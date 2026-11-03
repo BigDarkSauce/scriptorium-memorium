@@ -258,7 +258,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const spoutW=makeMaterial({preset:'plastic',color:'#2a7ad0'});spoutW.normalMap=null;spoutW.roughness=.05;spoutW.clearcoat=1;spoutW.clearcoatRoughness=.03;spoutW.emissive=new THREE.Color(0x0d3866);spoutW.emissiveIntensity=.6;spoutW.envMapIntensity=1.3; // the narrow column: dense tinted water so its level reads across the room
   const menM=makeMaterial({preset:'plastic',color:'#d8ecff'});menM.normalMap=null;menM.roughness=.04;menM.clearcoat=1;menM.emissive=new THREE.Color(0x5a88b8);menM.emissiveIntensity=.5; // bright meniscus rim (light caught by the curved surface)
   const sol=thinGlass({side:THREE.FrontSide,absorb:.1,edge:1,color:0x161208,ior:1.36,smudge:false,env:1.15});     // ethanol–water camphor solution (clear; crystals inside stay crisp)
-  const merc=makeMaterial('mercury');merc.color.set(0xf4f6f8);merc.roughness=.06;merc.envMapIntensity=2.4;merc.emissive=new THREE.Color(0x60666e);merc.emissiveIntensity=.4; // liquid metal: mirror-bright, a little self-light so it reads in dull weather
+  const merc=makeMaterial('mercury');merc.color.set(0xf4f6f8);merc.roughness=.06;merc.envMapIntensity=2.4;merc.emissive=new THREE.Color(0x8a929c);merc.emissiveIntensity=.42; // liquid metal: mirror-bright, a little self-light so it reads in dull weather
   const brass=makeMaterial('brass'),walnut=makeMaterial('walnut'),cork=makeMaterial('cork'),crystM=makeMaterial('crystal');crystM.color.set('#b8c2c9');crystM.emissiveIntensity=.02;crystM.sheen=.3;crystM.envMapIntensity=.9;
   const lathe=(pts,mat,seg=96)=>{const m=new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x,y])=>new THREE.Vector2(Math.max(.0005,x),y)),seg),mat);m.castShadow=true;m.receiveShadow=true;return m};
   // glass shell from an outer profile: outer surface up, inner surface (offset by wall thickness) back down
@@ -354,7 +354,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   // water in the body, with a wetting (concave) meniscus; its volume barely changes, so it is built once at the fill level
   const WY=1.9;let V0=0;for(let y=WY;y<4.2;y+=.01){const r=Math.max(0,rIn(y));V0+=Math.PI*r*r*.01}
   const A_fl=Math.PI*rIn(WY)**2,RB=.05,a_sp=Math.PI*RB*RB;
-  const wprof=[];for(let y=.33;y<=WY+.03;y+=.04)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY+.035)*.995,WY+.035]);for(let i=1;i<=8;i++){const t=i/8,rr=rIn(WY)*(1-t);wprof.push([rr,WY+.035*Math.pow(1-t,3)])}
+  const wprof=[];for(let y=.33;y<=WY+.03;y+=.04)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY+.012)*.995,WY+.012]);for(let i=1;i<=8;i++){const t=i/8,rr=rIn(WY)*(1-t);wprof.push([rr,WY+.012*Math.pow(1-t,3)])} // a low wetting rim: a tall one reads as the lip of a cup
   const fw=put(lathe([[.001,.33]].concat(wprof),water,96),'water in the body',GW);fw.position.set(GX,0,GZ);fw.castShadow=false;
   // spout: fused into the lower body, sweeping out and up beside it to an open, flared lip; a glass bridge steadies it
   const SPG=part('spout (open to the air)',GW);
@@ -441,6 +441,8 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const btube=put(lathe(shellPts([[RHG+.014,PY0-.25],[RHG+.014,PY0+PH+.05],[RHG*.7,PY0+PH+.13],[.001,PY0+PH+.15]],.012),shell,24),'glass tube (vacuum above the mercury)',HGG);btube.position.set(tubeX,0,TZ);btube.castShadow=false;
   const hgG=new THREE.CylinderGeometry(RHG,RHG,1,24,1,true);hgG.translate(0,.5,0);const hg=put(new THREE.Mesh(hgG,merc),'mercury',HGG);hg.position.set(tubeX,PY0-.25,TZ);
   const hgTop=put(new THREE.Mesh(new THREE.SphereGeometry(RHG,24,12,0,Math.PI*2,0,Math.PI/2),merc),'convex meniscus',HGG);hgTop.scale.y=.6;
+  // the window's reflection running down the column: the glint that makes mercury read as liquid metal from across the room
+  const glG=new THREE.PlaneGeometry(.014,1);glG.translate(0,.5,0);const glint=put(new THREE.Mesh(glG,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false})),'reflection glint',HGG);glint.position.set(tubeX-.022,PY0-.25,TZ+RHG+.002);glint.userData.noInk=true;
   // vernier slider with a magnifier: a brass-bezelled lens riding on the meniscus; behind it, the column top drawn 1.8× wide
   const VER=part('vernier & magnifier',HGG),LR=.1; // origin = apex of the meniscus; lens sits just inside the register glass
   put(new THREE.Mesh(new THREE.TorusGeometry(LR,.013,10,48),brass),'lens bezel',VER).position.z=.085;
@@ -555,7 +557,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     const c=Math.max(0,total()-mass()),sig=c/S_(Tg)-1,haze=clamp((sig-.06)/.3,0,1),near=clamp(1+sig/.35,0,1)*clamp(Mb/.02,0,1); // near: close to saturation with a bed present
     specks.material.opacity=Math.max(haze*.8,near*.14);hz.material.opacity=.02+near*.08+haze*.25;sol.opacity=.1+haze*.38+near*.04;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);
     // mercury, vernier and set hand, thermometer spirit
-    hgShown+=(Pc-hgShown)*Math.min(1,dt*4);const yh=yOfP(clamp(hgShown,PMIN-8,PMAX+6));hg.scale.y=Math.max(.01,yh-(PY0-.25));hgTop.position.set(tubeX,yh,TZ);VER.position.set(tubeX,clamp(yh,PY0,PY0+PH)+RHG*.6,TZ);setHand.position.set(tubeX+.22,yOfP(setP),BZ+.24);
+    hgShown+=(Pc-hgShown)*Math.min(1,dt*4);const yh=yOfP(clamp(hgShown,PMIN-8,PMAX+6));hg.scale.y=Math.max(.01,yh-(PY0-.25));glint.scale.y=Math.max(.01,yh-(PY0-.25)-.01);hgTop.position.set(tubeX,yh,TZ);VER.position.set(tubeX,clamp(yh,PY0,PY0+PH)+RHG*.6,TZ);setHand.position.set(tubeX+.22,yOfP(setP),BZ+.24);
     spirit.scale.y=Math.max(.01,TY0+(clamp(Tc,-10,40)+10)/50*TH-(TY0-.06));
     // rain streaks, splashes, wet ground
     rain.material.opacity=rainK;rain.visible=rainK>.01;
