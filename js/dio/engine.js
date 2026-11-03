@@ -120,7 +120,7 @@ export class DioramaView {
     let pin = this.pins.get(a.name);
     if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', text: a.name })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
     this.pins.forEach(p => p.classList.remove('focus')); if (focus) pin.classList.add('focus');
-    pin._actor = a;
+    pin._actor = a; if (this._hot && this._hot.length) pin.classList.toggle('hot', this._hot.some(h => h.name === a.name));
   }
   // ---------- explore: foldable left panel with step-by-step instructions ----------
   showExplore(immediate) {
@@ -195,7 +195,7 @@ export class DioramaView {
     if (rebuild) { ds.build(); this.refreshPins(); }
     this.spec.values = Object.assign(this.spec.values || {}, { [k]: ds.p[k] });
   }
-  highlightPins(actors) { const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
+  highlightPins(actors) { this._hot = actors; const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
   refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
   // ---------- HUD ----------
   buildHUD() {
