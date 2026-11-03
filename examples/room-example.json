@@ -1,0 +1,272 @@
+{
+  "format": "scriptorium-room/1",
+  "book": {
+    "title": "Probability & the Bell Curve",
+    "pages": 12
+  },
+  "room": {
+    "parts": [
+      {
+        "title": "Galton board",
+        "startPage": 1,
+        "endPage": 12,
+        "summary": "A bell curve made of coin flips.",
+        "analysis": {
+          "title": "Galton board",
+          "summary": "A bell curve made of coin flips.",
+          "chain": [
+            {
+              "id": "S1",
+              "kind": "definition",
+              "title": "Bernoulli trial",
+              "statement": "One random event with two outcomes: right with probability $p$, left with $1-p$.",
+              "bodies": [
+                "peg",
+                "ball"
+              ],
+              "demos": []
+            },
+            {
+              "id": "S2",
+              "kind": "theorem",
+              "title": "Binomial distribution",
+              "statement": "The number of right-bounces in $N$ trials is binomial.",
+              "math": "P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}",
+              "from": [
+                "S1"
+              ],
+              "bodies": [
+                "bins"
+              ],
+              "demos": [
+                {
+                  "type": "plot",
+                  "title": "Binomial pmf (continuous view)",
+                  "exprs": [
+                    "exp(-(x-N*p)^2/(2*N*p*(1-p)))/sqrt(2*PI*N*p*(1-p))"
+                  ],
+                  "x": [
+                    0,
+                    20
+                  ],
+                  "y": [
+                    0,
+                    0.4
+                  ],
+                  "params": {
+                    "N": [
+                      4,
+                      20,
+                      10
+                    ],
+                    "p": [
+                      0.1,
+                      0.9,
+                      0.5
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "S3",
+              "kind": "result",
+              "title": "Normal approximation",
+              "statement": "For large $N$ the binomial approaches a normal curve.",
+              "from": [
+                "S2"
+              ],
+              "bodies": [
+                "curve"
+              ],
+              "demos": [
+                {
+                  "type": "scene",
+                  "title": "Galton board: many coin flips make a bell",
+                  "technique": "sweep",
+                  "environment": {
+                    "preset": "abstract"
+                  },
+                  "bodies": [
+                    {
+                      "id": "back",
+                      "name": "Board",
+                      "role": "decor",
+                      "shape": {
+                        "kind": "box",
+                        "w": 7.2,
+                        "h": 6.6,
+                        "d": 0.16,
+                        "round": 0.03
+                      },
+                      "material": {
+                        "preset": "darkwood"
+                      },
+                      "position": [
+                        0,
+                        3.3,
+                        -0.3
+                      ]
+                    },
+                    {
+                      "id": "funnel",
+                      "name": "Funnel",
+                      "label": "Funnel · releases balls",
+                      "role": "actor",
+                      "describe": "Every ball starts in the same place.",
+                      "shape": {
+                        "kind": "cone",
+                        "r": 0.55,
+                        "h": 0.7
+                      },
+                      "material": {
+                        "preset": "brass"
+                      },
+                      "position": [
+                        0,
+                        6.2,
+                        0
+                      ],
+                      "rotation": [
+                        180,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "id": "ball",
+                      "name": "Ball",
+                      "label": "A ball · one random path",
+                      "role": "actor",
+                      "describe": "Its final bin is the number of times it bounced right.",
+                      "shape": {
+                        "kind": "sphere",
+                        "r": 0.09
+                      },
+                      "material": {
+                        "preset": "chrome"
+                      },
+                      "position": [
+                        0,
+                        5.85,
+                        0
+                      ]
+                    },
+                    {
+                      "id": "pegs",
+                      "name": "Pegs",
+                      "label": "Pegs · each one a coin flip",
+                      "role": "actor",
+                      "describe": "At every peg the ball goes right with probability p.",
+                      "shape": {
+                        "kind": "group"
+                      },
+                      "position": [
+                        0,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "id": "bins",
+                      "name": "Bins",
+                      "label": "Bins · the histogram",
+                      "role": "actor",
+                      "describe": "Bin k collects the paths with k right-bounces.",
+                      "shape": {
+                        "kind": "group"
+                      },
+                      "position": [
+                        0,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "id": "curve",
+                      "name": "Curve",
+                      "label": "Binomial ≈ normal curve",
+                      "role": "actor",
+                      "describe": "Theory: mean Np, spread √(Np(1−p)).",
+                      "shape": {
+                        "kind": "group"
+                      },
+                      "position": [
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  ],
+                  "tour": [
+                    "funnel",
+                    "ball",
+                    "pegs",
+                    "bins",
+                    "curve"
+                  ],
+                  "params": [
+                    {
+                      "key": "rows",
+                      "label": "rows of pegs",
+                      "min": 4,
+                      "max": 14,
+                      "value": 10,
+                      "rebuild": true
+                    },
+                    {
+                      "key": "p",
+                      "label": "probability of bouncing right",
+                      "min": 0.1,
+                      "max": 0.9,
+                      "value": 0.5
+                    },
+                    {
+                      "key": "rate",
+                      "label": "balls per second",
+                      "min": 1,
+                      "max": 25,
+                      "value": 7
+                    }
+                  ],
+                  "code": "const T=api.THREE, N=Math.round(api.param('rows')), pegs=api.body('pegs'), bins=api.body('bins'), cg=api.body('curve'), lead=api.body('ball');\nconst top=5.5, dy=4.3/N, dx=Math.min(0.5,6.2/(N+2)), pegM=api.material({preset:'brass'}), ballM=api.material({preset:'chrome'});\nfor(let r=0;r<N;r++) for(let k=0;k<=r;k++){ const m=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.26,12),pegM); m.rotation.x=Math.PI/2; m.position.set((k-r/2)*dx,top-r*dy,0); m.castShadow=true; pegs.add(m); }\nconst counts=new Array(N+1).fill(0), bars=[], binY=0.12, maxH=2.3;\nfor(let k=0;k<=N;k++){ const x=(k-N/2)*dx; const w=new T.Mesh(new T.BoxGeometry(0.025,maxH,0.26),api.material({preset:'steel'})); w.position.set(x+dx/2,binY+maxH/2,0); bins.add(w);\n  const b=new T.Mesh(new T.BoxGeometry(dx*0.8,1,0.2),api.material({preset:'plastic',color:'#2d5b8e'})); b.position.set(x,binY,0); b.scale.y=0.001; b.castShadow=true; bins.add(b); bars.push(b); }\nconst balls=[]; let acc=0, landed=0, said=false;\nconst curve=new T.Line(new T.BufferGeometry().setFromPoints(Array.from({length:81},()=>new T.Vector3())),new T.LineBasicMaterial({color:0xffd27a})); curve.frustumCulled=false; cg.add(curve);\nfunction spawn(){ let m; if(lead&&!lead.userData.used){ lead.userData.used=true; m=lead; } else { m=new T.Mesh(new T.SphereGeometry(0.085,16,12),ballM); m.castShadow=true; api.world.add(m); } m.visible=true; m.position.set(0,top+0.4,0); balls.push({m,row:-1,k:0,t:0,x0:0,x1:0,y0:top+0.4,y1:top}); }\napi.onStep((h)=>{ acc+=h*api.param('rate'); while(acc>=1){ acc-=1; spawn(); }\n  for(let i=balls.length-1;i>=0;i--){ const b=balls[i]; b.t+=h/0.11;\n    if(b.t>=1){ b.t=0; b.row++;\n      if(b.row<N){ const right=api.rand()<api.param('p'); b.x0=b.m.position.x; b.k+=right?1:0; b.x1=(b.k-(b.row+1)/2)*dx; b.y0=top-b.row*dy; b.y1=top-(b.row+1)*dy; }\n      else { counts[b.k]++; landed++; if(b.m===lead) b.m.visible=false; else b.m.removeFromParent(); balls.splice(i,1);\n        if(landed<=3) api.event('A ball lands in bin '+b.k+' after '+N+' coin flips',new T.Vector3((b.k-N/2)*dx,0.5,0),{id:'land'});\n        if(landed===150&&!said){ said=true; api.event('150 balls: the bins now trace a bell (binomial ≈ normal)',null,{id:'bell'}); } continue; } }\n    const s=b.t; b.m.position.x=b.x0+(b.x1-b.x0)*s; b.m.position.y=b.y0+(b.y1-b.y0)*s+Math.sin(Math.PI*s)*dy*0.35; } });\napi.onFrame(()=>{ bars.forEach((b,k)=>{ const H=Math.max(0.001,Math.min(maxH,counts[k]*0.045)); b.scale.y=H; b.position.y=binY+H/2; });\n  const p=api.param('p'), mu=N*p, sd=Math.sqrt(N*p*(1-p))||1e-3, a=curve.geometry.attributes.position;\n  for(let i=0;i<=80;i++){ const kk=-0.5+(N+1)*i/80, x=(kk-N/2)*dx, d=Math.exp(-((kk-mu)**2)/(2*sd*sd))/(sd*Math.sqrt(2*Math.PI)); a.setXYZ(i,x,binY+Math.min(maxH+0.6,d*landed*0.045),0.16); } a.needsUpdate=true; });\nconst mean=()=>{ let s=0; counts.forEach((c,k)=>s+=c*k); return landed?s/landed:NaN; };\napi.readout('balls landed',()=>landed); api.readout('mean bin',()=>mean()); api.readout('theory N·p',()=>N*api.param('p'));\napi.readout('spread measured',()=>{ if(landed<2) return NaN; const m=mean(); let v=0; counts.forEach((c,k)=>v+=c*(k-m)**2); return Math.sqrt(v/(landed-1)); });\napi.readout('theory √(Np(1−p))',()=>Math.sqrt(N*api.param('p')*(1-api.param('p'))));\napi.plot('balls in the centre bin',()=>counts[Math.round(N/2)]); api.camera({target:[0,3.1,0],r:13,ph:1.4,th:0});",
+                  "lessons": [
+                    {
+                      "title": "Let the balls fall",
+                      "text": "Each ball meets one peg per row and goes left or right at random. Watch the bins fill until the bell event.",
+                      "focus": "funnel",
+                      "until": "event:bell",
+                      "run": 40,
+                      "explain": "A bin count is the number of right-bounces in N independent flips: a binomial distribution, which for many rows is close to a normal curve."
+                    },
+                    {
+                      "title": "Bias the coin",
+                      "text": "Make right-bounces likelier. The pile slides right; its centre moves to N·p.",
+                      "set": {
+                        "p": 0.75
+                      },
+                      "focus": "bins",
+                      "run": 14,
+                      "explain": "The mean of a binomial is Np; the spread √(Np(1−p)) also changes."
+                    },
+                    {
+                      "title": "More rows",
+                      "text": "Add rows. The board rebuilds; with more flips per ball the bell becomes smoother and wider in bins but narrower relative to N.",
+                      "set": {
+                        "rows": 14,
+                        "p": 0.5
+                      },
+                      "focus": "curve",
+                      "run": 20,
+                      "explain": "Spread grows like √N while the range grows like N: averages concentrate (the central limit theorem)."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

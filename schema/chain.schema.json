@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scriptorium-chain/1",
+  "title": "Logical chain of one part",
+  "type": "object",
+  "required": [
+    "chain"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "sourceNote": {
+      "type": "string"
+    },
+    "chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "definition",
+              "axiom",
+              "postulate",
+              "lemma",
+              "theorem",
+              "derivation",
+              "formula",
+              "result",
+              "example",
+              "remark"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "math": {
+            "type": "string"
+          },
+          "derivation": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "expr": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bodies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "demos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

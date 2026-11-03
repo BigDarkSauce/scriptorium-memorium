@@ -1,0 +1,638 @@
+{
+  "type": "scene",
+  "title": "A market finds its price",
+  "technique": "card",
+  "environment": {
+    "preset": "studio"
+  },
+  "bodies": [
+    {
+      "id": "square",
+      "name": "Market square",
+      "role": "decor",
+      "shape": {
+        "kind": "disc",
+        "r": 6.4
+      },
+      "material": {
+        "preset": "stone"
+      },
+      "position": [
+        0,
+        0.01,
+        0
+      ]
+    },
+    {
+      "id": "board",
+      "name": "Chart board",
+      "label": "Demand and supply curves",
+      "role": "actor",
+      "describe": "Blue: how many would buy at each price. Red: how many would sell. The gold line is the current price.",
+      "shape": {
+        "kind": "box",
+        "w": 6.8,
+        "h": 4.9,
+        "d": 0.1,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "chalk",
+        "color": "#1f2a24"
+      },
+      "position": [
+        0,
+        3,
+        -3.45
+      ]
+    },
+    {
+      "id": "stall",
+      "name": "Stall",
+      "label": "The stall · where trades happen",
+      "role": "actor",
+      "describe": "Every buyer and seller who steps up here trades; the quantity traded is the smaller group.",
+      "shape": {
+        "kind": "table",
+        "w": 2.6,
+        "d": 1,
+        "h": 0.9
+      },
+      "position": [
+        0,
+        0,
+        -1.6
+      ]
+    },
+    {
+      "id": "awning",
+      "name": "Awning",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 2.9,
+        "h": 0.07,
+        "d": 1.5,
+        "round": 0.01
+      },
+      "material": {
+        "preset": "fabric",
+        "color": "#b8392b"
+      },
+      "position": [
+        0,
+        1.95,
+        -1.6
+      ],
+      "rotation": [
+        -8,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "post1",
+      "name": "Post",
+      "role": "decor",
+      "shape": {
+        "kind": "cylinder",
+        "r": 0.03,
+        "h": 1.95
+      },
+      "material": {
+        "preset": "darkwood"
+      },
+      "position": [
+        -1.35,
+        0.97,
+        -1
+      ]
+    },
+    {
+      "id": "post2",
+      "name": "Post",
+      "role": "decor",
+      "shape": {
+        "kind": "cylinder",
+        "r": 0.03,
+        "h": 1.95
+      },
+      "material": {
+        "preset": "darkwood"
+      },
+      "position": [
+        1.35,
+        0.97,
+        -1
+      ]
+    },
+    {
+      "id": "pole",
+      "name": "Price pole",
+      "role": "decor",
+      "shape": {
+        "kind": "cylinder",
+        "r": 0.03,
+        "h": 3.6
+      },
+      "material": {
+        "preset": "brass"
+      },
+      "position": [
+        0,
+        1.8,
+        1.9
+      ]
+    },
+    {
+      "id": "price",
+      "name": "Price",
+      "label": "Price",
+      "role": "actor",
+      "describe": "Rises while more want to buy than sell, falls while more want to sell than buy.",
+      "shape": {
+        "kind": "coin",
+        "r": 0.26
+      },
+      "position": [
+        0,
+        1,
+        1.9
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "b0",
+      "name": "Buyer 1",
+      "label": "Buyers",
+      "role": "actor",
+      "describe": "Each buyer has a different willingness to pay; they step up to the stall when the price is below it.",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -1.4,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b1",
+      "name": "Buyer 2",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -2.12,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b2",
+      "name": "Buyer 3",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -2.84,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b3",
+      "name": "Buyer 4",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -3.56,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b4",
+      "name": "Buyer 5",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -1.4,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b5",
+      "name": "Buyer 6",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -2.12,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b6",
+      "name": "Buyer 7",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -2.84,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "b7",
+      "name": "Buyer 8",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#4f8ad0"
+      },
+      "position": [
+        -3.56,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        150,
+        0
+      ]
+    },
+    {
+      "id": "s0",
+      "name": "Seller 1",
+      "label": "Sellers",
+      "role": "actor",
+      "describe": "Each seller has a different cost; they step up to sell when the price is above it.",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        1.4,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s1",
+      "name": "Seller 2",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        2.12,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s2",
+      "name": "Seller 3",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        2.84,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s3",
+      "name": "Seller 4",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        3.56,
+        0,
+        0.7
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s4",
+      "name": "Seller 5",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        1.4,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s5",
+      "name": "Seller 6",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        2.12,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s6",
+      "name": "Seller 7",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        2.84,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "s7",
+      "name": "Seller 8",
+      "role": "decor",
+      "describe": "",
+      "shape": {
+        "kind": "person",
+        "h": 1,
+        "color": "#d0553c"
+      },
+      "position": [
+        3.56,
+        0,
+        1.5499999999999998
+      ],
+      "rotation": [
+        0,
+        -150,
+        0
+      ]
+    },
+    {
+      "id": "lampL",
+      "name": "Lamp",
+      "role": "decor",
+      "shape": {
+        "kind": "lamp",
+        "h": 1.8
+      },
+      "position": [
+        -4.6,
+        0,
+        -2.4
+      ]
+    },
+    {
+      "id": "tree0",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.6
+      },
+      "position": [
+        4.8,
+        0.15,
+        -2.2
+      ]
+    },
+    {
+      "id": "tree1",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.4
+      },
+      "position": [
+        -5,
+        0.15,
+        1.8
+      ]
+    },
+    {
+      "id": "tree2",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.3
+      },
+      "position": [
+        5.2,
+        0.15,
+        2
+      ]
+    }
+  ],
+  "tour": [
+    "price",
+    "b0",
+    "s0",
+    "stall",
+    "board"
+  ],
+  "params": [
+    {
+      "key": "income",
+      "label": "buyers' income (shifts demand)",
+      "min": 0,
+      "max": 4,
+      "value": 0
+    },
+    {
+      "key": "cost",
+      "label": "sellers' cost (shifts supply)",
+      "min": 0,
+      "max": 4,
+      "value": 0
+    },
+    {
+      "key": "speed",
+      "label": "price adjustment speed",
+      "min": 0.2,
+      "max": 2,
+      "value": 0.8
+    }
+  ],
+  "code": "const T=api.THREE, nb=8, buyers=[], sellers=[];\nfor(let i=0;i<nb;i++){ const b=api.body('b'+i), s=api.body('s'+i); buyers.push({o:b,z0:b.position.z}); sellers.push({o:s,z0:s.position.z}); }\nconst coin=api.body('price'); let p=1.5, last=0;\nconst sig=x=>1/(1+Math.exp(-x/0.25)), W=i=>api.param('income')+9-i, C=i=>api.param('cost')+1+i;\nconst Dm=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(W(i)-q); return s;}, Sp=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(q-C(i)); return s;};\nconst ox=-3.1, oy=0.75, sx=6.2/8.5, sy=4.2/12, z=-3.38;\nconst line=c=>{ const g=new T.BufferGeometry().setFromPoints(Array.from({length:61},()=>new T.Vector3())); const l=new T.Line(g,new T.LineBasicMaterial({color:c})); l.frustumCulled=false; api.world.add(l); return l; };\nconst dl=line(0x6fa8ff), sl=line(0xff7a5c), pl=line(0xffd27a), ax=line(0xd8d2c0);\n{ const a=ax.geometry.attributes.position; for(let i=0;i<=60;i++){ const t=i/60; if(t<0.5) a.setXYZ(i,ox,oy+4.2*(1-t*2),z); else a.setXYZ(i,ox+6.2*(t-0.5)*2,oy,z); } a.needsUpdate=true; }\nconst dot=api.ball(0.1,api.material({preset:'emissive',color:'#ffd27a'})); api.world.add(dot);\napi.onStep((h)=>{ const ex=Dm(p)-Sp(p); p=api.clamp(p+api.param('speed')*0.5*ex*h,0,12);\n  const s=Math.abs(ex)<0.15?0:Math.sign(ex);\n  if(s!==last){ if(s>0) api.event('Excess demand: buyers outbid each other, the price rises',coin.position.clone(),{id:'up'}); else if(s<0) api.event('Excess supply: sellers undercut each other, the price falls',coin.position.clone(),{id:'down'}); else api.event('Market clears: demand equals supply at p ≈ '+api.fmt(p)+', q ≈ '+api.fmt(Dm(p)),coin.position.clone(),{id:'clear'}); last=s; } });\napi.onFrame((dt)=>{ coin.position.y=0.3+p*0.26; coin.rotation.z+=dt*1.5;\n  buyers.forEach((b,i)=>{ b.o.position.z=b.z0+(-0.95-b.z0)*sig(W(i)-p)*0.7; });\n  sellers.forEach((s,i)=>{ s.o.position.z=s.z0+(-0.95-s.z0)*sig(p-C(i))*0.7; });\n  const dA=dl.geometry.attributes.position, sA=sl.geometry.attributes.position, pA=pl.geometry.attributes.position;\n  for(let i=0;i<=60;i++){ const q=12*i/60; dA.setXYZ(i,ox+Dm(q)*sx,oy+q*sy,z); sA.setXYZ(i,ox+Sp(q)*sx,oy+q*sy,z); pA.setXYZ(i,ox+8.5*sx*i/60,oy+p*sy,z+0.005); }\n  dA.needsUpdate=sA.needsUpdate=pA.needsUpdate=true; dot.position.set(ox+Math.min(Dm(p),Sp(p))*sx,oy+p*sy,z+0.03); });\napi.readout('price p',()=>p); api.readout('quantity demanded',()=>Dm(p)); api.readout('quantity supplied',()=>Sp(p)); api.readout('excess demand',()=>Dm(p)-Sp(p)); api.readout('trades',()=>Math.min(Dm(p),Sp(p)));\napi.plot('price',()=>p); api.camera({target:[0,1.4,0],r:13.5,ph:1.12,th:0.25});",
+  "lessons": [
+    {
+      "title": "From a low price to the clearing price",
+      "text": "The price starts low: many buyers step up, few sellers. Watch the price climb until the two groups at the stall match.",
+      "focus": "price",
+      "until": "event:clear",
+      "run": 30,
+      "explain": "At the clearing price quantity demanded equals quantity supplied; any other price leaves a shortage or a surplus that pushes it back."
+    },
+    {
+      "title": "Buyers get richer",
+      "text": "Raise income. Every buyer will now pay more: the blue curve shifts right, and the price climbs to a new, higher clearing point.",
+      "set": {
+        "income": 3
+      },
+      "focus": "board",
+      "until": "event:clear",
+      "run": 30,
+      "explain": "A rise in demand raises both the equilibrium price and the quantity traded."
+    },
+    {
+      "title": "Costs rise",
+      "text": "Raise the sellers' cost. The red curve shifts left: the price rises further but fewer units change hands.",
+      "set": {
+        "cost": 3
+      },
+      "focus": "board",
+      "until": "event:clear",
+      "run": 30,
+      "explain": "A fall in supply raises the price and lowers the quantity."
+    },
+    {
+      "title": "A nervous market",
+      "text": "Make the price adjust quickly and watch it overshoot and settle.",
+      "set": {
+        "speed": 2,
+        "income": 0,
+        "cost": 0
+      },
+      "focus": "price",
+      "run": 12,
+      "explain": "The equilibrium is the same; only the path to it changes."
+    }
+  ]
+}

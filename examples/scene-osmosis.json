@@ -1,0 +1,163 @@
+{
+  "type": "scene",
+  "title": "Osmosis across a semi-permeable membrane",
+  "technique": "sweep",
+  "environment": {
+    "preset": "micro",
+    "base": true
+  },
+  "bodies": [
+    {
+      "id": "tank",
+      "name": "Tank",
+      "role": "decor",
+      "shape": {
+        "kind": "glasscase",
+        "w": 6,
+        "d": 1.6,
+        "h": 3.4
+      },
+      "position": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "membrane",
+      "name": "Membrane",
+      "label": "Semi-permeable membrane",
+      "role": "actor",
+      "describe": "Pores let water molecules through but not the larger solute molecules.",
+      "shape": {
+        "kind": "box",
+        "w": 0.05,
+        "h": 3.2,
+        "d": 1.55,
+        "round": 0
+      },
+      "material": {
+        "preset": "membrane",
+        "color": "#ffb0c8"
+      },
+      "position": [
+        0,
+        1.6,
+        0
+      ]
+    },
+    {
+      "id": "left",
+      "name": "Left level",
+      "label": "Pure water side · level",
+      "role": "actor",
+      "describe": "Water only.",
+      "shape": {
+        "kind": "water",
+        "w": 2.95,
+        "d": 1.55
+      },
+      "material": {
+        "preset": "water",
+        "color": "#3a9ec0",
+        "opacity": 0.55
+      },
+      "position": [
+        -1.5,
+        1.3,
+        0
+      ]
+    },
+    {
+      "id": "right",
+      "name": "Right level",
+      "label": "Solution side · level",
+      "role": "actor",
+      "describe": "Water plus solute.",
+      "shape": {
+        "kind": "water",
+        "w": 2.95,
+        "d": 1.55
+      },
+      "material": {
+        "preset": "water",
+        "color": "#c08a3a",
+        "opacity": 0.55
+      },
+      "position": [
+        1.5,
+        1.3,
+        0
+      ]
+    }
+  ],
+  "tour": [
+    "membrane",
+    "left",
+    "right"
+  ],
+  "params": [
+    {
+      "key": "solute",
+      "label": "solute molecules",
+      "min": 0,
+      "max": 90,
+      "value": 45,
+      "rebuild": true
+    },
+    {
+      "key": "T",
+      "label": "temperature",
+      "min": 0.3,
+      "max": 2,
+      "value": 1
+    },
+    {
+      "key": "pass",
+      "label": "membrane permeability",
+      "min": 0.2,
+      "max": 1,
+      "value": 0.6
+    }
+  ],
+  "code": "const T=api.THREE, nW=200, nS=Math.round(api.param('solute')), rnd=api.rand;\nconst wm=new T.InstancedMesh(new T.SphereGeometry(0.05,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW);\nconst sm=new T.InstancedMesh(new T.SphereGeometry(0.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; api.world.add(wm,sm);\nconst L=api.body('left'), R=api.body('right'); const base=1.3; let hL=base, hR=base, phi=0, cLR=0, cRL=0, win=0, flowSaid=false, eqT=0, eqSaid=false, lastDh=0;\nconst P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-0.1-rnd()*2.7:0.1+rnd()*2.7,y:0.15+rnd()*(base-0.3),z:(rnd()-0.5)*1.3,w:true}); }\nfor(let i=0;i<nS;i++) P.push({x:0.2+rnd()*2.6,y:0.2+rnd()*(base-0.4),z:(rnd()-0.5)*1.2,w:false});\nP.forEach(q=>q.side=q.x<0?-1:1);\napi.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?new T.Vector3(q.x,q.y,q.z):null; },'Small enough to pass the pores.');\nif(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?new T.Vector3(q.x,q.y,q.z):null; },'Too large to pass; they stay on the right.');\napi.onStep((h)=>{ const s=Math.sqrt(api.param('T'))*0.9, k=1.8, dh=hR-hL, pass=api.param('pass');\n  for(const q of P){ q.x+=(rnd()-0.5)*s*h*14; q.y+=(rnd()-0.5)*s*h*14; q.z+=(rnd()-0.5)*s*h*14;\n    const top=(q.side<0?hL:hR)-0.06; if(q.y<0.12)q.y=0.12; if(q.y>top)q.y=top; if(q.z<-0.66)q.z=-0.66; if(q.z>0.66)q.z=0.66; if(q.x<-2.88)q.x=-2.88; if(q.x>2.88)q.x=2.88;\n    const side=q.x<0?-1:1;\n    if(side!==q.side){ let ok=false; if(q.w) ok = q.side<0 ? rnd()<pass*Math.exp(-k*dh) : rnd()<pass*(1-phi)*Math.exp(k*dh);\n      if(ok){ q.side=side; if(side>0) cLR++; else cRL++; } else q.x=q.side<0?-0.04:0.04; } } });\nconst m4=new T.Matrix4();\napi.onFrame((dt)=>{ let nL=0,nRw=0; P.forEach(q=>{ if(q.w){ if(q.side<0) nL++; else nRw++; } }); phi=nS?Math.min(0.85,1.25*nS/(nS+nRw)):0;\n  const tL=base+(nL-nW/2)*0.011, tR=base+(nRw-nW/2)*0.011; hL+=(tL-hL)*Math.min(1,dt*3); hR+=(tR-hR)*Math.min(1,dt*3);\n  L.position.y=hL; R.position.y=hR; let iw=0,is=0;\n  P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;\n  win+=dt; if(win>2){ if(!flowSaid&&cLR-cRL>4){ flowSaid=true; api.event('Net water flow into the solution side',new T.Vector3(0,1.2,0),{id:'flow'}); } cLR=0; cRL=0; win=0; }\n  const dh=hR-hL; if(Math.abs(dh-lastDh)<0.0015*Math.max(dt*60,1)) eqT+=dt; else eqT=0; lastDh=dh;\n  if(!eqSaid&&eqT>4&&api.time()>6){ eqSaid=true; api.event('Osmotic equilibrium: the extra height Δh = '+api.fmt(dh)+' balances the solute\\'s pull',new T.Vector3(1.5,hR,0),{id:'eq'}); } });\napi.readout('water left',()=>P.filter(q=>q.w&&q.side<0).length); api.readout('water right',()=>P.filter(q=>q.w&&q.side>0).length);\napi.readout('solute fraction φ',()=>phi); api.readout('Δh (right − left)',()=>hR-hL);\napi.plot('Δh',()=>hR-hL); api.camera({target:[0,1.5,0],r:9.5,ph:1.35,th:0.1});",
+  "lessons": [
+    {
+      "title": "Watch the water move",
+      "text": "Water molecules wander through the pores in both directions, but on the right some pore openings are blocked by solute. Wait for the net-flow event.",
+      "focus": "membrane",
+      "until": "event:flow",
+      "run": 20,
+      "explain": "Fewer water molecules per unit area reach the pores from the solution side, so more cross into it than out of it."
+    },
+    {
+      "title": "Equilibrium",
+      "text": "The right level rises until its extra pressure pushes water back as fast as it arrives. Wait for equilibrium.",
+      "focus": "right",
+      "until": "event:eq",
+      "run": 40,
+      "explain": "The height difference at equilibrium measures the osmotic pressure; it grows with solute concentration (van 't Hoff: π ≈ cRT)."
+    },
+    {
+      "title": "More solute",
+      "text": "Double the solute. The tank refills from scratch and settles at a bigger height difference.",
+      "set": {
+        "solute": 90
+      },
+      "focus": "right",
+      "until": "event:eq",
+      "run": 45,
+      "explain": "Osmotic pressure rises with the number of dissolved particles."
+    },
+    {
+      "title": "Pure water both sides",
+      "text": "Remove all solute: nothing drives a net flow and the levels stay equal.",
+      "set": {
+        "solute": 0
+      },
+      "focus": "left",
+      "run": 12,
+      "explain": "Osmosis needs a concentration difference across a membrane that blocks the solute."
+    }
+  ]
+}

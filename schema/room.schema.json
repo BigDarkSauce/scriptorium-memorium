@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scriptorium-room/1",
+  "title": "A book room",
+  "type": "object",
+  "required": [
+    "format",
+    "room"
+  ],
+  "properties": {
+    "format": {
+      "const": "scriptorium-room/1"
+    },
+    "book": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "pages": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "required": [
+        "parts"
+      ],
+      "properties": {
+        "dims": {
+          "type": "object",
+          "properties": {
+            "w": {
+              "type": "number"
+            },
+            "d": {
+              "type": "number"
+            },
+            "h": {
+              "type": "number"
+            }
+          }
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "startPage": {
+                "type": "integer"
+              },
+              "endPage": {
+                "type": "integer"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "subOf": {
+                "type": "string"
+              },
+              "analysis": {
+                "$ref": "scriptorium-chain/1"
+              },
+              "pedestal": {
+                "type": "object",
+                "properties": {
+                  "step": {
+                    "type": "string"
+                  },
+                  "demo": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,464 @@
+{
+  "type": "scene",
+  "title": "The water cycle in a glass valley",
+  "technique": "topdown",
+  "environment": {
+    "preset": "landscape",
+    "glassCase": true,
+    "time": 11
+  },
+  "bodies": [
+    {
+      "id": "ground",
+      "name": "Valley floor",
+      "role": "decor",
+      "shape": {
+        "kind": "terrain",
+        "w": 13,
+        "d": 13,
+        "h": 0.3,
+        "seed": 3,
+        "low": "#5f7f3e",
+        "high": "#8a8a5a",
+        "flat": [
+          [
+            2.6,
+            1.2,
+            2,
+            0.9,
+            0.18
+          ],
+          [
+            1,
+            -2.7,
+            0.7,
+            0.6,
+            0.2
+          ]
+        ]
+      },
+      "position": [
+        0,
+        0.02,
+        0
+      ]
+    },
+    {
+      "id": "mountain",
+      "name": "Mountains",
+      "label": "Mountains",
+      "role": "actor",
+      "describe": "Air forced up their slopes expands and cools.",
+      "shape": {
+        "kind": "mountain",
+        "r": 1.8,
+        "h": 2.7,
+        "seed": 5,
+        "snowline": 0.7
+      },
+      "position": [
+        -3.1,
+        0,
+        -1.4
+      ]
+    },
+    {
+      "id": "mountain2",
+      "name": "Mountain",
+      "role": "decor",
+      "shape": {
+        "kind": "mountain",
+        "r": 1.5,
+        "h": 2.1,
+        "seed": 9,
+        "snowline": 0.72
+      },
+      "position": [
+        -3.3,
+        0,
+        1.7
+      ]
+    },
+    {
+      "id": "mountain3",
+      "name": "Hill",
+      "role": "decor",
+      "shape": {
+        "kind": "mountain",
+        "r": 1.1,
+        "h": 1.2,
+        "seed": 2,
+        "snowline": 2
+      },
+      "position": [
+        -1.7,
+        0,
+        -3.1
+      ]
+    },
+    {
+      "id": "lake",
+      "name": "Lake",
+      "label": "Lake · source of vapour",
+      "role": "actor",
+      "describe": "Sunlight gives water molecules the energy to escape as vapour.",
+      "shape": {
+        "kind": "water",
+        "w": 3.4,
+        "d": 2.6
+      },
+      "position": [
+        2.6,
+        0.38,
+        1.2
+      ]
+    },
+    {
+      "id": "vapour",
+      "name": "Water vapour",
+      "label": "Water vapour",
+      "role": "actor",
+      "describe": "Invisible gas in reality; drawn here as rising motes.",
+      "shape": {
+        "kind": "particles",
+        "type": "bubbles",
+        "count": 220,
+        "area": [
+          3.4,
+          3,
+          2.4
+        ],
+        "size": 0.05
+      },
+      "position": [
+        2.6,
+        0.4,
+        1.2
+      ]
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud",
+      "label": "Cloud · condensed droplets",
+      "role": "actor",
+      "describe": "Vapour condenses on dust into droplets; the cloud darkens as it fills.",
+      "shape": {
+        "kind": "cloud",
+        "r": 0.9,
+        "puffs": 8
+      },
+      "position": [
+        2.6,
+        4.3,
+        1.2
+      ]
+    },
+    {
+      "id": "wind",
+      "name": "Wind",
+      "label": "Wind",
+      "role": "actor",
+      "describe": "Carries the cloud west, towards the mountains.",
+      "shape": {
+        "kind": "arrow",
+        "length": 1.3,
+        "r": 0.05
+      },
+      "material": {
+        "preset": "neon",
+        "color": "#9fd0ff"
+      },
+      "position": [
+        -0.4,
+        5.6,
+        3.4
+      ],
+      "rotation": [
+        0,
+        0,
+        90
+      ]
+    },
+    {
+      "id": "rain",
+      "name": "Rain",
+      "label": "Rain",
+      "role": "actor",
+      "describe": "Falls when the cloud holds more water than its air can keep suspended.",
+      "shape": {
+        "kind": "particles",
+        "type": "rain",
+        "count": 600,
+        "area": [
+          2.2,
+          4,
+          1.4
+        ],
+        "size": 0.035
+      },
+      "position": [
+        2.6,
+        0.3,
+        1.2
+      ]
+    },
+    {
+      "id": "sun",
+      "name": "Sun",
+      "label": "Sun · the energy source",
+      "role": "actor",
+      "describe": "Its height through the day sets how strongly the lake is heated.",
+      "shape": {
+        "kind": "star",
+        "r": 0.42,
+        "color": "#ffd27a",
+        "intensity": 2
+      },
+      "position": [
+        4.5,
+        6.4,
+        -3.5
+      ]
+    },
+    {
+      "id": "house",
+      "name": "Cottage",
+      "role": "decor",
+      "shape": {
+        "kind": "house",
+        "w": 1,
+        "d": 0.8,
+        "h": 0.65
+      },
+      "position": [
+        1,
+        0.22,
+        -2.7
+      ],
+      "rotation": [
+        0,
+        18,
+        0
+      ]
+    },
+    {
+      "id": "tree0",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.1
+      },
+      "position": [
+        0,
+        0.15,
+        -1.2
+      ]
+    },
+    {
+      "id": "tree1",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 0.9
+      },
+      "position": [
+        0.6,
+        0.15,
+        -2
+      ]
+    },
+    {
+      "id": "tree2",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.2
+      },
+      "position": [
+        3.2,
+        0.15,
+        -1.6
+      ]
+    },
+    {
+      "id": "tree3",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1
+      },
+      "position": [
+        -0.4,
+        0.15,
+        2.6
+      ]
+    },
+    {
+      "id": "tree4",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 0.9
+      },
+      "position": [
+        4,
+        0.15,
+        3.2
+      ]
+    },
+    {
+      "id": "tree5",
+      "name": "Tree",
+      "role": "decor",
+      "shape": {
+        "kind": "tree",
+        "h": 1.1
+      },
+      "position": [
+        1,
+        0.15,
+        3.4
+      ]
+    },
+    {
+      "id": "pine0",
+      "name": "Pine",
+      "role": "decor",
+      "shape": {
+        "kind": "pine",
+        "h": 1.3
+      },
+      "position": [
+        -2,
+        0.15,
+        0.2
+      ]
+    },
+    {
+      "id": "pine1",
+      "name": "Pine",
+      "role": "decor",
+      "shape": {
+        "kind": "pine",
+        "h": 1.1
+      },
+      "position": [
+        -1.6,
+        0.15,
+        -1.2
+      ]
+    },
+    {
+      "id": "pine2",
+      "name": "Pine",
+      "role": "decor",
+      "shape": {
+        "kind": "pine",
+        "h": 1.2
+      },
+      "position": [
+        -2.2,
+        0.15,
+        3
+      ]
+    }
+  ],
+  "tour": [
+    "sun",
+    "lake",
+    "vapour",
+    "cloud",
+    "wind",
+    "mountain",
+    "rain"
+  ],
+  "params": [
+    {
+      "key": "sun",
+      "label": "solar heating",
+      "min": 0,
+      "max": 1.5,
+      "value": 0.9,
+      "unit": ""
+    },
+    {
+      "key": "wind",
+      "label": "wind speed",
+      "min": 0,
+      "max": 3,
+      "value": 1.2,
+      "unit": ""
+    },
+    {
+      "key": "hour",
+      "label": "time of day",
+      "min": 6,
+      "max": 19.5,
+      "value": 11,
+      "unit": "h"
+    }
+  ],
+  "behaviors": [
+    {
+      "target": "tree*",
+      "type": "sway",
+      "amount": "wind",
+      "speed": "1"
+    },
+    {
+      "target": "pine*",
+      "type": "sway",
+      "amount": "wind*0.7",
+      "speed": "0.8"
+    }
+  ],
+  "code": "const T=api.THREE, lake=api.body('lake'), cloud=api.body('cloud'), rain=api.body('rain'), vap=api.body('vapour'), sun=api.body('sun'), wind=api.body('wind');\nlet H=0.2, W=0.1, level=0, raining=false, rained=0, evap=0, lifted=false;\nconst home=cloud.position.clone(), white=new T.Color('#ffffff'), slate=new T.Color('#59626c'), cm=[]; cloud.traverse(o=>{ if(o.isMesh) cm.push(o); });\nconst rainPts=rain.children[0]||rain; const vapPts=vap.children[0]||vap;\nfunction sunDir(h){ const elev=Math.sin((h-6)/12*Math.PI)*62, az=(h-12)/12*140; return new T.Vector3().setFromSphericalCoords(1,(90-elev)*Math.PI/180,az*Math.PI/180); }\nconst heat=()=>api.param('sun')*Math.max(0,Math.sin((api.param('hour')-6)/12*Math.PI));\napi.onStep((h)=>{\n  const E=0.09*heat()*(1+0.3*api.param('wind'))*Math.max(0,1-H);\n  H+=E*h; evap+=E*h; level-=E*h*0.12;\n  if(Math.abs(cloud.position.x-home.x)<1.6){ const c=Math.min(H,0.14*h*(0.5+H)); H-=c; W+=c; }\n  cloud.position.x-=api.param('wind')*0.32*h;\n  const lift=Math.max(0,(-1.2-cloud.position.x))/2.5, sat=Math.max(0.35,1.0-0.6*Math.min(1,lift));\n  const was=raining; raining=W>sat;\n  if(raining){ const r=(W-sat)*0.6*h+0.02*h; W=Math.max(0,W-r); rained+=r; if(Math.abs(cloud.position.x-home.x)<2) level+=r*0.12; }\n  H=Math.max(0,H-0.01*h);\n  if(raining&&!was) api.event('Cloud saturated: rain begins',cloud.position.clone(),{id:'rain'});\n  if(!raining&&was) api.event('Rain stops: the cloud has given up its excess water',cloud.position.clone(),{id:'dry'});\n  if(lift>0.05&&!lifted){ lifted=true; api.event('Orographic lift: rising over the mountains, the air cools and holds less water',cloud.position.clone(),{id:'lift'}); }\n  if(cloud.position.x<-5.2){ cloud.position.x=home.x; W=0.05; lifted=false; api.event('A new cloud forms over the lake',cloud.position.clone(),{id:'newcloud'}); }\n  level=api.clamp(level,-0.22,0.22);\n});\napi.onFrame((dt)=>{\n  cloud.scale.setScalar(0.6+W*0.9); const k=api.clamp(W,0,1); cm.forEach(m=>m.material.color.copy(white).lerp(slate,k*0.8));\n  lake.position.y=0.38+level; rain.visible=raining; rain.position.x=cloud.position.x; rain.position.z=cloud.position.z;\n  if(raining&&rainPts.geometry){ const a=rainPts.geometry.attributes.position; for(let i=0;i<a.count;i++){ let y=a.getY(i)-dt*7; if(y<0) y+=4; a.setY(i,y);} a.needsUpdate=true; }\n  if(vapPts.geometry){ const a=vapPts.geometry.attributes.position, e=heat(); for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(0.12+e*0.8); if(y>3) y=0; a.setY(i,y); let x=a.getX(i)-dt*api.param('wind')*0.15; if(x<-1.7) x=1.7; a.setX(i,x);} a.needsUpdate=true; vapPts.material.opacity=0.12+0.6*Math.min(1,e); }\n  const d=sunDir(api.param('hour')).multiplyScalar(7.2); sun.position.set(d.x,Math.max(0.6,d.y),d.z);\n  wind.scale.setScalar(0.35+api.param('wind')*0.35);\n});\napi.readout('heating',()=>heat()); api.readout('humidity over lake',()=>H); api.readout('cloud water',()=>W);\napi.readout('lake level',()=>(level*1000).toFixed(0)+' mm'); api.readout('total rain',()=>rained); api.readout('total evaporation',()=>evap);\napi.plot('cloud water',()=>W);",
+  "lessons": [
+    {
+      "title": "Heat the lake",
+      "text": "Turn the sun up. Watch the vapour rise faster above the lake and the humidity readout climb: evaporation needs energy.",
+      "set": {
+        "sun": 1.4
+      },
+      "focus": "lake",
+      "run": 8,
+      "explain": "Each molecule that leaves takes its latent heat with it; more heating means a higher evaporation rate."
+    },
+    {
+      "title": "Let the wind carry the cloud",
+      "text": "With a steady wind the cloud drifts west. Follow it to the mountains and wait for the rain event.",
+      "set": {
+        "wind": 2
+      },
+      "focus": "cloud",
+      "until": "event:rain",
+      "run": 25,
+      "explain": "Rising over the slopes the air expands and cools, its capacity to hold water falls below what the cloud carries, and the excess falls as rain."
+    },
+    {
+      "title": "Calm air",
+      "text": "Drop the wind almost to zero. The cloud now stays over the lake and keeps filling until it rains back where it came from.",
+      "set": {
+        "wind": 0.2
+      },
+      "focus": "cloud",
+      "run": 14,
+      "explain": "Without transport the cycle closes locally: evaporation, condensation and rain over the same water."
+    },
+    {
+      "title": "Evening",
+      "text": "Move the time of day to evening. With the sun low, heating falls and so does evaporation.",
+      "set": {
+        "hour": 18.5
+      },
+      "focus": "sun",
+      "run": 10,
+      "explain": "The energy input sets the pace of the whole cycle."
+    }
+  ]
+}

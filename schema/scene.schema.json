@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scriptorium-scene/1",
+  "title": "Universal diorama scene",
+  "type": "object",
+  "required": [
+    "type",
+    "bodies"
+  ],
+  "properties": {
+    "type": {
+      "const": "scene"
+    },
+    "title": {
+      "type": "string"
+    },
+    "technique": {
+      "enum": [
+        "card",
+        "sweep",
+        "topdown"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "preset": {
+          "enum": [
+            "studio",
+            "lab",
+            "landscape",
+            "cosmos",
+            "micro",
+            "abstract",
+            "ocean",
+            "night",
+            "desk"
+          ]
+        },
+        "time": {
+          "type": "number"
+        },
+        "glassCase": {
+          "type": "boolean"
+        },
+        "base": {
+          "type": "boolean"
+        }
+      }
+    },
+    "bodies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "shape"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "actor",
+              "decor"
+            ]
+          },
+          "describe": {
+            "type": "string"
+          },
+          "shape": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string"
+              }
+            }
+          },
+          "material": {
+            "type": "object"
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "rotation": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "scale": {},
+          "parent": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "tour": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "params": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "min",
+          "max",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "rebuild": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "behaviors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target",
+          "type"
+        ]
+      }
+    },
+    "code": {
+      "type": "string"
+    },
+    "lessons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "text"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "set": {
+            "type": "object"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "run": {
+            "type": "number"
+          },
+          "until": {
+            "type": "string"
+          },
+          "explain": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "overrides": {
+      "type": "object"
+    },
+    "additions": {
+      "type": "array"
+    },
+    "hidden": {
+      "type": "array"
+    },
+    "ranges": {
+      "type": "object"
+    }
+  }
+}
