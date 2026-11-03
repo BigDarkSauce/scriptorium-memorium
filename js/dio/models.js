@@ -250,9 +250,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
       vec4 smC=texture2D(map,vMapUv);float smLo=.5-.48*uCover;float smA=smoothstep(smLo,smLo+.42,smC.a);smA=max(smA,smoothstep(.0,.3,smC.a)*pow(uCover,2.5)*.8);
       diffuseColor.rgb*=smC.rgb;diffuseColor.a*=smA;
     #endif`)};m.customProgramCacheKey=()=>'smcloud';return m};
-  const layers=[];const cloudDeck=(r,h,y0,seed,rep,speed,name)=>{const t=cloudLayer(seed,2048,256,2).clone();t.repeat.set(rep,1);t.needsUpdate=true;const m=coverHook(new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.BackSide,fog:false}),name);const me=new THREE.Mesh(sector(r,h,y0),m);me.name=name;me.userData.noContact=true;me.userData.noInk=true;me.renderOrder=-2;W.add(me);layers.push({m,t,speed});return me};
+  const layers=[];const cloudDeck=(r,h,y0,seed,rep,speed,name,size=1)=>{const t=cloudLayer(seed,1024,128,2,size).clone();t.repeat.set(rep,1);t.needsUpdate=true;const m=coverHook(new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.BackSide,fog:false}),name);const me=new THREE.Mesh(sector(r,h,y0),m);me.name=name;me.userData.noContact=true;me.userData.noInk=true;me.renderOrder=-2;W.add(me);layers.push({m,t,speed});return me};
   const hills=(r,h,seed,rough,ht,col,name)=>{const t=hillLayer(seed,1024,256,rough,ht).clone();t.repeat.set(3,1);t.needsUpdate=true;const m=new THREE.MeshBasicMaterial({map:t,alphaTest:.5,alphaToCoverage:true,side:THREE.BackSide,color:col});const me=new THREE.Mesh(sector(r,h,0),m);me.name=name;me.userData.noContact=true;me.userData.noInk=true;W.add(me);return m};
-  cloudDeck(6.5,4.4,3.2,11,1.5,.004,'high clouds');const hillFar=hills(6.36,2.6,5,1,.62,0x8fa3b8,'far hills');cloudDeck(6.2,3.6,1.9,23,2,.009,'mid clouds');
+  cloudDeck(6.5,4.4,3.2,11,1.5,.004,'high clouds',.8);const hillFar=hills(6.36,2.6,5,1,.62,0x8fa3b8,'far hills');cloudDeck(6.2,3.6,1.9,23,2,.009,'mid clouds',1.2);
   // aerial perspective: haze veils in front of each hill range, tinted with the horizon colour every sky update
   const hazeTex=(()=>{const c=document.createElement('canvas');c.width=4;c.height=128;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(.55,'rgba(255,255,255,.55)');gr.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=gr;g.fillRect(0,0,4,128);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
   const hazes=[[6.3,2.4,.62],[6.0,1.4,.28]].map(([r,h,o])=>{const m=new THREE.MeshBasicMaterial({map:hazeTex,transparent:true,depthWrite:false,side:THREE.BackSide,opacity:o,fog:false});const me=new THREE.Mesh(sector(r,h,0),m);me.name='haze';me.userData.noInk=true;me.userData.noContact=true;me.renderOrder=-1;W.add(me);return m});
@@ -341,7 +341,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const cistRing=new THREE.Mesh(new THREE.TorusGeometry(.355,.02,8,48),brass);cistRing.rotation.x=Math.PI/2;cistRing.position.set(BX,.5,BZ+.1);W.add(cistRing);
   const fin=lathe(smooth([[.001,0],[.1,0],[.12,.05],[.07,.12],[.11,.22],[.06,.32],[.03,.4],[.001,.42]],5),brass,32);fin.position.set(BX,6.85+.03,BZ);fin.name='finial';W.add(fin);
   // engraved register plate: colour map + roughness(G)/metalness(B) map from one drawing
-  const plate=(()=>{const w=512,h=Math.round(512*PH/.82),c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=w;c1.height=c2.height=h;const g=c1.getContext('2d'),q=c2.getContext('2d');
+  const plate=(()=>{const w=512,h=Math.round(512*PH/.82),c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=w*2;c1.height=c2.height=h*2;const g=c1.getContext('2d'),q=c2.getContext('2d');g.scale(2,2);q.scale(2,2); // drawn at 2× for crisp engraving
     const gb=g.createLinearGradient(0,0,w,0);gb.addColorStop(0,'#c9a35a');gb.addColorStop(.5,'#e4c784');gb.addColorStop(1,'#c29c55');g.fillStyle=gb;g.fillRect(0,0,w,h);
     const r2=mulberry(3);for(let i=0;i<2600;i++){g.fillStyle=`rgba(${r2()<.5?'90,60,20':'255,240,200'},${r2()*.03})`;g.fillRect(0,r2()*h,w,1)}
     q.fillStyle='rgb(0,140,215)';q.fillRect(0,0,w,h);
@@ -352,9 +352,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     for(let P=PMIN;P<=PMAX;P++){const y=Y(P),L=P%10===0?46:P%5===0?30:16;line(cx0-L,y,cx0,y,P%10===0?3:1.6);if(P%10===0)text(String(P),cx0-78,y,30)}
     for(let i=Math.ceil(PMIN/33.8639*20);i<=Math.floor(PMAX/33.8639*20);i++){const inHg=i/20,y=Y(inHg*33.8639),big=i%10===0,mid=i%2===0;line(cx1,y,cx1+(big?46:mid?28:14),y,big?3:1.4);if(mid)text(inHg.toFixed(1),cx1+(big?92:80),y,big?30:21)}
     text('hPa',cx0-70,26,26);text('inHg',cx1+80,26,26);
-    [['STORMY',965],['RAIN',985],['CHANGE',1000],['FAIR',1020],['SET FAIR',1035],['VERY DRY',1048]].forEach(([s,P])=>text(s,60,Y(P),19,'center','Georgia, serif'));
+    [['STORMY',965],['RAIN',985],['CHANGE',1000],['FAIR',1020],['SET FAIR',1035],['VERY DRY',1048]].forEach(([s,P])=>text(s,62,Y(P),22,'center','Georgia, serif'));
     const t1=new THREE.CanvasTexture(c1);t1.colorSpace=THREE.SRGBColorSpace;t1.anisotropy=8;const t2=new THREE.CanvasTexture(c2);t2.anisotropy=8;return[t1,t2]})();
-  const plateM=new THREE.MeshPhysicalMaterial({map:plate[0],roughnessMap:plate[1],metalnessMap:plate[1],roughness:1,metalness:1,clearcoat:.35,clearcoatRoughness:.25,envMapIntensity:1.4});
+  const plateM=new THREE.MeshPhysicalMaterial({map:plate[0],roughnessMap:plate[1],metalnessMap:plate[1],roughness:1,metalness:1,envMapIntensity:1.4});
   const plateMesh=new THREE.Mesh(new THREE.PlaneGeometry(.82,PH),plateM);plateMesh.position.set(BX,PY0+PH/2,BZ+.13);plateMesh.name='engraved scale plates (hPa · inHg)';plateMesh.receiveShadow=true;W.add(plateMesh);
   [[0,PY0+PH+.02,.88,.035],[0,PY0-.02,.88,.035],[-.43,PY0+PH/2,.035,PH+.07],[.43,PY0+PH/2,.035,PH+.07]].forEach(([x,y,w,h])=>{const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,.04),brass);b.position.set(BX+x,y,BZ+.15);b.castShadow=true;W.add(b)});
   const regGlass=new THREE.Mesh(new THREE.PlaneGeometry(.84,PH+.04),film);regGlass.position.set(BX,PY0+PH/2,BZ+.24);regGlass.renderOrder=6;W.add(regGlass);
@@ -413,7 +413,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     const c=Math.max(0,total()-mass()),S=S_(Tc),sig=c/S-1,dTdt=(Tc-lastT)/h;lastT=Tc;cool=lerp(cool,dTdt,Math.min(1,h*2));
     if(!nucl&&sig>.04){nucl=true;Mb=.002}
     if(nucl&&sig>0){const g=.55*sig*h,fern=clamp((sig-.04)/.22,.1,.85),top=cool<-.35?clamp(-cool*.5,0,.6):0;Mf+=g*fern*(1-top);Mt+=g*fern*top;Mb+=g*(1-fern)}
-    if(sig<0){const k=-.9*sig*h;Mf=Math.max(0,Mf-k*2*Math.pow(Mf+1e-6,.667));Mt=Math.max(0,Mt-k*2.4*Math.pow(Mt+1e-6,.667));Mb=Math.max(0,Mb-k*Math.pow(Mb+1e-6,.667))}
+    if(sig<0){const k=-.9*sig*h;Mf=Math.max(0,Mf-k*2*Math.pow(Mf+1e-6,.667));Mt=Math.max(0,Mt-k*3.2*Math.pow(Mt+1e-6,.667));Mb=Math.max(0,Mb-k*Math.pow(Mb+1e-6,.667))}
     if(mass()<.0015&&sig<0){Mb=Mf=Mt=0;nucl=false}
     const has=mass()>.02;if(has&&!wasCryst)D.event('solution supersaturated (σ = '+fmt(sig,2)+'): camphor crystals nucleate',V3(SX,.75,SZ));if(!has&&wasCryst)D.event('warming raises solubility: all crystals redissolve, the liquid clears',V3(SX,2,SZ),0x88c0ff);wasCryst=has;
     if(cool<-.6&&Mt>.01&&rng()<h*.4)D.event('rapid cooling grows fine feathery crystals at the top (folklore: "storm coming"; physically a temperature effect)',V3(SX,LIQ-.4,SZ));
@@ -431,7 +431,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     col.scale.y=Math.max(.001,y-1.05);col.visible=vert;menisc.visible=vert;menisc.position.set(SXp,y,GZ);bendW.visible=y>.62;
     for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.v-=9.8*dt;d.y+=d.v*dt;d.x+=.25*dt;if(d.y<.05)drops.splice(i,1)}while(drops.length>DN)drops.shift();{const m=new THREE.Matrix4();for(let i=0;i<DN;i++){const d=drops[i];if(d)m.makeTranslation(d.x,d.y,d.z);else m.makeScale(0,0,0);dropM.setMatrixAt(i,m)}dropM.instanceMatrix.needsUpdate=true}
     // crystals: shard i is grown when its threshold lies below the group's growth fraction
-    const k=Math.min(1,dt*3);Gf+=(clamp(Mf/.3,0,1)-Gf)*k;Gt+=(clamp(Mt/.12,0,1)-Gt)*k;Gb+=(clamp(Mb/.25,0,1)-Gb)*k;
+    const k=Math.min(1,dt*3);Gf+=(clamp(Mf/.35,0,1)-Gf)*k;Gt+=(clamp(Mt/.2,0,1)-Gt)*k;Gb+=(clamp(Mb/.25,0,1)-Gb)*k;
     const m4=new THREE.Matrix4(),sv=V3();for(let i=0;i<SH.length;i++){const s=SH[i],G=s.grp?Gt:Gf,f=clamp((G-s.th)/.08,0,1);if(f<=0){m4.makeScale(0,0,0)}else{sv.copy(s.s).multiplyScalar(f);m4.compose(s.p,s.q,sv)}shards.setMatrixAt(i,m4)}shards.instanceMatrix.needsUpdate=true;
     for(let i=0;i<BASEN;i++){const b=BC[i],f=clamp((Gb*1.1-b.th)/.15,0,1);if(f<=0)m4.makeScale(0,0,0);else{sv.setScalar(b.s*(.4+.6*f));m4.compose(b.p,b.q,sv)}baseC.setMatrixAt(i,m4)}baseC.instanceMatrix.needsUpdate=true;
     const c=Math.max(0,total()-mass()),sig=c/S_(Tc)-1,haze=clamp((sig-.06)/.3,0,1);specks.material.opacity=haze*.8;sol.opacity=.1+haze*.38;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);

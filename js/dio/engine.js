@@ -16,6 +16,7 @@ import { radialGlow } from '../gfx/textures.js';
 import { renderSource } from '../room/reader.js';
 import { evidenceTools } from '../ai/evidence.js';
 import { Director } from './director.js';
+import { DIO } from './models.js';
 const PREFS_KEY = 'scriptorium.view';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
 const savePrefs = p => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { } };
@@ -237,8 +238,11 @@ export class DioramaView {
     const now = performance.now(); this._seen = this._seen || new Map(); if (now - (this._seen.get(ev.text) || -1e9) < 4000) return; this._seen.set(ev.text, now);
     const named = this.namesIn(ev.text), host = named[0] || this.lessonActor;
     if (this.dir.cinematic && this.stage === 'explore') {
-      const pos = ev.pos ? ev.pos.clone() : null;
-      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host) });
+      // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
+      const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
+      const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
+      const pos = shot && shot.target ? new THREE.Vector3().fromArray(shot.target) : ev.pos ? ev.pos.clone() : null;
+      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), dist: shot && shot.dist });
     } else { const d = el('div', { text: ev.text }); this.ticker.append(d); setTimeout(() => d.remove(), this.dir.readTime(ev.text) * 1000); while (this.ticker.children.length > 2) this.ticker.firstChild.remove(); }
     this.evlog.prepend(el('li', { text: 't=' + ev.t.toFixed(2) + ' s · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }

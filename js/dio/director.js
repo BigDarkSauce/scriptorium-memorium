@@ -69,7 +69,7 @@ export class Director {
     const v = this.v, p = b.anchor && b.anchor(); if (!p) return;
     let r = .8; if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) r = bx.getSize(V3()).length() * .5; }
     const R = v.ds.orb ? v.ds.orb.r : 10;
-    const dist = clamp(r * 3.2, R * .22, R * .62);
+    const dist = b.dist || clamp(r * 3.2, R * .22, R * .62);
     v.flyTo(p, dist, 1.6, b.kind === 'event' ? 18 : 10);
     this.orbit = { center: p.clone(), rate: (Math.random() < .5 ? -1 : 1) * .06 };
   }

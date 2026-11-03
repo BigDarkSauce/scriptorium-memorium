@@ -170,16 +170,16 @@ export function softDisc(S = 128, inner = 0) {
 // Cumulus banks for backdrops, painted like a matte painting: each cloud is a cluster of soft puffs clipped to a
 // flat base, with a per-cloud strength stored in alpha (so a coverage threshold grows clouds in and out), then
 // self-shadowed (density above a texel darkens it: bright tops, grey bellies). Tiles horizontally.
-export function cloudLayer(seed = 1, W = 1024, H = 256, puff = 1) {
-  return cached('cloud' + seed + W + H + puff, () => {
-    const r = mulberryP(seed * 7919 + 13), c = canvas(W, H), g = c.getContext('2d');
-    const n = Math.round(16 * puff);
+export function cloudLayer(seed = 1, W = 1024, H = 256, puff = 1, size = 1) {
+  return cached('cloud' + seed + W + H + puff + size, () => {
+    const r = mulberryP(seed * 7919 + 13), c = canvas(W, H), g = c.getContext('2d', { willReadFrequently: true }), K = H / 256; size *= K;
+    const n = Math.round(16 * puff * (W / H / 8) / Math.sqrt(size / K));
     for (let k = 0; k < n; k++) {
-      const cx = r() * W, base = H * (.66 + r() * .16), w = 70 + r() * 200, h = 40 + r() * 80 * (w / 200 + .4), str = .45 + r() * .55, m = 26 + Math.floor(r() * 30);
+      const cx = r() * W, base = H * (.6 + r() * .26), w = (50 + r() * r() * 260) * size, h = (30 + r() * 80 * (w / 200 / size + .4)) * size, str = .35 + r() * .65, m = 18 + Math.floor(r() * 36);
       for (const ox of [-W, 0, W]) {
         if (cx + ox + w < -50 || cx + ox - w > W + 50) continue;
         for (let i = 0; i < m; i++) {
-          const dx = (r() + r() + r() - 1.5) / 1.5 * w * .55, fall = 1 - Math.min(1, Math.abs(dx) / (w * .6)), pr = (10 + r() * 34) * (.5 + fall * .8), py = base - pr * .55 - r() * h * (.25 + .75 * fall) * .55;
+          const dx = (r() + r() + r() - 1.5) / 1.5 * w * .55, fall = 1 - Math.min(1, Math.abs(dx) / (w * .6)), pr = (10 + r() * 34) * (.5 + fall * .8) * size, py = base - pr * .55 - r() * h * (.25 + .75 * fall) * .55;
           const gr = g.createRadialGradient(cx + ox + dx, py, 0, cx + ox + dx, py, pr); gr.addColorStop(0, `rgba(255,255,255,${.42 * str})`); gr.addColorStop(.5, `rgba(255,255,255,${.26 * str})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
           g.fillStyle = gr; g.beginPath(); g.arc(cx + ox + dx, py, pr, 0, 7); g.fill();
         }
@@ -188,7 +188,7 @@ export function cloudLayer(seed = 1, W = 1024, H = 256, puff = 1) {
     // self-shadowing from the density above each texel
     const img = g.getImageData(0, 0, W, H), d = img.data, A = new Float32Array(W * H); for (let i = 0; i < W * H; i++) A[i] = d[i * 4 + 3] / 255;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      let acc = 0; for (let k = 4; k <= 28; k += 6) { const yy = y - k; if (yy >= 0) acc += A[yy * W + x]; }
+      let acc = 0; for (let k = 4; k <= 28; k += 6) { const yy = y - Math.round(k * K); if (yy >= 0) acc += A[yy * W + x]; }
       const k = Math.min(1, acc / 3), o = (y * W + x) * 4; // lit white → cool grey-blue belly
       d[o] = 255 * (1 - .22 * k); d[o + 1] = 255 * (1 - .19 * k); d[o + 2] = 255 * (1 - .12 * k); d[o + 3] = 255 * Math.min(1, A[y * W + x] * 1.7);
     }

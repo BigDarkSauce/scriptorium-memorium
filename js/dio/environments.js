@@ -134,11 +134,11 @@ function glassCase(scene, w, h) {
 const LOOKS = {
   studio: { contrast: 1.12, sat: 1.04, vignette: .36, grain: .028, warm: .018, exposure: 1.0, bloomThreshold: 2.2, bloom: .22, tilt: 1 },
   lab: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.02, vignette: .32, grain: .025, warm: .0, exposure: 1.0 },
-  landscape: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.08, vignette: .28, grain: .022, warm: .01 },
+  landscape: { bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.08, sat: 1.08, vignette: .28, grain: .022, warm: .01 },
   cosmos: { bloomThreshold: 1.6, bloom: .26, contrast: 1.1, sat: 1.05, vignette: .4, grain: .03, warm: 0, exposure: 1.0 },
   micro: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
   abstract: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
-  ocean: { bloomThreshold: 1.6, bloom: .26, contrast: 1.06, sat: 1.06, vignette: .26, grain: .02, warm: .01, exposure: .95 },
+  ocean: { bloomThreshold: 9, bloom: .2, contrast: 1.06, sat: 1.06, vignette: .26, grain: .02, warm: .01, exposure: .95 },
   night: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.12, sat: 1.0, vignette: .42, grain: .035, warm: 0, exposure: 1.05 }
 };
 

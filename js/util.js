@@ -15,7 +15,9 @@ export const fmt = (v, d = 3) => {
   if (!isFinite(v)) return '—';
   const a = Math.abs(v);
   if (a !== 0 && (a < 1e-3 || a >= 1e5)) return v.toExponential(2);
-  return (+v.toFixed(d)).toString();
+  // d = the most decimals wanted; readouts also stop at about 4 significant figures (1018.3 hPa, 33.06 mm, 0.028)
+  const ints = a === 0 ? 1 : Math.floor(Math.log10(a)) + 1, dec = Math.min(d, Math.max(a >= 100 && d > 0 ? 1 : 0, 4 - ints));
+  return (+v.toFixed(Math.max(0, dec))).toString();
 };
 export function el(tag, attrs = {}, kids = []) {
   const e = document.createElement(tag);

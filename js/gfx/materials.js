@@ -27,6 +27,9 @@ function hook(m) {
   if (m.isMeshBasicMaterial || m.isShaderMaterial) return m;
   m.onBeforeCompile = (s) => {
     const card = !!m.userData.frontPatched; // set synchronously by patchMaterial before the first compile
+    // punctual lights are infinitely small: on polished metal their GGX peak is hundreds of times brighter than a real
+    // softbox highlight and blooms into a white blob. Cap direct specular radiance (IBL reflections are untouched).
+    s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n reflectedLight.directSpecular = min( reflectedLight.directSpecular, vec3( 3.0 ) );\n #ifdef USE_CLEARCOAT\n clearcoatSpecularDirect = min( clearcoatSpecularDirect, vec3( 3.0 ) );\n #endif');
     if (card && s.fragmentShader.includes('#include <lights_physical_fragment>')) {
       s.fragmentShader = s.fragmentShader.replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
         normal = normalize( mix( normal, nonPerturbedNormal, isCard ) );

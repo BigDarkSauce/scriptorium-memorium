@@ -102,7 +102,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
         let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
         if (isT) { let e = noise.fbm(x * .18, z * .18, 0, 5) * H * 2 + (shape.bowl ? (x * x + z * z) * shape.bowl : 0);
           for (const f of (shape.flat || [])) { const dd = Math.hypot(x - f[0], z - f[1]), k = Math.max(0, Math.min(1, (dd - f[2]) / (f[3] ?? .8))); e = (f[4] ?? -.05) * (1 - k) + e * k; }
-          const edge = Math.min(num(shape.w, R * 2), num(shape.d, R * 2)) / 2, rr = Math.hypot(x, z); if (shape.round !== false && rr > edge * .86) e -= Math.pow((rr - edge * .86) / (edge * .14), 2) * (H + .4); pos.setY(i, e); const t = Math.min(1, Math.max(0, (e + H) / (2.5 * H))); c.copy(low).lerp(high, t); }
+          const edge = Math.min(num(shape.w, R * 2), num(shape.d, R * 2)) / 2, rr = Math.hypot(x, z); if (shape.round !== false && rr > edge * .86) { e -= Math.min(1, Math.pow((rr - edge * .86) / (edge * .14), 2)) * (H + .4); if (rr > edge) { const k = edge / rr; x *= k; z *= k; pos.setX(i, x); pos.setZ(i, z); e = -(H + .4); } } pos.setY(i, e); /* round terrain: corners fold onto a circular rim instead of spiking down */ const t = Math.min(1, Math.max(0, (e + H) / (2.5 * H))); c.copy(low).lerp(high, t); }
         else { const v = V3(x, y, z).normalize(); const n = 1 + noise.fbm(v.x * 1.6, v.y * 1.6, v.z * 1.6, 5) * .55; let yy = v.y * n; if (k === 'mountain') yy = Math.max(0, yy) * (1 + Math.pow(Math.max(0, v.y), 2)); pos.setXYZ(i, v.x * n * R, yy * H * (k === 'mountain' ? 1 : .7), v.z * n * R); const hh = yy; c.copy(low).lerp(high, Math.min(1, Math.max(0, hh))); if (k === 'mountain' && hh > (shape.snowline ?? .75)) c.copy(snow); }
         cols.push(c.r, c.g, c.b);
       }
@@ -117,7 +117,9 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       for (let i = 0; i < n; i++) { const q = new THREE.IcosahedronGeometry(s * (.45 + r() * .4), 2); q.translate((r() - .5) * s * 2.2, (r() - .3) * s * .5, (r() - .5) * s * 1.1); geos.push(q); }
       const m = mesh(mergeGeometries(geos), cm); m.castShadow = true; m.userData.inkAngle = 70; return m;
     }
-    case 'water': { const m = mesh(new THREE.PlaneGeometry(num(shape.w, 4), num(shape.d, 3), 64, 64), makeMaterial(matSpec || 'water'), false); m.rotation.x = -Math.PI / 2; m.userData.waves = num(shape.waves, .03); m.userData.noInk = true; g.add(m); g.userData.water = m; return g; }
+    case 'water': { const m = mesh(new THREE.PlaneGeometry(num(shape.w, 4), num(shape.d, 3), 64, 64), makeMaterial(matSpec || 'water'), false); m.rotation.x = -Math.PI / 2; m.userData.waves = num(shape.waves, .03); m.userData.noInk = true; g.add(m); g.userData.water = m;
+      // optional water body below the surface (shape.depth): a transmissive volume, so submerged bodies refract and the water reads as a mass
+      if (num(shape.depth, 0) > 0) { const D = num(shape.depth, 0), body = mesh(new THREE.BoxGeometry(num(shape.w, 4) * .998, D, num(shape.d, 3) * .998), m.material, false); body.position.y = -D / 2 - .003; body.userData.noInk = true; g.add(body); m.material.thickness = Math.min(num(shape.w, 4), num(shape.d, 3)); } return g; }
     case 'table': {
       const w = num(shape.w, 3), d = num(shape.d, 1.6), h = num(shape.h, 1.1), wm = makeMaterial(matSpec || 'darkwood');
       const top = mesh(alignUV(new RoundedBoxGeometry(w, .08, d, 2, .02)), wm); top.position.y = h; g.add(top);

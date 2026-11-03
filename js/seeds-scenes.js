@@ -11,7 +11,7 @@ export const WATER_CYCLE = {
     { id: 'mountain', name: 'Mountains', label: 'Mountains', role: 'actor', describe: 'Air forced up their slopes expands and cools.', shape: { kind: 'mountain', r: 1.8, h: 2.7, seed: 5, snowline: .7 }, position: [-3.1, 0, -1.4] },
     { id: 'mountain2', name: 'Mountain', role: 'decor', shape: { kind: 'mountain', r: 1.5, h: 2.1, seed: 9, snowline: .72 }, position: [-3.3, 0, 1.7] },
     { id: 'mountain3', name: 'Hill', role: 'decor', shape: { kind: 'mountain', r: 1.1, h: 1.2, seed: 2, snowline: 2 }, position: [-1.7, 0, -3.1] },
-    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunlight gives water molecules the energy to escape as vapour.', shape: { kind: 'water', w: 3.4, d: 2.6 }, position: [2.6, .38, 1.2] },
+    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunlight gives water molecules the energy to escape as vapour.', shape: { kind: 'water', w: 3.4, d: 2.6, depth: .5 }, material: { preset: 'water', color: '#3f9aa8' }, position: [2.6, .38, 1.2] },
     { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'Invisible gas in reality; drawn here as rising motes.', shape: { kind: 'particles', type: 'bubbles', count: 220, area: [3.4, 3, 2.4], size: .05 }, position: [2.6, .4, 1.2] },
     { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Vapour condenses on dust into droplets; the cloud darkens as it fills.', shape: { kind: 'cloud', r: .9, puffs: 8 }, position: [2.6, 4.3, 1.2] },
     { id: 'wind', name: 'Wind', label: 'Wind', role: 'actor', describe: 'Carries the cloud west, towards the mountains.', shape: { kind: 'arrow', length: 1.3, r: .05 }, material: { preset: 'neon', color: '#9fd0ff' }, position: [-.4, 5.6, 3.4], rotation: [0, 0, 90] },
@@ -168,8 +168,8 @@ export const OSMOSIS = {
   bodies: [
     { id: 'tank', name: 'Tank', role: 'decor', shape: { kind: 'glasscase', w: 6, d: 1.6, h: 3.4 }, position: [0, 0, 0] },
     { id: 'membrane', name: 'Membrane', label: 'Semi-permeable membrane', role: 'actor', describe: 'Pores let water molecules through but not the larger solute molecules.', shape: { kind: 'box', w: .05, h: 3.2, d: 1.55, round: 0 }, material: { preset: 'membrane', color: '#ffb0c8' }, position: [0, 1.6, 0] },
-    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55 }, material: { preset: 'water', color: '#3a9ec0', opacity: .55 }, position: [-1.5, 1.3, 0] },
-    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus solute.', shape: { kind: 'water', w: 2.95, d: 1.55 }, material: { preset: 'water', color: '#c08a3a', opacity: .55 }, position: [1.5, 1.3, 0] }],
+    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 2.2 }, material: { preset: 'water', color: '#58b4d0' }, position: [-1.5, 1.3, 0] },
+    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus solute.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 2.2 }, material: { preset: 'water', color: '#d0a050' }, position: [1.5, 1.3, 0] }],
   tour: ['membrane', 'left', 'right'],
   params: [
     { key: 'solute', label: 'solute molecules', min: 0, max: 90, value: 45, rebuild: true },
