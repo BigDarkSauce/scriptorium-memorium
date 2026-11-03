@@ -2,7 +2,13 @@
 
 ## The library
 
-- **Move:** drag to look around, WASD or the arrow keys to walk.
+- **Move:** the box at the bottom right switches between two ways of moving. Its **Speed** slider (0.3–4 m/s) sets how fast you move in both, and is remembered.
+  - **Overview:** drag to orbit, use the wheel to zoom, and press WASD or the arrow keys to glide.
+  - **Walk (first person):** you see the room at the height of a person's eyes (1.62 m).
+    - Drag to turn your head and press WASD to walk. Hold Shift to hurry.
+    - The wheel, or holding the right mouse button, narrows your view to look closely.
+    - You can't walk through walls or furniture. Press **V** to switch modes.
+  - The same controls work in every book room.
 - **Arrange library:** add horizontal (wide, 3-tier) or vertical (tall, 6-tier) bookcases.
   - Click one to select it, then drag it along the floor; it snaps flush to the nearest wall.
   - Rotate it by 90° or 15°, rename it by subject, switch its shape, or remove it.
@@ -29,11 +35,21 @@
 
 1. **The drawing.** You see the scene as a drawing, either on the scroll or full screen. Press **Transition** (or scroll down) to materialise it while the camera dives in.
 2. **The tour.** Scroll, press ↓ or press › to visit each significant body in turn. Its name appears beside it and stays there. Decor isn't toured, but it reacts to the simulation (trees sway with wind, windows glow at night…).
-3. **Explore.** A panel slides in on the left:
+3. **Explore.** A panel slides in on the left (described below). While a step plays, the **cinematic** presentation takes over:
+   - The camera moves to what the step is about and drifts slowly around it.
+   - Each explanation appears beside the thing it describes, joined to it by a line.
+   - Explanations come one at a time, and each stays as long as it takes to read. A thin bar shows the time left.
+   - While you read an event, simulated time slows to about a third, so you can still see the process the text describes.
+   - When a step ends, its *Why* explanation appears next to the object.
+   - Grab the camera at any time; the director gives it back to you for a few seconds.
+   - The bar at the bottom left switches **Cinematic** on or off and sets the **reading pace** (slow, normal, fast).
+   - **Guides** (optional) adds animated arrows that show which way the subject is moving, and links to the other objects the explanation names.
+
+   The panel itself has three parts:
    - **Instructions** appear one at a time. Press *Play this step*: it sets the variables, focuses the camera, and runs until the step's event or time is reached. The next step then appears; finished steps stay readable, with an explanation.
    - **Variables** are sliders for every parameter.
    - **Objects** lists everything in the scene.
-4. **Edit.** Press the pencil, or E, then click any object:
+4. **Edit.** Press the pencil, or E, then click any object. **Ctrl+Z** undoes the last change (a move, rotation or scale, a hide or removal, a replacement, an added object, or a change made by AI):
    - **Move / Rotate / Scale**, with the G, R and S keys;
    - **Hide** (H), **Remove** (Del), or **Replace…** with another shape and material;
    - **Ask AI to change…** in plain words. *+ Add object* places a new body, and the *Ask AI…* button with nothing selected changes the whole diorama.

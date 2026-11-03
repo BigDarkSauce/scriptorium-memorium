@@ -74,7 +74,7 @@ export class Reader {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
     wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: esc(A.title || this.part.title) }), A.summary ? el('p', { html: esc(A.summary) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
-    wrap.append(this.evidenceBar(A));
+    wrap.append(this.evidenceBar(A)); this.seen3D = new Map();
     (A.chain || []).forEach(st => wrap.append(this.renderStep(st, wrap, A)));
     if (A.references && A.references.length) wrap.append(el('section', { class: 'refs' }, [el('h3', { text: 'References' }), el('ol', {}, A.references.map(r => el('li', {}, [renderSource(r)])))]));
     // typeset only once the scroll has finished unrolling (MathJax measures sizes; a scaled container gives NaN)
@@ -114,7 +114,12 @@ export class Reader {
       return el('div', { class: 'demo2d' }, [btn, slot]);
     }
     if (!is3D(d)) return el('span');
-    const card = el('figure', { class: 'sketch-card' });
+    // the same diorama appears once as the overview drawing; later steps get a stage plate that frames and marks
+    // only the bodies that step is about (or, if none can be identified, a compact link instead of a repeat)
+    const dkey = d.type === 'scene' ? 'scene:' + (d.title || '') : String(d.type);
+    const first = this.seen3D && this.seen3D.get(dkey); if (this.seen3D && !first) this.seen3D.set(dkey, st.id);
+    const stage = first && first !== st.id && !needsAuthoring(d) ? { focusText: [st.title, (st.bodies || []).join(' '), st.statement].join(' '), label: st.id + ' ' + st.title, first } : null;
+    const card = el('figure', { class: 'sketch-card' + (stage ? ' stage' : '') });
     const fill = () => {
       card.innerHTML = '';
       if (needsAuthoring(d)) {
@@ -126,10 +131,17 @@ export class Reader {
       const img = el('img', { class: 'sketch', alt: 'Drawing of ' + (d.title || d.type) });
       const go = el('button', { class: 'btn primary small', text: 'Transition ▸', onclick: () => this.openDiorama(d, st, img) });
       card.append(el('div', { class: 'sketch-frame' }, [img, el('div', { class: 'sketch-loading', text: 'drawing…' })]),
-        el('figcaption', {}, [el('div', {}, [el('div', { class: 'kicker', text: (d.technique || d.style || 'card') + ' · ' + (d.type === 'scene' ? 'authored scene' : d.type) }), el('b', { text: d.title || d.type })]), el('div', { class: 'row' }, [
+        el('figcaption', {}, [el('div', {}, [el('div', { class: 'kicker', text: stage ? `stage of the diorama shown in ${stage.first} · numbered parts are this step's bodies` : (d.technique || d.style || 'card') + ' · ' + (d.type === 'scene' ? 'authored scene' : d.type) }), el('b', { text: d.title || d.type })]), el('div', { class: 'row' }, [
           el('button', { class: 'btn small', text: 'Pedestal', title: 'Show this as the card model on the pedestal by this scroll', onclick: () => { this.part.pedestal = { step: st.id, demo: i }; this.save(); this.room.refreshStation(this.part); toast('Placed on the pedestal'); } }), go])]));
       img.addEventListener('click', () => this.openDiorama(d, st, img));
-      requestAnimationFrame(() => renderSketch(this.app.gfx, d, 800, 500).then(url => { img.src = url; card.classList.add('ready'); }).catch(e => { card.querySelector('.sketch-loading').textContent = 'Could not draw: ' + e.message; }));
+      requestAnimationFrame(() => renderSketch(this.app.gfx, d, 800, stage ? 420 : 500, stage || {}).then(url => {
+        if (!url) { // nothing specific to frame: a compact reference rather than the same picture again
+          card.className = 'sketch-ref'; card.innerHTML = '';
+          card.append(el('span', { class: 'ic', text: '↺' }), el('span', { html: `Same diorama as <a>${esc(stage.first)}</a>${d.params ? ', with this step\'s settings: ' + esc(Object.entries(d.params).map(([k, v]) => k + ' = ' + v).join(', ')) : ''}.` }), el('button', { class: 'btn small primary', text: 'Open ▸', onclick: () => this.openDiorama(d, st, null) }));
+          card.querySelector('a').onclick = () => { const t = this.el.querySelector(`[data-sid="${CSS.escape(stage.first)}"]`); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+          return;
+        }
+        img.src = url; card.classList.add('ready'); }).catch(e => { card.querySelector('.sketch-loading').textContent = 'Could not draw: ' + e.message; }));
     };
     fill(); return card;
   }
@@ -164,6 +176,7 @@ export class Reader {
     } catch (e) { res.innerHTML = ''; res.append(el('div', { class: 'err', text: evidenceErr(e, 'OpenAlex') })); }
   }
   openDiorama(d, st, img) {
+    if (!img || !img.src) { this.app.openDiorama(d, { title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id }, autoTransition: true }); return; }
     const r = img.getBoundingClientRect();
     this.app.openDiorama(d, { fromRect: r, fromImg: img.src, title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id } });
   }

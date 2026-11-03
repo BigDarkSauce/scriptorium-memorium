@@ -57,6 +57,23 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
 - PDF ingestion (`js/ai/ingest.js`) tries the outline, then headings, then the contents page, then fixed windows. It strips running headers and footers and rejoins hyphenated words.
 
+## Presentation and navigation
+
+- **`js/dio/director.js`** turns lesson steps and simulation events into *beats*, shown one at a time.
+  - Each beat has a camera shot: a push-in to the subject's bounding sphere with a slight change of azimuth, then a slow drift.
+  - Its callout is anchored to the subject in screen space, with a leader line and a reading timer: 1.6 s plus words ÷ reading speed (150/210/300 wpm), 3–14 s.
+  - During an instructed step, simulated time slows to 0.3× while an event is read (`timeScale`). A lesson waiting on `until: event:…` completes only after its beats have been read.
+  - Optional guides are SVG arrows: motion direction from the anchor's screen velocity, plus links to the other actors the sentence names.
+  - Preferences (`cinematic`, `guides`, `pace`) are kept in `localStorage['scriptorium.view']`.
+- **Undo** (`DioramaView.undo`, Ctrl+Z):
+  - transforms are stored as before-states keyed by object path;
+  - structural edits are stored as spec snapshots, and they survive an AI rewrite of the spec.
+- **Stage plates** (`renderSketch(..., {focusText})`): when a chain shows the same diorama again, the later drawing frames only the bodies its step names and marks them with coloured numbers and a legend. If nothing can be matched, a compact link replaces the repeat.
+- **`js/nav.js`** is shared by the hub and the rooms. It has two modes:
+  - *Overview*: orbit, with WASD gliding.
+  - *Walk*: first person at a 1.62 m eye height, drag-to-look, 68° FOV narrowing to 30° when you look closely, inertia, head bob, and collisions against the room bounds and furniture boxes.
+  - Speed and mode are remembered.
+
 ## Evidence (`js/ai/evidence.js`)
 
 - Declares the viewer's connectors OpenAlex (`search_works`, `resolve_references`), Consensus (`search`) and PubMed (`search_articles`, `get_article_metadata`) through the artifact `mcp` capability.
