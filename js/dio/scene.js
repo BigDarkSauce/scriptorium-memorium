@@ -62,7 +62,7 @@ export class DioramaScene {
     const D = {
       get world() { return self.world; }, get scene() { return self.scene; }, mats: this.mats, spec, p: this.p, ranges: this.ranges,
       get t() { return self.t; }, get playing() { return self.playing; }, get speed() { return self.speed; }, orb: this.orb, cam: this.camera,
-      label: (text, getPos, sym) => { if (!sym) self.addActor(text, () => { try { return getPos(); } catch (e) { return null; } }); else self.symbols = (self.symbols || []).concat([{ text, getPos }]); return {}; },
+      label: (text, getPos, sym, obj) => { if (sym && sym.isObject3D) { obj = sym; sym = false; } if (!sym) self.addActor(text, () => { try { return getPos(); } catch (e) { return null; } }, obj); else self.symbols = (self.symbols || []).concat([{ text, getPos }]); return {}; },
       event: (text, pos, color) => self.fire(text, pos, color),
       push: v => self.push(v), set seriesName(v) { self.seriesName = v; }, get seriesName() { return self.seriesName; }
     };

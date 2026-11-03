@@ -157,10 +157,10 @@ export class DioramaView {
     if (l.reset !== false && i === this.lessonI) { /* keep state continuous */ }
     if (l.set) { for (const k in l.set) this.setParam(k, +l.set[k], true); this.renderParams(); }
     const fa = l.focus ? this.ds.actors.find(a => a.id === l.focus || a.name === l.focus || a.name.toLowerCase().includes(String(l.focus).toLowerCase())) : null;
-    this.lessonActor = fa; this.awaitIdle = false; this.dir.clear();
+    this.lessonActor = fa; this.awaitIdle = false; this.dir.queue = [];   // the beat being read finishes; stale queued ones go
     const host = fa || this.namesIn(l.text)[0];
     this.dir.clearCaption(); if (this.dir.cinematic && !host) this.dir.setCaption(l.title || 'Step ' + (i + 1), l.text);
-    if (this.dir.cinematic && host) this.dir.push({ kind: 'lesson', title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: () => host ? host.getPos() : null, focus: host && host.obj, names: this.namesIn(l.text, host) });
+    if (this.dir.cinematic && host) this.dir.push({ kind: 'lesson', title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: () => host ? host.getPos() : null, focus: host && host.obj, host, names: this.namesIn(l.text, host) });
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     this.ds.playing = true; this.syncTimeUI();
     const until = String(l.until || ''); this.running = i; this.runT = 0; this.runDur = +l.run || (until ? 30 : 6); this.runUntil = until.startsWith('event:') ? until.slice(6).toLowerCase() : null; this.runReplay = !!replay;
@@ -181,7 +181,9 @@ export class DioramaView {
       const [a, b, , unit, name] = this.ds.ranges[k], v = this.ds.p[k];
       const out = el('b', { text: fmt(v) + (unit ? ' ' + unit : '') });
       const inp = el('input', { type: 'range', min: a, max: b, step: (b - a) / 300, value: v, id: 'dp-' + k, 'aria-label': name || k });
-      inp.oninput = () => { out.textContent = fmt(+inp.value) + (unit ? ' ' + unit : ''); this.setParam(k, +inp.value); };
+      inp.onpointerdown = inp.onkeydown = () => { if (inp._from == null) inp._from = this.ds.p[k]; };
+      inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; out.textContent = fmt(+inp.value) + (unit ? ' ' + unit : ''); this.setParam(k, +inp.value); };
+      inp.onchange = () => { if (inp._from != null && inp._from !== this.ds.p[k]) this.pushUndo({ kind: 'param', k, v: inp._from, label: name || k }); inp._from = null; inp.blur(); };
       box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { text: name || k }), out]), inp]));
     }
     if (!box.children.length) box.append(el('p', { class: 'dim small', text: 'No variables. Use Edit → Ask AI to add some.' }));
@@ -193,6 +195,7 @@ export class DioramaView {
     if (rebuild) { ds.build(); this.refreshPins(); }
     this.spec.values = Object.assign(this.spec.values || {}, { [k]: ds.p[k] });
   }
+  highlightPins(actors) { const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
   refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
   // ---------- HUD ----------
   buildHUD() {
@@ -232,6 +235,8 @@ export class DioramaView {
   // actors whose names appear in a sentence (for links and framing)
   namesIn(text, except) { const t = String(text || '').toLowerCase(); return this.ds.actors.filter(a => a !== except && a.name && a.name.length > 2 && t.includes(a.name.toLowerCase().split(' · ')[0])); }
   setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) this.dir.clear(); } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
+  // the model's own clock when it has one (e.g. "11:00 · day 1"), else simulated seconds
+  clockText(t) { const s = this.ds.sim; if (s && s.clock) { try { const c = s.clock(t); if (c) return String(c); } catch (e) { } } return 't=' + (t ?? this.ds.t).toFixed(1) + ' s'; }
   syncTimeUI() { this.playBtn.innerHTML = this.ds.playing ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>'; }
   onEvent(ev) {
     if (this.stage === 'sketch') return;
@@ -241,10 +246,11 @@ export class DioramaView {
       // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
+      const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, fk = Object.keys(flows).find(k => lt.includes(k));
       const pos = shot && shot.target ? new THREE.Vector3().fromArray(shot.target) : ev.pos ? ev.pos.clone() : null;
-      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), dist: shot && shot.dist });
+      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null });
     } else { const d = el('div', { text: ev.text }); this.ticker.append(d); setTimeout(() => d.remove(), this.dir.readTime(ev.text) * 1000); while (this.ticker.children.length > 2) this.ticker.firstChild.remove(); }
-    this.evlog.prepend(el('li', { text: 't=' + ev.t.toFixed(2) + ' s · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
+    this.evlog.prepend(el('li', { text: this.clockText(ev.t) + ' · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
     if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) this.awaitIdle = true; else this.runT = this.runDur; }
   }
@@ -254,8 +260,9 @@ export class DioramaView {
     else if (this.stage === 'sketch' && e.deltaY > 0) { e.preventDefault(); this.transition(); }
   }
   key(e) {
+    const typing = e.target.closest && e.target.closest('textarea,input:not([type=range]):not([type=checkbox]),[contenteditable]');
+    if (!typing && (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); this.undo(); return; }
     if (e.target.closest && e.target.closest('input,textarea,select')) return;
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
     if (this.stage === 'tour' && (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ')) { e.preventDefault(); this.next(); }
     else if (this.stage === 'tour' && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) { e.preventDefault(); this.prev(); }
     else if (e.key === 'Escape') { if (this.sel) this.deselect(); else this.exit(); }
@@ -316,6 +323,8 @@ export class DioramaView {
     if (u.kind === 'transform') {
       let o = u.o; if (!o.parent && u.path) o = this.ds.objectByPath(u.path); if (!o || !o.parent) { toast('That object no longer exists'); return; }
       this.select(o); o.position.copy(u.p); o.rotation.copy(u.r); o.scale.copy(u.s); this.commitTransform(); toast('Undone: move');
+    } else if (u.kind === 'param') {
+      this.setParam(u.k, u.v, true); this.renderParams(); this.save(); toast('Undone: ' + u.label + ' = ' + fmt(u.v));
     } else if (u.kind === 'spec') {
       const nw = JSON.parse(u.json); this.deselect(); Object.keys(this.spec).forEach(k => delete this.spec[k]); Object.assign(this.spec, nw);
       this.ds.build(); this.refreshPins(); this.renderObjects(); this.renderParams(); this.save(); toast('Undone: ' + (u.label || 'change'));
@@ -357,14 +366,22 @@ export class DioramaView {
   renderObjects() {
     const box = this.objBox; if (!box) return; box.innerHTML = '';
     box.append(el('div', { class: 'row wrap' }, [el('button', { class: 'btn small', text: this.editing ? 'Stop editing' : 'Start editing', onclick: () => { this.toggleEdit(); this.renderObjects(); } }), el('button', { class: 'btn small', text: '+ Add object', onclick: () => this.addObjectDialog() }), el('button', { class: 'btn small primary', text: 'Ask AI…', onclick: () => this.askAI(null) })]));
-    const list = el('ul', { class: 'olist' });
-    [...this.ds.world.children, ...this.ds.extras.children].forEach(o => {
-      if (o.userData.isInk || o.isLight) return;
+    // named parts first (actors, then scenery); unnamed sub-meshes are gathered under one collapsible line
+    const list = el('ul', { class: 'olist' }), rest = el('ul', { class: 'olist' }), seen = new Map();
+    const item = (o, nm) => {
       const hidden = !!o.userData.hiddenByUser;
       const eye = el('button', { class: 'ibtn tiny', title: hidden ? 'Show' : 'Hide', 'aria-label': hidden ? 'Show' : 'Hide', text: hidden ? '◌' : '●', onclick: ev => { ev.stopPropagation(); this.editAction('hide', o); } });
-      list.append(el('li', { class: (this.sel === o ? 'sel ' : '') + (o.userData.role === 'actor' ? 'actor' : ''), onclick: () => { if (!this.editing) this.toggleEdit(true); this.select(o); } }, [eye, el('span', { text: this.nameOf(o) })]));
+      return el('li', { class: (this.sel === o ? 'sel ' : '') + (o.userData.role === 'actor' ? 'actor' : ''), onclick: () => { if (!this.editing) this.toggleEdit(true); this.select(o); } }, [eye, el('span', { text: nm })]);
+    };
+    const all = [...this.ds.world.children, ...this.ds.extras.children].filter(o => !o.userData.isInk && !o.isLight);
+    const named = o => !!(o.userData.label || (o.name && !/^(mesh|group|object3d)?$/i.test(o.name)));
+    all.sort((a, b) => (b.userData.role === 'actor') - (a.userData.role === 'actor')).forEach(o => {
+      if (!named(o)) { rest.append(item(o, this.nameOf(o))); return; }
+      let nm = this.nameOf(o); const k = seen.get(nm) || 0; seen.set(nm, k + 1); if (k) nm += ' (' + (k + 1) + ')';
+      list.append(item(o, nm));
     });
     box.append(list);
+    if (rest.children.length) box.append(el('details', { class: 'orest' }, [el('summary', { text: `Other parts (${rest.children.length})` }), rest]));
   }
   async askAI(o) {
     const ta = el('textarea', { class: 'field', rows: 4, placeholder: o ? 'e.g. "make it twice as heavy", "turn it into a red sailing boat", "attach a spring to it and log every bounce"' : 'e.g. "add wind that bends the trees", "add a second planet and an event when they align", "add a variable for friction"' });
@@ -410,9 +427,9 @@ export class DioramaView {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
       if (!src || this.stage === 'sketch' || this.stage === 'materialize') { pin.style.visibility = 'hidden'; return; }
       v.copy(src).project(this.camera); if (v.z > 1) { pin.style.visibility = 'hidden'; return; }
-      pin.style.visibility = 'visible'; pin.style.transform = `translate(${((v.x * .5 + .5) * w).toFixed(1)}px,${((-v.y * .5 + .5) * h).toFixed(1)}px)`;
+      pin.style.visibility = 'visible'; if (!pin._w) pin._w = pin.offsetWidth; pin.style.transform = `translate(${clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10).toFixed(1)}px,${clamp((-v.y * .5 + .5) * h, 22, h - 22).toFixed(1)}px)`;
     });
-    if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = ds.t.toFixed(1) + ' s'; const rd = ds.readouts(); this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
+    if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd = ds.readouts(); this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
   }
   drawSpark() {
     const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
@@ -450,6 +467,8 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, ds.radius * .005); addOutlines(ds.extras, ds.U, ds.radius * .005);
   const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   ds.step(0);
+  // a stage plate shows the step's own state: let the model settle under the step's settings first (≈4 s of model time)
+  if (opts.focusText) { try { for (let k = 0; k < 120; k++) ds.step(1 / 30); } catch (e) { } }
   let endKey = ds.overviewKey(), focus = [], fc = ds.center, fr = ds.radius;
   if (opts.focusText) {
     focus = matchActors(ds.actors, opts.focusText);
@@ -478,7 +497,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
     });
     // badges in a column on the side with more room, spaced so they never overlap; leader lines to each part
     const side = pts.reduce((s, p) => s + p.x, 0) / Math.max(1, pts.length) < w / 2 ? 1 : -1, colX = side > 0 ? Math.min(w - 50, Math.max(...pts.map(p => p.x + p.rr)) + 60) : Math.max(50, Math.min(...pts.map(p => p.x - p.rr)) - 60);
-    pts.sort((p, q) => p.y - q.y); let lastY = -1e9; pts.forEach(p => { p.by = clamp(Math.max(p.y, lastY + 34), 60, h - 60); lastY = p.by; });
+    pts.sort((p, q) => p.y - q.y); let lastY = -1e9; pts.forEach((p, n) => { p.by = clamp(Math.max(p.y, lastY + 34), 60, h - 60); lastY = p.by; p.i = n; });   // numbered top to bottom, no gaps
     pts.forEach(({ a, i, x, y, rr, by }) => {
       const col = STAGE_COLORS[i % STAGE_COLORS.length], bx = colX;
       g.strokeStyle = col; g.lineWidth = 2.5; g.globalAlpha = .9; g.setLineDash([]); g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
@@ -495,8 +514,13 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   // drafting chrome: border, corner marks, title block
   g.strokeStyle = 'rgba(29,28,25,.75)'; g.lineWidth = 1.5; g.strokeRect(14, 14, w - 28, h - 28);
   g.fillStyle = '#e85d04'; [[14, 14], [w - 14, 14], [14, h - 14], [w - 14, h - 14]].forEach(([x, y]) => { g.fillRect(x - 6, y - 1, 12, 2); g.fillRect(x - 1, y - 6, 2, 12); });
-  g.fillStyle = 'rgba(29,28,25,.85)'; g.font = '13px "IBM Plex Mono", monospace'; g.fillText(String(spec.title || spec.type).toUpperCase().slice(0, 60), 26, h - 26);
-  g.textAlign = 'right'; g.fillText(focus.length ? 'STAGE · ' + String(opts.label || '').toUpperCase().slice(0, 40) : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING', w - 26, h - 26);
+  // title block on an opaque strip; both labels fitted with an ellipsis so they never run into each other
+  g.font = '13px "IBM Plex Mono", monospace'; g.textAlign = 'left';
+  const fit = (t, max) => { t = String(t); if (g.measureText(t).width <= max) return t; while (t.length > 1 && g.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
+  const L0 = String(spec.title || spec.type).toUpperCase(), R0 = focus.length ? 'STAGE · ' + String(opts.label || '').toUpperCase() : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING';
+  const avail = w - 52 - 24, lW = Math.min(g.measureText(L0).width, avail * .5), Lt = fit(L0, lW), Rt = fit(R0, avail - g.measureText(Lt).width);
+  g.fillStyle = 'rgba(239,233,220,.94)'; g.fillRect(15, h - 44, w - 30, 29); g.strokeStyle = 'rgba(29,28,25,.35)'; g.beginPath(); g.moveTo(15, h - 44); g.lineTo(w - 15, h - 44); g.stroke();
+  g.fillStyle = 'rgba(29,28,25,.85)'; g.fillText(Lt, 26, h - 25); g.textAlign = 'right'; g.fillText(Rt, w - 26, h - 25);
   rt.dispose(); ds.scene.background = keepBg; ds.scene.fog = keepFog; ds.dispose();
   const url = c.toDataURL('image/jpeg', .86); sketchCache.set(key, url); return url;
 }

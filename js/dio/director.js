@@ -59,15 +59,17 @@ export class Director {
     b.line = document.createElementNS(NS, 'path'); b.line.setAttribute('class', 'co-line'); this.svg.append(b.line);
     b.dot = el('div', { class: 'co-dot' }); this.layer.append(b.dot);
     if (this.guides) this.makeGuides(b);
+    this.v.highlightPins && this.v.highlightPins([b.host, ...(b.names || [])].filter(Boolean));
   }
   endBeat(all) {
     const b = this.beat; if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
-    this.beat = null; if (all) { this.timeScale = 1; return; } this.nextBeat();
+    this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; return; } this.nextBeat();
   }
   // choose a camera shot for a beat: push in on the subject, keep a three-quarter view, drift around it
   frame(b) {
-    const v = this.v, p = b.anchor && b.anchor(); if (!p) return;
-    let r = .8; if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) r = bx.getSize(V3()).length() * .5; }
+    const v = this.v; let p = b.anchor && b.anchor(); if (!p) return;
+    let r = .8;
+    if (b.focus && !b.dist) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { r = bx.getSize(V3()).length() * .5; p = bx.getCenter(V3()); } }
     const R = v.ds.orb ? v.ds.orb.r : 10;
     const dist = b.dist || clamp(r * 3.2, R * .22, R * .62);
     v.flyTo(p, dist, 1.6, b.kind === 'event' ? 18 : 10);
@@ -77,8 +79,13 @@ export class Director {
   makeGuides(b) {
     b.guides = [];
     const mk = cls => { const p = document.createElementNS(NS, 'path'); p.setAttribute('class', cls); p.setAttribute('marker-end', 'url(#dir-ah)'); this.svg.append(p); b.guides.push(p); return p; };
-    b.motion = mk('guide motion');
+    b.motion = mk('guide motion'); b.wtrail = [];
     b.links = (b.names || []).slice(0, 3).map(a => ({ a, path: mk('guide link') }));   // the named objects already carry their pins
+    // process arrows supplied by the model for this event (DIO.<type>.flows): what pushes what, where
+    b.flowEls = (b.flows || []).slice(0, 4).map(f => {
+      const path = mk('guide flow'), t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'guide-label'); t.textContent = f.label || ''; this.svg.append(t); b.guides.push(t);
+      return { f, path, t };
+    });
   }
   // ---------- per frame ----------
   update(dt, cam, w, h) {
@@ -99,22 +106,43 @@ export class Director {
     // callout placement: on the emptier side of the anchor, kept inside the safe frame
     const e = b.el; if (e) {
       const cw = e.offsetWidth || 300, ch = e.offsetHeight || 80, panel = v.panel && !v.panel.hidden && !v.panel.classList.contains('folded') ? 380 : 24;
-      const right = sx < w * .58; let x = right ? sx + 110 : sx - 110 - cw; let y = sy - ch - 40;
-      x = clamp(x, panel, w - cw - 24); y = clamp(y, 84, h - ch - 120);
+      if (!b.rects || b.t - (b.rectT || -1) > .25) { b.rectT = b.t; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top; }
+      const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; x = clamp(x, panel, w - cw - 24); y = clamp(y, 84, h - ch - 120); return [x, y]; };
+      const cost = ([x, y]) => { let o = 0; for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
+      const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
+      const right0 = sx < w * .58; if (b.side == null) b.side = right0 ? 0 : 1;
+      let best = b.side, bc = cost(place(C[b.side])); C.forEach((c, i) => { const k = cost(place(c)); if (k < bc * .7) { bc = k; best = i; } }); b.side = best;
+      let [x, y] = place(C[best]); const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
       b.line.setAttribute('d', on ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
       // guides
       if (b.motion) {
-        const tr = this.trail.get(b) || []; if (on) tr.push([sx, sy, b.t]); while (tr.length && b.t - tr[0][2] > .5) tr.shift(); this.trail.set(b, tr);
-        const a0 = tr[0], dx = a0 ? sx - a0[0] : 0, dy = a0 ? sy - a0[1] : 0, L = Math.hypot(dx, dy);
-        if (L > 6) { const k = 60 / L; b.motion.setAttribute('d', `M${sx + dx * .2} ${sy + dy * .2} q ${-dy * k * .25} ${dx * k * .25} ${dx * k} ${dy * k}`); b.motion.style.opacity = 1; } else b.motion.style.opacity = 0;
+        // motion: from how the subject moves in the WORLD (camera moves don't count), shown only when it really moves
+        const wp = (b.host && b.host.getPos && b.host.getPos()) || p;
+        const tr = b.wtrail; if (wp) tr.push([wp.clone(), b.t]); while (tr.length > 2 && b.t - tr[0][1] > .6) tr.shift();
+        const R = v.ds.orb ? v.ds.orb.r : 10, a0 = tr[0];
+        const hq = wp && wp.clone().project(cam), hx = hq ? (hq.x * .5 + .5) * w : sx, hy = hq ? (-hq.y * .5 + .5) * h : sy;
+        if (hq && hq.z < 1 && a0 && b.t - a0[1] > .2) {
+          const dW = wp.clone().sub(a0[0]), sp = dW.length() / (b.t - a0[1]);
+          if (sp > R * .006) {
+            const q2 = wp.clone().add(dW.normalize().multiplyScalar(R * .05)).project(cam), ex = (q2.x * .5 + .5) * w - hx, ey = (-q2.y * .5 + .5) * h - hy, L = Math.hypot(ex, ey);
+            if (L > 1) { const k = 64 / L; b.motion.setAttribute('d', `M${hx + ex * k * .25} ${hy + ey * k * .25} q ${-ey * k * .2} ${ex * k * .2} ${ex * k} ${ey * k}`); b.motion.style.opacity = 1; } else b.motion.style.opacity = 0;
+          } else b.motion.style.opacity = 0;
+        } else b.motion.style.opacity = 0;
         (b.links || []).forEach(L2 => {
-          const q = L2.a.getPos && L2.a.getPos(); if (!q) return; const s = q.clone().project(cam); if (s.z > 1) { L2.path.setAttribute('d', ''); return; }
-          const tx = (s.x * .5 + .5) * w, ty = (-s.y * .5 + .5) * h; if (Math.hypot(tx - sx, ty - sy) < 30) { L2.path.setAttribute('d', ''); return; }
+          const q = L2.a.getPos && L2.a.getPos(); if (!q) return; const s2 = q.clone().project(cam); if (s2.z > 1) { L2.path.setAttribute('d', ''); return; }
+          const tx = (s2.x * .5 + .5) * w, ty = (-s2.y * .5 + .5) * h; if (Math.hypot(tx - sx, ty - sy) < 30) { L2.path.setAttribute('d', ''); return; }
           const mx = (sx + tx) / 2, my = Math.min(sy, ty) - 60; L2.path.setAttribute('d', `M${sx} ${sy} Q ${mx} ${my} ${tx} ${ty - 8}`);
-          
+        });
+        (b.flowEls || []).forEach(F => {
+          const fv = q => typeof q === 'function' ? q() : V3().fromArray(q), a = fv(F.f.from).clone().project(cam), c = fv(F.f.to).clone().project(cam);
+          if (a.z > 1 || c.z > 1) { F.path.setAttribute('d', ''); F.t.textContent = ''; return; }
+          const ax = (a.x * .5 + .5) * w, ay = (-a.y * .5 + .5) * h, cx = (c.x * .5 + .5) * w, cy = (-c.y * .5 + .5) * h;
+          const grow = Math.min(1, b.t / 1.2), ex = ax + (cx - ax) * grow, ey = ay + (cy - ay) * grow, nx = -(cy - ay) * .18, ny = (cx - ax) * .18;
+          F.path.setAttribute('d', `M${ax} ${ay} Q ${(ax + ex) / 2 + nx} ${(ay + ey) / 2 + ny} ${ex} ${ey}`);
+          F.t.textContent = F.f.label || ''; F.t.setAttribute('x', ((ax + cx) / 2 + nx + 8).toFixed(0)); F.t.setAttribute('y', ((ay + cy) / 2 + ny).toFixed(0));
         });
       }
     }

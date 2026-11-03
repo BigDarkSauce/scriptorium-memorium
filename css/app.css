@@ -294,3 +294,18 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .sketch-ref .ic { color: var(--rubric); font-size: 16px; } .sketch-ref a { color: var(--lapis); cursor: pointer; text-decoration: underline dotted; }
 .sketch-card.stage .sketch-frame { aspect-ratio: 800 / 420; }
 .callout { z-index: 2; } .dir-svg { z-index: 1; }
+
+/* director focus: the beat's objects stay bright, the other labels step back */
+.pins.dir-focus .pin.in:not(.hot) { opacity: .32; }
+.pins.dir-focus .pin.hot .pin-name { border-color: var(--brass); }
+.guide.flow { stroke: #9fe3ff; stroke-width: 2.6; fill: none; stroke-dasharray: 7 6; animation: flowdash 1s linear infinite; filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); }
+.guide-label { fill: #e8f8ff; font: italic 14px var(--f-italic, serif); paint-order: stroke; stroke: rgba(10,14,18,.85); stroke-width: 4px; }
+@keyframes flowdash { to { stroke-dashoffset: -13; } }
+
+/* readable panels over bright skies: a more opaque glass, full-strength list text */
+.dio-panel.glass, .edit-bar.glass, .dio-reads.glass { background: linear-gradient(180deg, rgba(255,250,240,.05), rgba(0,0,0,.05)), rgba(20,16,12,.86); }
+.olist li { color: var(--ink); }
+.orest { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.orest summary { cursor: pointer; padding: 3px 6px; border-radius: 8px; }
+.orest summary:hover { color: var(--ink); background: rgba(255,250,240,.06); }
+.edit-bar .dim, .dio-panel .dim { color: rgba(244,239,230,.82); }
