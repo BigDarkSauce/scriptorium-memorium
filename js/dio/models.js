@@ -255,9 +255,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   // ---------- materials ----------
   const shell=thinGlass({side:THREE.FrontSide,absorb:.03,edge:.9});            // glass with real wall thickness (two lathe surfaces)
   const film=thinGlass({side:THREE.DoubleSide,absorb:.05,edge:1,card:.35});    // single-surface glass (register glass, lens)
-  const oldGlass=thinGlass({side:THREE.FrontSide,absorb:.15,edge:1,color:0x12241c,env:2.1});   // Goethe body: hand-blown, faintly green-grey, so its pear outline reads against a bright sky
-  const oldTube=thinGlass({side:THREE.DoubleSide,absorb:.16,edge:1,color:0x12241c,env:2.1,card:.35}); // the spout, same glass
-  const water=makeMaterial({preset:'liquid',color:'#2f7fcf'});water.color.set('#8cc0ee');water.transmission=.6;water.attenuationDistance=1.2;water.thickness=1.6;water.roughness=.02; // tinted (blue) water, as real Goethe glasses use
+  const oldGlass=thinGlass({side:THREE.FrontSide,absorb:.3,edge:1,color:0x173026,env:2.3});   // Goethe body: hand-blown, green-grey, dense enough that the empty upper pear reads as glass (not as a bowl of water with nothing above)
+  const oldTube=thinGlass({side:THREE.DoubleSide,absorb:.32,edge:1,color:0x173026,env:2.3,card:.35}); // the spout, same glass: its empty upper part stays visible up to the open lip
+  const mkWater=()=>{const m=makeMaterial({preset:'liquid',color:'#2f7fcf'});m.color.set('#8cc0ee');m.transmission=.6;m.attenuationDistance=1.2;m.thickness=1.6;m.roughness=.02;return m},water=mkWater(); // tinted (blue) water, as real Goethe glasses use
   const spoutW=makeMaterial({preset:'plastic',color:'#2a7ad0'});spoutW.normalMap=null;spoutW.roughness=.05;spoutW.clearcoat=1;spoutW.clearcoatRoughness=.03;spoutW.emissive=new THREE.Color(0x0d3866);spoutW.emissiveIntensity=.6;spoutW.envMapIntensity=1.3; // the narrow column: dense tinted water so its level reads across the room
   const menM=makeMaterial({preset:'plastic',color:'#d8ecff'});menM.normalMap=null;menM.roughness=.04;menM.clearcoat=1;menM.emissive=new THREE.Color(0x5a88b8);menM.emissiveIntensity=.5; // bright meniscus rim (light caught by the curved surface)
   const sol=thinGlass({side:THREE.FrontSide,absorb:.1,edge:1,color:0x161208,ior:1.36,smudge:false,env:1.15});     // ethanol–water camphor solution (clear; crystals inside stay crisp)
@@ -368,7 +368,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const A_fl=Math.PI*rIn(WY)**2,RB=.05,a_sp=Math.PI*RB*RB;
   const wprof=[[.001,.33]];for(let y=.34;y<WY-.01;y+=.03)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY)*.995,WY]);
   const fw=put(lathe(wprof,water,96),'water in the body',GW);fw.position.set(GX,0,GZ);fw.castShadow=false;
-  const wSurf=new THREE.Mesh(new THREE.CircleGeometry(rIn(WY)*.995,96).rotateX(-Math.PI/2),water);wSurf.position.y=WY;wSurf.name='water surface';wSurf.castShadow=false;fw.add(wSurf);
+  const wsM=mkWater();wsM.envMapIntensity=.45;wsM.specularIntensity=.6;const wSurf=new THREE.Mesh(new THREE.CircleGeometry(rIn(WY)*.995,96).rotateX(-Math.PI/2),wsM);wSurf.position.y=WY;wSurf.name='water surface';wSurf.castShadow=false;fw.add(wSurf);
   // spout: a short stub out of the foot of the belly, a tight quarter bend, then straight up beside the body to an open lip;
   // a small glass weld at the belly ties it to the body
   const SPG=part('spout (open to the air)',GW);

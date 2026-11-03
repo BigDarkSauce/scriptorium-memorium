@@ -14,12 +14,15 @@ import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox } from 
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const SPACING = 2.9;
+// Station heights: every hanging scroll's lower rod sits at SHEET_BOTTOM, above the pedestal and its turning model
+// (PED_TOP + up to ~.4 m), so from the opening view (eye ~1.9 m, ~4.5 m back) the model never hides the sheet.
+const SHEET_BOTTOM = 1.3, PED_TOP = .965;
 
 export class BookRoom {
   constructor(app, book, data, opts = {}) {
     this.app = app; this.gfx = app.gfx; this.book = book; this.data = data; this.opts = opts;
     this.data.dims = this.data.dims || { w: 12, d: 10, h: 5.5 }; if (this.data.dims.h === 4.4) this.data.dims.h = 5.5; this.data.parts = this.data.parts || [];
-    this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .3;
+    this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .15; this.scene.userData.look = this.gfx.constructor.HOUSE;
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .05, 120);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 12, maxPolarAngle: Math.PI * .56, rotateSpeed: .6 });
@@ -45,8 +48,10 @@ export class BookRoom {
   frameStart() {
     const D = this.data.dims, first = (this.placed || []).slice(0, 3);
     if (!first.length) { this.camera.position.set(0, 1.65, D.d / 2 - 1.2); this.controls.target.set(0, 1.5, -D.d / 2); this.controls.update(); return; }
-    const t = V3(), n = V3(); first.forEach(({ slot }) => { t.add(slot.p.clone().addScaledVector(slot.n, .55)); n.add(slot.n); }); t.divideScalar(first.length).setY(1.45); n.normalize();
-    const back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), p = t.clone().addScaledVector(n, back).lerp(V3(0, 0, 0), .22).setY(1.68);
+    // eye a little above standing height, looking slightly down: the line of sight over each pedestal's model meets the
+    // wall below the scroll's lower rod (SHEET_BOTTOM), so banners show whole with their pedestals in front
+    const t = V3(), n = V3(); first.forEach(({ slot }) => { t.add(slot.p.clone().addScaledVector(slot.n, .55)); n.add(slot.n); }); t.divideScalar(first.length).setY(1.62); n.normalize();
+    const back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), p = t.clone().addScaledVector(n, back).lerp(V3(0, 0, 0), .22).setY(1.95);
     p.x = clamp(p.x, -D.w / 2 + 1.1, D.w / 2 - 1.1); p.z = clamp(p.z, -D.d / 2 + 1.1, D.d / 2 - 1.1);
     this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update();
   }
@@ -94,20 +99,20 @@ export class BookRoom {
     const g = new THREE.Group(); g.position.copy(slot.p); g.lookAt(slot.p.clone().add(slot.n)); this.scene.add(g);
     const sub = !!part.subOf, sc = sub ? .78 : 1;
     // hanging scroll: two rods and a parchment sheet with the part's title written on it
-    const W = 1.15 * sc, H = 1.55 * sc, y0 = 2.45 * (sub ? .94 : 1);
+    const W = 1.15 * sc, H = 1.55 * sc, nt = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.nicheTop) || 3.22, y0 = Math.min(SHEET_BOTTOM + H, nt - .12);
     const sheet = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: this.sheetTexture(part, i), roughness: .85, emissive: 0xffe6b0, emissiveIntensity: 0 }));
     sheet.position.set(0, y0 - H / 2, .06); sheet.castShadow = true; sheet.receiveShadow = true; g.add(sheet);
     [y0, y0 - H].forEach(y => { const rod = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, W + .16, 16), makeMaterial('darkwood')); rod.rotation.z = Math.PI / 2; rod.position.set(0, y, .08); rod.castShadow = true; g.add(rod); [-1, 1].forEach(s => { const k = new THREE.Mesh(new THREE.SphereGeometry(.045, 12, 10), makeMaterial('brass')); k.position.set(s * (W / 2 + .1), y, .08); g.add(k); }); });
-    const cord = new THREE.Mesh(new THREE.CylinderGeometry(.004, .004, .5, 4), makeMaterial('iron')); cord.position.set(0, y0 + .25, .07); g.add(cord);
+    const cl = Math.max(.08, nt - y0), cord = new THREE.Mesh(new THREE.CylinderGeometry(.004, .004, cl, 4), makeMaterial('iron')); cord.position.set(0, y0 + cl / 2, .07); g.add(cord); // up to the niche head
     const spot = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); spot.position.set(0, y0 + 1.4, 1.4); spot.target = sheet; g.add(spot);
     sheet.userData = { station: part.id, kind: 'sheet' };
     // pedestal with the card model
     const ped = new THREE.Group(); ped.position.set(0, 0, 1.15); g.add(ped);
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(.24, .3, 1.0, 32), makeMaterial('marble')); col.position.y = .5; col.castShadow = true; col.receiveShadow = true; ped.add(col);
-    const capM = new THREE.Mesh(new THREE.CylinderGeometry(.38, .34, .06, 32), makeMaterial('marble')); capM.position.y = 1.03; capM.receiveShadow = true; ped.add(capM);
-    const card = new THREE.Mesh(new THREE.CircleGeometry(.36, 48), new THREE.MeshStandardMaterial({ color: PAPER, roughness: .9 })); card.rotation.x = -Math.PI / 2; card.position.y = 1.065; card.receiveShadow = true; ped.add(card);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(.24, .3, PED_TOP - .065, 32), makeMaterial('marble')); col.position.y = (PED_TOP - .065) / 2; col.castShadow = true; col.receiveShadow = true; ped.add(col);
+    const capM = new THREE.Mesh(new THREE.CylinderGeometry(.38, .34, .06, 32), makeMaterial('marble')); capM.position.y = PED_TOP - .035; capM.receiveShadow = true; ped.add(capM);
+    const card = new THREE.Mesh(new THREE.CircleGeometry(.36, 48), new THREE.MeshStandardMaterial({ color: PAPER, roughness: .9 })); card.rotation.x = -Math.PI / 2; card.position.y = PED_TOP; card.receiveShadow = true; ped.add(card);
     ped.userData = { station: part.id, kind: 'pedestal' };
-    const mini = new THREE.Group(); mini.position.y = 1.07; ped.add(mini);
+    const mini = new THREE.Group(); mini.position.y = PED_TOP + .005; ped.add(mini);
     const st = { part, group: g, sheet, ped, mini, slot, spec: null };
     this.stations.set(part.id, st); this.buildMini(st);
     return st;
@@ -204,7 +209,7 @@ export class BookRoom {
   enterPedestal(p) {
     const st = this.stations.get(p.id); if (!st || !st.spec) { toast(p.analysis ? 'No 3D showcase in this scroll yet' : 'Analyse the scroll first'); this.openPart(p); return; }
     if (this.reader) this.reader.close();
-    const c = st.ped.getWorldPosition(V3()).add(V3(0, 1.15, 0)), n = st.slot.n;
+    const c = st.ped.getWorldPosition(V3()).add(V3(0, PED_TOP + .085, 0)), n = st.slot.n;
     const pos = c.clone().addScaledVector(n, 1.1).add(V3(0, .45, 0));
     this.flyTo(pos, c, 1.2, () => { this.unfold = { st, k: 0, c, n }; });
   }
@@ -218,7 +223,7 @@ export class BookRoom {
     this.stations.forEach(s => { s.mini.rotation.y += dt * .15; });
     if (this.unfold) {
       const U = this.unfold; U.k += dt / 1.6; const e = easeInOutQuint(Math.min(1, U.k));
-      U.st.mini.scale.setScalar(1 + e * 1.4); U.st.mini.position.y = 1.07 + e * .25; U.st.mini.rotation.y += dt * 1.2 * e;
+      U.st.mini.scale.setScalar(1 + e * 1.4); U.st.mini.position.y = PED_TOP + .005 + e * .25; U.st.mini.rotation.y += dt * 1.2 * e;
       if (U.st.ds) { U.st.ds.U.uFrontR.value = -1e5; }
       this.camera.position.lerp(U.c.clone().addScaledVector(U.n, .7).add(V3(0, .3, 0)), dt * 1.5); this.camera.lookAt(U.c);
       this.gfx.grade.uniforms.uFade.value = clamp((U.k - .55) * 2.2, 0, 1);

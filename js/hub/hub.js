@@ -14,7 +14,8 @@ export class Hub {
   constructor(app) {
     this.app = app; this.gfx = app.gfx; this.lib = app.lib;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0d0a07);
-    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .35;
+    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;
+    this.scene.userData.look = this.gfx.constructor.HOUSE; // crisp warm daylight (renderer.js); set before setView
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .05, 120);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
@@ -224,10 +225,10 @@ export class Hub {
     const k2 = easeOut(clamp((t - .35) / 1.0, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
     const k3 = clamp((t - 1.35) / 1.25, 0, 1), e3 = easeInOutQuint(k3);
     O.sheet.scale.y = Math.max(.001, e3); sc.rotation.z += 0; O.sheet.material.emissiveIntensity = e3 * 1.6; O.light.intensity = e3 * 6; sc.userData.paper.emissiveIntensity = e3 * .8;
-    this.gfx.bloom.strength = .32 + e3 * .5;
+    this.gfx.bloom.strength = this.scene.userData.look.bloom + e3 * .5;
     const k4 = clamp((t - 2.7) / 1.1, 0, 1), e4 = easeInOutQuint(k4);
     if (k4 > 0) { const into = O.liftTo.clone().add(V3(0, -.3, 0)); c.position.lerpVectors(O.camTo, into.clone().lerp(O.camTo, .18), e4); this.controls.target.copy(into); c.lookAt(into); this.gfx.grade.uniforms.uFade.value = e4; }
-    if (t > 3.85 && !O.done) { O.done = true; this.gfx.bloom.strength = .32; this.app.openRoom(O.b.id, { fromHub: true }); }
+    if (t > 3.85 && !O.done) { O.done = true; this.gfx.bloom.strength = this.scene.userData.look.bloom; this.app.openRoom(O.b.id, { fromHub: true }); }
   }
   // ---------- frame ----------
   update(dt) {

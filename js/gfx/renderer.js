@@ -69,7 +69,7 @@ export class Gfx {
   // low in these scenes (its grey reflections in lacquer, scagliola and the polished floor were the milky veil; gilt
   // compensates with its own envMapIntensity); bloom only on real highlights (flames, windows); a little contrast.
   static get HOUSE() {
-    return { contrast: 1.14, sat: 1.07, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.0, bloom: .2, bloomThreshold: 1.15, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping };
+    return { contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping };
   }
   setView(scene, camera) {
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);

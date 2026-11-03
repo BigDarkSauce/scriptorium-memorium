@@ -107,31 +107,32 @@ export function slotPos(shelfObj, tier, slot) {
   return new THREE.Vector3(x, y, .02);
 }
 const ribbonColors = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f4f'];
-// Name tag for a scroll end: an ivory card narrower than the slot pitch (0.128 m < 0.17 m), the title wrapped on up to
-// three lines and auto-fitted, the book's colour as a band with its short code. Cached per title/colour.
-const TAG_W = .128, TAG_H = .1;
+// Name tag for a scroll end: an ivory card narrower than the slot pitch (0.152 m < 0.17 m, 18 mm between neighbours),
+// the title in a bold, open book face (Alegreya) wrapped on up to three lines and fitted as large as it will go, the
+// book's colour as a thin band with its short code. 512 px canvas (≈ 3.4 px/mm: crisp at 1.5–3 m). Cached per title/colour.
+const TAG_W = .152, TAG_H = .112;
 function tagTex(title, col, icon) {
-  return canvasTex('tag|' + title + '|' + col + '|' + icon, 256, 200, (g, w, h) => {
-    g.fillStyle = '#f5ecd6'; g.fillRect(0, 0, w, h);
-    const band = 34; g.fillStyle = col; g.fillRect(0, 0, w, band);
-    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, band, w, 3);
-    g.fillStyle = '#f5ecd6'; g.beginPath(); g.arc(w / 2, band / 2, 7, 0, 7); g.fill(); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.stroke();
-    if (icon) { g.fillStyle = 'rgba(255,248,232,.92)'; g.font = '500 19px "IBM Plex Mono", monospace'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(String(icon).slice(0, 5), 12, band / 2 + 1); }
-    g.strokeStyle = col; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
-    g.fillStyle = '#2a1d12'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const maxW = w - 22, words = String(title || 'Untitled').split(/\s+/);
+  return canvasTex('tag2|' + title + '|' + col + '|' + icon, 512, 376, (g, w, h) => {
+    g.fillStyle = '#f7efdc'; g.fillRect(0, 0, w, h);
+    const band = 44; g.fillStyle = col; g.fillRect(0, 0, w, band);
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(0, band, w, 4);
+    g.fillStyle = '#f7efdc'; g.beginPath(); g.arc(w / 2, band / 2, 11, 0, 7); g.fill(); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3; g.stroke();
+    if (icon) { g.fillStyle = 'rgba(255,248,232,.95)'; g.font = '500 28px "IBM Plex Mono", monospace'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(String(icon).slice(0, 5), 18, band / 2 + 1); }
+    g.strokeStyle = col; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+    g.fillStyle = '#1e140b'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const maxW = w - 40, words = String(title || 'Untitled').split(/\s+/), avail = h - band - 26;
     let lines, fs;
-    for (fs = 44; fs >= 22; fs -= 2) {
-      g.font = `600 ${fs}px "IM Fell English", Georgia, serif`; lines = []; let cur = '';
+    for (fs = 104; fs >= 40; fs -= 4) {
+      g.font = `700 ${fs}px "Alegreya", Georgia, serif`; lines = []; let cur = '';
       for (const wd of words) { const t2 = cur ? cur + ' ' + wd : wd; if (g.measureText(t2).width <= maxW) cur = t2; else { if (cur) lines.push(cur); cur = wd; } }
       if (cur) lines.push(cur);
-      if (lines.length <= 3 && lines.every(l => g.measureText(l).width <= maxW) && lines.length * fs * 1.08 <= h - band - 14) break;
+      if (lines.length <= 3 && lines.every(l => g.measureText(l).width <= maxW) && lines.length * fs * 1.04 <= avail) break;
     }
     if (lines.length > 3) { lines = lines.slice(0, 3); lines[2] = lines[2].replace(/\s*\S*$/, '') + '…'; }
     lines = lines.map(l => { while (g.measureText(l).width > maxW && l.length > 2) l = l.slice(0, -2) + '…'; return l; });
-    const lh = fs * 1.08, y0 = band + (h - band) / 2 - (lines.length - 1) * lh / 2 + 2;
+    const lh = fs * 1.04, y0 = band + 4 + (h - band - 4) / 2 - (lines.length - 1) * lh / 2 + fs * .04;
     lines.forEach((l, i) => g.fillText(l, w / 2, y0 + i * lh));
-  }, { aniso: 8 });
+  }, { aniso: 16 });
 }
 export function makeScroll(book, scale = 1) {
   const g = new THREE.Group(); g.userData = { bookId: book.id, kind: 'scroll' };
@@ -148,7 +149,7 @@ export function makeScroll(book, scale = 1) {
   const seal = m(new THREE.CylinderGeometry(R * .38, R * .4, R * .16, 20), new THREE.MeshStandardMaterial({ color: col, roughness: .35, metalness: .05 })); seal.position.set(0, R * 1.08, 0); g.add(seal);
   // name tag hanging below the front knob; odd slots sit a little forward and lower, so neighbours never share a plane
   const odd = (book.slot | 0) % 2, sc = scale;
-  const tagM = new THREE.MeshStandardMaterial({ map: tagTex(book.title || 'Untitled', col, book.icon || ''), roughness: .82, emissive: 0xffffff, emissiveIntensity: .1, polygonOffset: true, polygonOffsetFactor: -1 - odd, polygonOffsetUnits: -1 - odd });
+  const tagM = new THREE.MeshStandardMaterial({ map: tagTex(book.title || 'Untitled', col, book.icon || ''), roughness: .82, emissive: 0xffffff, emissiveIntensity: .16, polygonOffset: true, polygonOffsetFactor: -1 - odd, polygonOffsetUnits: -1 - odd });
   tagM.emissiveMap = tagM.map;
   const tag = new THREE.Mesh(new THREE.PlaneGeometry(TAG_W * sc, TAG_H * sc), tagM);
   const zf = L / 2 + R * .4 + R * .55 + .006 * sc + odd * .007 * sc, yTop = -R * .5 - odd * .014 * sc;

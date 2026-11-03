@@ -28,7 +28,7 @@ export class Director {
   }
   dispose() { this.layer.remove(); }
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
-  userGrab() { this.hold = 6; }
+  userGrab() { this.hold = 6; this.move = null; this.fovTo = this.baseFov(); this.last = null; }
 
   // ---------- beats ----------
   // beat: {kind:'event'|'lesson'|'explain', title, text, anchor:()=>Vector3|null, focus:Object3D|null, names:[actor...]}
@@ -54,7 +54,7 @@ export class Director {
     const inStep = this.v.running != null || b.kind !== 'event';
     // read first, then watch: an instruction freezes the model until it has been read; events play in slow motion
     this.targetScale = !this.cinematic ? 1 : b.kind === 'lesson' ? 0 : b.kind === 'event' && inStep ? .3 : 1; if (b.kind === 'lesson' && this.cinematic) this.timeScale = 0;
-    if (b.caption) { this.setCaption(b.title, b.text); b.el = null; b.capBar = el('div', { class: 'co-time' }, [el('i')]); this.caption.append(b.capBar); if (this.cinematic && this.hold <= 0 && b.anchor) this.frame(b); return; }
+    if (b.caption) { this.setCaption(b.title, b.text); b.el = null; b.capBar = el('div', { class: 'co-time' }, [el('i')]); this.caption.append(b.capBar); if (this.cinematic && this.hold <= 0 && inStep) this.frame(b); return; }
     // the shot
     if (this.cinematic && inStep && this.hold <= 0) this.frame(b);
     // the callout, beside what it describes
@@ -72,17 +72,54 @@ export class Director {
     const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
     this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; return; } this.nextBeat();
   }
-  // choose a camera shot for a beat: push in on the subject, keep a three-quarter view, drift around it
+  // ---------- shots ----------
+  // A shot grammar taken from documentary and architectural film (docs/research/presentation-craft.md §5):
+  //  wide   static establishing view (the model's overview)            — start of a step without a named subject
+  //  push   cut to a medium-wide view, dolly in for ~3.5 s, then HOLD   — an instruction about one object
+  //  medium static, frames the subject and the objects the text names — explanations
+  //  close  static, narrow lens (~24°), cut in, not flown in            — an event on a small part
+  //  pov    the learner's eye rides an actor (engine.setPOV)            — when a step asks for it (lesson.shot = 'pov')
+  // Never two moving shots in a row; no floating drift; the subject sits on a third, the callout in the open side.
   frame(b) {
-    const v = this.v; let p = b.anchor && b.anchor(); if (!p) return;
-    let r = .8;
-    if (b.focus && !b.dist) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { r = bx.getSize(V3()).length() * .5; p = bx.getCenter(V3()); } }
+    const v = this.v, cam = v.camera; if (!cam || v.pov) return;
+    let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
-    if (b.focus && !b.dist) { const a0 = b.anchor && b.anchor(); if (a0) r = Math.max(r, a0.distanceTo(p)); }
-    const fit = r / Math.tan(THREE.MathUtils.degToRad((v.camera ? v.camera.fov : 45) / 2)) * 1.35;   // keep the subject inside ~70 % of the frame
-    const dist = b.dist || Math.max(fit, clamp(r * 3.2, R * .22, R * .62));
-    v.flyTo(p, dist, 1.6, b.kind === 'event' ? 18 : 10);
-    this.orbit = { center: p.clone(), rate: (Math.random() < .5 ? -1 : 1) * .06 };
+    let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
+    if (kind === 'pov') { const a = b.host || (b.names || [])[0]; if (a && v.setPOV) { v.setPOV(a, { auto: true }); this.last = { kind, moving: false, subj: a }; return; } kind = 'close'; }
+    if (kind === 'wide' || !p) { const k = v.ds.overviewKey(); this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), false); this.last = { kind: 'wide', moving: false }; return; }
+    // subject size: its mesh box, grown to include its label point and (for explanations) the other named objects
+    let box = null; if (b.focus) { box = new THREE.Box3().setFromObject(b.focus); if (box.isEmpty()) box = null; }
+    if (box) { box.expandByPoint(p); if (kind === 'medium') (b.names || []).slice(0, 2).forEach(a => { const q = a.getPos && a.getPos(); if (q) box.expandByPoint(q); }); p = box.getCenter(V3()); }
+    let r = box ? box.getSize(V3()).length() * .5 : .8;
+    // same subject and kind as the shot on screen: keep it (no needless cut)
+    const subj = b.host || b.focus || null;
+    if (this.last && this.last.subj && this.last.subj === subj && this.last.kind === kind && !b.dist) return;
+    const fov = kind === 'close' ? 24 : 36, half = THREE.MathUtils.degToRad(fov / 2), aspect = cam.aspect || 1.6;
+    let dist = b.dist || clamp(r / Math.tan(half) * (kind === 'close' ? 1.25 : 1.55), R * .1, R * 1.4);
+    if (b.dist) dist = b.dist * Math.tan(THREE.MathUtils.degToRad(this.baseFov() / 2)) / Math.tan(half);   // the model's hint was for the base lens
+    // direction: keep the learner's side of the model (current azimuth), at a calm elevation; eye-level-ish for close-ups
+    const off = cam.position.clone().sub(v.controls.target); off.y = 0; if (off.lengthSq() < 1e-6) off.set(0, 0, 1); off.normalize();
+    const elev = THREE.MathUtils.degToRad(kind === 'close' ? 9 : 17), dir = off.multiplyScalar(Math.cos(elev)); dir.y = Math.sin(elev);
+    // rule of thirds: shift the aim so the subject sits on the third away from where the callout will go
+    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize().negate(), hw = dist * Math.tan(half) * aspect;
+    const sx = p.clone().project(cam).x, side = sx < .16 ? 1 : -1;   // subject left of centre now → keep it on the left third
+    const target = p.clone().addScaledVector(right, side * hw * .3);
+    const pos = target.clone().addScaledVector(dir, dist);
+    if (kind === 'push') {
+      const start = target.clone().addScaledVector(dir, dist * 1.45);
+      this.cutTo(target.clone(), start, fov, true, () => { this.move = { from: start, to: pos, t0: target.clone(), k: 0, dur: 3.5 }; });
+      this.last = { kind, moving: true, subj };
+    } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj }; }
+  }
+  baseFov() { return this.v.baseFov || 40; }
+  near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
+  // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
+  cutTo(target, pos, fov, dip, then) {
+    const v = this.v, apply = () => { v.fly = null; v.controls.target.copy(target); v.camera.position.copy(pos); v.camera.fov = fov; v.camera.updateProjectionMatrix(); v.camera.lookAt(target); this.fovTo = fov; then && then(); };
+    this.move = null;
+    if (!dip) { v.flyTo ? (v.fly = { from: { p: v.camera.position.clone(), t: v.controls.target.clone() }, to: { p: pos.clone(), t: target.clone() }, k: 0, dur: 1.1, lift: 0 }) : apply(); this.fovTo = fov; v.controls.enabled = false; if (then) setTimeout(then, 1100); return; }
+    this.dip = { t: 0, apply, done: false };
+    v.app && v.app.sfx && v.app.sfx.play('cut', { gain: .5 });
   }
   // guides: an arrow from the callout into the subject, motion arrows for moving bodies, links between named actors
   makeGuides(b) {
@@ -101,11 +138,13 @@ export class Director {
     this.hold = Math.max(0, this.hold - dt);
     this.timeScale += ((this.targetScale ?? 1) - this.timeScale) * Math.min(1, dt * 3);
     const v = this.v;
-    // slow cinematic drift around the current subject while the director has the camera
-    if (this.cinematic && this.orbit && this.hold <= 0 && !v.fly && v.stage === 'explore' && (this.beat || v.running != null)) {
-      const c = cam.position, t = v.controls.target, off = c.clone().sub(t), ang = this.orbit.rate * dt;
-      off.applyAxisAngle(V3(0, 1, 0), ang); c.copy(t).add(off); cam.lookAt(t);
-    }
+    // cut dip (≈0.18 s down, 0.3 s up through a dark grade)
+    const g = v.gfx && v.gfx.grade && v.gfx.grade.uniforms;
+    if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
+    // a push: slow dolly, eased, then it simply holds
+    if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e); v.camera.lookAt(m.t0); v.controls.enabled = false; if (m.k >= 1) { this.move = null; v.controls.enabled = v.stage === 'explore' && !v.pov; } }
+    // lens: ease the field of view toward the shot's focal length (or back to the base lens after the learner takes over)
+    if (this.fovTo && Math.abs(v.camera.fov - this.fovTo) > .05 && !v.pov) { v.camera.fov += (this.fovTo - v.camera.fov) * Math.min(1, dt * 2.5); v.camera.updateProjectionMatrix(); }
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
     if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = this.queue.length ? .12 : .3;   // more waiting → slower, so text never lags far behind the process

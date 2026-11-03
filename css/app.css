@@ -317,3 +317,10 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .co-next:hover { background: rgba(255,217,138,.15); }
 .callout:hover { border-color: var(--brass); }
 .dir-caption .co-time { margin-top: 7px; }
+/* point of view */
+.pov-bar { position: absolute; left: 50%; top: calc(76px + env(safe-area-inset-top,0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 999px; font-size: 14px; color: var(--ink); background: rgba(20,16,12,.82); z-index: 4; }
+.pov-bar b { color: var(--brass); font-weight: 500; }
+.olist .pov { margin-left: auto; opacity: .8; } .olist .pov:hover { opacity: 1; color: var(--brass); }
+/* sound toggle */
+.sound-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(78px + env(safe-area-inset-top,0px)); z-index: 40; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); cursor: pointer; padding: 0; }
+.sound-btn[aria-pressed="false"] { color: var(--ink-3); }

@@ -11,6 +11,7 @@ import { normalizeChain } from './room/reader.js';
 import { legacyScrolls } from './seeds-legacy.js';
 import { FLAGSHIPS } from './seeds-scenes.js';
 import { groundChain } from './seeds-sources.js';
+import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
 import { el, $, uid, toast, sleep, clamp } from './util.js';
 
@@ -21,6 +22,9 @@ class App {
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
     this.mode = null; this.last = performance.now(); this.t = 0;
     initAI(); initEvidence();
+    // sound: one speaker button, a soft click for every button, ambience per place
+    this.sfx = sfx; document.body.append(sfx.button());
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button, .btn, [role=button], summary'); if (b && !b.classList.contains('sound-btn')) sfx.play('click', { gain: .6 }); }, true);
   }
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {
@@ -67,16 +71,19 @@ class App {
     try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); this.mode = new Hub(this); }
     await sleep(60); for (let k = 1; k > 0; k -= .05) { g.value = k; await sleep(16); } g.value = 0;
   }
-  openHub(opts = {}) { this.history = []; return this.switchMode(() => new Hub(this, opts)); }
+  openHub(opts = {}) { this.history = []; sfx.ambience('library'); return this.switchMode(() => new Hub(this, opts)); }
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
     const data = await this.loadRoom(bookId); this.currentRoom = bookId;
+    sfx.ambience('room'); sfx.play('door', { gain: .6 });
     return this.switchMode(() => new BookRoom(this, book, data, opts));
   }
   openDiorama(spec, opts = {}) {
     const back = opts.returnTo;
     const o = Object.assign({}, opts, { onExit: () => { if (back && back.room) this.openRoom(back.room, { openPart: back.part }); else this.openHub(); } });
     // keep the scroll image visible during the fade: the flight starts after the switch
+    const pre = (spec.environment && spec.environment.preset) || 'studio';
+    sfx.ambience({ landscape: 'outdoor', ocean: 'ocean', cosmos: 'space', night: 'outdoor', micro: 'micro', lab: 'lab', abstract: 'studio', desk: 'studio' }[pre] || (spec.type === 'weatherglass' ? 'outdoor' : 'studio')); sfx.play('whoosh', { gain: .5 });
     return this.switchMode(() => new DioramaView(this, spec, o));
   }
   loop() {
