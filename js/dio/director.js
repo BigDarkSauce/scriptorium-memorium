@@ -108,6 +108,7 @@ export class Director {
     }
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
+    if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = this.queue.length ? .12 : .3;   // more waiting → slower, so text never lags far behind the process
     const bar = (b.el || b.capBar) && (b.el || b.capBar).querySelector('.co-time i'); if (bar) bar.style.width = Math.min(100, b.t / b.dur * 100) + '%';
     // anchor on screen
     const p = b.anchor && b.anchor(); let sx = w * .5, sy = h * .42, on = false;

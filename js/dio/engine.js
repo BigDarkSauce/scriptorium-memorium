@@ -157,7 +157,7 @@ export class DioramaView {
     if (l.reset !== false && i === this.lessonI) { /* keep state continuous */ }
     if (l.set) { for (const k in l.set) this.setParam(k, +l.set[k], true); this.renderParams(); }
     const fa = l.focus ? this.ds.actors.find(a => a.id === l.focus || a.name === l.focus || a.name.toLowerCase().includes(String(l.focus).toLowerCase())) : null;
-    this.lessonActor = fa; this.awaitIdle = false; this.dir.queue = [];   // the beat being read finishes; stale queued ones go
+    this.lessonActor = fa; this.awaitIdle = false; this.dir.clear();   // starting a step is the reader's choice: what was showing gives way, and the new instruction is read before anything moves
     const host = fa || this.namesIn(l.text)[0];
     this.dir.clearCaption();
     // cinematic: the instruction is read first (the model waits), then the step plays; without a subject it shows as a caption

@@ -36,7 +36,9 @@ export function bmat(name) {
       m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aVar;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif'); };
       m.customProgramCacheKey = () => 'spines-atlas-1'; m.userData.noCast = true; break; }
     case 'paint': m = S({ color: 0xf0ebe0, roughness: .55 }); break;
-    case 'statuary-head': m = bmat('statuary').clone(); m.vertexColors = true; m.userData = { boxUV: 1.6 }; break;
+    // carved figures: one vertex-coloured geometry each (hollows and creases baked darker, see bakeAO); a little less
+    // sheen and env than plain statuary so the modelling, not a milky rim, carries the form
+    case 'statuary-head': case 'statuary-carved': m = P({ map: marbleTex('statuary', { size: 512, seed: 4 }), vertexColors: true, roughness: .44, clearcoat: .16, clearcoatRoughness: .45, sheen: .1, sheenColor: new THREE.Color(0xfff4e8), envMapIntensity: .8 }); m.userData.boxUV = 1.6; break;
     case 'statuary': m = P({ map: marbleTex('statuary', { size: 512, seed: 4 }), roughness: .36, clearcoat: .25, clearcoatRoughness: .4, sheen: .3, sheenColor: new THREE.Color(0xfff4e8), envMapIntensity: 1.1 }); m.userData.boxUV = 1.6; break;
     case 'books': m = S({ map: bookSpinesTex(), roughness: .72 }); break;
     case 'pages': m = S({ map: parchment('deskbook', 256, 256), roughness: .85 }); break;
@@ -91,88 +93,251 @@ export class Acc {
   }
 }
 
-// ---------- small geometry helpers ----------
-const UP = V(0, 1, 0);
-// tapered limb between two points (open cylinder + spherical joints), pushed into `add(geo, m4)`
-function limb(add, a, b, r0, r1, seg = 12) {
-  const dir = b.clone().sub(a), len = dir.length(), mid = a.clone().add(b).multiplyScalar(.5);
-  const q = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize());
-  add(new THREE.CylinderGeometry(r1, r0, len, seg, 1, true), new THREE.Matrix4().compose(mid, q, V(1, 1, 1)));
-  add(new THREE.SphereGeometry(r0, seg, 8), Mx(a.x, a.y, a.z)); add(new THREE.SphereGeometry(r1, seg, 8), Mx(b.x, b.y, b.z));
+// ---------- carved figures (statues, atlantes) ----------
+// A figure is built in unit height (≈ 1 = crown) as ONE vertex-coloured geometry: every part carries a 'color' (carved
+// hollows darker), then bakeAO() darkens the creases where forms meet (arm against flank, drapery folds, hair against
+// the face, the hem on the plinth), so the carving reads as stone under the hall's soft light from 4–8 m.
+// Gilt parts go to addGilt. Budget: ≤ ~25k triangles a figure; the callers merge by material.
+const UP = V(0, 1, 0), TAU = Math.PI * 2;
+const G1 = (x, c, s) => Math.exp(-((x - c) * (x - c)) / (s * s));
+const sstep = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
+const adist = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+// Catmull-Rom through a [[y, r], …] profile table (smooth: no shading kinks at the knots)
+function spline(tab, y) {
+  const n = tab.length; if (y <= tab[0][0]) return tab[0][1]; if (y >= tab[n - 1][0]) return tab[n - 1][1];
+  let i = 0; while (i < n - 2 && y > tab[i + 1][0]) i++;
+  const t = (y - tab[i][0]) / (tab[i + 1][0] - tab[i][0]), p0 = tab[Math.max(0, i - 1)][1], p1 = tab[i][1], p2 = tab[i + 1][1], p3 = tab[Math.min(n - 1, i + 2)][1];
+  return .5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
 }
-// lathe with drapery folds: radius modulated by sin(k·θ) with amplitude amp(y)
+// carved fold profile: broad rounded ridges (+1) and narrow, deep hollows (−1), as drapery is cut in marble
+const fold = ph => 1 - 2 * Math.pow(1 - Math.abs(Math.sin(ph / 2)), 2.6);
+const hollow = (f, k = .6) => 1 - k * Math.pow((1 - f) / 2, 1.4); // shade for a fold value
+// a parametric grid (u around / across, v along) → indexed geometry with normals, uv and a shade colour.
+// fn(u, v) → [x, y, z, shade]. Outward normal = ∂u × ∂v (flip reverses it).
+function surf(nu, nv, fn, closeU = false, flip = false) {
+  const cu = closeU ? nu : nu + 1, n = cu * (nv + 1), pos = new Float32Array(n * 3), col = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = [];
+  let q = 0;
+  for (let j = 0; j <= nv; j++) for (let i = 0; i < cu; i++, q++) {
+    const r = fn(i / nu, j / nv), k = r[3] == null ? 1 : clamp(r[3], .25, 1.05);
+    pos[q * 3] = r[0]; pos[q * 3 + 1] = r[1]; pos[q * 3 + 2] = r[2]; col[q * 3] = k; col[q * 3 + 1] = k * (.97 + .03 * k); col[q * 3 + 2] = k * (.93 + .07 * k); uv[q * 2] = i / nu; uv[q * 2 + 1] = j / nv;
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * cu + i, b = j * cu + (closeU ? (i + 1) % nu : i + 1), c = a + cu, d = b + cu; if (flip) idx.push(a, d, b, a, c, d); else idx.push(a, b, d, a, d, c); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+// surface of revolution about a swaying, sheared axis (contrapposto). rf(y, θ, v) → [radius, shade]; θ = 0 faces +z,
+// π/2 faces +x. cx(y): axis offset in x; shear(y): y += shear·(x − cx) (tilted hips / shoulders); zs(y): depth ratio.
+function revolve(y0, y1, nu, nv, rf, { cx = () => 0, zs = () => .78, shear = () => 0, th0 = 0, th1 = TAU, yf = null, flip = false } = {}) {
+  const full = Math.abs(th1 - th0 - TAU) < 1e-6;
+  return surf(nu, nv, (u, v) => { const th = th0 + (th1 - th0) * u, y = yf ? yf(th, v) : y0 + (y1 - y0) * v, [r, k] = rf(y, th, v), c = cx(y), x = c + r * Math.sin(th); return [x, y + shear(y) * (x - c), r * Math.cos(th) * zs(y), k]; }, full, flip);
+}
+// a tube from a to b, radius rf(t, θ) → [r, shade] (open ends: cover them with joints)
+function tube(a, b, rf, nu = 14, nv = 8) {
+  const d = b.clone().sub(a), dn = d.clone().normalize(), e1 = (Math.abs(dn.y) < .9 ? V(0, 1, 0) : V(1, 0, 0)).cross(dn).normalize(), e2 = dn.clone().cross(e1);
+  return surf(nu, nv, (u, v) => { const th = u * TAU, [r, k] = rf(v, th), c = Math.cos(th) * r, s = Math.sin(th) * r; return [a.x + d.x * v + e1.x * c + e2.x * s, a.y + d.y * v + e1.y * c + e2.y * s, a.z + d.z * v + e1.z * c + e2.z * s, k]; }, true);
+}
+// tapered limb between two points (tube + spherical joints)
+function limb(add, a, b, r0, r1, seg = 12) {
+  add(tube(a, b, t => [r0 + (r1 - r0) * t, 1], seg, 3)); add(new THREE.SphereGeometry(r0, seg, 8), Mx(a.x, a.y, a.z)); add(new THREE.SphereGeometry(r1, seg, 8), Mx(b.x, b.y, b.z));
+}
+// a band of drapery along pts: width wf(t), folds across it, a thin two-sided slab; out(P) is the outward direction
+function ribbon(add, pts, wf, out, { folds = 3, depth = .012, thick = .008, nu = 9, nv = 26, ph = 0, hem = 0 } = {}) {
+  const cur = new THREE.CatmullRomCurve3(pts), fr = [];
+  for (let j = 0; j <= nv; j++) { const t = j / nv, P = cur.getPointAt(t), T = cur.getTangentAt(t), B = T.clone().cross(out(P)).normalize(), O = B.clone().cross(T).normalize(); fr.push({ P, B, O, T, t }); }
+  [1, -1].forEach(sg => add(surf(nu, nv, (u, v) => {
+    const F = fr[Math.round(v * nv)], x = u * 2 - 1, f = fold(x * Math.PI * folds + ph + F.t * 2), wd = wf(F.t), hz = hem * sstep(.85, 1, F.t) * (f + 1) / 2;
+    const o = sg * thick / 2 + depth * (.5 * f + .5) * (1 - .5 * x * x);
+    return [F.P.x + F.B.x * x * wd / 2 + F.O.x * o - F.T.x * hz, F.P.y + F.B.y * x * wd / 2 + F.O.y * o - F.T.y * hz, F.P.z + F.B.z * x * wd / 2 + F.O.z * o - F.T.z * hz, sg > 0 ? hollow(f, .55) : .7];
+  }, false, sg < 0)));
+}
+// lathe with drapery folds: radius modulated by sin(k·θ) with amplitude amp(y) (used for small gilt work)
 function drapedLathe(profile, folds = 9, amp = () => 0, segs = 40, zScale = .8, phase = 0, phiStart = 0, phiLength = Math.PI * 2) {
   const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs, phiStart, phiLength);
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), th = Math.atan2(z, x), k = 1 + amp(y) * Math.sin(folds * th + y * 4 + phase) + amp(y) * .4 * Math.sin(folds * 2.3 * th + 1.7); p.setXYZ(i, x * k, y, z * k * zScale); }
   geo.computeVertexNormals(); return geo;
 }
-// ---------- figures (unit height ≈ 1; caller scales) ----------
-// A bearing atlas: legs braced, arms raised to a cushion at y = 1. Abstract, built from limbs and lathes.
-export function atlasFigure(add, mirror = 1, { herm = false, addTerm = null, addGilt = null, addHead = null } = {}) {
-  const m = mirror, P = (x, y, z) => V(x * m, y, z);
+// A hand: palm, curled fingers and thumb. z = along the forearm, `back` = the direction the back of the hand faces.
+function hand(add, Wr, dir, back, sc = 1) {
+  const z = dir.clone().normalize(), x = back.clone().cross(z).normalize(), y = z.clone().cross(x), B = new THREE.Matrix4().makeBasis(x, y, z);
+  const at = (px, py, pz, sx, sy, sz, rx = 0) => B.clone().setPosition(Wr.clone().addScaledVector(x, px * sc).addScaledVector(y, py * sc).addScaledVector(z, pz * sc)).multiply(Mx(0, 0, 0, rx, 0, 0, sx * sc, sy * sc, sz * sc));
+  const pt = (px, py, pz) => Wr.clone().addScaledVector(x, px * sc).addScaledVector(y, py * sc).addScaledVector(z, pz * sc);
+  add(new THREE.SphereGeometry(1, 12, 8), at(0, 0, .022, .021, .011, .026));
+  add(new THREE.SphereGeometry(1, 12, 8), at(0, -.009, .05, .02, .011, .019, .7));
+  limb(add, pt(.016, -.004, .012), pt(.022, -.014, .036), .0075 * sc, .006 * sc, 8);
+  return pt(0, -.016, .03); // the hollow of the palm
+}
+// Local occlusion baked into the vertex colours: for each vertex, the area of nearby surface lying in front of it
+// (within R, weighted by distance and angle). Density-independent; creases, folds and contacts go darker.
+function bakeAO(geo, R = .032, k = 1.5, lo = .4) {
+  const p = geo.attributes.position.array, nr = geo.attributes.normal.array, col = geo.attributes.color.array, N = p.length / 3;
+  const ids = new Int32Array(N), map = new Map(), P = [], Nn = [], Ar = [];
+  for (let i = 0; i < N; i++) {
+    const key = Math.round(p[i * 3] * 5000) + ',' + Math.round(p[i * 3 + 1] * 5000) + ',' + Math.round(p[i * 3 + 2] * 5000);
+    let id = map.get(key); if (id === undefined) { id = Ar.length; map.set(key, id); P.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); Nn.push(0, 0, 0); Ar.push(0); }
+    ids[i] = id; Nn[id * 3] += nr[i * 3]; Nn[id * 3 + 1] += nr[i * 3 + 1]; Nn[id * 3 + 2] += nr[i * 3 + 2];
+  }
+  for (let t = 0; t < N; t += 3) {
+    const a = t * 3, b = a + 3, c = a + 6, ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+    const ar = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 6; Ar[ids[t]] += ar; Ar[ids[t + 1]] += ar; Ar[ids[t + 2]] += ar;
+  }
+  const M = Ar.length, grid = new Map(), cell = q => Math.floor(q / R);
+  for (let j = 0; j < M; j++) { const key = cell(P[j * 3]) + ',' + cell(P[j * 3 + 1]) + ',' + cell(P[j * 3 + 2]); let l = grid.get(key); if (!l) grid.set(key, l = []); l.push(j); }
+  const ao = new Float32Array(M), norm = Math.PI * R * R / 3, R2 = R * R;
+  for (let j = 0; j < M; j++) {
+    const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2], nl = Math.hypot(Nn[j * 3], Nn[j * 3 + 1], Nn[j * 3 + 2]) || 1, nx = Nn[j * 3] / nl, ny = Nn[j * 3 + 1] / nl, nz = Nn[j * 3 + 2] / nl;
+    const gx = cell(x), gy = cell(y), gz = cell(z); let occ = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const l = grid.get((gx + a) + ',' + (gy + b) + ',' + (gz + c)); if (!l) continue;
+      for (let s = 0; s < l.length; s++) { const q = l[s], dx = P[q * 3] - x, dy = P[q * 3 + 1] - y, dz = P[q * 3 + 2] - z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > R2 || d2 < 1e-10) continue; const d = Math.sqrt(d2), cs = (dx * nx + dy * ny + dz * nz) / d; if (cs > .1) occ += Ar[q] * (1 - d / R) * cs; }
+    }
+    ao[j] = clamp(1 - k * occ / norm, lo, 1);
+  }
+  for (let i = 0; i < N; i++) { const a = ao[ids[i]]; col[i * 3] *= a; col[i * 3 + 1] *= a; col[i * 3 + 2] *= a; }
+  geo.attributes.color.needsUpdate = true; return geo;
+}
+// collects a figure's stone parts (shade colour on every part), merges them and bakes the occlusion
+class Fig {
+  constructor() { this.parts = []; this.add = (geo, m4, shade = 1) => this.push(geo, m4, shade); }
+  push(geo, m4, shade = 1) {
+    const g = geo.index ? geo.toNonIndexed() : geo.clone(); if (m4) g.applyMatrix4(m4); if (!g.attributes.normal) g.computeVertexNormals();
+    const n = g.attributes.position.count;
+    if (!g.attributes.color) { const c = new Float32Array(n * 3); for (let i = 0; i < n; i++) { c[i * 3] = shade; c[i * 3 + 1] = shade * (.97 + .03 * shade); c[i * 3 + 2] = shade * (.93 + .07 * shade); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
+    g.morphAttributes = {}; g.clearGroups(); this.parts.push(g); return g;
+  }
+  bake(R = .032, k = 1.5, lift = 0) { const g = mergeGeometries(this.parts, false); bakeAO(g, R, k); if (lift) g.translate(0, lift, 0); this.parts = []; return g; }
+}
+// ---------- figures (unit height ≈ 1; caller scales; `add` must take vertex colours: bmat('statuary-carved')) ----------
+// A bearing atlas: arms raised to a cushion at y = 1, head bowed under the load: a modelled chest (pectorals with a
+// shadowed lower edge, sternum, three rows of the rectus, linea alba, obliques, serratus), muscled arms and big hands.
+export function atlasFigure(add, mirror = 1, { herm = false, addTerm = null, addGilt = null, seed } = {}) {
+  const F = new Fig(), a = F.add, m = mirror, P = (x, y, z) => V(x * m, y, z), gilt = addGilt || a;
   if (herm) { // a herm-atlas: the torso rises from a tapering term wrapped in drapery and a gilt acanthus cuff
-    const term = new THREE.CylinderGeometry(.17 * Math.SQRT2, .11 * Math.SQRT2, .47, 4, 1); term.rotateY(Math.PI / 4); term.scale(1, 1, .78); (addTerm || add)(term, Mx(0, .235, 0));
+    const term = new THREE.CylinderGeometry(.17 * Math.SQRT2, .11 * Math.SQRT2, .47, 4, 1); term.rotateY(Math.PI / 4); term.scale(1, 1, .78); (addTerm || a)(term, Mx(0, .235, 0));
     if (addGilt) { addGilt(new THREE.BoxGeometry(.25, .025, .19), Mx(0, .012, 0)); addGilt(new THREE.BoxGeometry(.37, .03, .29), Mx(0, .46, 0));
       for (let k = 0; k < 6; k++) addGilt(new THREE.SphereGeometry(.016 - k * .0013, 8, 6), Mx(0, .4 - k * .05, .143 - k * .006, 0, 0, 0, 1, 1.25, .7));
       addGilt(drapedLathe([[0, .45], [.17, .45], [.18, .48], [.15, .53], [0, .535]], 14, y => .12 * clamp((.53 - y) / .08, 0, 1), 40, .8), Mx(0, 0, 0)); }
-    add(drapedLathe([[0, .5], [.15, .5], [.13, .54], [.105, .58], [.09, .61], [0, .615]], 11, y => .08 * clamp((.61 - y) / .1, 0, 1), 40, .78, 1), Mx(0, 0, 0));
-    add(new THREE.SphereGeometry(.05, 12, 10), Mx(.06 * m, .56, .08, .3, 0, .4 * m, .9, 1.4, .3)); // a fold of the drape over the hip
-  } else {
-  // legs: weight on one leg, the other knee forward (contrapposto under load)
-  limb(add, P(-.062, .04, .0), P(-.066, .265, .005), .022, .034); limb(add, P(-.066, .265, .005), P(-.07, .49, -.005), .036, .05);
-  limb(add, P(.07, .05, .06), P(.075, .27, .05), .022, .033); limb(add, P(.075, .27, .05), P(.07, .49, .0), .035, .049);
-  add(new THREE.SphereGeometry(.028, 10, 8), Mx(-.062 * m, .02, .025, 0, 0, 0, 1, .55, 1.7)); add(new THREE.SphereGeometry(.028, 10, 8), Mx(.07 * m, .028, .085, 0, 0, 0, 1, .55, 1.7));
-  add(new THREE.SphereGeometry(.03, 10, 8), Mx(-.066 * m, .265, .02, 0, 0, 0, 1, .9, .8)); add(new THREE.SphereGeometry(.03, 10, 8), Mx(.075 * m, .27, .068, 0, 0, 0, 1, .9, .8));
-  // draped loincloth with a hanging front fold
-  add(drapedLathe([[0, .44], [.098, .44], [.118, .47], [.115, .53], [.1, .57], [0, .575]], 12, y => .07 * clamp((.56 - y) / .12, 0, 1), 36, .78), Mx(0, 0, 0));
-  add(new THREE.SphereGeometry(.05, 12, 10), Mx(.02 * m, .45, .07, .2, 0, .15 * m, .9, 1.6, .35));
+    // the drapery knotted round the hips, cut in deep hanging folds
+    const HIP = [[.45, .17], [.5, .156], [.55, .132], [.59, .108], [.615, .088]];
+    a(revolve(.46, .615, 88, 14, (y, th) => { const f = fold(11 * th + 1.2 * Math.sin(y * 9) + 1), am = .03 * sstep(.6, .47, y) + .004; return [spline(HIP, y) + am * (.5 * f + .25), hollow(f, .65 * clamp(am / .02, 0, 1))]; }));
+    a(new THREE.SphereGeometry(.05, 12, 10), Mx(.06 * m, .56, .085, .3, 0, .4 * m, .9, 1.4, .35)); // a fold of the drape over the hip
+  } else { // legs: weight on one leg, the other knee forward (contrapposto under load)
+    limb(a, P(-.062, .04, .0), P(-.066, .265, .005), .022, .034); limb(a, P(-.066, .265, .005), P(-.07, .49, -.005), .036, .05);
+    limb(a, P(.07, .05, .06), P(.075, .27, .05), .022, .033); limb(a, P(.075, .27, .05), P(.07, .49, .0), .035, .049);
+    a(drapedLathe([[0, .44], [.098, .44], [.118, .47], [.115, .53], [.1, .57], [0, .575]], 12, y => .07 * clamp((.56 - y) / .12, 0, 1), 36, .78), Mx(0, 0, 0));
   }
-  // torso: V-shaped, slightly bowed forward under the weight
-  add(drapedLathe([[0, .55], [.082, .56], [.086, .6], [.1, .66], [.122, .72], [.135, .77], [.11, .8], [.05, .825], [0, .83]], 1, () => 0, 32, .66), Mx(0, 0, -.005, .12));
-  add(new THREE.SphereGeometry(.052, 14, 10), Mx(-.05, .73, .05, .1, 0, 0, 1, .72, .45)); add(new THREE.SphereGeometry(.052, 14, 10), Mx(.05, .73, .05, .1, 0, 0, 1, .72, .45));
-  [[.66, .036], [.62, .034], [.585, .032]].forEach(([y, r]) => [-1, 1].forEach(s => add(new THREE.SphereGeometry(r, 10, 8), Mx(s * .024, y, .05 + (y - .58) * .2, 0, 0, 0, 1, .75, .5))));
-  add(new THREE.SphereGeometry(.07, 14, 10), Mx(0, .81, -.015, 0, 0, 0, 1.6, .55, .8)); // trapezius
-  add(new THREE.CylinderGeometry(.03, .04, .055, 12), Mx(0, .84, .02, .45));
-  // a bearded head bowed forward and turned a little under the load: carved features, curled hair and beard
-  (addHead || add)(headGeo({ beard: true, seed: m > 0 ? 1 : 2 }), Mx(0, .878, .068, .32, -.18 * m, 0, .05, .05, .05));
+  // torso, bowed forward under the weight
+  const TA = [[.5, .1], [.55, .09], [.6, .094], [.65, .106], [.7, .123], [.74, .135], [.775, .139], [.8, .118], [.82, .085], [.845, .045]];
+  a(revolve(.5, .845, 76, 36, (y, th) => {
+    const rb = spline(TA, y), xm = Math.sin(th) * rb, ax = Math.abs(xm), c = Math.cos(th), fr = Math.pow(Math.max(0, c), 1.5);
+    let d = 0, cav = 0;
+    d += .032 * G1(ax, .054, .04) * G1(y, .738, .034) * sstep(.69, .716, y) * fr;                              // pectorals
+    const ce = G1(y, .7, .011) * G1(ax, .056, .045) * fr; d -= .01 * ce; cav += .55 * ce;                         // their shadowed lower edge
+    const sg = G1(xm, 0, .012) * G1(y, .735, .045) * fr; d -= .012 * sg; cav += .35 * sg;                          // sternum
+    for (const yr of [.67, .634, .598]) { d += .013 * G1(ax, .026, .017) * G1(y, yr, .015) * fr; const gr = G1(y, yr + .018, .006) * G1(ax, .026, .03) * fr; d -= .004 * gr; cav += .32 * gr; }
+    const la = G1(xm, 0, .007) * sstep(.57, .6, y) * sstep(.716, .69, y) * fr; d -= .008 * la; cav += .45 * la;   // linea alba
+    d += .014 * G1(ax, .088, .026) * G1(y, .6, .04) * Math.max(0, c * .6 + .4);                                   // obliques
+    for (let k = 0; k < 3; k++) { const se = G1(ax, .106, .013) * G1(y, .655 + .022 * k, .008) * Math.max(0, c); d += .006 * se; cav += .14 * se; }
+    const nv = G1(xm, 0, .008) * G1(y, .577, .007) * fr; d -= .009 * nv; cav += .55 * nv;                          // navel
+    d += .02 * G1(y, .812, .03) * Math.max(0, .5 - c * .5);                                                         // trapezius
+    return [rb + d, 1 - cav];
+  }, { zs: () => .64 }), Mx(0, 0, -.005, .12));
+  // a bearded head bowed and turned a little under the load; the neck strained forward
+  a(tube(V(0, .81, -.005), V(0, .875, .05), t => [.046 - .006 * t, 1], 16, 4));
+  a(headGeo({ beard: true, seed: seed != null ? seed : (m > 0 ? 1 : 2) }), Mx(0, .887, .074, .34, -.18 * m, 0, .062, .062, .062));
   // a mantle knotted on the shoulder, falling behind the back, with a fold across the breast
-  add(drapedLathe([[.07, .84], [.13, .82], [.16, .77], [.155, .7], [.14, .62], [.13, .56]], 6, y => .06 * clamp((.84 - y) / .3, 0, 1), 26, .75, 2 + m, Math.PI * .58, Math.PI * .84), Mx(0, 0, -.01));
-  add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(-.13 * m, .81, .0), V(-.07 * m, .76, .07), V(.02 * m, .7, .085), V(.09 * m, .64, .06), V(.13 * m, .6, .0)]), 20, .022, 8), Mx(0, 0, 0, 0, 0, 0, 1, 1, .8));
-  add(new THREE.SphereGeometry(.03, 10, 8), Mx(-.12 * m, .815, .02, 0, 0, 0, 1, .8, .9));
+  a(drapedLathe([[.07, .84], [.13, .82], [.16, .77], [.155, .7], [.14, .62], [.13, .56]], 6, y => .07 * clamp((.84 - y) / .3, 0, 1), 26, .75, 2 + m, Math.PI * .58, Math.PI * .84), Mx(0, 0, -.01));
+  ribbon(a, [V(-.14 * m, .82, .0), V(-.08 * m, .77, .075), V(.02 * m, .71, .09), V(.09 * m, .655, .07), V(.135 * m, .61, .0)], () => .05, p => V(p.x * .4, .3, p.z + .06).normalize(), { folds: 2, depth: .01, thick: .012, nv: 20 });
+  a(new THREE.SphereGeometry(.034, 12, 10), Mx(-.125 * m, .815, .025, 0, 0, 0, 1, .8, .9));
+  // arms raised to the load: deltoid, biceps, the forearm swelling below the elbow, hands flat under the cushion
   [-1, 1].forEach(s => {
-    add(new THREE.SphereGeometry(.047, 12, 10), Mx(s * .135, .79, 0, 0, 0, 0, 1, .95, .9));
-    const sh = V(s * .14, .8, 0), el = V(s * .19, .93, -.01), hd = V(s * .075, .99, .02);
-    limb(add, sh, el, .04, .032); limb(add, el, hd, .031, .022);
-    add(new THREE.SphereGeometry(.028, 10, 8), Mx(hd.x, hd.y + .008, hd.z, 0, 0, 0, 1.3, .6, 1.2));
+    const S = V(s * .138, .79, 0), E = V(s * .196, .93, -.012), Hd = V(s * .085, .982, .022);
+    a(new THREE.SphereGeometry(1, 16, 12), Mx(s * .142, .792, .004, 0, 0, -s * .5, .056, .046, .053));
+    a(tube(S, E, t => [.041 - .009 * t + .007 * G1(t, .45, .2), 1], 16, 10));
+    a(new THREE.SphereGeometry(.033, 14, 10), Mx(E.x, E.y, E.z));
+    a(tube(E, Hd, t => [.033 + .006 * G1(t, .22, .18) - .013 * t, 1], 16, 10));
+    a(new THREE.SphereGeometry(.021, 12, 8), Mx(Hd.x, Hd.y, Hd.z));
+    hand(a, Hd, V(-s * .9, .15, .1), V(0, -1, 0), 1.3);
   });
+  add(F.bake(.034, 1.5), new THREE.Matrix4());
 }
-// A draped allegorical figure holding an attribute. variant 0 book · 1 globe · 2 ring (astronomy) · 3 tablet · 4 torch
-export function drapedFigure(add, addGilt, variant = 0, seed = 1, addHead = null) {
-  const ph = seed * 1.7;
-  add(drapedLathe([[0, 0], [.14, 0], [.15, .03], [.13, .2], [.1, .42], [.078, .52], [.085, .6], [.1, .7], [.108, .76], [.08, .8], [.036, .83], [0, .835]], 9, y => .085 * Math.pow(clamp(1 - y / .82, 0, 1), 1.3) + .012, 44, .78, ph), Mx(0, 0, 0));
-  // mantle: a cape falling from the shoulders behind (half lathe with folds) and a sash across the breast
-  const s = seed % 2 ? 1 : -1; // which hand holds the attribute
-  const cape = drapedLathe([[.17, .015], [.165, .25], [.135, .5], [.122, .7], [.112, .78], [.07, .815]], 7, y => .07 * Math.pow(clamp(1 - y / .8, 0, 1), 1.1) + .012, 30, .8, ph + 2, Math.PI * .62, Math.PI * .76);
-  add(cape, Mx(0, 0, -.012, 0, 0, 0, 1.06, 1, 1.12));
-  const sash = new THREE.CatmullRomCurve3([V(-s * .1, .77, .01), V(-s * .04, .72, .085), V(s * .04, .63, .09), V(s * .095, .54, .07), V(s * .115, .46, .02)]);
-  add(new THREE.TubeGeometry(sash, 24, .03, 8), Mx(0, 0, 0, 0, 0, 0, 1, 1, .7));
-  add(new THREE.CylinderGeometry(.03, .036, .06, 12), Mx(0, .845, .005));
-  // carved head turned toward the attribute, waved hair gathered into a knot, a gilt fillet
-  const HQ = Mx(0, .9, .014, .14, .32 * s, 0, .049, .049, .049);
-  (addHead || add)(headGeo({ female: true, seed }), HQ);
-  add(new THREE.SphereGeometry(.6, 14, 10), HQ.clone().multiply(Mx(0, .35, -1.0, 0, 0, 0, 1, .85, .9))); // knot
-  [[-.35, .5], [.35, .5]].forEach(([x]) => add(new THREE.TorusGeometry(.32, .14, 6, 12), HQ.clone().multiply(Mx(x, .3, -1.05, 0, Math.PI / 2, 0)))); // coils of the knot
-  addGilt(new THREE.TorusGeometry(1.02, .05, 6, 40), HQ.clone().multiply(Mx(0, .4, -.08, Math.PI / 2 - .35, 0, 0, .92, 1, 1)));
-  limb(add, V(-s * .1, .765, 0), V(-s * .125, .61, .03), .026, .022); limb(add, V(-s * .125, .61, .03), V(-s * .07, .55, .085), .022, .018); // lowered arm across, holding the sash
-  const sh = V(s * .1, .765, 0), el = V(s * .15, .63, .07), hd = V(s * .12, .72, .17);
-  limb(add, sh, el, .026, .022); limb(add, el, hd, .021, .018);
-  const H = hd;
-  if (variant === 0) { const BM = Mx(H.x, H.y + .035, H.z + .015, -.5, s * .3); add(new THREE.BoxGeometry(.075, .1, .024), BM); addGilt(new THREE.BoxGeometry(.068, .094, .026), BM); [-1, 1].forEach(k => add(new THREE.BoxGeometry(.078, .103, .004), BM.clone().multiply(Mx(0, 0, k * .013)))); }
-  else if (variant === 1) { add(new THREE.SphereGeometry(.065, 20, 14), Mx(H.x, H.y + .07, H.z)); addGilt(new THREE.TorusGeometry(.075, .006, 6, 36), Mx(H.x, H.y + .07, H.z, .4, 0, .3)); }
-  else if (variant === 2) { addGilt(new THREE.TorusGeometry(.07, .008, 6, 36), Mx(H.x, H.y + .08, H.z, 0, s * .5)); addGilt(new THREE.TorusGeometry(.055, .006, 6, 30), Mx(H.x, H.y + .08, H.z, Math.PI / 2, s * .5)); }
-  else if (variant === 3) { add(new THREE.BoxGeometry(.1, .14, .018), Mx(H.x, H.y + .05, H.z, -.15, s * .2)); }
-  else { addGilt(new THREE.CylinderGeometry(.012, .016, .2, 8), Mx(H.x, H.y + .06, H.z)); addGilt(new THREE.ConeGeometry(.03, .08, 10), Mx(H.x, H.y + .2, H.z)); }
+// A draped allegorical figure in contrapposto holding an attribute: weight on one leg (that hip higher, the shoulder
+// lower), the free knee forward under a chiton cut in deep folds, a himation wrapped round the hips with a rolled
+// upper edge and a band over the shoulder, a cape behind, one arm bent holding the attribute before the breast, the
+// other lowered gathering a fall of the mantle. variant 0 book · 1 globe · 2 ring (astronomy) · 3 tablet · 4 torch
+export function drapedFigure(add, addGilt, variant = 0, seed = 1) {
+  const F = new Fig(), a = F.add, s = seed % 2 ? 1 : -1, w = -s, ph = seed * 1.7, LIFT = .022, Gd = (geo, mm) => addGilt(geo, Mx(0, LIFT, 0).multiply(mm));
+  const thK = s * .5, thW = w * Math.PI / 2;
+  const cx = y => w * (.022 * G1(y, .46, .2) - .012 * G1(y, .8, .09));
+  const shear = y => w * (.1 * G1(y, .5, .08) - .08 * G1(y, .79, .05));
+  const LOW = [[0, .158], [.04, .146], [.12, .13], [.24, .12], [.36, .119], [.46, .126], [.53, .117], [.6, .094]];
+  const TOR = [[.54, .1], [.6, .088], [.64, .093], [.68, .1], [.72, .104], [.76, .106], [.785, .1], [.81, .08], [.83, .052], [.85, .03]];
+  const knee = (y, th) => .05 * G1(adist(th, thK), 0, .5) * (y < .3 ? .5 + .5 * y / .3 : G1(y, .3, .17));
+  const zsT = y => .64 + .06 * G1(y, .7, .05), bl = y => sstep(.54, .62, y);
+  const rLow = (y, th) => spline(LOW, y) + knee(y, th), rTor = (y, th) => spline(TOR, y) + .027 * (G1(adist(th, .45), 0, .3) + G1(adist(th, -.45), 0, .3)) * G1(y, .7, .04);
+  const rB = (y, th) => rLow(y, th) * (1 - bl(y)) + rTor(y, th) * bl(y), zsB = y => .78 * (1 - bl(y)) + zsT(y) * bl(y);
+  const onBody = (th, y, off) => { const r = rB(y, th) + off, c = cx(y), x = c + r * Math.sin(th); return V(x, y + shear(y) * (x - c), r * Math.cos(th) * zsB(y)); };
+  const outw = P => P.clone().sub(V(cx(P.y), P.y - .03, 0)).normalize();
+  // chiton: deep folds from the hips to the ground (a straight column of them over the weight-bearing leg), the cloth
+  // pulled smooth over the free knee and hanging from it
+  a(revolve(0, .6, 104, 25, (y, th) => {
+    const tw = th + .2 * Math.sin(3 * th + ph) + .09 * Math.sin(5 * th + 2 * ph), f = fold(13 * tw + .7 * Math.sin(y * 5 + ph));
+    const am = (.008 + .034 * sstep(.58, .02, y)) * (1 + .5 * G1(adist(th, thW), 0, .9)) * (1 - .8 * G1(adist(th, thK), 0, .45) * G1(y, .31, .09));
+    return [rLow(y, th) + am * (.5 * f + .2), hollow(f, .62 * clamp(am / .025, 0, 1))];
+  }, { cx, shear, zs: () => .78 }));
+  a(new THREE.SphereGeometry(1, 14, 10), Mx(s * .072 + cx(0), .014, .152, 0, s * .25, 0, .03, .019, .05)); // the free foot's toes
+  // bodice with fine folds gathered at the girdle under the breast
+  a(revolve(.54, .85, 64, 20, (y, th) => { const f = fold(17 * th + 9 * y + ph), am = .005 * (1 + 1.4 * G1(y, .655, .03)) * sstep(.84, .8, y); return [rTor(y, th) + am * (.5 * f + .3), hollow(f, .45 * Math.min(1, am / .01))]; }, { cx, shear, zs: zsT }));
+  a(revolve(.636, .657, 72, 4, (y, th, v) => [rTor(y, th) + .005 + .006 * Math.sin(Math.PI * v), 1], { cx, shear, zs: zsT }));
+  // himation round the hips: hem high over the free knee, low on the weight side, its edge zig-zagging; a rolled top
+  const yb = th => .275 + .085 * Math.cos(adist(th, thK)), yt = th => .56 + .032 * Math.cos(adist(th, thW));
+  const hemZ = th => .016 * (fold(9 * th + ph + 1) + 1) / 2, V0 = 1 / 17;
+  a(revolve(0, 1, 80, 17, (y, th, v) => {
+    const vv = clamp((v - V0) / (1 - V0), 0, 1), f = fold(9 * th + w * 10 * (y - yb(th)) + ph + 1), am = .017 * (1 - .55 * vv);
+    const r = rLow(y, th) + (v < V0 / 2 ? .008 : .028 + am * (.5 * f + .3)) - .016 * sstep(.8, 1, vv);
+    return [r, (v < V0 / 2 ? .55 : 1) * hollow(f, .6 * (1 - .4 * vv))];
+  }, { cx, shear, zs: () => .78, yf: (th, v) => { const vv = clamp((v - V0) / (1 - V0), 0, 1); return v < V0 / 2 ? yb(th) - hemZ(th) + .01 : yb(th) - hemZ(th) * (1 - vv) + (yt(th) - yb(th)) * vv; } }));
+  const roll = []; for (let i = 0; i < 48; i++) { const th = i / 48 * TAU; roll.push(onBody(th, yt(th) - .004, .021 + .004 * Math.sin(th * 5 + ph))); }
+  a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(roll, true), 64, .018, 7, true));
+  // the end of the himation drawn up across the breast and over the shoulder of the weight-bearing side
+  ribbon(a, [onBody(s * .55, .565, .03), onBody(s * .15, .635, .026), onBody(w * .3, .71, .02), onBody(w * .9, .785, .018), V(cx(.82) + w * .072, .832, -.012), onBody(w * 2.3, .75, .024), onBody(w * 2.6, .6, .05)],
+    t => .075 + .02 * Math.sin(t * Math.PI), outw, { folds: 3, depth: .013, thick: .009, nv: 30, ph });
+  // cape falling from the shoulders behind (two-sided, deep folds)
+  [[.052, false, 1, 40, 20], [.044, true, .7, 22, 10]].forEach(([off, flip, sh, nu, nv]) => a(revolve(.03, .8, nu, nv, (y, th) => { const f = fold(7 * th + 1.5 * Math.sin(y * 4 + ph) + ph), am = .03 * sstep(.8, .1, y) + .006; return [rB(y, th) + off - .03 * sstep(.68, .8, y) + am * (.5 * f + .3), sh * hollow(f, .55)]; }, { cx, shear, zs: zsB, th0: Math.PI - 1.15, th1: Math.PI + 1.15, flip })));
+  // arms: chiton sleeves to above the elbow (buttoned folds), bare forearms, hands
+  const arm = (S, E, Wr, back, r0 = .027) => {
+    const M = S.clone().lerp(E, .6);
+    a(tube(S.clone().lerp(E, -.1), M, (t, th) => { const f = fold(7 * th + t * 2.5 + ph); return [.04 - .006 * t + .005 * (.5 * f + .3) - .01 * sstep(.82, 1, t), hollow(f, .5)]; }, 28, 10));
+    a(tube(S.clone().lerp(E, .5), E, t => [r0 - .003 * t, 1], 14, 4)); a(new THREE.SphereGeometry(r0 - .003, 12, 8), Mx(E.x, E.y, E.z));
+    a(tube(E, Wr, t => [r0 - .003 + .004 * G1(t, .25, .2) - .009 * t, 1], 14, 8)); a(new THREE.SphereGeometry(r0 - .011, 10, 8), Mx(Wr.x, Wr.y, Wr.z));
+    return hand(a, Wr, Wr.clone().sub(E), back, 1.05);
+  };
+  const S1 = onBody(s * Math.PI / 2, .775, -.012), E1 = V(s * .158, .64, .03), W1 = V(s * .1, .7, .145);
+  const S2 = onBody(w * Math.PI / 2, .775, -.012), E2 = V(w * .155, .625, -.02), W2 = V(w * .142, .5, .045);
+  const H = arm(S1, E1, W1, V(0, -1, 0)), H2 = arm(S2, E2, W2, V(w, -.2, -.3));
+  // a fall of the mantle gathered in the lowered hand, hanging in folds with a zig-zag hem
+  ribbon(a, [H2.clone().add(V(0, .03, -.01)), H2.clone().add(V(w * .01, -.08, .012)), H2.clone().add(V(w * .016, -.2, .022)), H2.clone().add(V(w * .02, -.3, .03))], t => .045 + .05 * t, P => V(w * .55, 0, .85).normalize(), { folds: 2.5, depth: .014, thick: .01, nv: 18, ph: ph + 2, hem: .02 });
+  // carved head turned toward the attribute; hair waved back over the ears into a knot; a gilt fillet
+  const hx = cx(.9) + w * .008, HQ = Mx(hx, .905, .02, .12, .35 * s, w * .06, .056, .056, .056);
+  a(tube(V(cx(.8), .8, -.008), V(hx * .9, .878, .012), t => [.031 - .004 * t, 1], 14, 4));
+  a(headGeo({ female: true, seed }), HQ);
+  [-1, 1].forEach(sd => {
+    a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(sd * .4, .66, .62), V(sd * .84, .44, .26), V(sd * .96, .2, -.24), V(sd * .64, .16, -.78), V(sd * .2, .26, -1.02)]), 22, .21, 8), HQ, .92);
+    a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(sd * .2, .92, .5), V(sd * .34, 1.04, 0), V(sd * .3, .86, -.6), V(sd * .14, .52, -.98)]), 16, .16, 8), HQ, .95);
+  });
+  a(new THREE.SphereGeometry(.56, 14, 10), HQ.clone().multiply(Mx(0, .3, -1.05, 0, 0, 0, 1.1, .85, .85)));
+  [-.32, .32].forEach(x => a(new THREE.TorusGeometry(.3, .13, 6, 12), HQ.clone().multiply(Mx(x, .3, -1.18, 0, Math.PI / 2, 0))));
+  Gd(new THREE.TorusGeometry(1.04, .05, 6, 40), HQ.clone().multiply(Mx(0, .42, -.08, Math.PI / 2 - .35, 0, 0, .92, 1, 1)));
+  // the attribute, resting in the raised hand
+  if (variant === 0) { const BM = Mx(H.x, H.y + .052, H.z + .006, -.38, s * .3); a(new THREE.BoxGeometry(.082, .108, .026), BM); [-1, 1].forEach(k => a(new THREE.BoxGeometry(.088, .114, .006), BM.clone().multiply(Mx(0, 0, k * .015)), .95)); Gd(new THREE.BoxGeometry(.03, .03, .03), BM.clone().multiply(Mx(0, 0, .02, 0, 0, Math.PI / 4, 1, 1, .2))); }
+  else if (variant === 1) { a(new THREE.SphereGeometry(.066, 22, 16), Mx(H.x, H.y + .062, H.z)); Gd(new THREE.TorusGeometry(.074, .006, 6, 40), Mx(H.x, H.y + .062, H.z, .4, 0, .3)); Gd(new THREE.TorusGeometry(.074, .005, 6, 40), Mx(H.x, H.y + .062, H.z, Math.PI / 2, 0, 0)); }
+  else if (variant === 2) { Gd(new THREE.TorusGeometry(.07, .008, 6, 36), Mx(H.x, H.y + .085, H.z, 0, s * .5)); Gd(new THREE.TorusGeometry(.055, .006, 6, 30), Mx(H.x, H.y + .085, H.z, Math.PI / 2, s * .5)); Gd(new THREE.CylinderGeometry(.006, .006, .07, 6), Mx(H.x, H.y + .035, H.z)); }
+  else if (variant === 3) { a(new THREE.BoxGeometry(.1, .14, .02), Mx(H.x, H.y + .068, H.z, -.2, s * .2)); }
+  else { Gd(new THREE.CylinderGeometry(.012, .016, .22, 8), Mx(H.x, H.y + .05, H.z)); Gd(new THREE.ConeGeometry(.032, .085, 10), Mx(H.x, H.y + .2, H.z)); }
+  a(new THREE.BoxGeometry(.38, .022, .33), Mx(cx(0) * .5, -.011, 0)); // the plinth the figure is carved with
+  add(F.bake(.032, 1.5, LIFT), new THREE.Matrix4());
 }
 // Pedestal: base, die, cornice (scagliola die, stucco mouldings, gilt beads). Footprint w × d, height h. Pushes into acc.
 export function pedestal(acc, M, w = .62, d = .62, h = 1, die = 'scag-rose') {
@@ -233,13 +398,13 @@ export function headGeo({ female = false, beard = false, seed = 1 } = {}) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(x), f = sm(.05, .5, z), lon = Math.atan2(x, z);
     let d = 0, cav = 0;
     // face: brow, sockets (eyeballs and lids left standing), nose with alae, cheekbones, parted lips, chin, ears
-    d += .1 * fk * G(x, y, 0, .3, .52, .08) * f;
-    const sock = G(ax, y, .3, .1, .15, .1) * f; d -= .16 * sock; cav += .5 * sock;
-    const eye = G(ax, y, .29, .08, .08, .055) * f; d += .1 * eye; cav -= .35 * eye;
+    d += .13 * fk * G(x, y, 0, .3, .52, .08) * f; cav += .22 * G(ax, y, .3, .2, .2, .05) * f; // brow, its shadow over the eyes
+    const sock = G(ax, y, .3, .1, .16, .11) * f; d -= .21 * sock; cav += .72 * sock;
+    const eye = G(ax, y, .29, .08, .08, .055) * f; d += .12 * eye; cav -= .42 * eye;
     d += .04 * G(ax, y, .29, .15, .1, .025) * f; d -= .02 * G(ax, y, .3, .015, .1, .02) * f;
-    const nose = (.13 * G(x, y, 0, .04, .06, .15) + .27 * G(x, y, 0, -.22, .08, .12) + .1 * G(x, y, 0, -.36, .085, .055)) * f * (female ? .85 : 1); d += nose;
+    const nose = (.13 * G(x, y, 0, .04, .06, .15) + .27 * G(x, y, 0, -.22, .08, .12) + .1 * G(x, y, 0, -.36, .085, .055)) * f * (female ? .92 : 1.08); d += nose; cav += .22 * G(ax, y, .12, -.2, .06, .14) * f; // shadowed flank of the nose
     d += .07 * G(ax, y, .105, -.36, .05, .045) * f; const nost = G(ax, y, .07, -.43, .035, .02) * f; d -= .05 * nost; cav += .6 * nost;
-    d += .08 * G(ax, y, .44, -.1, .16, .13) * f;
+    d += .09 * G(ax, y, .44, -.1, .16, .13) * f;
     const hol = G(ax, y, .32, -.33, .12, .13) * f; d -= .05 * hol * (1 - fk * .5); cav += .18 * hol;
     const nl = G(ax, y, .2, -.42, .04, .1) * f; cav += .3 * nl; // naso-labial fold
     d += .08 * G(x, y, 0, -.5, .2, .05) * f; const mg = G(x, y, 0, -.565, .22, .018) * f; d -= .07 * mg; cav += .7 * mg; d += .075 * G(x, y, 0, -.62, .16, .045) * f;
@@ -251,18 +416,18 @@ export function headGeo({ female = false, beard = false, seed = 1 } = {}) {
     const hm = sm(hairline - .04, hairline + .03, y) * sm(-.98, -.6, y);
     if (hm > 0) {
       const wave = female ? Math.sin(lon * 10 + y * 2.5) : Math.sin(x * 21 + y * 8) * Math.sin(y * 19 - z * 11);
-      d += hm * (female ? .085 + .04 * wave + .06 * G(ax, y, .72, .05, .3, .35) - .03 * sm(.6, 1, y) : .11 + .06 * Math.max(0, wave));
-      cav += hm * (female ? .28 * Math.max(0, -wave) : .32 * Math.max(0, -wave) + .08);
+      d += hm * (female ? .11 + .055 * wave + .08 * G(ax, y, .72, .05, .3, .35) - .03 * sm(.6, 1, y) - .05 * G(x, 0, 0, 0, .05, 1) * sm(.3, .8, y) : .14 + .08 * Math.max(0, wave)); // (a centre parting)
+      cav += hm * (female ? .4 * Math.max(0, -wave) + .06 : .45 * Math.max(0, -wave) + .1) + .35 * G(y - hairline, 0, 0, 0, .05, 1) * sm(-.2, .3, z); // deep-cut waves; shadow under the hairline
     }
     if (beard) { // beard over jaw and chin, moustache over the upper lip, the lower lip left free
       const bm = sm(-.22, -.48, y) * sm(-.55, -.12, z) * (1 - .92 * G(x, y, 0, -.6, .15, .07)), curl = Math.sin(x * 23 + y * 9) * Math.sin(y * 21 + z * 7);
-      d += bm * (.24 + .07 * Math.max(0, curl)) + .1 * G(ax, y, .14, -.48, .15, .045) * f + .12 * G(x, y, 0, -1, .3, .22) * f;
+      d += bm * (.26 + .1 * Math.max(0, curl)) + .1 * G(ax, y, .14, -.48, .15, .045) * f + .12 * G(x, y, 0, -1, .3, .22) * f;
       cav += bm * .3 * Math.max(0, -curl) + .25 * G(ax, y, .26, -.52, .05, .05) * f;
     }
-    cav += .3 * sm(-.75, -1, y) * sm(0, .6, z); // shadow under the chin
+    cav += .4 * sm(-.75, -1, y) * sm(0, .6, z); // shadow under the chin
     const sx = (female ? .84 : .8) * (1 - (female ? .15 : .2) * sm(-.2, -1, y)), sy = female ? 1.0 : 1.14, sz = .95, zf = 1 + .09 * sm(-.3, -.9, y) * f;
     p.setXYZ(i, x * (1 + d) * sx, y * (1 + d) * sy, z * (1 + d) * sz * zf);
-    const k = clamp(1 - cav, .38, 1.08); col[i * 3] = k; col[i * 3 + 1] = k * (.97 + .03 * k); col[i * 3 + 2] = k * (.92 + .08 * k);
+    const k = clamp(1 - cav, .3, 1.06); col[i * 3] = k; col[i * 3 + 1] = k * (.97 + .03 * k); col[i * 3 + 2] = k * (.92 + .08 * k);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals(); _heads.set(key, geo); return geo;
@@ -642,7 +807,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   }
   // ---- atlantes (Metten): pairs carrying the entablature beside the central window and the door ----
   if (useAtl) {
-    const st = bmat('statuary');
+    const st = bmat('statuary-carved');
     walls.forEach(W => {
       const isWin = W.name === windowWall, isDoor = door && W.name === 'front' && !gWalls.has('front'); if (!isWin && !isDoor) return;
       const M = WM(W); let pair;
@@ -653,7 +818,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
         pedestal(A, M0, .7, .62, pH, 'scag-' + palette);
         const Hf = yE - pH - .2; if (Hf < 1) return;
         const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .82, Hf, Hf * .82));
-        atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(scag, geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)), addHead: (geo, m) => A.add(bmat('statuary-head'), geo, FM.clone().multiply(m)) });
+        atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(scag, geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)) });
         A.add(gilt, new THREE.BoxGeometry(.62, .2, .52), M.clone().multiply(Mx(s, yE - .1, .3)));
         A.add(stucco, new THREE.BoxGeometry(.7, E * .34 - .004, .6), M.clone().multiply(Mx(s, yE + E * .17, .3)));
         A.add(scag, new THREE.BoxGeometry(.66, E * .28 - .004, .56), M.clone().multiply(Mx(s, yE + E * .48, .28)));

@@ -62,7 +62,14 @@ export class Gfx {
     u.uVignette.value = L.vignette ?? .32; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
     if (L.exposure != null) this.renderer.toneMappingExposure = L.exposure;
     if (L.bloom != null) this.bloom.strength = L.bloom;
-    this.bloom.threshold = L.bloomThreshold ?? .86;
+    this.bloom.threshold = L.bloomThreshold ?? .86; this.bloom.radius = L.bloomRadius ?? .55;
+    this.renderer.toneMapping = L.toneMapping ?? THREE.AgXToneMapping; // (OutputPass applies it; scenes without a look keep AgX)
+  }
+  // The house look of the library and the book rooms: crisp, warm daylight. The neutral studio environment is kept
+  // low in these scenes (its grey reflections in lacquer, scagliola and the polished floor were the milky veil; gilt
+  // compensates with its own envMapIntensity); bloom only on real highlights (flames, windows); a little contrast.
+  static get HOUSE() {
+    return { contrast: 1.14, sat: 1.07, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.0, bloom: .2, bloomThreshold: 1.15, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping };
   }
   setView(scene, camera) {
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);

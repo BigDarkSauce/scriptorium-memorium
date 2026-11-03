@@ -228,14 +228,14 @@ export function readingDesk() {
   A.add(bmat('flame'), new THREE.SphereGeometry(.013, 8, 6), Mx(.58, 1.205, .12, 0, 0, 0, 1, 1.9, 1));
   A.build(g); return g;
 }
-// An abstract allegorical figure on a marble pedestal (white statuary marble; lathe + capsule forms).
+// An allegorical figure in contrapposto on a marble pedestal, carved in white statuary marble (see drapedFigure).
 // opts: { variant 0..4 (book · globe · ring · tablet · torch), seed, height (figure, m), pedestal (m), die: 'scag-rose'|... }
 export function statue({ variant = 0, seed = 1, height = 1.9, pedestal: pH = 1.05, die = 'scag-rose' } = {}) {
   const g = new THREE.Group(); g.userData = { kind: 'statue', variant }; g.name = 'statue';
-  const A = new Acc(), st = bmat('statuary'), gilt = bmat('gilt');
+  const A = new Acc(), st = bmat('statuary-carved'), gilt = bmat('gilt');
   pedestal(A, new THREE.Matrix4(), .64, .64, pH, die);
   const FM = Mx(0, pH, 0, 0, 0, 0, height, height, height);
-  drapedFigure((geo, mm) => A.add(st, geo, FM.clone().multiply(mm)), (geo, mm) => A.add(gilt, geo, FM.clone().multiply(mm)), variant % 5, seed, (geo, mm) => A.add(bmat('statuary-head'), geo, FM.clone().multiply(mm)));
+  drapedFigure((geo, mm) => A.add(st, geo, FM.clone().multiply(mm)), (geo, mm) => A.add(gilt, geo, FM.clone().multiply(mm)), variant % 5, seed);
   A.build(g); return g;
 }
 
