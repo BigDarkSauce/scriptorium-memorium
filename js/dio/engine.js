@@ -242,7 +242,10 @@ export class DioramaView {
     if (this.stage === 'sketch') return;
     const now = performance.now(); this._seen = this._seen || new Map(); if (now - (this._seen.get(ev.text) || -1e9) < 4000) return; this._seen.set(ev.text, now);
     const named = this.namesIn(ev.text), host = named[0] || this.lessonActor;
-    if (this.dir.cinematic && this.stage === 'explore') {
+    // during a step, events about objects the step doesn't mention don't take the camera (they go to the ticker)
+    const L = this.running != null ? this.lessons()[this.running] : null, lt0 = L ? ((L.title || '') + ' ' + (L.text || '')).toLowerCase() : '';
+    const offTopic = L && host && host !== this.lessonActor && !lt0.includes(host.name.split(' · ')[0].toLowerCase());
+    if (this.dir.cinematic && this.stage === 'explore' && !offTopic) {
       // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
