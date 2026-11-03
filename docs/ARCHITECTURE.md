@@ -21,6 +21,15 @@ The post chain follows Weatherglass's miniature look:
 
 Shadows are soft (PCF). Resolution adapts to keep frames under about 22 ms. Environment lighting comes from a pre-filtered RoomEnvironment map. All textures are drawn in code (`textures.js`). Materials come from about 40 PBR presets (`materials.js`).
 
+Diorama realism (v4):
+- **Textures** (`js/gfx/proc.js`): seamless procedural wood, brushed metal, cast iron, paper, felt and marble sets with colour, normal and roughness maps; painted cloud banks and hill silhouettes; `alignUV()` gives world-scale UVs so grain runs along each part.
+- **Materials** (`materials.js`): every preset is physically based. Vessels and cases are *thin-shell* glass (reflection only, edge-weighted), because three.js transmission renders only opaque objects and a transmissive flask would hide its water. Water, liquids, ice, gel and solid glass *do* use transmission (IOR, thickness, tinted absorption). While the drawing is showing, a shader hook flattens normal maps and removes clearcoat and sheen; each hook variant has its own shader define so compiled programs are never mixed up.
+- **Lighting** (`js/dio/environments.js`): key, fill, rim and kicker lights per preset; the studio key is a spotlight with a fitted 2048 shadow map. Real-time contact shadows are rendered from below into a 512² target, blurred, every other frame.
+- **Per-scene look** (`gfx.applyLook`): contrast, saturation, vignette, a subtle tilt-shift, exposure and bloom; `gfx.envFor(kind)` gives each preset its own reflection environment.
+- **Shot hints**: `DIO.<model>.shots = {'<lowercase event-text substring>': {target, dist}}` tells the director where to point the camera for an event.
+
+Library architecture (`js/gfx/baroque.js`, `roomshell.js` with `style: 'baroque'`): the hall and the rooms are built from the study in `docs/research/baroque-libraries.md` (Metten, Admont, Mafra, Wiblingen): pilasters on a regular bay rhythm (`bay`, default 3.2 m) placed between the scrolls (`avoid`), a gilt cornice and coved ceiling with a fresco, tall arched windows on the light side, marble floors (`diagonal`, `checker`, `cubes`), and, from about 7 m height, a gallery with an upper book tier and spiral stairs. Geometry is merged by material (about 20 meshes). `userData.baroque.obstacles` gives the footprints of statues and stairs; walk mode collides with them.
+
 ## Drawing → real (`js/gfx/materialize.js`)
 
 This generalises flat-to-3d (02 Section Sweep, 06 Card Model) and Lintel (top-down):
