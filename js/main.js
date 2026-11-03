@@ -47,6 +47,13 @@ class App {
     const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 5.5 }, parts: [] };
     // example rooms saved before grounding existed get their verified sources and teaching fields once
     const b = this.lib && this.lib.books.find(x => x.id === id);
+    // example rooms saved before the authored diorama lessons existed get them once (matched by demo type + title)
+    if (b && b.example && r.lessonsV !== 4) {
+      const L = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
+      walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) L.set(d.type + '|' + d.title, d.lessons); });
+      walk(r.parts, d => { const l = L.get(d.type + '|' + d.title); if (l && !(d.lessons && d.lessons.length)) d.lessons = JSON.parse(JSON.stringify(l)); });
+      r.lessonsV = 4; store.set('room:' + id, r);
+    }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     return r;
   }
