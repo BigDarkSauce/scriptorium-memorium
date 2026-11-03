@@ -118,7 +118,7 @@ export class Reader {
     // only the bodies that step is about (or, if none can be identified, a compact link instead of a repeat)
     const dkey = d.type === 'scene' ? 'scene:' + (d.title || '') : String(d.type);
     const first = this.seen3D && this.seen3D.get(dkey); if (this.seen3D && !first) this.seen3D.set(dkey, st.id);
-    const stage = first && first !== st.id && !needsAuthoring(d) ? { focusText: [st.title, (st.bodies || []).join(' '), st.statement].join(' '), label: st.id + ' ' + st.title, first } : null;
+    const stage = first && first !== st.id && !needsAuthoring(d) ? { focusText: [d.title || '', st.title, (st.bodies || []).join(' ')].join(' '), label: st.id + ' ' + st.title, first } : null;
     const card = el('figure', { class: 'sketch-card' + (stage ? ' stage' : '') });
     const fill = () => {
       card.innerHTML = '';

@@ -159,8 +159,10 @@ export class DioramaView {
     const fa = l.focus ? this.ds.actors.find(a => a.id === l.focus || a.name === l.focus || a.name.toLowerCase().includes(String(l.focus).toLowerCase())) : null;
     this.lessonActor = fa; this.awaitIdle = false; this.dir.queue = [];   // the beat being read finishes; stale queued ones go
     const host = fa || this.namesIn(l.text)[0];
-    this.dir.clearCaption(); if (this.dir.cinematic && !host) this.dir.setCaption(l.title || 'Step ' + (i + 1), l.text);
-    if (this.dir.cinematic && host) this.dir.push({ kind: 'lesson', title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: () => host ? host.getPos() : null, focus: host && host.obj, host, names: this.namesIn(l.text, host) });
+    this.dir.clearCaption();
+    // cinematic: the instruction is read first (the model waits), then the step plays; without a subject it shows as a caption
+    const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, lt = String(l.text || '').toLowerCase(), fk = Object.keys(flows).find(k => lt.includes(k));
+    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', caption: !host, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     this.ds.playing = true; this.syncTimeUI();
     const until = String(l.until || ''); this.running = i; this.runT = 0; this.runDur = +l.run || (until ? 30 : 6); this.runUntil = until.startsWith('event:') ? until.slice(6).toLowerCase() : null; this.runReplay = !!replay;
@@ -170,7 +172,7 @@ export class DioramaView {
   completeLesson() {
     const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption();
     const l = this.lessons()[i]; const fa = this.lessonActor;
-    if (l && l.explain && this.dir.cinematic) this.dir.push({ kind: 'explain', text: l.explain, anchor: () => fa ? fa.getPos() : null, focus: fa && fa.obj, names: this.namesIn(l.explain, fa) });
+    if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
     if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
     this.renderLessons();
   }
@@ -222,7 +224,7 @@ export class DioramaView {
     this.speedSel = el('select', { class: 'mini', 'aria-label': 'Speed' }, ['0.25', '0.5', '1', '2', '4'].map(v => el('option', { value: v, text: v + '×', selected: v === '1' })));
     this.speedSel.onchange = () => this.ds.speed = +this.speedSel.value;
     this.clock = el('span', { class: 'clock', text: '0.0 s' });
-    const tog = (key, label, title, def) => { const on = () => (this.prefs[key] ?? def); const b = el('button', { class: 'tog', title, 'aria-pressed': String(on()), text: label, onclick: () => { this.setPref(key, !on()); b.setAttribute('aria-pressed', String(on())); } }); return b; };
+    const tog = (key, label, title, def) => { const on = () => (this.prefs[key] ?? def); const b = el('button', { class: 'tog', title, 'data-pref': key, 'aria-pressed': String(on()), text: label, onclick: () => { this.setPref(key, !on()); b.setAttribute('aria-pressed', String(on())); } }); return b; };
     this.paceSel = el('select', { class: 'mini', 'aria-label': 'Reading pace', title: 'How long explanations stay on screen' }, [['slow', 'Read slowly'], ['normal', 'Read normally'], ['fast', 'Read fast']].map(([v, t]) => el('option', { value: v, text: t, selected: (this.prefs.pace || 'normal') === v })));
     this.paceSel.onchange = () => this.setPref('pace', this.paceSel.value);
     u.append(el('div', { class: 'dio-time glass' }, [this.playBtn, this.clock, this.speedSel, el('span', { class: 'sep' }), tog('cinematic', 'Cinematic', 'Camera follows each step and event; explanations appear beside what they describe, and time slows while you read', true), tog('guides', 'Guides', 'Show arrows for motion and links between the objects an explanation names', false), this.paceSel]));
@@ -234,7 +236,7 @@ export class DioramaView {
   }
   // actors whose names appear in a sentence (for links and framing)
   namesIn(text, except) { const t = String(text || '').toLowerCase(); return this.ds.actors.filter(a => a !== except && a.name && a.name.length > 2 && t.includes(a.name.toLowerCase().split(' · ')[0])); }
-  setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) this.dir.clear(); } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
+  setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); this.ui && this.ui.querySelectorAll(`[data-pref="${k}"]`).forEach(b => b.setAttribute('aria-pressed', String(!!v))); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) this.dir.clear(); } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
   // the model's own clock when it has one (e.g. "11:00 · day 1"), else simulated seconds
   clockText(t) { const s = this.ds.sim; if (s && s.clock) { try { const c = s.clock(t); if (c) return String(c); } catch (e) { } } return 't=' + (t ?? this.ds.t).toFixed(1) + ' s'; }
   syncTimeUI() { this.playBtn.innerHTML = this.ds.playing ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>'; }
@@ -250,7 +252,7 @@ export class DioramaView {
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
       const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, fk = Object.keys(flows).find(k => lt.includes(k));
-      const pos = shot && shot.target ? new THREE.Vector3().fromArray(shot.target) : ev.pos ? ev.pos.clone() : null;
+      const tg = shot && shot.target, pos0 = tg ? (typeof tg === 'function' ? tg() : tg) : null, pos = pos0 ? (pos0.isVector3 ? pos0.clone() : new THREE.Vector3().fromArray(pos0)) : ev.pos ? ev.pos.clone() : null;
       this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null });
     } else { const d = el('div', { text: ev.text }); this.ticker.append(d); setTimeout(() => d.remove(), this.dir.readTime(ev.text) * 1000); while (this.ticker.children.length > 2) this.ticker.firstChild.remove(); }
     this.evlog.prepend(el('li', { text: this.clockText(ev.t) + ' · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
@@ -426,12 +428,25 @@ export class DioramaView {
     // pins
     const w = innerWidth, h = innerHeight, v = V3();
     this.dir.update(dt, this.camera, w, h);
+    // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
+    // and fade any label that would land under the instruction panel or the readouts
+    if (!this._pr || t - this._pr > 1) { this._pr = t; this._block = [this.panel, this.readPanel].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
+    const placed = [], items = [];
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
       if (!src || this.stage === 'sketch' || this.stage === 'materialize') { pin.style.visibility = 'hidden'; return; }
       v.copy(src).project(this.camera); if (v.z > 1) { pin.style.visibility = 'hidden'; return; }
-      pin.style.visibility = 'visible'; if (!pin._w) pin._w = pin.offsetWidth; pin.style.transform = `translate(${clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10).toFixed(1)}px,${clamp((-v.y * .5 + .5) * h, 22, h - 22).toFixed(1)}px)`;
+      if (!pin._w) pin._w = pin.offsetWidth;
+      items.push({ pin, x: clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10), y: clamp((-v.y * .5 + .5) * h, 22, h - 22), pr: (pin.classList.contains('hot') ? 4 : 0) + (pin.classList.contains('focus') ? 2 : 0) + (pin._actor ? 1 : 0) });
     });
+    items.sort((a, b) => b.pr - a.pr);
+    for (const it of items) {
+      const W0 = it.pin._w || 120, H0 = 28; let y = it.y, ok = false;
+      for (let k = 0; k < 4 && !ok; k++) { const hit = placed.find(q => it.x < q.x + q.w && it.x + W0 > q.x && y - H0 / 2 < q.y + q.h / 2 && y + H0 / 2 > q.y - q.h / 2); if (!hit) ok = true; else y = hit.y + (y >= hit.y ? H0 : -H0); }
+      const under = (this._block || []).some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + 8 > rx && it.x < rx + r.width && y > ry && y < ry + r.height; });
+      it.pin.style.visibility = ok && !under ? 'visible' : 'hidden';
+      if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); it.pin.style.transform = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; }
+    }
     if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd = ds.readouts(); this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
   }
   drawSpark() {
@@ -471,10 +486,11 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   ds.step(0);
   // a stage plate shows the step's own state: let the model settle under the step's settings first (≈4 s of model time)
-  if (opts.focusText) { try { for (let k = 0; k < 120; k++) ds.step(1 / 30); } catch (e) { } }
+  if (opts.focusText) { const pl = ds.playing; ds.playing = true; try { const t0 = performance.now(); for (let k = 0; k < 96 && performance.now() - t0 < 1500; k++) ds.step(.5); } catch (e) { } ds.playing = pl; }   // ≈48 model-seconds: slow processes (crystals, levels) reach the step's state
   let endKey = ds.overviewKey(), focus = [], fc = ds.center, fr = ds.radius;
   if (opts.focusText) {
     focus = matchActors(ds.actors, opts.focusText);
+    { const seenO = new Set(); focus = focus.filter(a => { const k = a.obj || a.name; if (seenO.has(k)) return false; seenO.add(k); return true; }); }   // one marker per mesh
     const bx = new THREE.Box3(); focus.forEach(a => { if (a.obj) bx.expandByObject(a.obj); else { const p = a.getPos && a.getPos(); if (p) bx.expandByPoint(p); } });
     if (!bx.isEmpty()) { fc = bx.getCenter(V3()); fr = clamp(bx.getSize(V3()).length() * .62, ds.radius * .22, ds.radius); }
   }
