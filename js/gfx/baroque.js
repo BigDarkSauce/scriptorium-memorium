@@ -251,7 +251,7 @@ export function headGeo({ female = false, beard = false, seed = 1 } = {}) {
     const hm = sm(hairline - .04, hairline + .03, y) * sm(-.98, -.6, y);
     if (hm > 0) {
       const wave = female ? Math.sin(lon * 10 + y * 2.5) : Math.sin(x * 21 + y * 8) * Math.sin(y * 19 - z * 11);
-      d += hm * (female ? .12 + .045 * wave + .05 * G(ax, y, .72, .05, .3, .35) : .11 + .06 * Math.max(0, wave));
+      d += hm * (female ? .085 + .04 * wave + .06 * G(ax, y, .72, .05, .3, .35) - .03 * sm(.6, 1, y) : .11 + .06 * Math.max(0, wave));
       cav += hm * (female ? .28 * Math.max(0, -wave) : .32 * Math.max(0, -wave) + .08);
     }
     if (beard) { // beard over jaw and chin, moustache over the upper lip, the lower lip left free
@@ -260,7 +260,7 @@ export function headGeo({ female = false, beard = false, seed = 1 } = {}) {
       cav += bm * .3 * Math.max(0, -curl) + .25 * G(ax, y, .26, -.52, .05, .05) * f;
     }
     cav += .3 * sm(-.75, -1, y) * sm(0, .6, z); // shadow under the chin
-    const sx = .8 * (1 - .2 * sm(-.2, -1, y)), sy = female ? 1.1 : 1.14, sz = .95, zf = 1 + .09 * sm(-.3, -.9, y) * f;
+    const sx = (female ? .84 : .8) * (1 - (female ? .15 : .2) * sm(-.2, -1, y)), sy = female ? 1.0 : 1.14, sz = .95, zf = 1 + .09 * sm(-.3, -.9, y) * f;
     p.setXYZ(i, x * (1 + d) * sx, y * (1 + d) * sy, z * (1 + d) * sz * zf);
     const k = clamp(1 - cav, .38, 1.08); col[i * 3] = k; col[i * 3 + 1] = k * (.97 + .03 * k); col[i * 3 + 2] = k * (.92 + .08 * k);
   }
@@ -302,7 +302,8 @@ export function bookRow(out, M, xa, xb, y, hmax, zf, dmax, r) {
 }
 export function bookMesh(items) {
   if (!items.length) return null;
-  const geo = bookGeo().clone(), n = items.length, im = new THREE.InstancedMesh(geo, bmat('spines'), n), va = new Float32Array(n), c = new THREE.Color();
+  // very large halls (> 9k volumes): spine and top only, half the triangles (the covers only show at gaps)
+  const n0 = items.length, geo = n0 > 9000 ? bookGeo().clone().setDrawRange(0, 12) : bookGeo().clone(), n = n0, im = new THREE.InstancedMesh(geo, bmat('spines'), n), va = new Float32Array(n), c = new THREE.Color();
   items.forEach((b, i) => { im.setMatrixAt(i, b.m); va[i] = b.v; im.setColorAt(i, c.setScalar(b.c)); });
   geo.setAttribute('aVar', new THREE.InstancedBufferAttribute(va, 1));
   im.castShadow = false; im.receiveShadow = true; im.name = 'books'; im.userData.books = n; im.computeBoundingSphere(); return im;

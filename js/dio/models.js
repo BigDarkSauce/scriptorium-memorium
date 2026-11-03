@@ -251,7 +251,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
 
   // ---------- materials ----------
   const shell=thinGlass({side:THREE.FrontSide,absorb:.03,edge:.9});            // glass with real wall thickness (two lathe surfaces)
-  const film=thinGlass({side:THREE.DoubleSide,absorb:.05,edge:1,card:.35});    // single-surface glass (spout tube, register glass): a bit more edge so thin tubes read
+  const film=thinGlass({side:THREE.DoubleSide,absorb:.05,edge:1,card:.35});    // single-surface glass (register glass, lens)
+  const oldGlass=thinGlass({side:THREE.FrontSide,absorb:.15,edge:1,color:0x12241c,env:2.1});   // Goethe body: hand-blown, faintly green-grey, so its pear outline reads against a bright sky
+  const oldTube=thinGlass({side:THREE.DoubleSide,absorb:.16,edge:1,color:0x12241c,env:2.1,card:.35}); // the spout, same glass
   const water=makeMaterial({preset:'liquid',color:'#2f7fcf'});water.color.set('#8cc0ee');water.transmission=.6;water.attenuationDistance=1.2;water.thickness=1.6;water.roughness=.02; // tinted (blue) water, as real Goethe glasses use
   const spoutW=makeMaterial({preset:'plastic',color:'#2a7ad0'});spoutW.normalMap=null;spoutW.roughness=.05;spoutW.clearcoat=1;spoutW.clearcoatRoughness=.03;spoutW.emissive=new THREE.Color(0x0d3866);spoutW.emissiveIntensity=.6;spoutW.envMapIntensity=1.3; // the narrow column: dense tinted water so its level reads across the room
   const menM=makeMaterial({preset:'plastic',color:'#d8ecff'});menM.normalMap=null;menM.roughness=.04;menM.clearcoat=1;menM.emissive=new THREE.Color(0x5a88b8);menM.emissiveIntensity=.5; // bright meniscus rim (light caught by the curved surface)
@@ -302,7 +304,12 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     const arc=r*AL/rep,U={uCover:{value:.3},uLit:{value:new THREE.Color(1,1,1)},uShade:{value:new THREE.Color(.6,.65,.72)},uSun:{value:new THREE.Vector2(.5,.8)},uStep:{value:new THREE.Vector2(.026*h/arc,.026)}};
     const m=skyHook(new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.BackSide,fog:false}),'alpha','cloud',{uniforms:U,decl:'uniform float uCover;\nuniform vec3 uLit;\nuniform vec3 uShade;\nuniform vec2 uSun;\nuniform vec2 uStep;\n',map:CLOUD_GLSL});
     const me=deco(put(new THREE.Mesh(sector(r,h,y0),m),name,W));me.renderOrder=ro;decks.push({m,t,U,speed});return me};
-  const hills=(r,h,seed,rough,ht,name)=>{const t=hillRidge(seed,1024,256,rough,ht).clone();t.repeat.set(3,1);t.needsUpdate=true;const m=skyHook(new THREE.MeshBasicMaterial({map:t,alphaTest:.5,alphaToCoverage:true,side:THREE.BackSide,fog:false}),'color','hill');deco(put(new THREE.Mesh(sector(r,h,0),m),name,W));return m};
+  // hills sink into the meadow toward the sector ends (the ridge is looked up higher in the texture as the fade grows)
+  const HILL_GLSL=`#ifdef USE_MAP
+    float hlF=smoothstep(uFadeA.x,uFadeA.x+uFadeA.z*1.3,vSkyA)*smoothstep(uFadeA.y,uFadeA.y-uFadeA.z*1.3,vSkyA);
+    diffuseColor*=texture2D(map,vec2(vMapUv.x,vMapUv.y+(1.-hlF)*.85));
+  #endif`;
+  const hills=(r,h,seed,rough,ht,name)=>{const t=hillRidge(seed,1024,256,rough,ht).clone();t.repeat.set(3,1);t.needsUpdate=true;const m=skyHook(new THREE.MeshBasicMaterial({map:t,alphaTest:.5,alphaToCoverage:true,side:THREE.BackSide,fog:false}),'color','hill',{map:HILL_GLSL});deco(put(new THREE.Mesh(sector(r,h,0),m),name,W));return m};
   const hazeTex=(()=>{const c=document.createElement('canvas');c.width=4;c.height=128;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(.55,'rgba(255,255,255,.5)');gr.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=gr;g.fillRect(0,0,4,128);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
   const haze=(r,h,o,name,ro)=>{const m=skyHook(new THREE.MeshBasicMaterial({map:hazeTex,transparent:true,depthWrite:false,side:THREE.BackSide,opacity:o,fog:false}),'alpha','haze');const me=deco(put(new THREE.Mesh(sector(r,h,0),m),name,W));me.renderOrder=ro;return m};
   const sunG=deco(put(new THREE.Mesh(new THREE.PlaneGeometry(1.3,1.3),new THREE.MeshBasicMaterial({map:softDisc(),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,color:0xfff0c8,fog:false})),'sun',W));sunG.renderOrder=-9;
@@ -340,26 +347,26 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const GW=part('Goethe weather glass');
   const GX=-2.9,GZ=.3,S_MM=60,WALL=.026;
   const body=smooth([[.001,.3],[.36,.32],[.72,.43],[.97,.7],[1.07,1.08],[1.05,1.48],[.93,1.95],[.73,2.45],[.52,2.95],[.34,3.4],[.2,3.78],[.12,4.04],[.075,4.16],[.001,4.21]],5);
-  const flask=put(lathe(shellPts(body,WALL),shell,128),'glass body (trapped air above the water)',GW);flask.position.set(GX,0,GZ);flask.castShadow=false;
+  const flask=put(lathe(shellPts(body,WALL),oldGlass,128),'glass body (trapped air above the water)',GW);flask.position.set(GX,0,GZ);flask.castShadow=false;
   const rIn=y=>{for(let i=1;i<body.length;i++)if(body[i][1]>=y){const a=body[i-1],b=body[i],t=(y-a[1])/((b[1]-a[1])||1);return a[0]+(b[0]-a[0])*t-WALL}return 0};
   const foot=put(lathe(smooth([[.001,0],[.95,0],[.98,.06],[.88,.1],[.7,.13],[.52,.22],[.42,.27],[.001,.27]],4),walnut,96),'turned walnut stand',GW);foot.position.set(GX,0,GZ);
   const collar=put(new THREE.Mesh(new THREE.TorusGeometry(.45,.03,10,64),brass),'brass collar',GW);collar.rotation.x=Math.PI/2;collar.position.set(GX,.29,GZ);
   // water in the body, with a wetting (concave) meniscus; its volume barely changes, so it is built once at the fill level
-  const WY=1.3;let V0=0;for(let y=WY;y<4.2;y+=.01){const r=Math.max(0,rIn(y));V0+=Math.PI*r*r*.01}
-  const A_fl=Math.PI*rIn(WY)**2,RB=.058,a_sp=Math.PI*RB*RB;
+  const WY=1.9;let V0=0;for(let y=WY;y<4.2;y+=.01){const r=Math.max(0,rIn(y));V0+=Math.PI*r*r*.01}
+  const A_fl=Math.PI*rIn(WY)**2,RB=.05,a_sp=Math.PI*RB*RB;
   const wprof=[];for(let y=.33;y<=WY+.03;y+=.04)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY+.035)*.995,WY+.035]);for(let i=1;i<=8;i++){const t=i/8,rr=rIn(WY)*(1-t);wprof.push([rr,WY+.035*Math.pow(1-t,3)])}
   const fw=put(lathe([[.001,.33]].concat(wprof),water,96),'water in the body',GW);fw.position.set(GX,0,GZ);fw.castShadow=false;
   // spout: fused into the lower body, sweeping out and up beside it to an open, flared lip; a glass bridge steadies it
   const SPG=part('spout (open to the air)',GW);
-  const SXp=GX+1.24,TOP=4.75,bend=new THREE.CubicBezierCurve3(V3(GX+.62,.46,GZ),V3(GX+1.0,.33,GZ),V3(SXp,.36,GZ),V3(SXp,.9,GZ));const straight=new THREE.LineCurve3(V3(SXp,.9,GZ),V3(SXp,TOP,GZ));
+  const SXp=GX+1.18,TOP=4.75,SB=.8,bend=new THREE.CubicBezierCurve3(V3(GX+.42,.38,GZ),V3(GX+.8,.27,GZ),V3(SXp,.3,GZ),V3(SXp,SB,GZ));const straight=new THREE.LineCurve3(V3(SXp,SB,GZ),V3(SXp,TOP,GZ));
   const spPath=new THREE.CurvePath();spPath.add(bend);spPath.add(straight);
-  const spout=put(new THREE.Mesh(new THREE.TubeGeometry(spPath,200,RB+WALL,20,false),film),'spout tube',SPG);spout.castShadow=false;
-  const lip=put(new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.012,.02,10,32),shell),'open lip',SPG);lip.rotation.x=Math.PI/2;lip.position.set(SXp,TOP,GZ);
+  const spout=put(new THREE.Mesh(new THREE.TubeGeometry(spPath,200,RB+WALL,20,false),oldTube),'spout tube',SPG);spout.castShadow=false;
+  const lip=put(new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.012,.02,10,32),oldGlass),'open lip',SPG);lip.rotation.x=Math.PI/2;lip.position.set(SXp,TOP,GZ);
   const mark=put(new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.006,.007,6,32),brass),'level mark (spout = body when sealed)',SPG);mark.rotation.x=Math.PI/2;mark.position.set(SXp,WY,GZ);
-  {const x0=GX+rIn(3.0)+WALL*.5,x1=SXp-RB-WALL*.5,br=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,x1-x0,12),shell);br.rotation.z=Math.PI/2;br.position.set((x0+x1)/2,3.0,GZ);put(br,'fused glass bridge',SPG)}
+  {const x0=GX+rIn(3.0)+WALL*.5,x1=SXp-RB-WALL*.5,br=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,x1-x0,12),oldGlass);br.rotation.z=Math.PI/2;br.position.set((x0+x1)/2,3.0,GZ);put(br,'fused glass bridge',SPG)}
   const SCG=part('spout water column',SPG);
   const bendW=put(new THREE.Mesh(new THREE.TubeGeometry(bend,60,RB*.97,16,false),spoutW),'water in the bend',SCG);bendW.castShadow=false;
-  const colG=new THREE.CylinderGeometry(RB*.97,RB*.97,1,20,1,true);colG.translate(0,.5,0);const col=put(new THREE.Mesh(colG,spoutW),'water column',SCG);col.position.set(SXp,.9,GZ);col.castShadow=false;
+  const colG=new THREE.CylinderGeometry(RB*.97,RB*.97,1,20,1,true);colG.translate(0,.5,0);const col=put(new THREE.Mesh(colG,spoutW),'water column',SCG);col.position.set(SXp,SB,GZ);col.castShadow=false;
   const menisc=put(new THREE.Mesh(new THREE.LatheGeometry([[RB*.97,0],[RB*.8,-.02],[RB*.5,-.034],[.001,-.04]].map(([x,y])=>new THREE.Vector2(x,y)),20),spoutW),'meniscus (concave)',SCG);
   const menRing=put(new THREE.Mesh(new THREE.TorusGeometry(RB*.9,.008,6,24),menM),'meniscus rim',SCG);menRing.rotation.x=Math.PI/2;
   const DN=40,dropM=put(new THREE.InstancedMesh(new THREE.SphereGeometry(.035,10,8),spoutW,DN),'spilled drops',SPG);dropM.userData.noInk=true;dropM.frustumCulled=false;fixedBox(dropM,V3(SXp-.1,0,GZ-.1),V3(SXp+.6,TOP+.1,GZ+.1));const drops=[];
@@ -390,8 +397,8 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   for(let i=0;i<5;i++){const a=i/4*Math.PI*2+.4,o=V3(SX+Math.cos(a)*.18,LIQ-.04,SZ+Math.sin(a)*.18);frond(o,V3(Math.cos(a)*.5,-1,Math.sin(a)*.5),.55+rng()*.4,1,0,1)}
   const tubeBox=[V3(SX-sIn,SY0,SZ-sIn),V3(SX+sIn,LIQ,SZ+sIn)];
   const shards=put(new THREE.InstancedMesh(new THREE.OctahedronGeometry(1,0),crystM,SH.length),'fern fronds',CG);shards.userData.noInk=true;shards.castShadow=false;shards.frustumCulled=false;fixedBox(shards,...tubeBox);
-  const BASEN=110,BC=[];for(let i=0;i<BASEN;i++){const a=rng()*Math.PI*2,r=Math.pow(rng(),.7)*(sIn-.1),h=.05*(1-r/sIn)+rng()*.03;BC.push({p:V3(SX+Math.cos(a)*r,SY0+.07+h,SZ+Math.sin(a)*r),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*3,rng()*3,rng()*3)),s:.012+rng()*.022,th:r/sIn*.8+rng()*.2})}
-  const baseC=put(new THREE.InstancedMesh(new THREE.CylinderGeometry(.6,.6,1.6,6),crystM,BASEN),'seed bed (compact crystals)',CG);baseC.userData.noInk=true;baseC.frustumCulled=false;fixedBox(baseC,V3(SX-sIn,SY0,SZ-sIn),V3(SX+sIn,SY0+.3,SZ+sIn));
+  const BASEN=130,BC=[];for(let i=0;i<BASEN;i++){const a=rng()*Math.PI*2,r=Math.pow(rng(),.7)*(sIn-.1),h=.05*(1-r/sIn)+rng()*.03;BC.push({p:V3(SX+Math.cos(a)*r,SY0+.07+h,SZ+Math.sin(a)*r),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*3,rng()*3,rng()*3)),s:.016+rng()*.026,th:r/sIn*.7+rng()*.3})}
+  const bedM=crystM.clone();bedM.color.set('#e6ebee');bedM.emissiveIntensity=.08;const baseC=put(new THREE.InstancedMesh(new THREE.CylinderGeometry(.6,.6,1.6,6),bedM,BASEN),'seed bed (compact crystals)',CG);baseC.userData.noInk=true;baseC.frustumCulled=false;fixedBox(baseC,V3(SX-sIn,SY0,SZ-sIn),V3(SX+sIn,SY0+.3,SZ+sIn));
   // a faint milky layer just above the bed: undissolved micro-crystals near saturation
   const bedHaze=(()=>{const c=document.createElement('canvas');c.width=4;c.height=64;const g=c.getContext('2d'),q=g.createLinearGradient(0,0,0,64);q.addColorStop(0,'rgba(255,255,255,0)');q.addColorStop(.7,'rgba(255,255,255,.55)');q.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=q;g.fillRect(0,0,4,64);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
   const hz=put(new THREE.Mesh(new THREE.CylinderGeometry(sIn*.96,sIn*.96,.7,32,1,true),new THREE.MeshBasicMaterial({map:bedHaze,color:0xe8ecee,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide})),'milky haze near the bed',CG);hz.position.set(SX,SY0+.38,SZ);deco(hz);hz.renderOrder=3;
@@ -453,7 +460,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const bulb=put(new THREE.Mesh(new THREE.SphereGeometry(.045,16,12),new THREE.MeshPhysicalMaterial({color:0xb01818,roughness:.15,clearcoat:1})),'thermometer bulb',THG);bulb.position.set(BX+.06,TY0-.06,BZ+.17);
   const spG=new THREE.CylinderGeometry(.012,.012,1,8);spG.translate(0,.5,0);const spirit=put(new THREE.Mesh(spG,bulb.material),'thermometer spirit',THG);spirit.position.set(BX+.06,TY0-.06,BZ+.17);
   // light through the sky from behind (rim on the glass) and a lightning flash
-  const sunL=put(new THREE.DirectionalLight(0xffe6c0,0),'sunlight through the sky',W);sunL.position.set(-1,7,-9);W.add(sunL.target);
+  const sunL=put(new THREE.DirectionalLight(0xffe6c0,0),'sunlight through the sky',W);sunL.position.set(-1,7,-9);sunL.target.name='sunlight target';W.add(sunL.target);
   const flashL=put(new THREE.DirectionalLight(0xdfe8ff,0),'lightning flash',W);flashL.position.set(2,9,-8);
   // rain on the display case (when the diorama has one): lens-like droplets that grow, stick, then slip down the panes
   const caseObj=D.scene.getObjectByName('glass case');let CD=null;
@@ -473,7 +480,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   {const ex=Math.max(0,total()-BED-S_(Tg));Mb=Math.min(BED,total())+ex*.15;Mf=ex*.85;nucl=ex>0;wasFern=Mf>.02;Gf=clamp(Mf/.35,0,1);Gb=clamp(Math.sqrt(Mb/.3),0,1)}
   const spoutY=()=>clamp(WY+hs,.45,TOP-.02);
   DIO.weatherglass._live={spoutY,hgY:()=>yOfP(hgShown),bedY:()=>SY0+.15};
-  D.label('Goethe weather glass',()=>V3(GX,4.5,GZ),GW);D.label('spout column · water level',()=>V3(SXp,Math.max(1.1,spoutY())+.25,GZ),false,SPG);D.label('trapped air · P_in',()=>V3(GX,2.7,GZ),false,flask);D.label('flask water',()=>V3(GX-.45,WY-.3,GZ+.7),false,fw);
+  D.label('Goethe weather glass',()=>V3(GX,4.5,GZ),GW);D.label('spout column · water level',()=>V3(SXp+.05,Math.max(1.1,spoutY())+.25,GZ),false,SPG);D.label('trapped air · P_in',()=>V3(GX,3.05,GZ),false,flask);D.label('flask water',()=>V3(GX-.45,WY-.3,GZ+.7),false,fw);
   D.label('storm glass · sealed tube',()=>V3(SX,STOP+.65,SZ),false,SG);D.label('crystals',()=>mass()>.004?V3(SX+.05,.82,SZ+.3):null,false,CG);D.label('camphor solution',()=>V3(SX+.25,2.6,SZ+.35),false,liq);
   D.label('mercury barometer',()=>V3(BX,7.45,BZ),false,BG);D.label('mercury column',()=>V3(tubeX+.3,yOfP(hgShown),TZ+.15),false,HGG);D.label('thermometer',()=>V3(BX+.06,TY0+TH+.25,BZ+.17),false,THG);
   D.label('sky · cloud cover',()=>V3(-3.6,6.4,-4.7),false,deckMid);
@@ -538,15 +545,15 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     // set hand records the reading 3 h ago (like the brass "set" pointer on period barometers)
     if(t-lastSet>3){setP=hist.length?hist[0][1]:Pc;lastSet=t}
    },
-   visual(dt){const y=spoutY(),vert=y>.9;
-    col.scale.y=Math.max(.001,y-.9);col.visible=vert;menisc.visible=menRing.visible=vert;menisc.position.set(SXp,y,GZ);menRing.position.set(SXp,y-.004,GZ);bendW.visible=y>.6;
+   visual(dt){const y=spoutY(),vert=y>SB;
+    col.scale.y=Math.max(.001,y-SB);col.visible=vert;menisc.visible=menRing.visible=vert;menisc.position.set(SXp,y,GZ);menRing.position.set(SXp,y-.004,GZ);bendW.visible=y>.45;
     for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.v-=9.8*dt;d.y+=d.v*dt;d.x+=.25*dt;if(d.y<.05)drops.splice(i,1)}while(drops.length>DN)drops.shift();{const m=new THREE.Matrix4();for(let i=0;i<DN;i++){const d=drops[i];if(d)m.makeTranslation(d.x,d.y,d.z);else m.makeScale(0,0,0);dropM.setMatrixAt(i,m)}dropM.instanceMatrix.needsUpdate=true}
     // crystals: shard i is grown when its threshold lies below the group's growth fraction; the bed by √mass (a thin layer shows early)
     const k=Math.min(1,dt*3);Gf+=(clamp(Mf/.35,0,1)-Gf)*k;Gt+=(clamp(Mt/.2,0,1)-Gt)*k;Gb+=(clamp(Math.sqrt(Mb/.3),0,1)-Gb)*k;
     const m4=new THREE.Matrix4(),sv=V3();for(let i=0;i<SH.length;i++){const s=SH[i],G=s.grp?Gt:Gf,f=clamp((G-s.th)/.08,0,1);if(f<=0){m4.makeScale(0,0,0)}else{sv.copy(s.s).multiplyScalar(f);m4.compose(s.p,s.q,sv)}shards.setMatrixAt(i,m4)}shards.instanceMatrix.needsUpdate=true;
-    for(let i=0;i<BASEN;i++){const b=BC[i],f=clamp((Gb*1.15-b.th)/.15,0,1);if(f<=0)m4.makeScale(0,0,0);else{sv.setScalar(b.s*(.4+.6*f));m4.compose(b.p,b.q,sv)}baseC.setMatrixAt(i,m4)}baseC.instanceMatrix.needsUpdate=true;
+    for(let i=0;i<BASEN;i++){const b=BC[i],f=clamp((Gb*1.5-b.th)/.15,0,1);if(f<=0)m4.makeScale(0,0,0);else{sv.setScalar(b.s*(.4+.6*f));m4.compose(b.p,b.q,sv)}baseC.setMatrixAt(i,m4)}baseC.instanceMatrix.needsUpdate=true;
     const c=Math.max(0,total()-mass()),sig=c/S_(Tg)-1,haze=clamp((sig-.06)/.3,0,1),near=clamp(1+sig/.35,0,1)*clamp(Mb/.02,0,1); // near: close to saturation with a bed present
-    specks.material.opacity=Math.max(haze*.8,near*.25);hz.material.opacity=.06+near*.22+haze*.3;sol.opacity=.1+haze*.38+near*.04;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);
+    specks.material.opacity=Math.max(haze*.8,near*.14);hz.material.opacity=.02+near*.08+haze*.25;sol.opacity=.1+haze*.38+near*.04;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);
     // mercury, vernier and set hand, thermometer spirit
     hgShown+=(Pc-hgShown)*Math.min(1,dt*4);const yh=yOfP(clamp(hgShown,PMIN-8,PMAX+6));hg.scale.y=Math.max(.01,yh-(PY0-.25));hgTop.position.set(tubeX,yh,TZ);VER.position.set(tubeX,clamp(yh,PY0,PY0+PH)+RHG*.6,TZ);setHand.position.set(tubeX+.22,yOfP(setP),BZ+.24);
     spirit.scale.y=Math.max(.01,TY0+(clamp(Tc,-10,40)+10)/50*TH-(TY0-.06));
@@ -565,7 +572,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     D.push(Pc)},
    clock(t){const tt=(t??D.t)+CLK,hr=Math.floor(tt%24),mn=Math.floor((tt%1)*6)*10;return String(hr).padStart(2,'0')+':'+String(mn).padStart(2,'0')+' · day '+(1+Math.floor(tt/24))},
    readouts(){const c=Math.max(0,total()-mass()),sig=c/S_(Tg)-1,tr=hist.length>1?Pc-hist[0][1]:0,f1=v=>v.toFixed(1),dh=hs*S_MM,de=hsEq*S_MM;
-    return[['time scale','1 s = 1 h of weather'],['P outside',f1(Pc)+' hPa'],['3-h tendency',(tr>=0?'+':'−')+Math.abs(tr).toFixed(1)+' hPa'],['T air',f1(Tc)+' °C'],['P inside (trapped air)',f1(Pin)+' hPa'],
+    return[['time scale','1 s = 1 h'],['P outside',f1(Pc)+' hPa'],['3-h tendency',(tr>=0?'+':'−')+Math.abs(tr).toFixed(1)+' hPa'],['T air',f1(Tc)+' °C'],['P inside (trapped air)',f1(Pin)+' hPa'],
      ['spout Δh (now)',f1(dh)+' mm'],['Δh at equilibrium',f1(de)+' mm'],['spout',overflow?'overflowing':Math.abs(de-dh)<.5?'settled':'settling…'],['Δh textbook (P₀T/T₀−P)/ρg',f1(ideal_mm())+' mm'],
      ['mercury column',f1(Pc*.750062)+' mm'],['T storm-glass liquid',f1(Tg)+' °C'],['solubility S(T)',S_(Tg).toFixed(3)],['supersaturation σ',sig.toFixed(3)],['crystal mass',mass().toFixed(3)],['cloud cover',Math.round(cover*100)+' %']]}}}};
 // Camera hints for the director: keys are lowercase substrings of the event text (the same matching lessons use).
@@ -576,7 +583,7 @@ DIO.weatherglass.shots={
  'pushes water up the spout':{target:[-2.2,2.4,.3],dist:5.6},
  'pushes the water back down':{target:[-2.2,2.4,.3],dist:5.6},
  'spout settles':{target:[-2,2.6,.3],dist:5.4},
- 'pushes water out of the spout':{target:[-1.66,4.4,.3],dist:2.6},
+ 'pushes water out of the spout':{target:[-1.72,4.4,.3],dist:2.6},
  'air bubbles into the flask':{target:[-2.1,.8,.3],dist:3.2},
  'camphor crystals nucleate':{target:[2.8,1.6,.4],dist:3.6},
  'crystals redissolve':{target:[2.8,1.8,.4],dist:3.8},
@@ -586,14 +593,14 @@ DIO.weatherglass.shots={
  'rain begins':{target:[0,2.6,-4.2],dist:8.5},
  'rain eases':{target:[0,2.6,-4.2],dist:8.5}};
 // Process arrows for the director (drawn when Guides are on): world coordinates, or functions for moving ends.
-{const L=()=>DIO.weatherglass._live||{spoutY:()=>1.3,hgY:()=>4.3,bedY:()=>.57},GX=-2.9,GZ=.3,SXp=-1.66,SX=2.8,SZ=.4,BZ=-2.55,TZ=BZ+.19,tubeX=0;
+{const L=()=>DIO.weatherglass._live||{spoutY:()=>1.9,hgY:()=>4.3,bedY:()=>.57},GX=-2.9,GZ=.3,SXp=-1.72,SX=2.8,SZ=.4,BZ=-2.55,TZ=BZ+.19,tubeX=0;
  const hgArrow=(up)=>[{from:()=>V3(tubeX-.32,L().hgY()+(up?-.45:.45),TZ+.2),to:()=>V3(tubeX-.32,L().hgY(),TZ+.2),label:up?'more air above the cistern: mercury rises':'less air above the cistern: mercury falls'},{from:[.9,.95,BZ+.4],to:[.3,.6,BZ+.3],label:up?'heavier air presses on the cistern':'lighter air presses on the cistern'}];
  DIO.weatherglass.flows={
-  'pushes water up the spout':[{from:[GX,2.5,GZ],to:[GX,1.42,GZ],label:'trapped air presses on the water'},{from:[GX+.55,.62,GZ+.1],to:[SXp,.95,GZ+.1],label:'water flows through the bend'},{from:()=>V3(SXp+.25,L().spoutY()-.8,GZ),to:()=>V3(SXp+.25,L().spoutY(),GZ),label:'air pushes water up the spout'}],
-  'pushes the water back down':[{from:[SXp,5.4,GZ],to:()=>V3(SXp,L().spoutY()+.1,GZ),label:'outside air presses down the open spout'},{from:[SXp-.05,.85,GZ+.1],to:[GX+.5,.62,GZ+.1],label:'water returns to the body'}],
-  'spout settles':[{from:[SXp+.3,1.3,GZ],to:()=>V3(SXp+.3,L().spoutY(),GZ),label:'Δh: weight of water = P_in − P'}],
+  'pushes water up the spout':[{from:[GX,3.1,GZ],to:[GX,2.02,GZ],label:'trapped air presses on the water'},{from:[GX+.35,.55,GZ+.1],to:[SXp,.85,GZ+.1],label:'water flows through the bend'},{from:()=>V3(SXp+.25,L().spoutY()-.8,GZ),to:()=>V3(SXp+.25,L().spoutY(),GZ),label:'air pushes water up the spout'}],
+  'pushes the water back down':[{from:[SXp,5.4,GZ],to:()=>V3(SXp,L().spoutY()+.1,GZ),label:'outside air presses down the open spout'},{from:[SXp-.05,.8,GZ+.1],to:[GX+.35,.55,GZ+.1],label:'water returns to the body'}],
+  'spout settles':[{from:[SXp+.3,1.9,GZ],to:()=>V3(SXp+.3,L().spoutY(),GZ),label:'Δh: weight of water = P_in − P'}],
   'pushes water out of the spout':[{from:[SXp,4.2,GZ],to:[SXp+.35,4.95,GZ],label:'trapped air overflows the spout'}],
-  'air bubbles into the flask':[{from:[SXp,5.2,GZ],to:[SXp,.9,GZ],label:'outside air drives the column below the bend'},{from:[GX+.8,.42,GZ+.1],to:[GX+.2,1.9,GZ+.1],label:'an air bubble rises into the flask'}],
+  'air bubbles into the flask':[{from:[SXp,5.2,GZ],to:[SXp,.8,GZ],label:'outside air drives the column below the bend'},{from:[GX+.6,.36,GZ+.1],to:[GX+.15,2.4,GZ+.1],label:'an air bubble rises into the flask'}],
   'camphor crystals nucleate':[{from:[SX+.15,3.1,SZ+.2],to:[SX+.05,1.1,SZ+.2],label:'dissolved camphor comes out of solution'}],
   'crystals redissolve':[{from:[SX,1,SZ+.2],to:[SX,2.8,SZ+.2],label:'crystals dissolve back into the liquid'}],
   'feathery crystals at the top':[{from:[SX+.9,3.9,SZ],to:[SX+.1,3.35,SZ],label:'fast cooling: growth hangs from the top'}],

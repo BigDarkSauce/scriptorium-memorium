@@ -186,7 +186,8 @@ export class Hub {
     if (this.opening || !e.target || e.target !== this.gfx.canvas) { if (!this.dragging) { this.tip.hidden = true; } }
     if (this.dragging) {
       const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera);
-      const p = V3(); if (this.ray.ray.intersectPlane(this.floorPlane, p)) { const s = this.lib.shelves.find(x => x.id === this.dragging.userData.shelfId); s.x = p.x; s.z = p.z; this.snap(s); this.dragging.position.set(s.x, 0, s.z); this.dragging.rotation.y = s.rot; }
+      const p = V3(); if (this.ray.ray.intersectPlane(this.floorPlane, p)) { const s = this.lib.shelves.find(x => x.id === this.dragging.userData.shelfId); s.x = p.x; s.z = p.z; this.snap(s); this.dragging.position.set(s.x, 0, s.z); this.dragging.rotation.y = s.rot;
+        const now = performance.now(); if (!(now - (this._casesT || 0) < 350)) { this._casesT = now; this.updateWallCases(); } } // wall cases make room while dragging (throttled)
       return;
     }
     if (e.target !== this.gfx.canvas || this.build) return;

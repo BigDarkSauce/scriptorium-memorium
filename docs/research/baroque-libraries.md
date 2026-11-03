@@ -181,5 +181,8 @@ walls with pilasters and a few low free-standing cases. The second pass adds the
   - Hair is waved and gathered into a knot for the allegories; the atlantes get curled hair and a beard.
   - The cavities are darkened by baked vertex colour, so the features read even under flat light.
   - The atlantes also wear a mantle knotted on the shoulder.
-- **Budget** (hub at 18 × 12 × 7): about 105 draw calls and about 240k triangles in the main pass. The sun's shadow
-  pass adds more; small gilt, balusters and books do not cast.
+- **Budget**, measured in headless Chromium with SwiftShader:
+  - Hub at 18 × 12 × 7: 108 draw calls and 243k triangles in the main pass, or 195 calls and 333k triangles counting
+    the sun's shadow pass. Small gilt, balusters, books and tiny parts do not cast.
+  - Book room at 12 × 10 × 5.5: 111 calls and 114k triangles.
+  - Above 9k volumes the books drop their cover faces.
