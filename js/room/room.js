@@ -3,6 +3,7 @@
 // clicking it unfolds the model and carries you inside. The room grows when more scrolls need hanging.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Navigator } from '../nav.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { canvasTex, parchment, radialGlow } from '../gfx/textures.js';
@@ -27,9 +28,12 @@ export class BookRoom {
     this.layout(); this.buildShell(); this.buildStations();
     const D = this.data.dims; this.camera.position.set(0, 1.65, D.d / 2 - .9); this.controls.target.set(-D.w * .25, 1.5, 0); this.controls.update();
     this.gfx.setView(this.scene, this.camera);
+    this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
+      bounds: () => { const D = this.data.dims; return { minX: -D.w / 2, maxX: D.w / 2, minZ: -D.d / 2, maxZ: D.d / 2, h: D.h }; },
+      obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => new THREE.Box3().setFromObject(o)) });
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
     this.onDown = e => { this.down = { x: e.clientX, y: e.clientY }; }; this.onUp = e => this.pointerUp(e); this.onMove = e => this.pointerMove(e);
-    this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; }; this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
+    this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if ((e.key === 'v' || e.key === 'V') && !this.reader) this.nav.toggle(); }; this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     this.gfx.canvas.addEventListener('pointerdown', this.onDown); this.gfx.canvas.addEventListener('pointerup', this.onUp); this.gfx.canvas.addEventListener('pointermove', this.onMove);
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     if (!this.data.parts.length) this.ingest();
@@ -67,7 +71,7 @@ export class BookRoom {
   }
   buildShell() {
     if (this.shell) this.scene.remove(this.shell);
-    const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'gallery', windowWall: 'none' }); this.scene.add(this.shell);
+    const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p) }); this.scene.add(this.shell);
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
@@ -175,7 +179,7 @@ export class BookRoom {
     const o = this.pick(e); if (!o) return; const p = this.data.parts.find(x => x.id === o.userData.station);
     if (o.userData.kind === 'pedestal') this.enterPedestal(p); else this.openPart(p);
   }
-  flyTo(pos, look, dur = 1.4, then) { this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, k: 0, dur, then }; this.controls.enabled = false; }
+  flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, k: 0, dur, then }; this.controls.enabled = false; }
   openPart(p, instant) {
     const st = this.stations.get(p.id); if (!st) return; if (this.reader) this.reader.close();
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
@@ -194,11 +198,9 @@ export class BookRoom {
   }
   // ---------- frame ----------
   update(dt, t) {
-    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = true; this.controls.update(); a.then && a.then(); } }
+    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
-      const k = this.keys, D = this.data.dims; let f = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), s = (k.d || k.arrowright ? 1 : 0) - (k.a || k.arrowleft ? 1 : 0);
-      if ((f || s) && !this.reader) { const dir = V3(); this.camera.getWorldDirection(dir); dir.y = 0; dir.normalize(); const side = V3().crossVectors(dir, V3(0, 1, 0)); const mv = dir.multiplyScalar(f).add(side.multiplyScalar(s)).multiplyScalar(dt * 2.6); this.camera.position.add(mv); this.controls.target.add(mv); }
-      this.controls.update(); const p = this.camera.position; p.x = clamp(p.x, -D.w / 2 + .35, D.w / 2 - .35); p.z = clamp(p.z, -D.d / 2 + .35, D.d / 2 - .35); p.y = clamp(p.y, .4, D.h - .3);
+      this.nav.update(dt, !!this.reader || !!this.unfold);
     }
     // card models turn slowly; the chosen one unfolds (grows, lifts, glows) before the dive
     this.stations.forEach(s => { s.mini.rotation.y += dt * .15; });
@@ -215,6 +217,6 @@ export class BookRoom {
     if (this.disposed) return; this.disposed = true;
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
-    this.controls.dispose(); if (this.reader) { this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); } this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); } this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }

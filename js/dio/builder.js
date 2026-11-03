@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeMaterial } from '../gfx/materials.js';
+import { makeMaterial, thinGlass } from '../gfx/materials.js';
+import { alignUV, relief } from '../gfx/proc.js';
 import { canvasTex, labelTex } from '../gfx/textures.js';
 import { compile, mulberry, makeNoise } from '../util.js';
 
@@ -22,12 +23,12 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
   switch (k) {
     case 'box': {
       const w = num(shape.w, 1), h = num(shape.h, 1), d = num(shape.d, 1), r = num(shape.round, Math.min(w, h, d) * .06);
-      return mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d), mat());
+      return mesh(alignUV(r > 0 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d)), mat());
     }
     case 'sphere': return mesh(new THREE.SphereGeometry(num(shape.r, .5), 48, 32), mat());
-    case 'cylinder': { const r = num(shape.r, .5); return mesh(new THREE.CylinderGeometry(num(shape.rt, r), num(shape.rb, r), num(shape.h, 1), num(shape.seg, 48)), mat()); }
-    case 'cone': return mesh(new THREE.ConeGeometry(num(shape.r, .5), num(shape.h, 1), 48), mat());
-    case 'torus': return mesh(new THREE.TorusGeometry(num(shape.R, 1), num(shape.r, .2), 24, 96), mat());
+    case 'cylinder': { const r = num(shape.r, .5); return mesh(alignUV(new THREE.CylinderGeometry(num(shape.rt, r), num(shape.rb, r), num(shape.h, 1), Math.max(24, num(shape.seg, 64)))), mat()); }
+    case 'cone': return mesh(new THREE.ConeGeometry(num(shape.r, .5), num(shape.h, 1), 64), mat());
+    case 'torus': return mesh(new THREE.TorusGeometry(num(shape.R, 1), num(shape.r, .2), 32, 128), mat());
     case 'capsule': return mesh(new THREE.CapsuleGeometry(num(shape.r, .3), num(shape.h, 1), 12, 24), mat());
     case 'plane': { const m = mesh(new THREE.PlaneGeometry(num(shape.w, 1), num(shape.h, 1)), mat(), false); m.material.side = THREE.DoubleSide; return m; }
     case 'disc': { const m = mesh(new THREE.CircleGeometry(num(shape.r, 1), 64), mat(), false); m.rotation.x = -Math.PI / 2; g.add(m); return g; }
@@ -40,7 +41,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       const geo = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bev > 0, bevelSize: bev, bevelThickness: bev, bevelSegments: 2, curveSegments: 24 });
       geo.translate(0, 0, -depth / 2); return mesh(geo, mat());
     }
-    case 'lathe': return mesh(new THREE.LatheGeometry((shape.points || [[0, 0], [.5, 0], [.5, 1], [0, 1]]).map(p => new THREE.Vector2(Math.max(.001, +p[0]), +p[1])), 64), mat());
+    case 'lathe': return mesh(new THREE.LatheGeometry((shape.points || [[0, 0], [.5, 0], [.5, 1], [0, 1]]).map(p => new THREE.Vector2(Math.max(.001, +p[0]), +p[1])), 96), mat());
     case 'tube': {
       const pts = (shape.points || [[0, 0, 0], [1, 1, 0]]).map(p => V3(+p[0], +p[1], +p[2] || 0));
       return mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, !!shape.closed), Math.max(32, pts.length * 12), num(shape.r, .05), 12, !!shape.closed), mat());
@@ -80,7 +81,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     }
     case 'house': {
       const w = num(shape.w, 1.6), d = num(shape.d, 1.2), h = num(shape.h, 1);
-      const wall = mesh(new THREE.BoxGeometry(w, h, d), makeMaterial(matSpec || { preset: 'plaster', color: '#efe3cc' })); wall.position.y = h / 2; g.add(wall);
+      const wall = mesh(alignUV(new THREE.BoxGeometry(w, h, d)), makeMaterial(matSpec || { preset: 'plaster', color: '#efe3cc' })); wall.position.y = h / 2; g.add(wall);
       const roofGeo = new THREE.CylinderGeometry(.001, w * .78, h * .7, 4, 1); roofGeo.rotateY(Math.PI / 4); roofGeo.scale(1, 1, d / w);
       const roof = mesh(roofGeo, makeMaterial({ preset: 'ceramic', color: shape.roof || '#8a3a2a', roughness: .7 })); roof.position.y = h + h * .35; g.add(roof);
       const win = makeMaterial({ preset: 'emissive', color: '#ffcf7a', emissiveIntensity: .8 });
@@ -106,7 +107,8 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
         cols.push(c.r, c.g, c.b);
       }
       geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); geo.computeVertexNormals();
-      const m = mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, flatShading: k !== 'terrain' }));
+      const R0 = relief(isT ? 'ground' : 'stone'), nm = R0.normalMap.clone(); nm.repeat.set(isT ? 9 : 3, isT ? 9 : 3); nm.needsUpdate = true;
+      const m = mesh(geo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .93, normalMap: nm, normalScale: new THREE.Vector2(isT ? 1.1 : .9, isT ? 1.1 : .9), sheen: isT ? .45 : 0, sheenColor: new THREE.Color(0xc8e0a0), sheenRoughness: .7 }));
       if (isT) { m.castShadow = false; m.userData.noInk = true; } else m.userData.inkAngle = 60; return m;
     }
     case 'cloud': {
@@ -118,7 +120,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     case 'water': { const m = mesh(new THREE.PlaneGeometry(num(shape.w, 4), num(shape.d, 3), 64, 64), makeMaterial(matSpec || 'water'), false); m.rotation.x = -Math.PI / 2; m.userData.waves = num(shape.waves, .03); m.userData.noInk = true; g.add(m); g.userData.water = m; return g; }
     case 'table': {
       const w = num(shape.w, 3), d = num(shape.d, 1.6), h = num(shape.h, 1.1), wm = makeMaterial(matSpec || 'darkwood');
-      const top = mesh(new RoundedBoxGeometry(w, .08, d, 2, .02), wm); top.position.y = h; g.add(top);
+      const top = mesh(alignUV(new RoundedBoxGeometry(w, .08, d, 2, .02)), wm); top.position.y = h; g.add(top);
       [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([a, b]) => { const l = mesh(new THREE.CylinderGeometry(.04, .03, h, 10), wm); l.position.set(a * (w / 2 - .1), h / 2, b * (d / 2 - .1)); g.add(l); });
       return g;
     }
@@ -130,14 +132,17 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       const L = new THREE.PointLight(0xffc98a, 3, 6, 2); L.position.y = h - .1; g.add(L); g.userData.light = L; return g;
     }
     case 'beaker': case 'flask': case 'testtube': {
-      const r = num(shape.r, k === 'testtube' ? .12 : .45), h = num(shape.h, k === 'testtube' ? 1.2 : 1), fill = num(shape.fill, .55);
-      const prof = k === 'flask' ? [[r * .3, h], [r * .3, h * .7], [r, h * .25], [r * .9, 0], [.001, 0]] : k === 'testtube' ? [[r, h], [r, r], [r * .7, r * .3], [.001, 0]] : [[r * 1.05, h], [r, h * .98], [r, 0], [.001, 0]];
-      const glass = mesh(new THREE.LatheGeometry(prof.map(p => new THREE.Vector2(p[0], p[1])).reverse(), 64), makeMaterial('glass'), false); glass.material.side = THREE.DoubleSide; g.add(glass);
-      const liq = buildShape({ kind: 'lathe', points: prof.filter(p => p[1] <= h * fill).map(p => [p[0] * .94, p[1] + .01]).concat([[.001, h * fill]]).reverse().reverse() }, { preset: 'water', color: shape.liquid || '#4aa3c0' });
-      const lp = []; for (const p of [...prof].reverse()) if (p[1] <= h * fill) lp.push([p[0] * .93, p[1] + .01]);
-      const rAt = (y) => { const pr = [...prof].reverse(); for (let i = 1; i < pr.length; i++) if (pr[i][1] >= y) { const a = pr[i - 1], b = pr[i], t = (y - a[1]) / ((b[1] - a[1]) || 1); return a[0] + (b[0] - a[0]) * t; } return r; };
-      lp.push([rAt(h * fill) * .93, h * fill]); lp.push([.001, h * fill]);
-      const liquid = mesh(new THREE.LatheGeometry(lp.map(p => new THREE.Vector2(p[0], p[1])), 48), makeMaterial({ preset: 'water', color: shape.liquid || '#4aa3c0' }), false);
+      // blown-glass vessel with real wall thickness (outer + inner lathe surfaces) and a liquid with a wetting meniscus
+      const r = num(shape.r, k === 'testtube' ? .12 : .45), h = num(shape.h, k === 'testtube' ? 1.2 : 1), fill = Math.min(.95, num(shape.fill, .55)), t = Math.max(.008, r * .05);
+      const outer = k === 'flask' ? [[.001, 0], [r * .9, 0], [r, h * .06], [r * .98, h * .25], [r * .3, h * .7], [r * .3, h * .97], [r * .34, h]] : k === 'testtube' ? [[.001, 0], [r * .55, r * .12], [r * .9, r * .45], [r, r], [r, h * .98], [r * 1.08, h]] : [[.001, 0], [r * .96, 0], [r, r * .06], [r, h * .97], [r * 1.06, h]];
+      const prof = new THREE.SplineCurve(outer.map(p => new THREE.Vector2(p[0], p[1]))).getPoints(outer.length * 8);
+      const inner = prof.map((p, i) => { const a = prof[Math.max(0, i - 1)], b = prof[Math.min(prof.length - 1, i + 1)], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return new THREE.Vector2(Math.max(.0005, p.x - dy / L * t), p.y + dx / L * t); }).reverse();
+      const glass = mesh(new THREE.LatheGeometry(prof.concat(inner), 96), thinGlass({ side: THREE.FrontSide, absorb: .03, edge: .9 }), false); g.add(glass);
+      const rAt = y => { for (let i = 1; i < prof.length; i++) if (prof[i].y >= y) { const a = prof[i - 1], b = prof[i], u = (y - a.y) / ((b.y - a.y) || 1); return Math.max(.001, a.x + (b.x - a.x) * u - t * 1.1); } return r - t; };
+      const top = h * fill, lp = [new THREE.Vector2(.001, t * 1.2)]; for (let y = t * 1.2; y < top; y += h / 40) lp.push(new THREE.Vector2(rAt(y), y));
+      const rt = rAt(top), mh = Math.min(.04, rt * .25); lp.push(new THREE.Vector2(rt, top + mh)); for (let i = 1; i <= 8; i++) { const u = i / 8; lp.push(new THREE.Vector2(Math.max(.001, rt * (1 - u)), top + mh * Math.pow(1 - u, 3))); }
+      const lmat = makeMaterial(matSpec && ['water', 'liquid', 'gel'].includes(matSpec.preset) ? matSpec : { preset: 'liquid', color: shape.liquid || '#4aa3c0' }); lmat.thickness = r * 1.6;
+      const liquid = mesh(new THREE.LatheGeometry(lp, 64), lmat, false);
       g.add(liquid); g.userData.liquid = liquid; return g;
     }
     case 'molecule': {
@@ -201,11 +206,13 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       const s = num(shape.size, 3); [[0xd2553c, [1, 0, 0]], [0x5aa03c, [0, 1, 0]], [0x3c78d2, [0, 0, 1]]].forEach(([c, d]) => g.add(new THREE.ArrowHelper(V3(...d), V3(), s, c, .25, .12))); return g;
     }
     case 'glasscase': {
-      const w = num(shape.w, 12), d = num(shape.d, 12), h = num(shape.h, 7);
-      const glass = new THREE.MeshPhysicalMaterial({ color: 0xeef6f2, roughness: .05, transparent: true, opacity: .1, side: THREE.DoubleSide, depthWrite: false, clearcoat: 1, specularIntensity: 1 });
-      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glass); box.position.y = h / 2; box.renderOrder = 10; g.add(box);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: 0xffe6b0, transparent: true, opacity: .5 })); edges.position.y = h / 2; g.add(edges);
-      return g;
+      const w = num(shape.w, 12), d = num(shape.d, 12), h = num(shape.h, 7), gm = thinGlass({ absorb: .012, edge: .55, card: .1 }), fm = makeMaterial('brass'), b = .06;
+      [[0, h / 2, d / 2, 0, w], [0, h / 2, -d / 2, Math.PI, w], [w / 2, h / 2, 0, Math.PI / 2, d], [-w / 2, h / 2, 0, -Math.PI / 2, d]].forEach(([x, y, z, ry, pw]) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, h), gm); m.position.set(x, y, z); m.rotation.y = ry; m.renderOrder = 10; g.add(m); });
+      const tp = new THREE.Mesh(new THREE.PlaneGeometry(w, d), gm); tp.rotation.x = -Math.PI / 2; tp.position.y = h; tp.renderOrder = 10; g.add(tp);
+      const bar = (sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), fm); m.position.set(x, y, z); g.add(m); };
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, c]) => bar(b, h, b, a * w / 2, h / 2, c * d / 2));
+      [h, b / 2].forEach(y => { bar(w + b, b, b, 0, y, d / 2); bar(w + b, b, b, 0, y, -d / 2); bar(b, b, d + b, w / 2, y, 0); bar(b, b, d + b, -w / 2, y, 0); });
+      g.traverse(o => { o.userData.noInk = true; }); return g;
     }
     case 'scale': { const base = mesh(new THREE.CylinderGeometry(.3, .4, .1, 32), makeMaterial('brass')); const post = mesh(new THREE.CylinderGeometry(.04, .04, 1.4, 12), base.material); post.position.y = .7; const beam = mesh(new THREE.BoxGeometry(2.2, .05, .06), base.material); beam.position.y = 1.4; g.add(base, post, beam); g.userData.beam = beam; [-1, 1].forEach(s => { const pan = mesh(new THREE.CylinderGeometry(.35, .3, .05, 32), base.material); pan.position.set(s * 1.05, .9, 0); g.add(pan); }); return g; }
     case 'pulley': { const w = mesh(new THREE.CylinderGeometry(num(shape.r, .3), num(shape.r, .3), .12, 48), makeMaterial('brass')); w.rotation.x = Math.PI / 2; g.add(w); return g; }

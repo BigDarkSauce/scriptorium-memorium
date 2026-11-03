@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, statue } from './props.js';
+import { Navigator } from '../nav.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, esc } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -22,7 +23,10 @@ export class Hub {
     this.buildRoom(); this.buildShelves(); this.buildUI();
     const R = this.lib.hub; this.camera.position.set(0, 1.7, R.d / 2 - 1.2); this.controls.target.set(0, 1.35, -R.d * .15); this.controls.update();
     this.gfx.setView(this.scene, this.camera);
-    this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
+    this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
+      bounds: () => ({ minX: -this.lib.hub.w / 2, maxX: this.lib.hub.w / 2, minZ: -this.lib.hub.d / 2, maxZ: this.lib.hub.d / 2, h: this.lib.hub.h }),
+      obstacles: () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)) });
+    this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
@@ -32,11 +36,13 @@ export class Hub {
   // ---------- world ----------
   buildRoom() {
     if (this.shell) { this.scene.remove(this.shell); }
-    const R = this.lib.hub; this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'library', windowWall: 'back' }); this.scene.add(this.shell);
+    const R = this.lib.hub; this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal' }); this.scene.add(this.shell);
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     this.furn.clear();
     const ch = armchair(); ch.position.set(-R.w / 2 + 2.2, 0, R.d / 2 - 2.4); ch.rotation.y = .6; this.furn.add(ch);
     const dk = readingDesk(); dk.position.set(R.w / 2 - 2.4, 0, R.d / 2 - 2.6); dk.rotation.y = -.4; this.furn.add(dk); this.desk = dk;
+    // baroque: allegorical statues framing the window wall (back corners), facing the hall
+    [-1, 1].forEach((sd, i) => { const st = statue({ variant: i ? 1 : 0, seed: i + 1 }); st.position.set(sd * (R.w / 2 - 1.15), 0, -R.d / 2 + 1.15); st.rotation.y = sd * -.75; this.furn.add(st); });
     this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0);
   }
   buildShelves() {
@@ -62,7 +68,7 @@ export class Hub {
     const add = el('button', { class: 'btn primary', text: '+ Add PDF scroll', onclick: () => this.pickPDF() });
     const more = el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog() });
     u.append(el('div', { class: 'hub-actions glass' }, [add, this.buildBtn, more]));
-    this.hint = el('div', { class: 'hint glass', text: 'Drag to look · WASD to walk · click a scroll to open it' }); u.append(this.hint);
+    this.hint = el('div', { class: 'hint glass', text: 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk · click a scroll to open it' }); u.append(this.hint);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
     this.fileIn = el('input', { type: 'file', accept: 'application/pdf', multiple: true, hidden: true }); u.append(this.fileIn);
@@ -70,7 +76,7 @@ export class Hub {
   }
   toggleBuild(on = !this.build) {
     this.build = on; this.buildBtn.classList.toggle('on', on); this.buildBtn.textContent = on ? 'Done arranging' : 'Arrange library';
-    this.buildPanel.hidden = !on; this.hint.textContent = on ? 'Click a bookcase to select it · drag it along the floor · it snaps to walls' : 'Drag to look · WASD to walk · click a scroll to open it';
+    this.buildPanel.hidden = !on; this.hint.textContent = on ? 'Click a bookcase to select it · drag it along the floor · it snaps to walls' : 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk · click a scroll to open it';
     if (!on) this.selectShelf(null); this.renderBuildPanel();
   }
   renderBuildPanel() {
@@ -166,7 +172,7 @@ export class Hub {
     if (sc) { const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(b.title)}</b><span>${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; } else this.tip.hidden = true;
   }
   pointerUp(e) {
-    if (this.dragging) { this.dragging = null; this.controls.enabled = true; this.app.saveLib(); return; }
+    if (this.dragging) { this.dragging = null; this.controls.enabled = this.nav.mode !== 'walk'; this.app.saveLib(); return; }
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || e.target !== this.gfx.canvas) return; this.down = null;
     if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; if (!h) this.selectShelf(null); return; }
     const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
@@ -177,6 +183,7 @@ export class Hub {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null);
     const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion()));
+    if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }
     const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() };
     O.liftTo = wp.clone().addScaledVector(outward, .55).setY(Math.max(1.35, wp.y)); O.camTo = O.liftTo.clone().addScaledVector(outward, .95).add(V3(0, .05, 0));
     O.start = wp.clone(); O.q0 = sc.getWorldQuaternion(new THREE.Quaternion());
@@ -201,18 +208,14 @@ export class Hub {
   // ---------- frame ----------
   update(dt) {
     if (this.opening) { this.stepOpening(dt); return; }
-    // walking: WASD / arrows move the camera and its target together, kept inside the room
-    const k = this.keys, R = this.lib.hub; let f = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), s = (k.d || k.arrowright ? 1 : 0) - (k.a || k.arrowleft ? 1 : 0);
-    if (f || s) { const dir = V3(); this.camera.getWorldDirection(dir); dir.y = 0; dir.normalize(); const side = V3().crossVectors(dir, V3(0, 1, 0)); const mv = dir.multiplyScalar(f).add(side.multiplyScalar(s)).multiplyScalar(dt * 2.6); this.camera.position.add(mv); this.controls.target.add(mv); }
-    this.controls.update();
-    const m = .35, p = this.camera.position; p.x = clamp(p.x, -R.w / 2 + m, R.w / 2 - m); p.z = clamp(p.z, -R.d / 2 + m, R.d / 2 - m); p.y = clamp(p.y, .4, R.h - .3);
-    this.controls.target.x = clamp(this.controls.target.x, -R.w / 2 + .1, R.w / 2 - .1); this.controls.target.z = clamp(this.controls.target.z, -R.d / 2 + .1, R.d / 2 - .1);
+    // walking (overview or first person) — see js/nav.js
+    this.nav.update(dt, !!this.dragging);
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
   }
   dispose() {
     if (this.disposed) return; this.disposed = true;
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
-    this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }
