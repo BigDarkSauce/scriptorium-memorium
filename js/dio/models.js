@@ -239,7 +239,7 @@ DIO.custom3d={params:{},build(D,p){
    the key light follows the painted sun (warm, hard shadows in fair weather; dim, cool and flat in storms). */
 // Layout shared by the model, its camera shots and its process arrows. Placed so that no instrument hides another
 // from the default view (front, slightly right) nor from the card-drawing view (high, from the front-right diagonal).
-const WGL={GX:-2.9,GZ:.6,SPX:1.23,WY:1.9,TOP:4.75,YB:.44,RBD:.15,SX:2.3,SZ:1.7,BX:0,BZ:-2.55};
+const WGL={GX:-2.55,GZ:.6,SPX:1.23,WY:1.9,TOP:4.75,YB:.44,RBD:.15,SX:2.2,SZ:1.7,BX:0,BZ:-2.55};
 DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,'hPa','outside air pressure'],P0:[990,1035,1013,'hPa','pressure when sealed (at 15 °C)'],auto:[0,1,1,'','auto weather (1 on · 0 off)'],conc:[.6,1.4,1,'×','camphor concentration']},
  build(D,p){const W=D.world;D.orb.ph=1.2;const rng=mulberry(42);
   // every part lives in a named group, so the edit list reads "Goethe weather glass", "mercury barometer", …
@@ -255,8 +255,8 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   // ---------- materials ----------
   const shell=thinGlass({side:THREE.FrontSide,absorb:.03,edge:.9});            // glass with real wall thickness (two lathe surfaces)
   const film=thinGlass({side:THREE.DoubleSide,absorb:.05,edge:1,card:.35});    // single-surface glass (register glass, lens)
-  const oldGlass=thinGlass({side:THREE.FrontSide,absorb:.3,edge:1,color:0x173026,env:2.3});   // Goethe body: hand-blown, green-grey, dense enough that the empty upper pear reads as glass (not as a bowl of water with nothing above)
-  const oldTube=thinGlass({side:THREE.DoubleSide,absorb:.32,edge:1,color:0x173026,env:2.3,card:.35}); // the spout, same glass: its empty upper part stays visible up to the open lip
+  const oldGlass=thinGlass({side:THREE.FrontSide,absorb:.38,edge:1,color:0x1d3a2e,env:2.4});   // Goethe body: hand-blown, green-grey, dense enough that the empty upper pear reads as glass (not as a bowl of water with nothing above)
+  const oldTube=thinGlass({side:THREE.DoubleSide,absorb:.38,edge:1,color:0x1d3a2e,env:2.4,card:.35}); // the spout, same glass: its empty upper part stays visible up to the open lip
   const mkWater=()=>{const m=makeMaterial({preset:'liquid',color:'#2f7fcf'});m.color.set('#8cc0ee');m.transmission=.6;m.attenuationDistance=1.2;m.thickness=1.6;m.roughness=.02;return m},water=mkWater(); // tinted (blue) water, as real Goethe glasses use
   const spoutW=makeMaterial({preset:'plastic',color:'#2a7ad0'});spoutW.normalMap=null;spoutW.roughness=.05;spoutW.clearcoat=1;spoutW.clearcoatRoughness=.03;spoutW.emissive=new THREE.Color(0x0d3866);spoutW.emissiveIntensity=.6;spoutW.envMapIntensity=1.3; // the narrow column: dense tinted water so its level reads across the room
   const menM=makeMaterial({preset:'plastic',color:'#d8ecff'});menM.normalMap=null;menM.roughness=.04;menM.clearcoat=1;menM.emissive=new THREE.Color(0x5a88b8);menM.emissiveIntensity=.5; // bright meniscus rim (light caught by the curved surface)
@@ -531,7 +531,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
       keyL.intensity=key0*(.3+.95*Math.min(1,day*1.6))*(1-.62*storm)*(1-.15*c)+key0*fl*.6}
     envLights.forEach(([l,i0])=>{l.intensity=i0*(.7+.3*day)*(1-.35*storm)});D.scene.environmentIntensity=env0*(.55+.45*Math.min(1,day*2))*(1-.35*storm)}
   const ev=(text,pos,color)=>D.event(text,pos,color);
-  return{orbit:{target:V3(0,2.5,-.3),r:15,ph:1.2,th:.12},
+  return{orbit:{target:V3(-.3,2.5,-.2),r:15,ph:1.2,th:.12},
    live(k){if(k==='T'||k==='P'){Pc=p.P;Tc=p.T;return true}
      if(k==='auto'){if(p.auto>.5){tA=D.t;Pc=autoP(0);hist=[];lastTrend=0;ev('auto weather (re)started: a fair-weather high, then a low moves in',V3(0,5.6,-4.6))}else{Pc=p.P;Tc=p.T}return true}
      if(k==='conc')return true;if(k==='P0'){P0=p.P0;ev('re-sealed at '+P0.toFixed(1)+' hPa',V3(GX,2.4,GZ));return true}return false},
@@ -603,7 +603,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
 // Targets may be functions (evaluated when the event fires). The spout shots aim at the live water column, a little
 // toward the body, at a distance that keeps the whole spout (bend to open top) and the flask in frame.
 {const L=()=>DIO.weatherglass._live||{spoutY:()=>WGL.WY,hgY:()=>4.3,bedY:()=>.57},{GX,GZ,SX,SZ,BZ,WY,TOP,YB,RBD}=WGL,SXp=GX+WGL.SPX,SB=YB+RBD,TZ=BZ+.19,tubeX=0;
- const spoutShot=dist=>({target:()=>[SXp-.45,Math.min(2.75,Math.max(2.2,(SB+L().spoutY())/2+.9)),GZ],dist});
+ const spoutShot=dist=>({target:()=>[SXp,Math.min(2.75,Math.max(2.2,(SB+L().spoutY())/2+.9)),GZ],dist});
  DIO.weatherglass.shots={
  'glass sealed at':{target:[GX+.45,2.45,GZ],dist:8.2},
  're-sealed at':{target:[GX+.45,2.45,GZ],dist:8.2},
@@ -611,8 +611,8 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
  'pushes water up the spout':spoutShot(8.4),
  'pushes the water back down':spoutShot(8.4),
  'spout settles':spoutShot(8.2),
- 'pushes water out of the spout':{target:[SXp-.4,2.9,GZ],dist:8.4},
- 'air bubbles into the flask':{target:[SXp-.45,.95,GZ],dist:4},
+ 'pushes water out of the spout':{target:[SXp,2.9,GZ],dist:8.4},
+ 'air bubbles into the flask':{target:[SXp-.3,.95,GZ],dist:4},
  'camphor crystals nucleate':{target:[SX,1.7,SZ],dist:4.2},
  'crystals redissolve':{target:[SX,1.9,SZ],dist:4.4},
  'feathery crystals at the top':{target:[SX,3.1,SZ],dist:3.2},
