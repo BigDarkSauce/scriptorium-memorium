@@ -634,5 +634,33 @@
       "run": 12,
       "explain": "The equilibrium is the same; only the path to it changes."
     }
+  ],
+  "sources": [
+    {
+      "title": "An Experimental Study of Competitive Market Behavior",
+      "authors": "Smith V L",
+      "year": 1962,
+      "doi": "10.1086/258609",
+      "venue": "Journal of Political Economy",
+      "note": "classroom double auctions converge to the supply–demand price",
+      "url": "https://doi.org/10.1086/258609",
+      "openalex": "https://openalex.org/W4246756863",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 1081
+    },
+    {
+      "title": "Allocative Efficiency of Markets with Zero-Intelligence Traders",
+      "authors": "Gode D K; Sunder S",
+      "year": 1993,
+      "doi": "10.1086/261868",
+      "venue": "Journal of Political Economy",
+      "note": "the market rules, not trader cleverness, do much of the work",
+      "url": "https://doi.org/10.1086/261868",
+      "openalex": "https://openalex.org/W2018567859",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 1656
+    }
   ]
 }

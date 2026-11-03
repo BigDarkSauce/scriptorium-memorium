@@ -6,6 +6,9 @@ import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
 import { askJSON, errCopy, imageLimit } from '../ai/claude.js';
 import { chapterPrompt, authorPrompt, detailPrompt } from '../ai/prompts.js';
+import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
+const TOOLNAME = { search_literature: 'OpenAlex', search_evidence: 'Consensus', search_biomedical: 'PubMed' };
+const toolStatus = st => (name, input) => { st.textContent = `Looking it up in ${TOOLNAME[name] || name}: “${String((input && input.query) || '').slice(0, 70)}”…`; };
 
 export const is3D = d => d && (d.type === 'scene' || Array.isArray(d.bodies) || !!DIO[String(d.type || '').toLowerCase()]);
 export const needsAuthoring = d => d && d.type === 'scene' && !Array.isArray(d.bodies);
@@ -54,9 +57,10 @@ export class Reader {
       if (!text && book.hasPdf) { const blob = await this.app.store.get('pdf:' + book.id); if (blob) { text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || (P.startPage || 1) + 20); if (text.replace(/\s|\[page \d+\]/g, '').length < 400 && imageLimit()) images = await this.app.ingest.pageImages(blob, P.startPage || 1, P.endPage || 1, imageLimit()); } }
       const prompt = chapterPrompt({ book: book.title, chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth, n, images: images.length });
       st.textContent = 'Claude is reading and planning. Long parts can take a minute or two.';
-      const A = await askJSON(prompt, { images, onText: t => { st.textContent = 'Writing the chain… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Analyse "' + P.title + '" in any AI' });
+      const A = await askJSON(prompt, { images, tools: evidenceTools(), onTool: toolStatus(st), onText: t => { st.textContent = 'Writing the chain… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Analyse "' + P.title + '" in any AI' });
       if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
       P.analysis = normalizeChain(A); this.save(); this.room.refreshStation(P); toast('Chain written'); this.render();
+      if (evidenceAvailable() && collectSources(P.analysis).length) this.verify();
     } catch (e) { go.disabled = false; st.textContent = errCopy(e); }
   }
   async pasteJSON() {
@@ -70,9 +74,11 @@ export class Reader {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
     wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: esc(A.title || this.part.title) }), A.summary ? el('p', { html: esc(A.summary) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    wrap.append(this.evidenceBar(A));
     (A.chain || []).forEach(st => wrap.append(this.renderStep(st, wrap, A)));
+    if (A.references && A.references.length) wrap.append(el('section', { class: 'refs' }, [el('h3', { text: 'References' }), el('ol', {}, A.references.map(r => el('li', {}, [renderSource(r)])))]));
     // typeset only once the scroll has finished unrolling (MathJax measures sizes; a scaled container gives NaN)
-    setTimeout(() => typeset(wrap).then(() => drawArcs(wrap)), 1000); setTimeout(() => drawArcs(wrap), 400);
+    setTimeout(() => { if (wrap.isConnected) typeset(wrap).then(() => drawArcs(wrap)); }, 1000); setTimeout(() => drawArcs(wrap), 400);
     return wrap;
   }
   renderStep(st, wrap, A) {
@@ -84,12 +90,18 @@ export class Reader {
     if (st.statement) art.append(el('p', { class: 'stmt', html: esc(st.statement) }));
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
+    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: esc(t.term) }), el('dd', { html: esc(t.meaning) })])));
+    if (st.intuition) art.append(el('p', { class: 'intuition', html: '<b>Picture it.</b> ' + esc(st.intuition) }));
+    if (st.misconception) art.append(el('p', { class: 'miscon', html: '<b>Common mistake.</b> ' + esc(st.misconception) }));
+    if (st.check && st.check.q) { const ans = el('div', { class: 'ans', hidden: true, html: esc(st.check.a || '') }); art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + esc(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) typeset(ans); } }), ans])); }
+    const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
     if (st.bodies && st.bodies.length) art.append(el('div', { class: 'bodies' }, ['attached to', ...st.bodies.map(b => el('span', { class: 'chip', text: b }))]));
     const demos = el('div', { class: 'demos' });
     (st.demos || []).forEach((d, i) => demos.append(this.renderDemo(d, st, i, demos)));
     demos.append(el('div', { class: 'step-tools' }, [
       el('button', { class: 'linkbtn', text: '+ showcase', onclick: () => this.addShowcase(st, demos) }),
-      el('button', { class: 'linkbtn', text: 'More detail → sub-scroll', onclick: () => this.moreDetail(st, A) })]));
+      el('button', { class: 'linkbtn', text: 'More detail → sub-scroll', onclick: () => this.moreDetail(st, A) }),
+      evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null]));
     art.append(demos);
     return art;
   }
@@ -108,7 +120,7 @@ export class Reader {
       if (needsAuthoring(d)) {
         const st2 = el('div', { class: 'status' });
         card.append(el('div', { class: 'sketch-empty' }, [el('div', { class: 'kicker', text: (d.technique || 'card') + ' diorama · not built yet' }), el('b', { text: d.title || 'Scene' }), el('p', { class: 'dim small', text: d.request || '' }),
-          el('button', { class: 'btn primary small', text: 'Build this diorama with AI', onclick: async ev => { ev.target.disabled = true; try { const spec = await askJSON(authorPrompt(d, `${st.title}: ${st.statement || ''}`), { onText: t => st2.textContent = 'Authoring… ' + t.length.toLocaleString() + ' characters', manualTitle: 'Author this diorama in any AI' }); const s = spec.spec || spec; if (!Array.isArray(s.bodies)) throw { code: 'invalid_json' }; s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); this.save(); this.room.refreshStation(this.part); fill(); } catch (e) { ev.target.disabled = false; st2.textContent = errCopy(e); } } }), st2]));
+          el('button', { class: 'btn primary small', text: 'Build this diorama with AI', onclick: async ev => { ev.target.disabled = true; try { const spec = await askJSON(authorPrompt(d, `${st.title}: ${st.statement || ''}`), { tools: evidenceTools(), onTool: toolStatus(st2), onText: t => st2.textContent = 'Authoring… ' + t.length.toLocaleString() + ' characters', manualTitle: 'Author this diorama in any AI' }); const s = spec.spec || spec; if (!Array.isArray(s.bodies)) throw { code: 'invalid_json' }; s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); this.save(); this.room.refreshStation(this.part); fill(); } catch (e) { ev.target.disabled = false; st2.textContent = errCopy(e); } } }), st2]));
         return;
       }
       const img = el('img', { class: 'sketch', alt: 'Drawing of ' + (d.title || d.type) });
@@ -120,6 +132,36 @@ export class Reader {
       requestAnimationFrame(() => renderSketch(this.app.gfx, d, 800, 500).then(url => { img.src = url; card.classList.add('ready'); }).catch(e => { card.querySelector('.sketch-loading').textContent = 'Could not draw: ' + e.message; }));
     };
     fill(); return card;
+  }
+  // ---------- evidence ----------
+  evidenceBar(A) {
+    const all = collectSources(A), ok = all.filter(s => s.verified).length, bad = all.filter(s => s.verified === false).length, todo = all.length - ok - bad;
+    const st = el('span', { class: 'dim small' });
+    const label = !all.length ? 'No sources cited yet.' : `${all.length} source${all.length > 1 ? 's' : ''} cited · ${ok} verified` + (bad ? ` · ${bad} not found` : '') + (todo ? ` · ${todo} unchecked` : '');
+    const kids = [el('span', { class: 'ev-ic', text: '❦' }), el('span', { text: label })];
+    if (evidenceAvailable() && todo) kids.push(el('button', { class: 'linkbtn', text: 'Verify against OpenAlex', onclick: () => this.verify(st) }));
+    if (!evidenceAvailable()) kids.push(el('span', { class: 'dim small', text: ' Connect OpenAlex, Consensus or PubMed in claude.ai to ground and verify sources.' }));
+    kids.push(st); this.evBar = el('div', { class: 'evidence-bar' }, kids); return this.evBar;
+  }
+  async verify(st) {
+    const A = this.part.analysis; st = st || (this.evBar && this.evBar.lastChild); if (st) st.textContent = ' Checking references…';
+    try { const r = await verifySources(A, (i, n) => { if (st) st.textContent = ` Checked ${i} of ${n}…`; }); this.save(); toast(`${r.ok} of ${r.checked} references found in OpenAlex`); this.render(); }
+    catch (e) { if (st) st.textContent = ' ' + evidenceErr(e, 'OpenAlex'); }
+  }
+  fillSources(st, box) {
+    box.innerHTML = ''; const S = st.sources || []; if (!S.length && !st.basis) return;
+    box.append(el('div', { class: 'src-head' }, [st.basis ? el('span', { class: 'basis b-' + st.basis, text: { 'source-text': 'from the text', standard: 'standard knowledge', derived: 'derived above', empirical: 'measured fact' }[st.basis] || st.basis }) : null, S.length ? el('span', { text: 'Sources' }) : null]));
+    if (S.length) box.append(el('ul', {}, S.map(s => el('li', {}, [renderSource(s)]))));
+  }
+  async findSources(st, box) {
+    const q = [st.title, st.statement && st.statement.replace(/\$[^$]*\$/g, '').slice(0, 120)].filter(Boolean).join(' ');
+    const res = el('div', { class: 'src-results' }, [el('div', { class: 'dim small', text: 'Searching OpenAlex…' })]); box.append(res);
+    try {
+      const R = await searchOpenAlex(q, { limit: 5 }); res.innerHTML = '';
+      if (!R.length) { res.append(el('div', { class: 'dim small', text: 'Nothing close found. Try More detail, or add a source by hand in the exported JSON.' })); return; }
+      res.append(el('div', { class: 'dim small', text: 'Pick the works that support this step:' }));
+      R.forEach(r => res.append(el('div', { class: 'src-cand' }, [renderSource(r), el('button', { class: 'btn small', text: 'Cite', onclick: () => { st.sources = st.sources || []; st.sources.push({ title: r.title, authors: r.authors, year: r.year, doi: r.doi, url: r.url, note: 'chosen by the reader', verified: true, check: 'exact', cited_by: r.cited_by }); this.save(); this.fillSources(st, box); } })])));
+    } catch (e) { res.innerHTML = ''; res.append(el('div', { class: 'err', text: evidenceErr(e, 'OpenAlex') })); }
   }
   openDiorama(d, st, img) {
     const r = img.getBoundingClientRect();
@@ -135,7 +177,7 @@ export class Reader {
   async moreDetail(st, A) {
     const t = toast('Writing a sub-scroll for ' + st.id + '…', 6000);
     try {
-      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain }), { manualTitle: 'Expand this step in any AI' });
+      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain }), { tools: evidenceTools(), manualTitle: 'Expand this step in any AI' });
       if (!sub || !Array.isArray(sub.chain)) throw { code: 'invalid_json' };
       const part = { id: 'p-' + uid(), title: sub.title || (st.title + ' in detail'), subOf: this.part.id, fromStep: st.id, analysis: normalizeChain(sub) };
       this.room.addPart(part, this.part); toast('Sub-scroll hung beside this one');
@@ -143,7 +185,10 @@ export class Reader {
   }
 }
 export function normalizeChain(A) {
-  A.chain = (A.chain || []).filter(x => x && typeof x === 'object').map((x, i) => ({ id: String(x.id || 'S' + (i + 1)), kind: String(x.kind || 'result'), title: String(x.title || ''), statement: String(x.statement || ''), math: x.math ? String(x.math) : '', derivation: Array.isArray(x.derivation) ? x.derivation : [], from: Array.isArray(x.from) ? x.from.map(String) : [], bodies: Array.isArray(x.bodies) ? x.bodies.map(String).slice(0, 8) : [], demos: Array.isArray(x.demos) ? x.demos.filter(d => d && d.type || (d && d.bodies)).slice(0, 4) : [] }));
+  A.chain = (A.chain || []).filter(x => x && typeof x === 'object').map((x, i) => ({ id: String(x.id || 'S' + (i + 1)), kind: String(x.kind || 'result'), title: String(x.title || ''), statement: String(x.statement || ''), math: x.math ? String(x.math) : '', derivation: Array.isArray(x.derivation) ? x.derivation : [], from: Array.isArray(x.from) ? x.from.map(String) : [], bodies: Array.isArray(x.bodies) ? x.bodies.map(String).slice(0, 8) : [], demos: Array.isArray(x.demos) ? x.demos.filter(d => d && d.type || (d && d.bodies)).slice(0, 4) : [],
+    terms: Array.isArray(x.terms) ? x.terms.filter(t => t && t.term).slice(0, 12) : [], intuition: x.intuition ? String(x.intuition) : '', misconception: x.misconception ? String(x.misconception) : '',
+    check: x.check && x.check.q ? { q: String(x.check.q), a: String(x.check.a || '') } : null, basis: x.basis ? String(x.basis) : '', sources: normSources(x.sources) }));
+  A.references = normSources(A.references);
   return A;
 }
 export function drawArcs(wrap) {
@@ -151,4 +196,12 @@ export function drawArcs(wrap) {
   const pos = {}; wrap.querySelectorAll('.step').forEach(a => { pos[a.dataset.sid] = a.offsetTop + 27; });
   const NS = 'http://www.w3.org/2000/svg'; const defs = document.createElementNS(NS, 'defs'); defs.innerHTML = '<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#9c3a28"/></marker>'; svg.append(defs);
   [...wrap.querySelectorAll('.step')].forEach((a, k) => { const f = a.querySelector('.from'); if (!f) return; [...f.querySelectorAll('a')].forEach((ln, j) => { const y0 = pos[ln.textContent], y1 = pos[a.dataset.sid]; if (y0 == null || y1 == null) return; const depth = 6 + ((k + j) % 4) * 3.5; const p = document.createElementNS(NS, 'path'); p.setAttribute('d', `M 18 ${y0} C ${depth - 6} ${y0}, ${depth - 6} ${y1}, 16 ${y1 - 1}`); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'rgba(156,58,40,.55)'); p.setAttribute('stroke-width', '1.3'); p.setAttribute('marker-end', 'url(#ah)'); svg.append(p); }); });
+}
+
+function normSources(a) { return Array.isArray(a) ? a.filter(s => s && (s.title || s.doi)).slice(0, 30).map(s => ({ ...s, title: String(s.title || ''), doi: s.doi ? String(s.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : '' })) : []; }
+export function renderSource(s) {
+  const href = s.url || (s.doi ? doiUrl(s.doi) : s.openalex || '');
+  const mark = s.verified === true ? el('span', { class: 'vmark ok', title: 'Found in OpenAlex' + (s.cited_by != null ? ` · cited ${s.cited_by.toLocaleString()} times` : ''), text: '✓' }) : s.verified === false ? el('span', { class: 'vmark bad', title: s.checkNote || 'Not found in OpenAlex: the reference may be garbled or invented. Check before relying on it.', text: s.check === 'uncertain' ? '?' : '✗' }) : el('span', { class: 'vmark', title: 'Not checked yet', text: '·' });
+  const title = href ? el('a', { href, target: '_blank', rel: 'noopener', html: esc(s.title || s.matched || s.doi) }) : el('i', { html: esc(s.title) });
+  return el('span', { class: 'src' }, [mark, ' ', s.authors ? String(s.authors) + ' ' : '', s.year ? '(' + s.year + ') ' : '', title, s.venue ? el('span', { class: 'dim', text: ' · ' + s.venue }) : null, s.matched && s.verified ? el('span', { class: 'dim small', text: ' — matched: ' + s.matched }) : null, s.note ? el('span', { class: 'note', text: ' — ' + s.note }) : null]);
 }

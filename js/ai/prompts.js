@@ -1,6 +1,9 @@
 // Every AI request the app makes. These same texts are exported as the portable prompt pack (prompts/*.md),
 // so any AI (any Claude account, ChatGPT, Gemini…) can do the work and the JSON is pasted back into the app.
 
+import { EVIDENCE_RULES } from './evidence.js';
+export { EVIDENCE_RULES };
+
 export const SCENE_SPEC = `SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (radius 7, top at y=0, units ≈ metres; keep content within |x|,|z| < 6.5, 0 < y < 8).
 {
  "type":"scene", "title":str, "technique":"card"|"sweep"|"topdown",      // how the drawing materialises (see below)
@@ -44,8 +47,21 @@ export const DIAGRAM_TYPES = `2D interactive diagrams: plot{exprs,x,y,params} ta
 export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
    "statement":"text with $inline LaTeX$","math":"display LaTeX or empty","derivation":[{"expr":"LaTeX","why":"short reason"}],
+   "terms":[{"term":"symbol or word","meaning":"plain definition with units"}],
+   "intuition":"one or two plain sentences: the picture to hold in mind (no new symbols)",
+   "misconception":"the most common wrong belief about this step and why it is wrong (or empty)",
+   "check":{"q":"a short question that tests understanding, not recall","a":"its answer with one line of reasoning"},
+   "basis":"source-text|standard|derived|empirical",
+   "sources":[{"title":str,"authors":"Surname A; Surname B","year":n,"doi":"10.… or empty","url":"or empty","note":"what exactly it supports"}],
    "from":["S#",...],"bodies":["the concrete bodies/events this step is about"],
-   "demos":[ a 2D diagram {"type":"plot",...} | a built-in 3D model {"type":"pendulum",...} | a 3D scene to be authored later {"type":"scene","title":str,"technique":"card|sweep|topdown","request":"precise description: actors, decor, variables, events, lessons"} ]}]}`;
+   "demos":[ a 2D diagram {"type":"plot",...,"source":{"title","year","doi"} if it shows real data} | a built-in 3D model {"type":"pendulum",...} | a 3D scene to be authored later {"type":"scene","title":str,"technique":"card|sweep|topdown","request":"precise description: actors, decor, variables, events, lessons"} ]}],
+ "references":[ the key works for the whole part, same fields as sources ]}`;
+
+// How the chain teaches (the app's approach to understanding; see docs/PEDAGOGY.md):
+// every step is (1) defined before use with its terms and units, (2) derived one justified move at a time,
+// (3) given a plain intuition and (4) a concrete embodiment (bodies + a showcase), (5) guarded against its
+// commonest misconception, (6) closed with a self-check question, and (7) grounded in sources that really exist.
+export const TEACHING_RULES = `TEACHING. For every step: list the new symbols/words in "terms" (meaning + units); add a one-line "intuition"; name the commonest "misconception" where one exists; end with a "check" question that needs understanding (predict, compare, explain why), with its answer. Mark "basis": source-text (stated in the part), standard (textbook knowledge of the field), derived (follows from earlier steps), empirical (a measured fact: needs a source). When the part's text and the established literature disagree, follow the literature, keep the step, and say what differs in "sourceNote".`;
 
 export function chapterPrompt({ book, chapter, text, depth = 'complete', n, images = 0 }) {
   const steps = depth === 'exact' ? `exactly ${n}` : depth === 'essential' ? 'as many as the essential spine needs (decide from the content)' : 'as many as a COMPLETE chain needs (decide from the content; cap 60, merge trivial moves)';
@@ -58,6 +74,8 @@ Attach every step to concrete bodies, objects or events ("bodies"). Abstract ide
 Showcases: about half of the steps get one. Prefer 3D: a built-in model when it fits exactly, otherwise a {"type":"scene", "request":...} to be authored in full later. Use 2D diagrams for pure graphs.
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
+${TEACHING_RULES}
+${EVIDENCE_RULES}
 Return ONLY JSON:
 ${CHAIN_FORMAT}
 Escape LaTeX backslashes in JSON strings (\\\\frac).
@@ -73,6 +91,7 @@ WHAT IT MUST SHOW: ${req.request || req.title}
 ${context ? 'CONTEXT (the study step it illustrates): ' + context : ''}
 Preferred technique: ${req.technique || 'choose the best'}.
 Make it beautiful and alive like a living miniature under glass: a composed scene with 2–7 actors (the bodies the idea is about, each with a clear label and one-line "describe"), scenic decor that gives place and scale and reacts to the simulation through behaviors, scene-appropriate environment and lighting, correct dynamics in code, events at the meaningful moments, readouts and a live plot of the telling quantity, and 3–7 lessons that each change something and say what to watch.
+Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI.
 ${SCENE_SPEC}
 Return ONLY the JSON scene spec.`;
 }
@@ -101,5 +120,7 @@ WHOLE CHAIN (for context): ${JSON.stringify((chain || []).map(s => ({ id: s.id, 
 REQUEST: ${request || 'Derive and explain this step in full detail, with intermediate definitions, a worked example and showcases.'}
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
+${TEACHING_RULES}
+${EVIDENCE_RULES}
 Return ONLY JSON: ${CHAIN_FORMAT}`;
 }

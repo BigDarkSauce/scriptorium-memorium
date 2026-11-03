@@ -7,17 +7,20 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 - **Reading scrolls.** Each part becomes a chain where every step follows from earlier ones: definitions, axioms, derivations line by line, results. Each step names the bodies it is about. You choose the length: complete, essential, or an exact number of steps. Any step can grow its own sub-scroll.
 - **Dioramas.** Every 3D showcase first appears on the scroll as a **drawing**. The drawing is not a picture: it is the real model seen through a very long lens. Press **Transition** and it materialises while the camera dives in. Scrolling then introduces each significant body in turn, its name pinned beside it. Then a foldable panel opens with step-by-step instructions (each one played before the next appears) and the variables.
 - **Edit anything.** Select any object to move, rotate, scale, hide, remove or replace it, add new objects, or ask an AI to change it in plain words.
+- **Grounded in the literature.** While Claude writes, it can search OpenAlex, Consensus and PubMed through your claude.ai connectors. Each step says where it comes from, and every cited reference is checked against OpenAlex (✓ found / ✗ not found). Each step also carries its terms with units, a plain picture, the commonest misconception and a self-check question (see `docs/PEDAGOGY.md`).
 - **Works with any AI.** Inside claude.ai the page uses the viewer's own Claude. Everywhere else, every request is a portable prompt and every answer is documented JSON (see `prompts/`, `docs/PROTOCOL.md`, `skill/`).
 
 ## Run it
 
-The page uses ES modules, so serve the folder over HTTP rather than opening the file directly:
+- **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
+- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server (Python if you have it, otherwise the built-in PowerShell server in `launcher/serve.ps1`) and opens http://localhost:8000. Keep its window open while you use the app. Locally, AI work goes through *Copy prompt / Paste JSON* (see `docs/PROTOCOL.md`).
+- **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening the file directly:
 
 ```bash
 python3 -m http.server 8000      # then open http://localhost:8000
 ```
 
-On Windows, double-click `serve.bat`. three.js, MathJax and pdf.js load from CDNs, so you need to be online.
+three.js, MathJax and pdf.js load from CDNs, so you need to be online.
 
 ## Three materialisation techniques
 
@@ -39,12 +42,14 @@ js/gfx/               renderer + post chain, procedural textures, materials, roo
 js/dio/               diorama: scene builder (shapes & macros), environments, built-in models, runtime (tour, lessons, edit)
 js/hub/               library room and its props
 js/room/              book room, reading scroll, 2D diagrams
-js/ai/                Claude connector, prompts, PDF ingestion
+js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
 prompts/              the portable prompt pack (same text the app sends)
 schema/               JSON Schemas: chain, scene, room
 examples/             example scenes and a room file
 skill/                a Claude skill that turns a PDF into a room file
-docs/                 architecture, protocol, scene spec, user guide, research notes
+docs/                 architecture, protocol, scene spec, user guide, pedagogy & grounding, research notes
+launcher/             Windows launcher helpers (local server, shortcut maker)
+assets/               app icon (scriptorium.ico / .png)
 ```
 
-Built with three.js r170, MathJax 3 and pdf.js 3.11. Every texture is drawn in code; the project ships no image files.
+Built with three.js r170, MathJax 3 and pdf.js 3.11. Every texture is drawn in code; the only image files are the app icon.

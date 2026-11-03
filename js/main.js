@@ -3,12 +3,14 @@ import { Gfx } from './gfx/renderer.js';
 import * as store from './store.js';
 import * as ingest from './ai/ingest.js';
 import { initAI } from './ai/claude.js';
+import { initEvidence } from './ai/evidence.js';
 import { Hub } from './hub/hub.js';
 import { BookRoom } from './room/room.js';
 import { DioramaView } from './dio/engine.js';
 import { normalizeChain } from './room/reader.js';
 import { legacyScrolls } from './seeds-legacy.js';
 import { FLAGSHIPS } from './seeds-scenes.js';
+import { groundChain } from './seeds-sources.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
 import { el, $, uid, toast, sleep, clamp } from './util.js';
 
@@ -18,7 +20,7 @@ class App {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
     this.mode = null; this.last = performance.now(); this.t = 0;
-    initAI();
+    initAI(); initEvidence();
   }
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {
@@ -41,7 +43,13 @@ class App {
   }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
   saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); }
-  async loadRoom(id) { return (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 4.4 }, parts: [] }; }
+  async loadRoom(id) {
+    const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 4.4 }, parts: [] };
+    // example rooms saved before grounding existed get their verified sources and teaching fields once
+    const b = this.lib && this.lib.books.find(x => x.id === id);
+    if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
+    return r;
+  }
   // ---------- modes, with a warm fade between them ----------
   async switchMode(make) {
     const g = this.gfx.grade.uniforms.uFade;
@@ -89,8 +97,8 @@ class App {
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: tiers - 1 - Math.floor(n / per), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 4.4 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
-    const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(JSON.parse(JSON.stringify(s.analysis))) });
-    const scenePart = (spec, title, summary, steps) => ({ title, summary, analysis: { title, summary, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s[0], title: s[1], statement: s[2], math: s[3] || '', from: i ? ['S' + i] : [], bodies: s[4] || [], demos: i === steps.length - 1 || s[5] ? [JSON.parse(JSON.stringify(spec))] : [] })) }, pedestal: { step: 'S' + steps.length, demo: 0 } });
+    const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(groundChain(JSON.parse(JSON.stringify(s.analysis)))) });
+    const scenePart = (spec, title, summary, steps) => ({ title, summary, analysis: normalizeChain(groundChain({ title, summary, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s[0], title: s[1], statement: s[2], math: s[3] || '', from: i ? ['S' + i] : [], bodies: s[4] || [], demos: i === steps.length - 1 || s[5] ? [JSON.parse(JSON.stringify(spec))] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
     book(physics, 'Classical Mechanics', L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart), 'PHY');
     book(earth, 'The Weather Glass', L[0].filter(s => /Weather/.test(s.title)).map(asPart), 'ATM');
     book(maths, 'Calculus & Linear Maps', L[1].map(asPart), 'MATH');

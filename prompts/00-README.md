@@ -11,3 +11,7 @@ Order of work:
 6. `06-whole-room.md`: everything in one answer (for AIs with large outputs).
 
 The formats are documented in `../docs/PROTOCOL.md` and `../docs/SCENE_SPEC.md`.
+
+## Grounding and sources
+
+Inside claude.ai the app hands Claude research tools while it writes (OpenAlex, Consensus and PubMed, through your own connectors) and checks every cited reference against OpenAlex afterwards (✓ found, ✗ not found). With another AI, let it use its own web or literature search to follow the GROUNDING rules in these prompts. Its references show as unchecked until you press *Verify against OpenAlex* inside claude.ai.

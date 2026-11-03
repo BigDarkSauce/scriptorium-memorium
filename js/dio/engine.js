@@ -13,6 +13,8 @@ import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, conf
 import { askJSON, errCopy } from '../ai/claude.js';
 import { editPrompt } from '../ai/prompts.js';
 import { radialGlow } from '../gfx/textures.js';
+import { renderSource } from '../room/reader.js';
+import { evidenceTools } from '../ai/evidence.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -191,6 +193,8 @@ export class DioramaView {
     // left panel
     this.lessonBox = el('div', { class: 'lessons' }); this.paramBox = el('div', { class: 'params' }); this.objBox = el('div', { class: 'objects' });
     const tabs = el('div', { class: 'tabs' }), sections = { Instructions: this.lessonBox, Variables: this.paramBox, Objects: this.objBox };
+    const srcs = Array.isArray(this.spec.sources) ? this.spec.sources.filter(x => x && (x.title || x.doi)) : [];
+    if (srcs.length) sections.Sources = el('div', { class: 'dio-sources' }, [el('p', { class: 'dim small', text: 'The laws and values this diorama is built on:' }), el('ol', {}, srcs.map(x => el('li', {}, [renderSource(x)])))]);
     Object.keys(sections).forEach((n, i) => { const b = el('button', { class: 'tab', role: 'tab', 'aria-selected': i === 0 ? 'true' : 'false', text: n, onclick: () => { tabs.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', 'false')); b.setAttribute('aria-selected', 'true'); Object.values(sections).forEach(s => s.hidden = true); sections[n].hidden = false; } }); tabs.append(b); if (i) sections[n].hidden = true; });
     this.fold = el('button', { class: 'ibtn fold', title: 'Fold the panel', 'aria-label': 'Fold panel', text: '‹', onclick: () => { this.panel.classList.toggle('folded'); this.fold.textContent = this.panel.classList.contains('folded') ? '›' : '‹'; } });
     this.panel = el('aside', { class: 'dio-panel glass', hidden: true }, [el('div', { class: 'panel-head' }, [tabs, this.fold]), el('div', { class: 'panel-body' }, Object.values(sections))]);
@@ -329,7 +333,7 @@ export class DioramaView {
       if (!ta.value.trim()) return; go.disabled = true; st.textContent = 'Thinking…';
       const selInfo = o ? { name: this.nameOf(o), path: this.ds.pathOf(o), bodyId: o.userData.bodyId || null, role: o.userData.role || 'decor', position: o.position.toArray().map(v => +v.toFixed(2)) } : null;
       try {
-        const nw = await askJSON(editPrompt(this.spec, selInfo, ta.value.trim(), this.opts.context), { onText: t => st.textContent = 'Writing… ' + t.length + ' characters', manualTitle: 'Ask an AI to change this diorama' });
+        const nw = await askJSON(editPrompt(this.spec, selInfo, ta.value.trim(), this.opts.context), { tools: evidenceTools(), onTool: (n, i) => st.textContent = 'Looking up: ' + String((i && i.query) || '').slice(0, 60) + '…', onText: t => st.textContent = 'Writing… ' + t.length + ' characters', manualTitle: 'Ask an AI to change this diorama' });
         const spec = nw.spec || nw; if (!spec || (!spec.type && !spec.bodies)) throw { code: 'invalid_json' };
         box.remove(); this.replaceSpec(spec); toast('Diorama updated');
       } catch (e) { go.disabled = false; st.textContent = errCopy(e); }

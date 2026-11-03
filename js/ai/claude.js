@@ -21,11 +21,13 @@ export function parseJSONLoose(text) {
   try { return JSON.parse(s); } catch (e) { try { return JSON.parse(s.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')); } catch (e2) { throw { code: 'invalid_json', text }; } }
 }
 // Ask for JSON. onText streams progress. Falls back to the manual relay dialog when Claude is unavailable.
-export async function askJSON(prompt, { onText, images, signal, tier = 'complex', manualTitle = 'Run this request in any AI' } = {}) {
+export async function askJSON(prompt, { onText, onTool, images, signal, tools, tier = 'complex', manualTitle = 'Run this request in any AI' } = {}) {
   await ready;
   if (!SAMPLE) return manualRelay(prompt, manualTitle);
   const opts = { modelTier: tier, cache: false, signal, onText: ({ text }) => onText && onText(text) };
   if (images && images.length) opts.images = images;
+  // research tools (js/ai/evidence.js): each execute is wrapped so the UI can show what is being looked up
+  if (tools && tools.length) opts.tools = tools.map(t => ({ ...t, execute: async input => { onTool && onTool(t.name, input); try { return await t.execute(input); } catch (e) { return { error: (e && (e.code || e.message)) || 'failed' }; } } }));
   const { text, truncated } = await SAMPLE(prompt, opts);
   const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
 }

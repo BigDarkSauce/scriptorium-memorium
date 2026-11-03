@@ -438,7 +438,7 @@
       "focus": "cloud",
       "until": "event:rain",
       "run": 25,
-      "explain": "Rising over the slopes the air expands and cools, its capacity to hold water falls below what the cloud carries, and the excess falls as rain."
+      "explain": "Rising over the slopes the air expands and cools; the saturation vapour pressure falls below the vapour actually present, so the excess condenses onto droplets, which grow until they fall as rain."
     },
     {
       "title": "Calm air",
@@ -459,6 +459,60 @@
       "focus": "sun",
       "run": 10,
       "explain": "The energy input sets the pace of the whole cycle."
+    }
+  ],
+  "sources": [
+    {
+      "title": "Estimates of the Global Water Budget and Its Annual Cycle Using Observational and Model Data",
+      "authors": "Trenberth K E; Smith L; Qian T; Dai A; Fasullo J",
+      "year": 2007,
+      "doi": "10.1175/JHM600.1",
+      "venue": "Journal of Hydrometeorology",
+      "note": "reservoirs and fluxes of the global water cycle",
+      "url": "https://doi.org/10.1175/JHM600.1",
+      "openalex": "https://openalex.org/W2032993224",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 953
+    },
+    {
+      "title": "Global Hydrological Cycles and World Water Resources",
+      "authors": "Oki T; Kanae S",
+      "year": 2006,
+      "doi": "10.1126/science.1128845",
+      "venue": "Science",
+      "note": "",
+      "url": "https://doi.org/10.1126/science.1128845",
+      "openalex": "https://openalex.org/W2166186402",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 4373
+    },
+    {
+      "title": "Clausius–Clapeyron equation and saturation vapour pressure: simple theory reconciled with practice",
+      "authors": "Koutsoyiannis D",
+      "year": 2012,
+      "doi": "10.1088/0143-0807/33/2/295",
+      "venue": "European Journal of Physics",
+      "note": "",
+      "url": "https://doi.org/10.1088/0143-0807/33/2/295",
+      "openalex": "https://openalex.org/W1975518602",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 189
+    },
+    {
+      "title": "Orographic precipitation",
+      "authors": "Roe G H",
+      "year": 2005,
+      "doi": "10.1146/annurev.earth.33.092203.122541",
+      "venue": "Annual Review of Earth and Planetary Sciences",
+      "note": "",
+      "url": "https://doi.org/10.1146/annurev.earth.33.092203.122541",
+      "openalex": "https://openalex.org/W4240717376",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 810
     }
   ]
 }

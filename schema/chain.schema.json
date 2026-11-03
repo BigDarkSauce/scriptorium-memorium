@@ -78,6 +78,79 @@
               "type": "string"
             }
           },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "term": {
+                  "type": "string"
+                },
+                "meaning": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "intuition": {
+            "type": "string"
+          },
+          "misconception": {
+            "type": "string"
+          },
+          "check": {
+            "type": "object",
+            "properties": {
+              "q": {
+                "type": "string"
+              },
+              "a": {
+                "type": "string"
+              }
+            }
+          },
+          "basis": {
+            "enum": [
+              "source-text",
+              "standard",
+              "derived",
+              "empirical",
+              ""
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "authors": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "doi": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "verified": {
+                  "type": "boolean",
+                  "description": "set by the app after checking OpenAlex"
+                }
+              }
+            }
+          },
           "demos": {
             "type": "array",
             "items": {
@@ -94,6 +167,39 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "authors": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "doi": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "set by the app after checking OpenAlex"
           }
         }
       }

@@ -61,7 +61,7 @@ api.readout('lake level',()=>(level*1000).toFixed(0)+' mm'); api.readout('total 
 api.plot('cloud water',()=>W);`,
   lessons: [
     { title: 'Heat the lake', text: 'Turn the sun up. Watch the vapour rise faster above the lake and the humidity readout climb: evaporation needs energy.', set: { sun: 1.4 }, focus: 'lake', run: 8, explain: 'Each molecule that leaves takes its latent heat with it; more heating means a higher evaporation rate.' },
-    { title: 'Let the wind carry the cloud', text: 'With a steady wind the cloud drifts west. Follow it to the mountains and wait for the rain event.', set: { wind: 2 }, focus: 'cloud', until: 'event:rain', run: 25, explain: 'Rising over the slopes the air expands and cools, its capacity to hold water falls below what the cloud carries, and the excess falls as rain.' },
+    { title: 'Let the wind carry the cloud', text: 'With a steady wind the cloud drifts west. Follow it to the mountains and wait for the rain event.', set: { wind: 2 }, focus: 'cloud', until: 'event:rain', run: 25, explain: 'Rising over the slopes the air expands and cools; the saturation vapour pressure falls below the vapour actually present, so the excess condenses onto droplets, which grow until they fall as rain.' },
     { title: 'Calm air', text: 'Drop the wind almost to zero. The cloud now stays over the lake and keeps filling until it rains back where it came from.', set: { wind: 0.2 }, focus: 'cloud', run: 14, explain: 'Without transport the cycle closes locally: evaporation, condensation and rain over the same water.' },
     { title: 'Evening', text: 'Move the time of day to evening. With the sun low, heating falls and so does evaporation.', set: { hour: 18.5 }, focus: 'sun', run: 10, explain: 'The energy input sets the pace of the whole cycle.' }]
 };
@@ -202,9 +202,14 @@ api.readout('water left',()=>P.filter(q=>q.w&&q.side<0).length); api.readout('wa
 api.readout('solute fraction φ',()=>phi); api.readout('Δh (right − left)',()=>hR-hL);
 api.plot('Δh',()=>hR-hL); api.camera({target:[0,1.5,0],r:9.5,ph:1.35,th:0.1});`,
   lessons: [
-    { title: 'Watch the water move', text: 'Water molecules wander through the pores in both directions, but on the right some pore openings are blocked by solute. Wait for the net-flow event.', focus: 'membrane', until: 'event:flow', run: 20, explain: 'Fewer water molecules per unit area reach the pores from the solution side, so more cross into it than out of it.' },
+    { title: 'Watch the water move', text: 'Water molecules cross the pores in both directions; solute molecules bounce off the membrane on the right. Wait for the net-flow event.', focus: 'membrane', until: 'event:flow', run: 20, explain: 'Solute that cannot enter the pores lowers the water\'s chemical potential on its side, so the net flow runs into the solution. In real membranes this is mostly bulk flow through the pores, not water simply "diffusing down its own gradient" (Kramer & Myers 2013); the particle picture here shows the direction and the balance, not the molecular mechanism.' },
     { title: 'Equilibrium', text: 'The right level rises until its extra pressure pushes water back as fast as it arrives. Wait for equilibrium.', focus: 'right', until: 'event:eq', run: 40, explain: 'The height difference at equilibrium measures the osmotic pressure; it grows with solute concentration (van \'t Hoff: π ≈ cRT).' },
     { title: 'More solute', text: 'Double the solute. The tank refills from scratch and settles at a bigger height difference.', set: { solute: 90 }, focus: 'right', until: 'event:eq', run: 45, explain: 'Osmotic pressure rises with the number of dissolved particles.' },
     { title: 'Pure water both sides', text: 'Remove all solute: nothing drives a net flow and the levels stay equal.', set: { solute: 0 }, focus: 'left', run: 12, explain: 'Osmosis needs a concentration difference across a membrane that blocks the solute.' }]
 };
+import { REF } from './seeds-sources.js';
+WATER_CYCLE.sources = [REF.trenberth, REF.oki, REF.koutsoyiannis, REF.roe];
+GALTON.sources = [REF.galton, REF.lecam];
+MARKET.sources = [REF.smith62, REF.gode];
+OSMOSIS.sources = [REF.vanthoff, REF.kedem, REF.kramer, REF.agre];
 export const FLAGSHIPS = [WATER_CYCLE, GALTON, MARKET, OSMOSIS];

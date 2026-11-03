@@ -57,6 +57,15 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
 - PDF ingestion (`js/ai/ingest.js`) tries the outline, then headings, then the contents page, then fixed windows. It strips running headers and footers and rejoins hyphenated words.
 
+## Evidence (`js/ai/evidence.js`)
+
+- Declares the viewer's connectors OpenAlex (`search_works`, `resolve_references`), Consensus (`search`) and PubMed (`search_articles`, `get_article_metadata`) through the artifact `mcp` capability.
+- Wraps them as `sample` tools (`search_literature`, `search_evidence`, `search_biomedical`) that return small, uniform records.
+- These tools are passed to every authoring call: analyse, author, edit, sub-scroll.
+- `verifySources()` batches all cited references (25 per call) into `resolve_references` and stores `verified` / `check` / `openalex` on each source.
+- Errors are reported per connector code (reconnect, add, not allowed…) and never collapsed into one message.
+- Without the capability, the rest of the app is unchanged and sources show as unchecked.
+
 ## Extending
 
 - **New built-in model:** add `DIO.<name> = {params, build(D, p)}` in `models.js`, call `D.label` for actors and `D.event` for events, and list the model in `prompts.js` → `BUILTIN_TYPES`.

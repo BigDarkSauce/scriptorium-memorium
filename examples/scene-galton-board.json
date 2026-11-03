@@ -178,5 +178,33 @@
       "run": 20,
       "explain": "Spread grows like √N while the range grows like N: averages concentrate (the central limit theorem)."
     }
+  ],
+  "sources": [
+    {
+      "title": "Natural Inheritance",
+      "authors": "Galton F",
+      "year": 1889,
+      "doi": "10.5962/bhl.title.32181",
+      "venue": "Macmillan",
+      "note": "where the quincunx (Galton board) is described",
+      "url": "https://doi.org/10.5962/bhl.title.32181",
+      "openalex": "https://openalex.org/W2502459556",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 607
+    },
+    {
+      "title": "The Central Limit Theorem Around 1935",
+      "authors": "Le Cam L",
+      "year": 1986,
+      "doi": "10.1214/ss/1177013818",
+      "venue": "Statistical Science",
+      "note": "",
+      "url": "https://doi.org/10.1214/ss/1177013818",
+      "openalex": "https://openalex.org/W2014957836",
+      "verified": true,
+      "check": "exact",
+      "cited_by": 167
+    }
   ]
 }

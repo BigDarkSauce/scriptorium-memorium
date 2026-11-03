@@ -16,6 +16,11 @@
 - **Click a hanging scroll** to read it.
   - **Analyse this part** writes the logical chain. Choose *Complete* or *Essential* (the length comes from the content) or an *Exact number of steps*.
   - Without Claude, use **Paste JSON from another AI**.
+- **Each step** shows its terms with units, a plain picture (*Picture it*), the commonest mistake, a *Check yourself* question with a hidden answer, and where the claim comes from.
+- **Sources.** Inside claude.ai, Claude searches OpenAlex, Consensus and PubMed while it writes, if you have those connectors. The bar above the chain counts the sources:
+  - **Verify against OpenAlex** checks each one: ✓ found, ? partial match, ✗ not found (treat these with suspicion).
+  - **Find sources** under a step searches OpenAlex so you can cite a work yourself.
+  - Inside a diorama, the *Sources* tab lists what it is built on.
 - **More detail → sub-scroll** writes a deeper chain for one step and hangs it beside the parent.
 - **Pedestals** carry the card model of the part's diorama. Click one: it unfolds and you enter the diorama. To choose which diorama a pedestal shows, use the *Pedestal* button on any drawing in the scroll.
 - **Room** opens the size sliders and the list of scrolls. The room also grows by itself when new scrolls need space.
