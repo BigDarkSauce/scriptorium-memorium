@@ -195,6 +195,60 @@ export function cloudLayer(seed = 1, W = 1024, H = 256, puff = 1, size = 1) {
     g.putImageData(img, 0, 0); const t = toTex(c, true); t.wrapT = THREE.ClampToEdgeWrapping; return t;
   });
 }
+// Cloud deck density for a shader-lit backdrop (see the weatherglass model): fbm cumulus cells with flat bases and
+// billowing tops over a thin stratus veil, domain-warped, tileable in u. Alpha holds the RANK of each texel's density
+// (histogram-equalised to 0..1), so a coverage c shows exactly the densest fraction c of the deck: the shader thresholds
+// at 1 − c and lights the cloud by marching the same alpha toward the sun (lit tops, grey bellies, silver edges).
+// A vertical envelope keeps the deck's top and bottom rows clear, so the sector has no visible seam.
+export function cloudDensity(seed = 1, W = 768, H = 192, o = {}) {
+  return cached('cden' + seed + W + H + JSON.stringify(o), () => {
+    const c = canvas(W, H), g = c.getContext('2d'), img = g.createImageData(W, H), d = img.data, N = W * H, D = new Float32Array(N);
+    const fx = o.fx ?? 6, fy = Math.max(1, Math.round(fx * 1.6 * H / W)), base = o.base ?? .2, tall = o.tall ?? .6, strat = o.stratus ?? .22, s = seed * 17;
+    for (let y = 0; y < H; y++) {
+      const h = 1 - y / H; // 0 = bottom of the deck, 1 = top
+      for (let x = 0; x < W; x++) {
+        const u = x / W, wu = u + .035 * (pfbm(u, h, 4, 2, 2, s + 5) - .5), wh = h + .05 * (pfbm(u, h, 5, 2, 2, s + 6) - .5);
+        const cell = pfbm(wu, wh * .35, fx, 1, 3, s), det = pfbm(wu, wh, fx * 6, fy * 6, 5, s + 1), bil = 1 - Math.abs(2 * pfbm(wu, wh, fx * 3, fy * 3, 3, s + 4) - 1);
+        const hb = base + .12 * (pfbm(u, 0, fx, 1, 2, s + 2) - .5), ht = hb + tall * Math.pow(cell, 1.4) + .08;
+        const prof = sst(hb - .02, hb + .06, wh) * (1 - sst(ht - .22, ht, wh));
+        const cum = Math.max(0, cell * .9 + det * .45 + bil * .3 - .78) * prof * 2.4;
+        const st = strat * pfbm(wu, wh, fx * 2, fy * 2, 4, s + 3) * sst(0, .25, h) * (1 - sst(.75, 1, h));
+        D[y * W + x] = cum + st + det * .002;
+      }
+    }
+    const idx = new Uint32Array(N); for (let i = 0; i < N; i++) idx[i] = i; idx.sort((a, b) => D[a] - D[b]);
+    const R = new Float32Array(N); for (let k = 0; k < N; k++) R[idx[k]] = k / (N - 1);
+    for (let y = 0; y < H; y++) { const h = 1 - y / H, env = sst(0, .14, h) * (1 - sst(.86, 1, h)); for (let x = 0; x < W; x++) { const i = y * W + x, o4 = i * 4; d[o4] = d[o4 + 1] = d[o4 + 2] = 255; d[o4 + 3] = Math.round(255 * R[i] * env); } }
+    g.putImageData(img, 0, 0); const t = toTex(c, true); t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
+  });
+}
+// Hill range for a backdrop, painted per pixel: fbm ridge line, slopes shaded by their facing (lit from the upper
+// right), darker woodland mottling, field strips and a pale ground-haze toward the foot (aerial perspective inside
+// the range). RGB is a grey value the material colour multiplies; alpha is the antialiased silhouette.
+export function hillRidge(seed = 1, W = 1024, H = 256, rough = 1, height = .55) {
+  return cached('ridge' + seed + W + H + rough + height, () => {
+    const c = canvas(W, H), g = c.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+    const ridge = u => (pfbm(u, 0, 4, 1, 3, seed) * .75 + pfbm(u, .5, 24, 1, 2, seed + 1) * .25 * rough) * height;
+    for (let x = 0; x < W; x++) {
+      const u = x / W, r = ridge(u), slope = (ridge(u + 1 / W) - ridge(u - 1 / W)) * W / 2, top = H - r * H;
+      const face = Math.tanh(-slope * 1.6); // > 0: faces the light
+      for (let y = 0; y < H; y++) {
+        const cov = Math.min(1, Math.max(0, y + 1 - top)); const o4 = (y * W + x) * 4; if (cov <= 0) { d[o4 + 3] = 0; continue; }
+        const depth = (y - top) / Math.max(1, H - top), v = y / H;
+        const wood = sst(.52, .7, pfbm(u, v, 24, 6, 4, seed + 3)), fields = .5 + .5 * Math.sin((v * 46 + pfbm(u, v, 6, 2, 2, seed + 4) * 6) * Math.PI);
+        let k = .78 + .22 * face * (1 - depth * .6) - .2 * wood + .05 * fields * sst(.3, .6, depth);
+        k = k * (1 - .25 * sst(0, .15, depth)) + .32 * sst(.45, 1, depth); // crest darker, foot pale with ground haze
+        const val = Math.max(0, Math.min(255, k * 230));
+        d[o4] = d[o4 + 1] = d[o4 + 2] = val; d[o4 + 3] = 255 * cov;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    // trees / hedgerows along the ridge
+    const r = (i) => hashI(i, seed, 7); for (let i = 0; i < 420; i++) { const u = r(i), x = u * W, hgt = ridge(u); const s = 1.5 + r(i + 999) * r(i + 333) * 6, yy = H - hgt * H + s * .4 + r(i + 77) * H * .2 * height;
+      const cg = g.createRadialGradient(x + s * .3, yy - s * .4, 1, x, yy, s * 1.1); cg.addColorStop(0, '#c8c8c8'); cg.addColorStop(1, '#7a7a7a'); g.fillStyle = cg; g.beginPath(); g.ellipse(x, yy, s * .75, s, 0, 0, 7); g.fill(); }
+    const t = toTex(c, true); t.wrapT = THREE.ClampToEdgeWrapping; return t;
+  });
+}
 function mulberryP(a) { return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 export function hillLayer(seed = 1, W = 1024, H = 256, rough = 1, height = .55) {
   return cached('hill' + seed + W + H + rough + height, () => {

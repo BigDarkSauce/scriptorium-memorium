@@ -26,10 +26,10 @@ export class BookRoom {
     this.stations = new Map(); this.keys = {};
     this.ui = el('div', { class: 'room-ui' }); app.ui.append(this.ui); this.buildUI();
     this.layout(); this.buildShell(); this.buildStations();
-    const D = this.data.dims; this.camera.position.set(0, 1.65, D.d / 2 - .9); this.controls.target.set(-D.w * .25, 1.5, 0); this.controls.update();
+    this.frameStart();
     this.gfx.setView(this.scene, this.camera);
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
-      bounds: () => { const D = this.data.dims; return { minX: -D.w / 2, maxX: D.w / 2, minZ: -D.d / 2, maxZ: D.d / 2, h: D.h }; },
+      bounds: () => { const D = this.data.dims, c = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; return { minX: -D.w / 2 + c, maxX: D.w / 2 - c, minZ: -D.d / 2 + c, maxZ: D.d / 2 - c, h: D.h }; },
       obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
     this.onDown = e => { this.down = { x: e.clientX, y: e.clientY }; }; this.onUp = e => this.pointerUp(e); this.onMove = e => this.pointerMove(e);
@@ -40,6 +40,16 @@ export class BookRoom {
     if (opts.openPart) { const p = this.data.parts.find(x => x.id === opts.openPart); if (p) setTimeout(() => this.openPart(p, true), 200); }
   }
   save() { this.app.saveRoom(this.book.id, this.data); }
+  // Opening view: stand back from the first scrolls (up to three) along their mean wall normal, looking at the scrolls
+  // and their pedestals; drift a little toward the room centre so the neighbouring bays show too.
+  frameStart() {
+    const D = this.data.dims, first = (this.placed || []).slice(0, 3);
+    if (!first.length) { this.camera.position.set(0, 1.65, D.d / 2 - 1.2); this.controls.target.set(0, 1.5, -D.d / 2); this.controls.update(); return; }
+    const t = V3(), n = V3(); first.forEach(({ slot }) => { t.add(slot.p.clone().addScaledVector(slot.n, .55)); n.add(slot.n); }); t.divideScalar(first.length).setY(1.45); n.normalize();
+    const back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), p = t.clone().addScaledVector(n, back).lerp(V3(0, 0, 0), .22).setY(1.68);
+    p.x = clamp(p.x, -D.w / 2 + 1.1, D.w / 2 - 1.1); p.z = clamp(p.z, -D.d / 2 + 1.1, D.d / 2 - 1.1);
+    this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update();
+  }
   partIndex(p) { return this.data.parts.filter(x => !x.subOf).indexOf(p); }
   // ---------- ingestion: split the PDF into parts (outline → headings → contents page → windows) ----------
   async ingest() {
@@ -51,7 +61,7 @@ export class BookRoom {
       this.book.pages = r.pages; this.app.saveLib();
       this.data.parts = r.parts.map(p => ({ id: 'p-' + uid(), ...p })); this.data.splitMethod = r.method; this.save();
       this.status(`${r.parts.length} parts found (${{ outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows' }[r.method]}).`, 4000);
-      this.layout(); this.buildShell(); this.buildStations();
+      this.layout(); this.buildShell(); this.buildStations(); if (!this.reader && !this.anim && this.nav && this.nav.mode !== 'walk') this.frameStart();
     } catch (e) { this.status('Could not read the PDF: ' + e.message); }
   }
   status(msg, ms) { this.statusEl.textContent = msg; this.statusEl.hidden = !msg; clearTimeout(this._st); if (ms) this._st = setTimeout(() => { this.statusEl.hidden = true; }, ms); }
@@ -71,11 +81,13 @@ export class BookRoom {
   }
   buildShell() {
     if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
-    const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p) }); this.scene.add(this.shell);
+    // Metten-like walnut-and-gilt wall bookcases; every hanging scroll gets an open, panelled niche in its bay
+    const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p) }); this.scene.add(this.shell);
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
     this.stations.forEach(s => s.group.removeFromParent()); this.stations.clear();
+    if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ niches: this.placed.map(x => x.slot.p) }); // no-op when unchanged
     this.placed.forEach(({ part, slot }, i) => this.makeStation(part, slot, i));
   }
   makeStation(part, slot, i) {

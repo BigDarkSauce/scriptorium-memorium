@@ -94,7 +94,8 @@ class App {
     const book = (shelf, title, parts, icon = 'EX') => {
       const n = slots.get(shelf.id) || 0; slots.set(shelf.id, n + 1);
       const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
-      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: tiers - 1 - Math.floor(n / per), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
+      const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
+      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
     const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(groundChain(JSON.parse(JSON.stringify(s.analysis)))) });

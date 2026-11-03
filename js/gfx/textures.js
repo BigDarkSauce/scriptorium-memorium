@@ -322,3 +322,61 @@ export function shaftTex() {
     g.putImageData(img, 0, 0);
   }, { aniso: 1 });
 }
+
+// ---------- library woodwork & books (wall bookcases, the user's bookcases) ----------
+// Figured wood with fine grain, pores and a few flame streaks. `paint` > 0 turns it into painted (lacquered) wood:
+// the grain only shows faintly through an ivory coat, as on Admont's white-and-gold cases.
+export function figuredWood(tone = [110, 70, 40], key = 'fig', { paint = 0, seed = 7 } = {}) {
+  return canvasTex('figwood' + key + tone.join() + paint, 512, 512, (g, w, h) => {
+    const r = mulberry(seed), n = makeNoise(seed), img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const warp = n.fbm(x / 160, y / 40, 0, 3) * 18, v = Math.sin((y + warp) * .32 + n(x / 30, y / 6) * 2) * .5 + .5, fl = n.fbm(x / 60, y / 220, 3, 3);
+      let k = .9 + v * .08 * (1 - paint * .8) + fl * .18 * (1 - paint * .85) + n(x / 3, y / 1.5) * .03;
+      const o = (y * w + x) * 4; img.data[o] = tone[0] * k; img.data[o + 1] = tone[1] * k; img.data[o + 2] = tone[2] * k; img.data[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    for (let i = 0; i < 220; i++) { g.strokeStyle = `rgba(${tone[0] * .35 | 0},${tone[1] * .3 | 0},${tone[2] * .25 | 0},${(.05 + r() * .16) * (1 - paint * .85)})`; g.lineWidth = .4 + r() * 1.6; g.beginPath(); const y = r() * h; g.moveTo(0, y); g.bezierCurveTo(w * .3, y + r() * 16 - 8, w * .65, y + r() * 16 - 8, w, y + r() * 8 - 4); g.stroke(); }
+    for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(20,10,4,${r() * .22 * (1 - paint * .9)})`; g.fillRect(r() * w, r() * h, 2 + r() * 5, 1); }
+    if (paint) for (let i = 0; i < 260; i++) { g.strokeStyle = `rgba(255,252,240,${r() * .05})`; g.lineWidth = 2 + r() * 6; g.beginPath(); const y = r() * h; g.moveTo(r() * w * .5, y); g.lineTo(w * (.5 + r() * .5), y + r() * 4 - 2); g.stroke(); }
+  });
+}
+// Atlas of book spines for the instanced books: 8 bindings side by side (each cell 128 px wide), the page edges in a
+// strip at the top (v > .97). Calf, morocco, cloth and vellum, raised bands with gilt fillets, a lettering piece and
+// gilt tools in the panels. Book geometry samples one cell; the shader shifts u by the instance's binding variant.
+export const SPINE_VARIANTS = 8;
+export function spineAtlas() {
+  return canvasTex('spine-atlas', 1024, 512, (g, W, H) => {
+    const r = mulberry(23), cw = W / SPINE_VARIANTS, sh = Math.round(H * .965);
+    const B = [['#6a3a1e', 1], ['#4a2614', 1], ['#6e1f1a', 1], ['#8b2c1e', 1], ['#2f4a32', 1], ['#25324a', 1], ['#d6c59a', 0], ['#94632f', 1]];
+    g.fillStyle = '#d6c8a4'; g.fillRect(0, 0, W, H); // page edges
+    for (let i = 0; i < 600; i++) { g.fillStyle = `rgba(120,96,60,${r() * .2})`; g.fillRect(r() * W, 0, 1, H - sh); }
+    B.forEach(([col, gilt], i) => {
+      const x0 = i * cw, y0 = H - sh;
+      g.fillStyle = col; g.fillRect(x0, y0, cw, sh);
+      for (let k = 0; k < 2200; k++) { g.fillStyle = `rgba(${r() < .5 ? '0,0,0' : '255,235,200'},${r() * .09})`; g.fillRect(x0 + r() * cw, y0 + r() * sh, 1 + r() * 3, 1 + r() * 3); }
+      const sg = g.createLinearGradient(x0, 0, x0 + cw, 0); sg.addColorStop(0, 'rgba(0,0,0,.55)'); sg.addColorStop(.18, 'rgba(0,0,0,.1)'); sg.addColorStop(.45, 'rgba(255,240,210,.14)'); sg.addColorStop(.8, 'rgba(0,0,0,.12)'); sg.addColorStop(1, 'rgba(0,0,0,.6)');
+      g.fillStyle = sg; g.fillRect(x0, y0, cw, sh);
+      const gold = 'rgba(226,186,104,.95)', bands = [.09, .25, .41, .57, .73, .89];
+      if (gilt) {
+        bands.forEach(t => { const y = y0 + sh * t; g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x0 + 2, y - 7, cw - 4, 3); g.fillStyle = 'rgba(255,230,190,.22)'; g.fillRect(x0 + 2, y - 4, cw - 4, 5); g.fillStyle = gold; g.fillRect(x0 + 4, y - 10, cw - 8, 2); g.fillRect(x0 + 4, y + 3, cw - 8, 2); });
+        const lab = i % 3 === 2 ? '#1c1a16' : (i % 2 ? '#7a1c16' : '#1f2a1c'); g.fillStyle = lab; g.fillRect(x0 + 10, y0 + sh * .27, cw - 20, sh * .12);
+        g.strokeStyle = gold; g.lineWidth = 2; g.strokeRect(x0 + 12, y0 + sh * .27 + 3, cw - 24, sh * .12 - 6);
+        g.fillStyle = gold; for (let l = 0; l < 2; l++) { let x = x0 + 18; while (x < x0 + cw - 22) { const ww = 4 + r() * 10; g.fillRect(x, y0 + sh * (.295 + l * .045), ww, 7); x += ww + 4 + r() * 4; } }
+        [.17, .49, .65, .81].forEach(t => { const cx = x0 + cw / 2, cy = y0 + sh * t; g.beginPath(); g.moveTo(cx, cy - 14); g.lineTo(cx + 10, cy); g.lineTo(cx, cy + 14); g.lineTo(cx - 10, cy); g.closePath(); g.fill(); g.fillRect(cx - 24, cy - 1, 10, 2); g.fillRect(cx + 14, cy - 1, 10, 2); });
+      } else { // vellum: hand-lettered title, ink shelf mark
+        g.fillStyle = 'rgba(60,40,20,.75)'; for (let l = 0; l < 3; l++) { let y = y0 + sh * (.18 + l * .06); g.fillRect(x0 + 30 + r() * 10, y, cw - 64 - r() * 20, 5); }
+        g.fillStyle = 'rgba(120,30,20,.7)'; g.fillRect(x0 + 40, y0 + sh * .8, cw - 80, 20);
+      }
+    });
+  }, { aniso: 8 });
+}
+// A long carpet runner (repeats along v): border bands, a field of lozenge medallions.
+export function runnerTex(colors = ['#5a1c1a', '#8e3a26', '#c9a053', '#1f2c3c', '#e8d6a8']) {
+  return canvasTex('runner' + colors.join(), 256, 512, (g, w, h) => {
+    const [a, b, c, d, e] = colors; g.fillStyle = a; g.fillRect(0, 0, w, h);
+    g.fillStyle = d; g.fillRect(0, 0, 30, h); g.fillRect(w - 30, 0, 30, h); g.fillStyle = c; g.fillRect(30, 0, 5, h); g.fillRect(w - 35, 0, 5, h); g.fillRect(10, 0, 3, h); g.fillRect(w - 13, 0, 3, h);
+    for (let y = 0; y < h; y += 32) { g.fillStyle = e; g.beginPath(); g.moveTo(15, y); g.lineTo(22, y + 8); g.lineTo(15, y + 16); g.lineTo(8, y + 8); g.fill(); g.beginPath(); g.moveTo(w - 15, y + 16); g.lineTo(w - 8, y + 24); g.lineTo(w - 15, y + 32); g.lineTo(w - 22, y + 24); g.fill(); }
+    [[h * .25, b], [h * .75, d]].forEach(([cy, col]) => { const cx = w / 2; g.fillStyle = c; g.beginPath(); g.moveTo(cx, cy - 110); g.lineTo(cx + 70, cy); g.lineTo(cx, cy + 110); g.lineTo(cx - 70, cy); g.fill(); g.fillStyle = col; g.beginPath(); g.moveTo(cx, cy - 96); g.lineTo(cx + 60, cy); g.lineTo(cx, cy + 96); g.lineTo(cx - 60, cy); g.fill(); g.fillStyle = e; g.beginPath(); g.arc(cx, cy, 18, 0, 7); g.fill(); g.fillStyle = c; for (let k = 0; k < 8; k++) { const t = k / 8 * Math.PI * 2; g.beginPath(); g.ellipse(cx + Math.cos(t) * 38, cy + Math.sin(t) * 58, 6, 10, t, 0, 7); g.fill(); } });
+    const r = mulberry(31); for (let i = 0; i < 26000; i++) { g.fillStyle = `rgba(${r() < .5 ? '0,0,0' : '255,240,210'},${r() * .07})`; g.fillRect(r() * w, r() * h, 2, 1); }
+  });
+}

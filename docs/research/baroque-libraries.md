@@ -134,3 +134,52 @@ proportions, rhythm, palette and the logic of the parts.
 - **Lights.** Gilt candle sconces on the pilasters (emissive flames and glow sprites, with very few real lights)
   and one to three chandeliers.
 - **Optional parts.** Atlas piers, a serpentine gallery with an upper book tier, and a spiral stair.
+
+## Second pass: the book-lined walls (what a review found missing)
+A review of the first pass found that the defining feature of all three reference halls was absent: **walls lined
+floor to ceiling with carved bookcases packed with leather spines, with a gallery tier above.** The shell had plaster
+walls with pilasters and a few low free-standing cases. The second pass adds the following.
+
+- **Built-in wall bookcases** (`makeBaroqueShell({ cases })`, built by `buildWallCases` in `js/gfx/baroque.js`).
+  - Three finishes after the references:
+    - `white`: ivory painted wood with the grain faintly showing, gilt beads, egg-and-dart frieze, fluted case
+      pilasters (Admont). Used in the hub.
+    - `walnut`: figured walnut with gilt trim and scagliola panels in the case pilasters (Metten). Used in the book
+      rooms.
+    - `pale`: pale rococo oak, carved but ungilded (Mafra).
+  - **Lower tier.** A closed cupboard for folios (fielded doors), a ledge, then open shelves at about 0.36 m pitch up
+    to the capitals.
+    - Where there is a gallery, the cases run up to the deck, which rests on them (as at Admont and Mafra).
+    - On the window wall they stop under the sills.
+  - **Piers.** Each pier of the bay rhythm becomes a full-depth case pilaster that carries the cornice ressaut, so the
+    order continues out of the woodwork.
+  - **Gallery tier.** Shallower cases (0.3 m) between the shell's pilasters, behind the balustrade.
+  - **Books.** Every volume is one instance of a single `InstancedMesh`: one draw call for about 6–7k books in the
+    18 × 12 × 7 m hall.
+    - Each instance varies its width, height, depth, brightness and binding.
+    - The bindings are 8 variants in a canvas spine atlas (calf, morocco, cloth, vellum) with raised bands, gilt
+      fillets and lettering pieces; a 4-line shader patch shifts u per instance.
+    - Books come in sets of the same binding and height, with the occasional folio, gap and leaning volume.
+- **The user's bookcases stay practical.**
+  - They still snap flush to the wall.
+  - The wall cases are split into ~1 m sections, and any section a user bookcase stands in front of is left out.
+    `shell.userData.setCases({ skip })` rebuilds only the case layer (≈ 0.1 s, on drop, not during a drag).
+  - Free placement in the middle of the room is unaffected.
+  - Each user bookcase now packs leather-bound books around its scrolls (`fillBookcase`), so even an almost empty
+    subject reads as part of a library. The scrolls stay the only interactive objects: ivory tags, with a clear gap
+    to the books on either side.
+  - New scrolls go to the eye-level tiers first (scroll centres nearest 1.35 m).
+- **Book rooms.**
+  - Each hanging scroll stands in an open niche of its bay. The niche has walnut panelling behind it, gilt jamb
+    beads, and a shelf of books bridging over it when the room is tall enough.
+  - Unused bays are full bookcases. The camera opens facing the first scrolls and their pedestals.
+- **A working reading floor in the hub.** A carpet runner on the axis, two refectory reading tables with lecterns and
+  benches, and a terrestrial and a celestial globe. Shelving on the walls and furniture in the middle is the pattern
+  Serrai describes for the hall library (see *Shelves on the walls, centre kept free* above).
+- **Figures.**
+  - Heads are carved from a displaced sphere: brow, eye sockets with eyeballs, nose and alae, lips, chin, ears.
+  - Hair is waved and gathered into a knot for the allegories; the atlantes get curled hair and a beard.
+  - The cavities are darkened by baked vertex colour, so the features read even under flat light.
+  - The atlantes also wear a mantle knotted on the shoulder.
+- **Budget** (hub at 18 × 12 × 7): about 105 draw calls and about 240k triangles in the main pass. The sun's shadow
+  pass adds more; small gilt, balusters and books do not cast.

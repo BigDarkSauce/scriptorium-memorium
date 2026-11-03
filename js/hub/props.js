@@ -3,9 +3,10 @@
 // scroll-books with legible, non-overlapping name tags; a fauteuil, a reading desk with lectern, allegorical statues.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { parchment, labelTex, leather, damaskTex, canvasTex } from '../gfx/textures.js';
+import { parchment, labelTex, leather, damaskTex, canvasTex, runnerTex } from '../gfx/textures.js';
+import { hashStr } from '../util.js';
 import { makeMaterial } from '../gfx/materials.js';
-import { Acc, bmat, Mx, cartoucheShape, drapedFigure, pedestal } from '../gfx/baroque.js';
+import { Acc, bmat, Mx, cartoucheShape, drapedFigure, pedestal, bookRow, bookMesh, rng, bandPlane } from '../gfx/baroque.js';
 
 export const SHELF_KINDS = {
   horizontal: { w: 3.2, h: 1.7, d: .5, tiers: 3 },
@@ -15,13 +16,14 @@ const SLOT = .17; // slot pitch along a tier (hub.js: per = floor((w - .2) / .17
 function m(geo, mat) { const o = new THREE.Mesh(geo, mat); o.castShadow = true; o.receiveShadow = true; return o; }
 const urnGeo = () => new THREE.LatheGeometry([[0, 0], [.045, 0], [.05, .015], [.025, .03], [.02, .045], [.055, .08], [.05, .11], [.02, .13], [.012, .15], [.02, .165], [0, .18]].map(([r, y]) => new THREE.Vector2(r, y)), 16);
 
-// Bookcase. shelf: { id, name, kind, w?, tiers?, finish?: 'cream' | 'walnut' }
+// Bookcase. shelf: { id, name, kind, w?, tiers?, finish?: 'cream' (ivory and gold, Admont) | 'walnut' (Metten) | 'pale' (Mafra) }
+// The tiers carry the scrolls; fillBookcase() packs leather-bound books into every slot no scroll occupies.
 // Scrolls sit on the tier boards: slotPos() y = .13 + tier·tierH + .07 (scroll radius .068), boards' tops at .13 + i·tierH.
 export function makeBookcase(shelf) {
   const K = SHELF_KINDS[shelf.kind] || SHELF_KINDS.horizontal, w = shelf.w || K.w, h = K.h, d = K.d, tiers = shelf.tiers || K.tiers;
   const g = new THREE.Group(); g.userData = { shelfId: shelf.id, kind: 'shelf', w, h, d, tiers };
-  const walnut = shelf.finish === 'walnut', A = new Acc();
-  const car = bmat(walnut ? 'walnut' : 'cream'), back = bmat(walnut ? 'walnut-dark' : 'cream-back'), gilt = bmat('gilt'), flute = bmat(walnut ? 'walnut' : 'fluted');
+  const fin = shelf.finish === 'walnut' || shelf.finish === 'pale' ? shelf.finish : 'cream', A = new Acc();
+  const car = bmat(fin), back = bmat(fin === 'cream' ? 'cream-back' : fin + '-dark'), gilt = bmat(fin === 'pale' ? 'pale-dark' : 'gilt'), flute = bmat(fin === 'cream' ? 'fluted' : fin);
   const t = .05, tierH = (h - .12) / tiers, B = (mat, x, y, z, a, b, c) => A.add(mat, new THREE.BoxGeometry(a, b, c), Mx(x, y, z));
   // plinth with a gilt bead
   B(car, 0, .06, .0, w + .1, .12, d + .06); B(gilt, 0, .126, d / 2 + .028, w + .1, .014, .014); B(back, 0, .006, 0, w + .06, .012, d + .02);
@@ -38,8 +40,19 @@ export function makeBookcase(shelf) {
     B(gilt, x, y0 + .006, d / 2 + .018, .1, .024, .036); B(gilt, x, y1 + .02, d / 2 + .02, .11, .04, .04);
     A.add(gilt, new THREE.TorusGeometry(.016, .006, 6, 12), Mx(x - s * .022, y1 + .03, d / 2 + .042)); A.add(gilt, new THREE.TorusGeometry(.016, .006, 6, 12), Mx(x + s * .022, y1 + .03, d / 2 + .042));
   });
-  // frieze and gilded cornice
-  B(car, 0, h + .05, .0, w + .04, .1, d + .02); B(gilt, 0, h + .006, d / 2 + .012, w + .06, .014, .012); B(gilt, 0, h + .094, d / 2 + .016, w + .07, .014, .014);
+  // fielded side panels with gilt frames
+  [-1, 1].forEach(s => {
+    const x = s * (w / 2 + .004), ph = h - .42, pz = d - .16;
+    B(car, x, .2 + ph / 2 + .02, -.01, .008, ph, pz); B(back, s * (w / 2 + .0085), .2 + ph / 2 + .02, -.01, .002, ph - .1, pz - .1);
+    [[.2 + .02, pz + .04, .014], [.2 + ph + .02, pz + .04, .014]].forEach(([y, a, b]) => B(gilt, s * (w / 2 + .01), y, -.01, .006, b, a));
+    [-1, 1].forEach(t => B(gilt, s * (w / 2 + .01), .22 + ph / 2, -.01 + t * (pz / 2 + .013), .006, ph + .014, .014));
+  });
+  // a carved shell on the apron of the plinth
+  A.add(gilt, new THREE.ExtrudeGeometry(cartoucheShape(), { depth: .012, bevelEnabled: true, bevelThickness: .006, bevelSize: .006, bevelSegments: 1, curveSegments: 6 }), Mx(0, .065, d / 2 + .03, 0, 0, 0, .2, .085, 1));
+  // frieze (carved egg-and-dart), dentils and the gilded cornice
+  B(car, 0, h + .05, .0, w + .04, .1, d + .02);
+  A.add(fin === 'pale' ? car : bmat('eggdart'), bandPlane(w + .04, .046, .085), Mx(0, h + .05, d / 2 + .0105));
+  for (let x = -w / 2 - .055; x <= w / 2 + .056; x += .045) B(car, x, h + .088, d / 2 + .035, .024, .026, .03); B(gilt, 0, h + .006, d / 2 + .012, w + .06, .014, .012); B(gilt, 0, h + .094, d / 2 + .016, w + .07, .014, .014);
   B(car, 0, h + .125, .0, w + .16, .05, d + .1); B(gilt, 0, h + .1625, .0, w + .2, .025, d + .12); B(car, 0, h + .185, -.005, w + .14, .02, d + .08);
   const top0 = h + .195;
   // crest: a gilt framed plaque with C-scrolls and a shell, carrying the subject name
@@ -76,6 +89,19 @@ function globeTex() {
   });
 }
 // Slot position (local to the bookcase) for tier i, slot j: scrolls lie horizontally, ends facing out.
+// Pack books into the free length of every tier (around the scrolls). used: Set of 'tier:slot'. Stable per bookcase.
+export function fillBookcase(o, used = new Set()) {
+  const u = o.userData; if (u.fill) { u.fill.removeFromParent(); u.fill.geometry.dispose(); u.fill = null; }
+  const items = [], r = rng(hashStr(String(u.shelfId)) + 7), M = new THREE.Matrix4(), zf = u.d / 2 - .035, dmax = u.d - .1;
+  for (let t = 0; t < u.tiers; t++) {
+    const y = .13 + t * u.tierH, hmax = Math.min(.4, u.tierH - .07);
+    let free = [[-u.w / 2 + .052, u.w / 2 - .052]];
+    [...used].filter(k => k.split(':')[0] === String(t)).map(k => -u.w / 2 + .14 + (+k.split(':')[1]) * SLOT).forEach(x => {
+      const a = x - .095, b = x + .095, nx = []; free.forEach(([p, q]) => { if (b <= p || a >= q) nx.push([p, q]); else { if (a - p > .03) nx.push([p, a]); if (q - b > .03) nx.push([b, q]); } }); free = nx; });
+    free.forEach(([a, b]) => bookRow(items, M, a, b, y, hmax, zf, dmax, r));
+  }
+  const bm = bookMesh(items); if (bm) { bm.userData.fill = true; o.add(bm); u.fill = bm; } return bm;
+}
 export function slotPos(shelfObj, tier, slot) {
   const u = shelfObj.userData, y = .13 + tier * u.tierH + .07, x = -u.w / 2 + .14 + slot * SLOT;
   return new THREE.Vector3(x, y, .02);
@@ -209,6 +235,86 @@ export function statue({ variant = 0, seed = 1, height = 1.9, pedestal: pH = 1.0
   const A = new Acc(), st = bmat('statuary'), gilt = bmat('gilt');
   pedestal(A, new THREE.Matrix4(), .64, .64, pH, die);
   const FM = Mx(0, pH, 0, 0, 0, 0, height, height, height);
-  drapedFigure((geo, mm) => A.add(st, geo, FM.clone().multiply(mm)), (geo, mm) => A.add(gilt, geo, FM.clone().multiply(mm)), variant % 5, seed);
+  drapedFigure((geo, mm) => A.add(st, geo, FM.clone().multiply(mm)), (geo, mm) => A.add(gilt, geo, FM.clone().multiply(mm)), variant % 5, seed, (geo, mm) => A.add(bmat('statuary-head'), geo, FM.clone().multiply(mm)));
   A.build(g); return g;
+}
+
+// ---------- the reading floor: refectory reading tables with lecterns, benches, a pair of globes, a carpet runner ----------
+const lathe = (pts, seg = 14) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+const legProfile = h => [[0, 0], [.045, 0], [.05, .035], [.032, .08], [.042, .2], [.056, .36], [.05, .46], [.032, .56], [.03, .62], [.042, h - .05], [.042, h], [0, h]].map(([r, y]) => [r, Math.min(y, h)]);
+// A lectern on a table top (local: stands on y = 0, the reader at +z), with an open book on its sloped board.
+function lectern(A, M, wn, gilt) {
+  const L = M.clone().multiply(Mx(0, .03, 0, -.5));
+  A.add(wn, new THREE.BoxGeometry(.5, .02, .36), L.clone().multiply(Mx(0, .01, 0)));
+  A.add(wn, new THREE.BoxGeometry(.46, .028, .03), L.clone().multiply(Mx(0, .03, .19)));
+  A.add(wn, new THREE.BoxGeometry(.44, .03, .3), M.clone().multiply(Mx(0, .015, .0)));
+  A.add(wn, new THREE.BoxGeometry(.05, .17, .05), M.clone().multiply(Mx(0, .1, -.1, .45)));
+  A.add(gilt, new THREE.BoxGeometry(.46, .008, .008), M.clone().multiply(Mx(0, .032, .15)));
+  A.add(bmat('walnut-dark'), new THREE.BoxGeometry(.46, .012, .32), L.clone().multiply(Mx(0, .026, 0)));
+  const pageM = bmat('pages');
+  [-1, 1].forEach(s => A.add(pageM, new THREE.BoxGeometry(.215, .02, .3), L.clone().multiply(Mx(s * .11, .042, 0, 0, 0, -s * .08))));
+}
+export function readingTable({ L = 2.4, W = .9 } = {}) {
+  const g = new THREE.Group(), A = new Acc(), wn = bmat('walnut'), gilt = bmat('gilt'), H = .76; g.name = 'reading-table';
+  A.add(wn, new RoundedBoxGeometry(W, .055, L, 2, .015), Mx(0, H + .0275, 0));
+  [-1, 1].forEach(s => { A.add(gilt, new THREE.BoxGeometry(.012, .012, L + .01), Mx(s * (W / 2 + .002), H + .01, 0)); A.add(wn, new THREE.BoxGeometry(.03, .1, L - .2), Mx(s * (W / 2 - .07), H - .05, 0)); A.add(wn, new THREE.BoxGeometry(W - .14, .1, .03), Mx(0, H - .05, s * (L / 2 - .1))); });
+  const nl = L > 2 ? 3 : 2;
+  for (let i = 0; i < nl; i++) { const z = -L / 2 + .14 + i * (L - .28) / (nl - 1); [-1, 1].forEach(s => { A.add(wn, lathe(legProfile(H)), Mx(s * (W / 2 - .1), 0, z)); A.add(gilt, new THREE.TorusGeometry(.045, .008, 6, 14), Mx(s * (W / 2 - .1), .36, z, Math.PI / 2)); }); A.add(wn, new THREE.BoxGeometry(W - .2, .05, .05), Mx(0, .13, z)); }
+  A.add(wn, new THREE.BoxGeometry(.05, .05, L - .28), Mx(0, .13, 0));
+  // tooled leather top and a lectern facing each bench, an inkwell between them
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(W - .16, L - .16), new THREE.MeshStandardMaterial({ map: leather('#2c4634', 'blotter2'), roughness: .62 })); top.rotation.x = -Math.PI / 2; top.position.y = H + .0555; top.receiveShadow = true; g.add(top);
+  [[0, (L - .16) / 2, W - .16, .008], [0, -(L - .16) / 2, W - .16, .008], [(W - .16) / 2, 0, .008, L - .16], [-(W - .16) / 2, 0, .008, L - .16]].forEach(([x, z, a, b]) => A.add(gilt, new THREE.BoxGeometry(a, .003, b), Mx(x, H + .057, z)));
+  lectern(A, Mx(.1, H + .055, -L / 4, 0, Math.PI / 2), wn, gilt); lectern(A, Mx(-.1, H + .055, L / 4, 0, -Math.PI / 2), wn, gilt);
+  A.add(gilt, new THREE.CylinderGeometry(.032, .038, .05, 14), Mx(0, H + .08, 0)); A.add(new THREE.MeshStandardMaterial({ color: 0x15100c, roughness: .2 }), new THREE.CylinderGeometry(.02, .02, .006, 12), Mx(0, H + .106, 0));
+  const tones = [0x5a2a1e, 0x2a3a5a, 0x3a4a2a];
+  tones.forEach((c, i) => A.add(bmat('book-' + i), new RoundedBoxGeometry(.26 - i * .02, .05, .19 - i * .01, 2, .006), Mx(-.22, H + .08 + i * .05, -.08 + i * .01, 0, (i - 1) * .25)));
+  A.build(g); return g;
+}
+export function bench({ L = 2.0 } = {}) {
+  const g = new THREE.Group(), A = new Acc(), wn = bmat('walnut'), gilt = bmat('gilt'), H = .45; g.name = 'bench';
+  A.add(wn, new RoundedBoxGeometry(.38, .05, L, 2, .012), Mx(0, H - .025, 0));
+  const fab = new THREE.MeshPhysicalMaterial({ map: damaskTex('#7c3038'), roughness: .9, sheen: 1, sheenColor: new THREE.Color(0xffc8b0), sheenRoughness: .5 });
+  A.add(fab, new RoundedBoxGeometry(.33, .055, L - .08, 3, .022), Mx(0, H + .022, 0));
+  [-1, 1].forEach(sz => [-1, 1].forEach(sx => A.add(wn, lathe(legProfile(H - .05).map(([r, y]) => [r * .75, y])), Mx(sx * .12, 0, sz * (L / 2 - .12)))));
+  A.add(wn, new THREE.BoxGeometry(.04, .04, L - .24), Mx(0, .1, 0)); A.add(wn, new THREE.BoxGeometry(.3, .07, .025), Mx(0, H - .085, L / 2 - .12)); A.add(wn, new THREE.BoxGeometry(.3, .07, .025), Mx(0, H - .085, -L / 2 + .12));
+  [-1, 1].forEach(s => A.add(gilt, new THREE.BoxGeometry(.006, .01, L - .02), Mx(s * .193, H - .03, 0)));
+  A.build(g); return g;
+}
+// A library globe (terrestrial or celestial) in a horizon ring on four cabriole legs, ~1.2 m tall.
+export function globeStand({ celestial = false } = {}) {
+  const g = new THREE.Group(), A = new Acc(), wn = bmat('walnut'), gilt = bmat('gilt'), R = .3, yc = .9; g.name = 'globe';
+  [0, 1, 2, 3].forEach(i => { const a = i * Math.PI / 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a); cabriole(A, wn, gilt, c * .3, s * .3, .84, c, s, .026); });
+  A.add(wn, new THREE.BoxGeometry(.78, .035, .05), Mx(0, .16, 0, 0, Math.PI / 4)); A.add(wn, new THREE.BoxGeometry(.78, .035, .05), Mx(0, .16, 0, 0, -Math.PI / 4));
+  A.add(gilt, lathe([[0, 0], [.04, 0], [.03, .04], [.012, .1], [.02, .14], [0, .16]], 12), Mx(0, .175, 0));
+  const ring = new THREE.TorusGeometry(R + .07, .04, 6, 48); ring.rotateX(Math.PI / 2); A.add(wn, ring, Mx(0, yc, 0, 0, 0, 0, 1, .35, 1));
+  const ring2 = new THREE.TorusGeometry(R + .11, .008, 6, 48); ring2.rotateX(Math.PI / 2); A.add(gilt, ring2, Mx(0, yc + .012, 0));
+  A.add(gilt, new THREE.TorusGeometry(R + .025, .009, 6, 48, Math.PI * 1.6), Mx(0, yc, 0, 0, 0, Math.PI * .7 + .41));
+  A.add(gilt, new THREE.CylinderGeometry(.008, .008, R * 2 + .12, 6), Mx(0, yc, 0, 0, 0, .41));
+  [0, 1, 2, 3].forEach(i => { const a = i * Math.PI / 2 + Math.PI / 4; A.add(wn, new THREE.BoxGeometry(.03, yc - .84 + .02, .03), Mx(Math.cos(a) * (R + .07), (yc + .84) / 2 - .01, Math.sin(a) * (R + .07))); });
+  A.build(g);
+  const globe = m(new THREE.SphereGeometry(R, 40, 28), new THREE.MeshPhysicalMaterial({ map: celestial ? celestialTex() : globeTex(), roughness: .42, clearcoat: .7, clearcoatRoughness: .2 }));
+  globe.position.set(0, yc, 0); globe.rotation.set(0, celestial ? 1.2 : -.6, .41); g.add(globe);
+  return g;
+}
+function celestialTex() {
+  return canvasTex('celestial', 512, 256, (g, w, h) => {
+    g.fillStyle = '#1d2a44'; g.fillRect(0, 0, w, h); const r = rng(5);
+    g.strokeStyle = 'rgba(214,180,100,.35)'; g.lineWidth = 1; for (let i = 1; i < 12; i++) { g.beginPath(); g.moveTo(i * w / 12, 0); g.lineTo(i * w / 12, h); g.stroke(); } for (let j = 1; j < 6; j++) { g.beginPath(); g.moveTo(0, j * h / 6); g.lineTo(w, j * h / 6); g.stroke(); }
+    g.strokeStyle = 'rgba(230,196,120,.8)'; g.lineWidth = 2; g.beginPath(); for (let x = 0; x <= w; x += 8) g.lineTo(x, h / 2 + Math.sin(x / w * Math.PI * 2) * h * .13); g.stroke();
+    for (let c = 0; c < 14; c++) { const cx = r() * w, cy = h * (.15 + r() * .7), pts = []; for (let k = 0; k < 4 + (r() * 4 | 0); k++) pts.push([cx + (r() - .5) * 70, cy + (r() - .5) * 50]); g.strokeStyle = 'rgba(214,180,100,.55)'; g.lineWidth = 1; g.beginPath(); pts.forEach(([x, y]) => g.lineTo(x, y)); g.stroke(); pts.forEach(([x, y]) => { g.fillStyle = '#f2d78e'; g.beginPath(); g.arc(x, y, 2 + r() * 2.5, 0, 7); g.fill(); }); }
+    for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(240,220,160,${.3 + r() * .5})`; g.fillRect(r() * w, r() * h, 1.2, 1.2); }
+  });
+}
+// The carpet runner along the hall's axis (a flat mesh: not an obstacle).
+export function runner(len = 8, wid = 1.5) {
+  const t = runnerTex(); t.repeat.set(1, len / (wid * 2)); const m2 = new THREE.MeshStandardMaterial({ map: t, roughness: 1 });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wid, len), m2); mesh.rotation.x = -Math.PI / 2; mesh.position.y = .005; mesh.receiveShadow = true; mesh.name = 'runner'; return mesh;
+}
+
+// Small parts and gilt trim do not need to cast shadows (keeps the sun's shadow pass short). minR: world radius, m.
+export function quietShadows(root, minR = .14) {
+  const sc = new THREE.Vector3(); root.updateMatrixWorld(true);
+  root.traverse(o => { if (!o.isMesh || !o.castShadow || o.isInstancedMesh) return; const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere(); o.getWorldScale(sc);
+    if ((o.material && o.material.userData && o.material.userData.bmat === 'gilt') || g.boundingSphere.radius * Math.max(sc.x, sc.y, sc.z) < minR) o.castShadow = false; });
+  return root;
 }

@@ -1,11 +1,14 @@
 // Built-in simulation models (ported from Scriptorium v2), running on the new engine through a small adapter.
 // Each model: {params:{key:[min,max,default,unit,label]}, build(D,p) -> {step(h), visual(dt), readouts(), orbit?, live?(k), click?(raycaster), hist?, histCurve?}}
-// D.label(text, getPos) marks a significant actor (used for the guided tour); unlabelled meshes are scenic decor.
+// D.label(text, getPos, obj) marks a significant actor (guided tour, lesson focus); obj (an Object3D) is the mesh/group the
+// director frames by its bounding box. D.label(text, getPos, true) is a symbol pin (θ, F, …). Unlabelled meshes are scenic decor.
+// Optional sim.clock(t) returns a display string for the model's own time base; DIO.<model>.shots / .flows give camera
+// hints and process arrows keyed by lowercase event-text substrings.
 import * as T from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, fmt, lerp, mod, mulberry, compile } from '../util.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
-import { alignUV, cloudLayer, hillLayer, softDisc, relief, variation } from '../gfx/proc.js';
+import { alignUV, cloudDensity, hillRidge, softDisc, relief, variation } from '../gfx/proc.js';
 // Lights: v2 ran with legacy light units; scale to physically based units so scenes keep their look.
 const PI = Math.PI;
 class PointLight extends T.PointLight { constructor(c, i = 1, d = 0, decay = 2) { super(c, i * PI * 4, d, Math.min(decay, 2)); } }
@@ -38,7 +41,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
   const arcG=new THREE.BufferGeometry();arcG.setAttribute('position',new THREE.BufferAttribute(new Float32Array(41*3),3));const arc=new THREE.Line(arcG,new THREE.LineBasicMaterial({color:0xffd27a}));arc.frustumCulled=false;W.add(arc);
   let th=p.theta0*Math.PI/180,w=0,gth=th,gw=0,lastW=0,lastTh=th,turns=[],Tm=NaN;const k=p.g/p.L,c=p.damping;
   const pos=a=>V3(piv.x+Lv*Math.sin(a),piv.y-Lv*Math.cos(a),0);
-  D.label('bob · m',()=>bob.position.clone().add(V3(0,.4,0)));D.label('string · L',()=>pos(th*.5).lerp(piv,.45));D.label('θ',()=>V3(piv.x+.9*Math.sin(th/2),piv.y-.9*Math.cos(th/2),0),true);D.label('pivot',()=>piv.clone().add(V3(0,.45,0)));D.label('small-angle model',()=>ghost.position.clone().add(V3(0,-.55,0)));
+  D.label('bob · m',()=>bob.position.clone().add(V3(0,.4,0)),bob);D.label('string · L',()=>pos(th*.5).lerp(piv,.45),rod);D.label('θ',()=>V3(piv.x+.9*Math.sin(th/2),piv.y-.9*Math.cos(th/2),0),true);D.label('pivot',()=>piv.clone().add(V3(0,.45,0)),pivot);D.label('small-angle model',()=>ghost.position.clone().add(V3(0,-.55,0)),ghost);
   D.seriesName='θ(t) in degrees';D.event('bob released from rest at θ₀ = '+p.theta0.toFixed(1)+'°',pos(th));
   return{orbit:{target:V3(0,3.4,0),r:14},
    step(h){const f=(a,b)=>[b,-k*Math.sin(a)-c*b];const k1=f(th,w),k2=f(th+h/2*k1[0],w+h/2*k1[1]),k3=f(th+h/2*k2[0],w+h/2*k2[1]),k4=f(th+h*k3[0],w+h*k3[1]);th+=h/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]);w+=h/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]);
@@ -59,7 +62,7 @@ DIO.spring={params:{k:[1,60,12,'N/m','spring constant'],m:[.2,5,1,'kg','mass'],c
   const coil=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),400,.045,8),D.mats.chrome);coil.castShadow=true;W.add(coil);
   const eq=lineFrom([V3(0,.15,1.2),V3(0,2.4,1.2)],0x8f733a,true);W.add(eq);
   let x=p.x0,v=0,lv=0,lx=x;const ex=x=>x*S_;
-  D.label('mass · m',()=>mass.position.clone().add(V3(0,sz/2+.3,0)));D.label('spring · k',()=>V3((wallX+mass.position.x)/2,y+.6,0));D.label('x = 0 (equilibrium)',()=>V3(0,2.6,1.2));
+  D.label('mass · m',()=>mass.position.clone().add(V3(0,sz/2+.3,0)),mass);D.label('spring · k',()=>V3((wallX+mass.position.x)/2,y+.6,0),coil);D.label('x = 0 (equilibrium)',()=>V3(0,2.6,1.2),eq);
   D.seriesName='x(t) in metres';
   return{orbit:{target:V3(0,1.2,0),r:13,ph:1.15},
    step(h){const a=(-p.k*x-p.c*v)/p.m;v+=a*h;x+=v*h;if(lv!==0&&Math.sign(v)!==Math.sign(lv))D.event('turning point x = '+fmt(x,3)+' m, all energy potential',V3(ex(x),y,0));if(Math.sign(x)!==Math.sign(lx)&&lx!==0)D.event('passes equilibrium: v = '+fmt(v,3)+' m/s, all energy kinetic',V3(0,y,0),0x88c0ff);lv=v;lx=x},
@@ -72,11 +75,11 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
   const grid=new THREE.Mesh(new THREE.CircleGeometry(6.8,96).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({map:canvasTex(1024,1024,(g,w,h)=>{g.clearRect(0,0,w,h);for(let i=0;i<=48;i++){const x=i/48*w,maj=i%4===0;g.strokeStyle=maj?'rgba(207,168,79,.55)':'rgba(207,168,79,.22)';g.lineWidth=maj?2.2:1.2;g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke();g.beginPath();g.moveTo(0,x);g.lineTo(w,x);g.stroke()}}),transparent:true,depthWrite:false}));grid.position.y=.016;grid.name='measuring grid';grid.userData.noInk=true;W.add(grid);
   const base=cyl(.6,.4,D.mats.wood,24);base.position.set(X0,.2,0);W.add(base);const barrel=cyl(.18,1.6,D.mats.iron,20);barrel.geometry.translate(0,.8,0);barrel.position.set(X0,.45,0);barrel.rotation.z=-(Math.PI/2-a);W.add(barrel);
   const b=ball(.2,D.mats.rubric);W.add(b);const tr=trail(600,0xffc56b);W.add(tr);
-  const ideal=[];for(let i=0;i<=80;i++){const x=R*i/80,y=x*Math.tan(a)-p.g*x*x/(2*p.v0*p.v0*Math.cos(a)**2);ideal.push(V3(X0+x*sc,.45+y*sc,0))}W.add(lineFrom(ideal,0x88aadd,true));
+  const ideal=[];for(let i=0;i<=80;i++){const x=R*i/80,y=x*Math.tan(a)-p.g*x*x/(2*p.v0*p.v0*Math.cos(a)**2);ideal.push(V3(X0+x*sc,.45+y*sc,0))}const idealLine=lineFrom(ideal,0x88aadd,true);idealLine.name='no-drag parabola';W.add(idealLine);
   const vArrow=new THREE.ArrowHelper(V3(1,0,0),V3(),1,0xffd27a,.3,.18);W.add(vArrow);
   let x,y,vx,vy,state,wait,apex;const reset=()=>{x=0;y=0;vx=p.v0*Math.cos(a);vy=p.v0*Math.sin(a);state=1;wait=0;apex=false;D.event('launch: v₀ = '+p.v0+' m/s at '+p.angle+'°',V3(X0,.45,0))};reset();
   const wp=()=>V3(X0+x*sc,.45+y*sc,0);
-  D.label('ball',()=>wp().add(V3(0,.35,0)));D.label('v',()=>wp().add(V3(vx,vy,0).normalize().multiplyScalar(1.1)),true);D.label('no-drag parabola',()=>ideal[60].clone().add(V3(0,.3,0)));
+  D.label('ball',()=>wp().add(V3(0,.35,0)),b);D.label('v',()=>wp().add(V3(vx,vy,0).normalize().multiplyScalar(1.1)),true);D.label('no-drag parabola',()=>ideal[60].clone().add(V3(0,.3,0)),idealLine);
   D.seriesName='height y(t) in metres';
   return{orbit:{target:V3(0,2,0),r:15},
    step(h){if(state===1){const ax=-p.drag*vx,ay=-p.g-p.drag*vy;const pvy=vy;vx+=ax*h;vy+=ay*h;x+=vx*h;y+=vy*h;if(!apex&&pvy>0&&vy<=0){apex=true;D.event('apex: vᵧ = 0, height '+fmt(y,2)+' m',wp())}if(y<0){y=0;state=2;D.event('lands: range '+fmt(x,2)+' m (no-drag R = '+fmt(R,2)+' m)',wp(),0x88c0ff)}}else{wait+=h;if(wait>1.6){tr.userData.count=0;reset()}}},
@@ -94,7 +97,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
   let x=p.r0,z=0,vc=Math.sqrt(p.GM/p.r0),vx=0,vz=-p.vfactor*vc,lastDr=0,peri=[],Tm=NaN;const L0=x*vz-z*vx;
   const wedges=[];let markT=0,markP=V3(x,Y,z),fanPts=[V3(x,Y,z)],wi=0;const Tg=2*Math.PI*Math.sqrt(Math.pow(p.r0,3)/p.GM)/12;
   const E0=.5*(vx*vx+vz*vz)-p.GM/p.r0;if(E0>=0)D.event('energy ε ≥ 0: unbound, the planet escapes',V3(x,Y,z));
-  D.label('star · M',()=>V3(0,Y+.9,0));D.label('planet · m',()=>pl.position.clone().add(V3(0,.35,0)));D.label('r',()=>pl.position.clone().lerp(V3(0,Y,0),.5),true);
+  D.label('star · M',()=>V3(0,Y+.9,0),star);D.label('planet · m',()=>pl.position.clone().add(V3(0,.35,0)),pl);D.label('r',()=>pl.position.clone().lerp(V3(0,Y,0),.5),true);
   const rline=lineFrom([V3(0,Y,0),V3(x,Y,z)],0x8f733a);W.add(rline);
   D.seriesName='distance r(t)';
   return{orbit:{target:V3(0,Y,0),r:16,ph:.75},
@@ -113,7 +116,7 @@ DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:
   const s1=.5+Math.cbrt(p.m1)*.35,s2=.5+Math.cbrt(p.m2)*.35;const c1=box(s1,s1*.7,1,D.mats.lapis),c2=box(s2,s2*.7,1,D.mats.rubric);W.add(c1,c2);
   let x1=-3,x2=2.5,v1=p.v1,v2=p.v2,done=false,wait=0,hits=0;const P0=p.m1*p.v1+p.m2*p.v2,K0=.5*p.m1*p.v1**2+.5*p.m2*p.v2**2;
   const a1=new THREE.ArrowHelper(V3(1,0,0),V3(),1,0x88c0ff,.25,.15),a2=new THREE.ArrowHelper(V3(1,0,0),V3(),1,0xff9a7a,.25,.15);W.add(a1,a2);
-  D.label('cart 1 · m₁',()=>V3(x1,s1*.7+.6,0));D.label('cart 2 · m₂',()=>V3(x2,s2*.7+.6,0));D.seriesName='total momentum p (stays flat)';
+  D.label('cart 1 · m₁',()=>V3(x1,s1*.7+.6,0),c1);D.label('cart 2 · m₂',()=>V3(x2,s2*.7+.6,0),c2);D.seriesName='total momentum p (stays flat)';
   return{orbit:{target:V3(0,.8,0),r:12,ph:1.1},
    step(h){if(done){wait+=h;if(wait>1.5){x1=-3;x2=2.5;v1=p.v1;v2=p.v2;done=false;wait=0}return}x1+=v1*h;x2+=v2*h;
     if(x2-x1<(s1+s2)/2&&v1-v2>0){const u1=v1,u2=v2,M=p.m1+p.m2;v1=(p.m1*u1+p.m2*u2+p.m2*p.e*(u2-u1))/M;v2=(p.m1*u1+p.m2*u2+p.m1*p.e*(u1-u2))/M;hits++;const K=.5*p.m1*v1*v1+.5*p.m2*v2*v2;D.event(`collision: p ${fmt(P0,2)} → ${fmt(p.m1*v1+p.m2*v2,2)} kg·m/s, KE ${fmt(K0,2)} → ${fmt(K,2)} J`,V3((x1+x2)/2,.6,0))}
@@ -131,7 +134,7 @@ DIO.incline={params:{angle:[5,60,30,'°','incline angle'],mu:[0,1,.2,'','frictio
   const slides=Math.tan(a)>p.mu;const acc=slides?p.g*(Math.sin(a)-p.mu*Math.cos(a)):0;let s=0,v=0,wait=0;
   D.event(slides?'tan θ > μ: gravity along the slope beats friction, block slides':'tan θ ≤ μ: static friction holds the block',V3(x0,hgt,0).add(dir.clone().multiplyScalar(.6)));
   const pos=()=>V3(x0,hgt,0).add(dir.clone().multiplyScalar(s+.6)).add(nrm.clone().multiplyScalar(.32));
-  D.label('block · m',()=>pos().add(V3(0,.7,0)));D.label('mg',()=>pos().add(V3(0,-1.5,0)),true);D.label('N',()=>pos().add(nrm.clone().multiplyScalar(1.6)),true);D.label('f',()=>pos().add(dir.clone().multiplyScalar(-1.3)),true);D.label('θ',()=>V3(-x0-1.1,.3,1.05),true);
+  D.label('block · m',()=>pos().add(V3(0,.7,0)),blk);D.label('mg',()=>pos().add(V3(0,-1.5,0)),true);D.label('N',()=>pos().add(nrm.clone().multiplyScalar(1.6)),true);D.label('f',()=>pos().add(dir.clone().multiplyScalar(-1.3)),true);D.label('θ',()=>V3(-x0-1.1,.3,1.05),true);
   D.seriesName='speed v(t) along slope';
   return{orbit:{target:V3(0,hgt/2,0),r:13,ph:1.2,th:.25},
    step(h){if(!slides)return;if(s<Lw-1.3){v+=acc*h;s+=v*h}else{wait+=h;if(wait<h*1.5)D.event('reaches the bottom at v = '+fmt(v,2)+' m/s (√(2aL) = '+fmt(Math.sqrt(2*acc*(Lw-1.3)),2)+')',pos(),0x88c0ff);if(wait>1.4){s=0;v=0;wait=0}}},
@@ -149,7 +152,7 @@ DIO.wave={params:{A:[.1,1.2,.6,'m','amplitude'],lambda:[1,10,5,'m','wavelength']
   if(st&&Math.abs(lam-p.lambda)>1e-3)D.event('standing wave on a fixed string: λ snapped to 2L/n = '+fmt(lam,3)+' m (n = '+Math.round(20/lam)+')',V3(0,Y,0));
   const yAt=(x,t)=>st?2*p.A*Math.sin(k*(x+5))*Math.cos(w*t):p.A*Math.sin(k*(x+5)-w*t);
   const nodes=[];if(st){for(let n=0;n*lam/2<=10.001;n++){const x=-5+n*lam/2;const r=new THREE.Mesh(new THREE.TorusGeometry(.18,.03,8,24),new THREE.MeshBasicMaterial({color:0x88c0ff}));r.position.set(x,Y,0);W.add(r);nodes.push(x)}}
-  const m4=new THREE.Matrix4();D.label(st?'node (never moves)':'crest',()=>st?(nodes[1]!=null?V3(nodes[1],Y-.5,0):null):V3(-5+((w*D.t/k)%lam)+lam/4-0,Y+p.A+.35,0));D.label('tracked bead',()=>marker.position.clone().add(V3(0,.35,0)));D.label('λ',()=>V3(-5+lam/2,Y-2*p.A-.6,0),true);
+  const m4=new THREE.Matrix4();D.label(st?'node (never moves)':'crest',()=>st?(nodes[1]!=null?V3(nodes[1],Y-.5,0):null):V3(-5+((w*D.t/k)%lam)+lam/4-0,Y+p.A+.35,0));D.label('tracked bead',()=>marker.position.clone().add(V3(0,.35,0)),marker);D.label('λ',()=>V3(-5+lam/2,Y-2*p.A-.6,0),true);
   W.add(lineFrom([V3(-5,Y-2*p.A-.4,0),V3(-5+lam,Y-2*p.A-.4,0)],0xcfa84f));
   D.seriesName='displacement of tracked bead y(t)';
   return{orbit:{target:V3(0,Y,0),r:13,ph:1.2},
@@ -166,7 +169,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const P=[],V=[];const gauss=()=>Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(2*Math.PI*Math.random());
   for(let i=0;i<N;i++){P.push([(Math.random()*2-1)*(BX-r),(Math.random()*2-1)*(BY-r),(Math.random()*2-1)*(BZ-r)]);const s=Math.sqrt(p.T);V.push([gauss()*s,gauss()*s,gauss()*s])}
   let imp=0,win=0,Pm=NaN;const ex=BX-r,ey=BY-r,ez=BZ-r,area=2*(4*ey*ez+4*ex*ez+4*ex*ey),vol=8*ex*ey*ez;const m4=new THREE.Matrix4(),col=new THREE.Color(); // molecule centres reflect at B − r
-  D.label('molecule · m',()=>V3(P[0][0],P[0][1]+Y0+.25,P[0][2]));D.label('container wall (pressure = impulse / area / time)',()=>V3(0,Y0+BY+.35,0));
+  D.label('molecule · m',()=>V3(P[0][0],P[0][1]+Y0+.25,P[0][2]));D.label('container wall (pressure = impulse / area / time)',()=>V3(0,Y0+BY+.35,0),glass);
   D.seriesName='speed histogram · red: Maxwell–Boltzmann';let temp=p.T;
   return{orbit:{target:V3(0,Y0,0),r:12,ph:1.1},
    live(k){if(k==='T'){const f=Math.sqrt(p.T/temp);V.forEach(v=>{v[0]*=f;v[1]*=f;v[2]*=f});temp=p.T;D.event('heated/cooled: velocities scaled by √(T′/T) = '+fmt(f,3),V3(0,Y0,0));return true}return false},
@@ -190,7 +193,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
   const bl=ball(.2,D.mats.chrome);W.add(bl);const tr=trail(900,0xff9a6a);W.add(tr);const gA=new THREE.ArrowHelper(V3(1,0,0),V3(),1,0x88c0ff,.2,.12);W.add(gA);
   let bx=2.2,by=1.6,vx=0,vy=0,rest=false,still=0;const grad=(x,y)=>{const e=1e-3;return[(F(x+e,y)-F(x-e,y))/(2*e),(F(x,y+e)-F(x,y-e))/(2*e)]};
   const height=(x,y)=>Y0+(F(x,y)-lo)*sc;
-  D.label('ball',()=>bl.position.clone().add(V3(0,.35,0)));D.label('−∇f',()=>gA.visible?gA.position.clone().add(V3(0,.25,0)):null,true);D.label('z = '+ex,()=>V3(-R_,Y0+2.9,-R_));
+  D.label('ball',()=>bl.position.clone().add(V3(0,.35,0)),bl);D.label('−∇f',()=>gA.visible?gA.position.clone().add(V3(0,.25,0)):null,true);D.label('z = '+ex,()=>V3(-R_,Y0+2.9,-R_),surf);
   D.event('ball placed — click the surface to drop it elsewhere',V3(bx,height(bx,by)+.2,by));D.seriesName='height f(ball) — falls toward a minimum';
   return{orbit:{target:V3(0,Y0+1,0),r:14,ph:.95},
    click(rc){const hit=rc.intersectObject(surf)[0];if(hit){bx=hit.point.x;by=hit.point.z;vx=vy=0;rest=false;still=0;tr.userData.count=0;D.event('ball dropped at ('+fmt(bx,2)+', '+fmt(by,2)+')',hit.point)}},
@@ -215,107 +218,168 @@ DIO.custom3d={params:{},build(D,p){
 }};
 
 /* --- Weather glass: Goethe barometer + storm glass + stick barometer under a living sky ---
-   Physics (all in hPa, °C, scene unit = 60 mm for the Goethe glass):
-   • Goethe glass: trapped gas = dry air + saturated water vapour. Sealed at P₀, T₀ = 15 °C with the spout level
-     equal to the flask level. Dry air: (P₀ − e(T₀))·(T/T₀)·(V₀/V); vapour: e(T) (Magnus). Water rising h in the
-     spout enlarges the air volume by a·h (a = bore area) and lowers the flask level by a·h/A, so
-     P_in(h) − P = ρ g h (1 + a/A). Solved by bisection each step; the column relaxes to it with τ ≈ 0.15 h.
-     The "air spring" (P_in·a/V₀ per unit rise) stiffens the glass by ~30 % versus the textbook Δh = (P₀T/T₀ − P)/ρg,
-     which is shown alongside as a readout.
+   Time base: 1 simulated second = 1 hour of weather; clock() gives the model's time of day ("11:00 · day 1").
+   Physics (all in hPa, °C; scene unit = 60 mm at the Goethe glass):
+   • Goethe glass: a pear-shaped glass body with a narrow spout fused at the base, rising beside the body, open at
+     the top. Sealed at P₀ and T₀ = 15 °C with the water in the spout level with the water in the body. Trapped gas =
+     dry air + saturated water vapour: P_in = (P₀ − e(T₀))·(T/T₀)·(V₀/V) + e(T) (Magnus). Water rising h in the spout
+     enlarges the air volume by a·h (a = bore area) and lowers the body level by a·h/A, so in equilibrium
+     P_in(h) − P = ρ g h (1 + a/A). Solved by bisection each step; the column relaxes to it with τ = 0.3 h.
+     The textbook Δh = (P₀T/T₀ − P)/ρg ignores the vapour and the "air spring" (P_in·a/V₀ per unit rise); it is
+     shown as its own readout, next to the equilibrium the model actually settles to.
    • Mercury barometer: column h = P / (ρ_Hg g) = 0.750062 mm per hPa; the register window shows 945–1055 hPa.
-   • Storm glass (Williams 2025, J. Chem. Educ. 10.1021/acs.jchemed.5c00131): crystals follow TEMPERATURE.
-     Total camphor is conserved, c + M = C; solubility S(T) = e^{0.065 (T − 16)}; σ = c/S − 1. Nucleation needs
-     σ > 0.04 (metastable zone); growth ∝ σ, dissolution ∝ σ·M^{2/3} (surface). High supersaturation / fast cooling
-     puts the growth into feathery dendrites (ferns), slow growth into compact crystals at the bottom.
-   Visual coupling: falling pressure → water rises in the spout, mercury falls, cloud cover and rain increase. */
+   • Storm glass (Williams 2025, J. Chem. Educ. 10.1021/acs.jchemed.5c00131): crystals follow the TEMPERATURE of the
+     liquid, which lags the air with τ = 1.5 h (thermal mass of glass and solution). Total camphor is conserved,
+     c + M = C; solubility S(T) = e^{0.065 (T − 16)}; σ = c/S − 1. Seeded growth on the bottom bed starts at σ > 0;
+     fern fronds need fresh nucleation, σ > 0.04 (metastable zone). Growth ∝ σ, dissolution ∝ σ·M^{2/3}. The
+     compact seed bed dissolves ~13× slower than fronds (only its top face meets the still, near-saturated liquid
+     of a sealed, unstirred tube), so a little undissolved camphor survives near saturation, as in real glasses.
+     Fast cooling (> 1.5 K/h) also grows feathery crystals hanging from the top.
+   Visual coupling: falling pressure → water rises in the spout, mercury falls, cloud cover and rain increase;
+   the key light follows the painted sun (warm, hard shadows in fair weather; dim, cool and flat in storms). */
 DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,'hPa','outside air pressure'],P0:[990,1035,1013,'hPa','pressure when sealed (at 15 °C)'],auto:[0,1,1,'','auto weather (1 on · 0 off)'],conc:[.6,1.4,1,'×','camphor concentration']},
  build(D,p){const W=D.world;D.orb.ph=1.2;const rng=mulberry(42);
+  // every part lives in a named group, so the edit list reads "Goethe weather glass", "mercury barometer", …
+  const part=(name,parent=W)=>{const g=new THREE.Group();g.name=name;g.userData.label=name;parent.add(g);return g};
+  const put=(o,name,parent)=>{o.name=name;if(parent)parent.add(o);return o};
+  const deco=o=>{o.userData.noContact=true;o.userData.noInk=true;return o};
+  // lights that the environment preset made (the weather dims and tints them)
+  const base0=o=>{if(!o.userData.wgBase)o.userData.wgBase={i:o.intensity,p:o.position.clone(),c:o.color.clone()};return o.userData.wgBase}; // originals kept on the light, so a rebuild never compounds the dimming
+  const keyL=D.scene.children.find(o=>(o.isDirectionalLight||o.isSpotLight)&&o.castShadow),key0=keyL?base0(keyL).i:0;
+  const keyT=keyL&&keyL.target?keyL.target.position.clone():V3(0,1.2,0),keyD=keyL?base0(keyL).p.distanceTo(keyT):14;
+  const envLights=D.scene.children.filter(o=>o.isLight&&o!==keyL).map(l=>[l,base0(l).i]);if(D.scene.userData.wgEnv0==null)D.scene.userData.wgEnv0=D.scene.environmentIntensity??.85;const env0=D.scene.userData.wgEnv0;
+
   // ---------- materials ----------
   const shell=thinGlass({side:THREE.FrontSide,absorb:.03,edge:.9});            // glass with real wall thickness (two lathe surfaces)
-  const film=thinGlass({side:THREE.DoubleSide,absorb:.025,edge:.8,card:.35});            // single-surface glass (spout tube, register glass)
-  const water=makeMaterial({preset:'liquid',color:'#6fd3c8'});water.color.set('#f2fffd');water.attenuationDistance=4.5;water.thickness=1.5;water.roughness=.01; // pale teal coloured water
+  const film=thinGlass({side:THREE.DoubleSide,absorb:.05,edge:1,card:.35});    // single-surface glass (spout tube, register glass): a bit more edge so thin tubes read
+  const water=makeMaterial({preset:'liquid',color:'#2f7fcf'});water.color.set('#8cc0ee');water.transmission=.6;water.attenuationDistance=1.2;water.thickness=1.6;water.roughness=.02; // tinted (blue) water, as real Goethe glasses use
+  const spoutW=makeMaterial({preset:'plastic',color:'#2a7ad0'});spoutW.normalMap=null;spoutW.roughness=.05;spoutW.clearcoat=1;spoutW.clearcoatRoughness=.03;spoutW.emissive=new THREE.Color(0x0d3866);spoutW.emissiveIntensity=.6;spoutW.envMapIntensity=1.3; // the narrow column: dense tinted water so its level reads across the room
+  const menM=makeMaterial({preset:'plastic',color:'#d8ecff'});menM.normalMap=null;menM.roughness=.04;menM.clearcoat=1;menM.emissive=new THREE.Color(0x5a88b8);menM.emissiveIntensity=.5; // bright meniscus rim (light caught by the curved surface)
   const sol=thinGlass({side:THREE.FrontSide,absorb:.1,edge:1,color:0x161208,ior:1.36,smudge:false,env:1.15});     // ethanol–water camphor solution (clear; crystals inside stay crisp)
-  const merc=makeMaterial('mercury');merc.envMapIntensity=2.2;merc.roughness=.05;const brass=makeMaterial('brass'),walnut=makeMaterial('walnut'),cork=makeMaterial('cork'),crystM=makeMaterial('crystal');crystM.color.set('#b8c2c9');crystM.emissiveIntensity=.02;crystM.sheen=.3;crystM.envMapIntensity=.9;
-  const ivory=makeMaterial({preset:'ceramic',color:'#efe6d2'});
+  const merc=makeMaterial('mercury');merc.color.set(0xf4f6f8);merc.roughness=.06;merc.envMapIntensity=2.4;merc.emissive=new THREE.Color(0x60666e);merc.emissiveIntensity=.4; // liquid metal: mirror-bright, a little self-light so it reads in dull weather
+  const brass=makeMaterial('brass'),walnut=makeMaterial('walnut'),cork=makeMaterial('cork'),crystM=makeMaterial('crystal');crystM.color.set('#b8c2c9');crystM.emissiveIntensity=.02;crystM.sheen=.3;crystM.envMapIntensity=.9;
   const lathe=(pts,mat,seg=96)=>{const m=new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x,y])=>new THREE.Vector2(Math.max(.0005,x),y)),seg),mat);m.castShadow=true;m.receiveShadow=true;return m};
   // glass shell from an outer profile: outer surface up, inner surface (offset by wall thickness) back down
   const shellPts=(outer,t)=>{const inner=[];for(let i=0;i<outer.length;i++){const a=outer[Math.max(0,i-1)],b=outer[Math.min(outer.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1;inner.push([outer[i][0]-dy/L*t,outer[i][1]+dx/L*t])}return outer.concat(inner.reverse())};
   const smooth=(pts,n=6)=>{const c=new THREE.SplineCurve(pts.map(([x,y])=>new THREE.Vector2(x,y)));return c.getPoints(pts.length*n).map(v=>[v.x,v.y])};
+  const fixedBox=(m,min,max)=>{m.boundingBox=new THREE.Box3(min,max);m.boundingSphere=m.boundingBox.getBoundingSphere(new THREE.Sphere());return m}; // instanced meshes: bounds of the fully grown set, for framing
 
-  // ---------- sky backdrop with depth: gradient sky, two cloud decks, two hill silhouettes, low scud ----------
-  const A0=Math.PI*.45,AL=Math.PI*1.1,H=7.6,sector=(r,h,y0=0)=>{const g=new THREE.CylinderGeometry(r,r,h,72,1,true,A0,AL);g.translate(0,y0+h/2,0);return g};
-  const skyCv=document.createElement('canvas');skyCv.width=4;skyCv.height=256;const skyTex=new THREE.CanvasTexture(skyCv);skyTex.colorSpace=THREE.SRGBColorSpace;
-  const back=new THREE.Mesh(sector(6.62,H),new THREE.MeshBasicMaterial({map:skyTex,side:THREE.BackSide}));back.name='sky backdrop';back.userData.noContact=true;back.userData.noInk=true;W.add(back);
-  const coverHook=(m,key)=>{m.userData.cover={value:.3};m.defines={SM_CLOUD:''};m.onBeforeCompile=s=>{s.uniforms.uCover=m.userData.cover;s.fragmentShader='uniform float uCover;\n'+s.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
-      vec4 smC=texture2D(map,vMapUv);float smLo=.5-.48*uCover;float smA=smoothstep(smLo,smLo+.42,smC.a);smA=max(smA,smoothstep(.0,.3,smC.a)*pow(uCover,2.5)*.8);
-      diffuseColor.rgb*=smC.rgb;diffuseColor.a*=smA;
-    #endif`)};m.customProgramCacheKey=()=>'smcloud';return m};
-  const layers=[];const cloudDeck=(r,h,y0,seed,rep,speed,name,size=1)=>{const t=cloudLayer(seed,1024,128,2,size).clone();t.repeat.set(rep,1);t.needsUpdate=true;const m=coverHook(new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.BackSide,fog:false}),name);const me=new THREE.Mesh(sector(r,h,y0),m);me.name=name;me.userData.noContact=true;me.userData.noInk=true;me.renderOrder=-2;W.add(me);layers.push({m,t,speed});return me};
-  const hills=(r,h,seed,rough,ht,col,name)=>{const t=hillLayer(seed,1024,256,rough,ht).clone();t.repeat.set(3,1);t.needsUpdate=true;const m=new THREE.MeshBasicMaterial({map:t,alphaTest:.5,alphaToCoverage:true,side:THREE.BackSide,color:col});const me=new THREE.Mesh(sector(r,h,0),m);me.name=name;me.userData.noContact=true;me.userData.noInk=true;W.add(me);return m};
-  cloudDeck(6.5,4.4,3.2,11,1.5,.004,'high clouds',.8);const hillFar=hills(6.36,2.6,5,1,.62,0x8fa3b8,'far hills');cloudDeck(6.2,3.6,1.9,23,2,.009,'mid clouds',1.2);
-  // aerial perspective: haze veils in front of each hill range, tinted with the horizon colour every sky update
-  const hazeTex=(()=>{const c=document.createElement('canvas');c.width=4;c.height=128;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(.55,'rgba(255,255,255,.55)');gr.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=gr;g.fillRect(0,0,4,128);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
-  const hazes=[[6.3,2.4,.62],[6.0,1.4,.28]].map(([r,h,o])=>{const m=new THREE.MeshBasicMaterial({map:hazeTex,transparent:true,depthWrite:false,side:THREE.BackSide,opacity:o,fog:false});const me=new THREE.Mesh(sector(r,h,0),m);me.name='haze';me.userData.noInk=true;me.userData.noContact=true;me.renderOrder=-1;W.add(me);return m});
-  const hillNear=hills(6.06,1.8,9,1.4,.7,0x4d6440,'near hills');const scud=cloudDeck(5.86,2.6,1.2,37,2.5,.02,'storm scud');
-  const sunG=new THREE.Mesh(new THREE.PlaneGeometry(1.5,1.5),new THREE.MeshBasicMaterial({map:softDisc(),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,color:0xfff0c8}));sunG.name='sun glow';sunG.userData.noContact=true;sunG.userData.noInk=true;W.add(sunG);
-  const starG=new THREE.BufferGeometry(),sp=[];for(let i=0;i<260;i++){const a=A0+rng()*AL,y=2.5+rng()*5;sp.push(Math.sin(a)*6.55,y,Math.cos(a)*6.55)}starG.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
-  const starP=new THREE.Points(starG,new THREE.PointsMaterial({size:.035,color:0xffffff,transparent:true,opacity:0,depthWrite:false}));W.add(starP);
-  // ground strip under the sky: grass that gets wet (darker, clearcoated) when it rains; a fence and hedges for scale
-  const gr=new THREE.RingGeometry(4.75,6.55,72,4,Math.PI*.5-AL/2,AL);gr.rotateX(-Math.PI/2);
-  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=new THREE.MeshPhysicalMaterial({map:rp6(variation('grass').map),normalMap:rp6(relief('ground').normalMap),normalScale:new THREE.Vector2(1.2,1.2),color:0x2c3a1c,roughness:.95,clearcoat:0,clearcoatRoughness:.08});
-  const ground=new THREE.Mesh(gr,groundM);ground.position.y=.02;ground.receiveShadow=true;ground.name='meadow';ground.userData.noContact=true;ground.userData.noInk=true;W.add(ground);
-  {const GN=900,blade=new THREE.ConeGeometry(.012,.16,3);blade.translate(0,.08,0);const gm=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.8,sheen:.5,sheenColor:new THREE.Color(0xc8e090)});const tufts=new THREE.InstancedMesh(blade,gm,GN);tufts.name='grass';tufts.userData.noInk=true;tufts.receiveShadow=true;const mm=new THREE.Matrix4(),qq=new THREE.Quaternion(),cc=new THREE.Color();
-   for(let i=0;i<GN;i++){const a=A0+rng()*AL,r=4.72+Math.pow(rng(),2.2)*1.75,h=.5+rng()*1.1;qq.setFromEuler(new THREE.Euler((rng()-.5)*.6,rng()*6,(rng()-.5)*.6));mm.compose(V3(Math.sin(a)*r,.02,Math.cos(a)*r),qq,V3(1,h,1));tufts.setMatrixAt(i,mm);tufts.setColorAt(i,cc.setHSL(.2+rng()*.08,.45+rng()*.2,.16+rng()*.14))}W.add(tufts)}
-  {const fr=makeMaterial('walnut'),top=new THREE.Mesh(new THREE.TorusGeometry(6.66,.07,8,160,AL),fr);top.rotation.x=Math.PI/2;top.rotation.z=Math.PI/2-(A0+AL);top.position.y=H;top.name='backdrop frame';W.add(top);
-   [A0,A0+AL].forEach(a=>{const post=new THREE.Mesh(alignUV(new THREE.BoxGeometry(.16,H,.16)),fr);post.position.set(Math.sin(a)*6.66,H/2,Math.cos(a)*6.66);post.rotation.y=a;post.castShadow=true;W.add(post)})}
+  // ---------- painted backdrop: sky, three cloud decks, three hill ranges with aerial perspective, meadow ----------
+  // Each backdrop material fades over the last ~24° at both ends of the sector (opaque layers toward the studio dark,
+  // veils by alpha), so the painted world dissolves into the room instead of ending at a frame post.
+  const A0=Math.PI*.45,AL=Math.PI*1.1,H=7.6,FW=.42,sector=(r,h,y0=0)=>{const g=new THREE.CylinderGeometry(r,r,h,96,1,true,A0,AL);g.translate(0,y0+h/2,0);return g};
+  const skyHook=(m,mode,key,extra={})=>{ // mode: 'alpha' (veils), 'color' (opaque, unlit), 'albedo' (lit ground)
+    const U=Object.assign({uFadeA:{value:new THREE.Vector3(A0,A0+AL,FW)},uFadeCol:{value:new THREE.Color(mode==='albedo'?0x1d3125:0x0d0a07)}},extra.uniforms||{});m.userData.skyU=U;
+    m.defines=Object.assign({},m.defines,{['SM_SKY_'+key.toUpperCase()]:''});
+    m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
+      s.vertexShader='varying float vSkyA;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vSkyA=atan(position.x,position.z); if(vSkyA<0.) vSkyA+=6.2831853;');
+      const fa='float skyF=smoothstep(uFadeA.x,uFadeA.x+uFadeA.z,vSkyA)*smoothstep(uFadeA.y,uFadeA.y-uFadeA.z,vSkyA);\n';
+      let f='uniform vec3 uFadeA;\nuniform vec3 uFadeCol;\nvarying float vSkyA;\n'+(extra.decl||'')+s.fragmentShader;
+      if(extra.map)f=f.replace('#include <map_fragment>',extra.map);
+      if(mode==='albedo')f=f.replace('#include <map_fragment>','#include <map_fragment>\n'+fa+'diffuseColor.rgb=mix(uFadeCol,diffuseColor.rgb,skyF);');
+      else f=f.replace('#include <opaque_fragment>',fa+(mode==='alpha'?'diffuseColor.a*=skyF;':'outgoingLight=mix(uFadeCol,outgoingLight,skyF);')+'\n#include <opaque_fragment>');
+      s.fragmentShader=f};
+    m.customProgramCacheKey=()=>'smsky-'+key;return m};
+  // sky: vertical gradient + sun halo, repainted as the hour and the cloud cover change
+  const skyCv=document.createElement('canvas');skyCv.width=192;skyCv.height=96;const skyTex=new THREE.CanvasTexture(skyCv);skyTex.colorSpace=THREE.SRGBColorSpace;
+  const back=deco(put(new THREE.Mesh(sector(6.62,H),skyHook(new THREE.MeshBasicMaterial({map:skyTex,side:THREE.BackSide,fog:false}),'color','sky')),'backdrop sky',W));
+  // cloud decks, lit in the shader: alpha = density rank; threshold 1 − cover; optical depth marched toward the sun
+  const CLOUD_GLSL=`#ifdef USE_MAP
+    float smLo=1.-uCover,smW=.2;
+    float smD=texture2D(map,vMapUv).a;
+    float smA=smoothstep(smLo-.03,smLo+smW,smD);
+    float smU=(vSkyA-uFadeA.x)/(uFadeA.y-uFadeA.x);
+    vec2 smDir=normalize(vec2(clamp((uSun.x-smU)*5.,-1.,1.)*.8,.35+.65*uSun.y));
+    float smOD=0.;
+    for(int i=1;i<=5;i++){smOD+=smoothstep(smLo-.03,smLo+smW,texture2D(map,vMapUv+smDir*uStep*float(i)).a)*(1.-float(i)*.12);}
+    smOD/=3.2;
+    float smCore=smoothstep(smLo+.05,smLo+.55,smD);
+    float smLit=clamp(exp(-2.4*smOD)*(1.-.35*smCore),0.,1.);
+    vec3 smCol=mix(uShade,uLit,smLit)+uLit*.45*smA*(1.-smA)*(1.-smOD);
+    diffuseColor.rgb*=smCol;diffuseColor.a*=smA;
+  #endif`;
+  const decks=[];const cloudDeck=(r,h,y0,seed,rep,speed,name,o,ro)=>{const t=cloudDensity(seed,768,192,o).clone();t.repeat.set(rep,1);t.needsUpdate=true;
+    const arc=r*AL/rep,U={uCover:{value:.3},uLit:{value:new THREE.Color(1,1,1)},uShade:{value:new THREE.Color(.6,.65,.72)},uSun:{value:new THREE.Vector2(.5,.8)},uStep:{value:new THREE.Vector2(.026*h/arc,.026)}};
+    const m=skyHook(new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.BackSide,fog:false}),'alpha','cloud',{uniforms:U,decl:'uniform float uCover;\nuniform vec3 uLit;\nuniform vec3 uShade;\nuniform vec2 uSun;\nuniform vec2 uStep;\n',map:CLOUD_GLSL});
+    const me=deco(put(new THREE.Mesh(sector(r,h,y0),m),name,W));me.renderOrder=ro;decks.push({m,t,U,speed});return me};
+  const hills=(r,h,seed,rough,ht,name)=>{const t=hillRidge(seed,1024,256,rough,ht).clone();t.repeat.set(3,1);t.needsUpdate=true;const m=skyHook(new THREE.MeshBasicMaterial({map:t,alphaTest:.5,alphaToCoverage:true,side:THREE.BackSide,fog:false}),'color','hill');deco(put(new THREE.Mesh(sector(r,h,0),m),name,W));return m};
+  const hazeTex=(()=>{const c=document.createElement('canvas');c.width=4;c.height=128;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(.55,'rgba(255,255,255,.5)');gr.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=gr;g.fillRect(0,0,4,128);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
+  const haze=(r,h,o,name,ro)=>{const m=skyHook(new THREE.MeshBasicMaterial({map:hazeTex,transparent:true,depthWrite:false,side:THREE.BackSide,opacity:o,fog:false}),'alpha','haze');const me=deco(put(new THREE.Mesh(sector(r,h,0),m),name,W));me.renderOrder=ro;return m};
+  const sunG=deco(put(new THREE.Mesh(new THREE.PlaneGeometry(1.3,1.3),new THREE.MeshBasicMaterial({map:softDisc(),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,color:0xfff0c8,fog:false})),'sun',W));sunG.renderOrder=-9;
+  const starG=new THREE.BufferGeometry(),sp=[];for(let i=0;i<260;i++){const a=A0+FW+rng()*(AL-2*FW),y=2.5+rng()*5;sp.push(Math.sin(a)*6.58,y,Math.cos(a)*6.58)}starG.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+  const starP=put(new THREE.Points(starG,new THREE.PointsMaterial({size:.035,color:0xffffff,transparent:true,opacity:0,depthWrite:false,fog:false})),'night stars',W);starP.renderOrder=-9;
+  cloudDeck(6.5,4.4,3.2,11,1.5,.004,'cloud deck (upper)',{fx:5,base:.12,tall:.7,stratus:.3},-8);
+  const hillFar=hills(6.4,2.6,5,1,.62,'hills (far)'),hazeFar=haze(6.34,2.4,.55,'haze over the far hills',-7);
+  const deckMid=cloudDeck(6.25,3.6,1.9,23,2,.009,'cloud deck (middle)',{fx:6,base:.2,tall:.6,stratus:.2},-6);
+  const hillMid=hills(6.2,2.1,7,1.2,.55,'hills (middle)'),hazeMid=haze(6.15,1.7,.4,'haze over the middle hills',-5);
+  const hillNear=hills(6.06,1.8,9,1.4,.62,'hills (near)'),hazeNear=haze(6.0,1.0,.22,'haze over the near hills',-4);
+  const scud=cloudDeck(5.88,2.6,1.2,37,2.5,.02,'storm scud (low cloud)',{fx:8,base:.15,tall:.45,stratus:.5},-3);
+  // meadow strip under the sky: grass that gets wet (darker, clearcoated) when it rains; a fence and hedges for scale
+  const MW=part('meadow (grass, hedges, fence)');
+  const gr=new THREE.RingGeometry(4.75,6.55,96,4,Math.PI*.5-AL/2,AL);gr.rotateX(-Math.PI/2);
+  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=skyHook(new THREE.MeshPhysicalMaterial({map:rp6(variation('grass').map),normalMap:rp6(relief('ground').normalMap),normalScale:new THREE.Vector2(1.2,1.2),color:0x2c3a1c,roughness:.95,clearcoat:0,clearcoatRoughness:.08}),'albedo','ground');
+  const ground=deco(put(new THREE.Mesh(gr,groundM),'meadow ground',MW));ground.position.y=.02;ground.receiveShadow=true;
+  const inMeadow=()=>A0+FW*.55+rng()*(AL-FW*1.1);
+  {const GN=900,blade=new THREE.ConeGeometry(.012,.16,3);blade.translate(0,.08,0);const gm=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.8,sheen:.5,sheenColor:new THREE.Color(0xc8e090)});const tufts=put(new THREE.InstancedMesh(blade,gm,GN),'grass tufts',MW);tufts.userData.noInk=true;tufts.receiveShadow=true;const mm=new THREE.Matrix4(),qq=new THREE.Quaternion(),cc=new THREE.Color();
+   for(let i=0;i<GN;i++){const a=inMeadow(),r=4.72+Math.pow(rng(),2.2)*1.75,h=.5+rng()*1.1;qq.setFromEuler(new THREE.Euler((rng()-.5)*.6,rng()*6,(rng()-.5)*.6));mm.compose(V3(Math.sin(a)*r,.02,Math.cos(a)*r),qq,V3(1,h,1));tufts.setMatrixAt(i,mm);tufts.setColorAt(i,cc.setHSL(.2+rng()*.08,.45+rng()*.2,.16+rng()*.14))}tufts.computeBoundingBox();tufts.computeBoundingSphere()}
   const leaf=makeMaterial({preset:'foliage',color:'#34502a'});leaf.flatShading=false;leaf.normalMap=relief('leather').normalMap;leaf.normalScale.set(1.5,1.5);const fenceM=makeMaterial('darkwood');
   const bushG=(()=>{const g=mergeVertices(new THREE.IcosahedronGeometry(1,4).deleteAttribute('normal').deleteAttribute('uv')),P=g.attributes.position,v=V3();for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);const n=1+.22*Math.sin(v.x*7.1+v.y*3.3)*Math.cos(v.z*6.7-v.y*2.1)+.12*Math.sin(v.x*17+v.z*13);v.multiplyScalar(n);if(v.y<-.3)v.y=-.3-(v.y+.3)*.2;P.setXYZ(i,v.x,v.y,v.z)}g.computeVertexNormals();const uv=[];for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);uv.push(Math.atan2(v.z,v.x)/6.283+.5,v.y*.5+.5)}g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));return g})();
-  for(let i=0;i<14;i++){const a=A0+.06*AL+i/13*AL*.88,r=5.0+rng()*.25,s=.16+rng()*.16;const b=new THREE.Mesh(bushG,leaf);b.position.set(Math.sin(a)*r,s*.3,Math.cos(a)*r);b.scale.set(s*(1+rng()*.5),s*.8,s);b.rotation.y=rng()*6;b.castShadow=true;b.receiveShadow=true;b.userData.noInk=true;W.add(b)}
-  for(let i=0;i<=24;i++){const a=A0+.05*AL+i/24*AL*.9,r=5.55;const post=new THREE.Mesh(new THREE.BoxGeometry(.05,.42,.05),fenceM);post.position.set(Math.sin(a)*r,.21,Math.cos(a)*r);post.rotation.y=a;post.castShadow=true;post.userData.noInk=true;W.add(post)}
-  [.18,.34].forEach(y=>{const rail=new THREE.Mesh(new THREE.TorusGeometry(5.55,.016,5,96,AL*.9),fenceM);rail.rotation.x=Math.PI/2;rail.rotation.z=Math.PI/2-(A0+.95*AL);rail.position.y=y;rail.userData.noInk=true;W.add(rail)});
+  const hedges=part('hedges',MW),fence=part('fence',MW);
+  for(let i=0;i<14;i++){const a=A0+.1*AL+i/13*AL*.8,r=5.0+rng()*.25,s=.16+rng()*.16;const b=new THREE.Mesh(bushG,leaf);b.position.set(Math.sin(a)*r,s*.3,Math.cos(a)*r);b.scale.set(s*(1+rng()*.5),s*.8,s);b.rotation.y=rng()*6;b.castShadow=true;b.receiveShadow=true;b.userData.noInk=true;hedges.add(b)}
+  for(let i=0;i<=20;i++){const a=A0+.11*AL+i/20*AL*.78,r=5.55;const post=new THREE.Mesh(new THREE.BoxGeometry(.05,.42,.05),fenceM);post.position.set(Math.sin(a)*r,.21,Math.cos(a)*r);post.rotation.y=a;post.castShadow=true;post.userData.noInk=true;fence.add(post)}
+  [.18,.34].forEach(y=>{const rail=new THREE.Mesh(new THREE.TorusGeometry(5.55,.016,5,96,AL*.78),fenceM);rail.rotation.x=Math.PI/2;rail.rotation.z=Math.PI/2-(A0+.89*AL);rail.position.y=y;rail.userData.noInk=true;fence.add(rail)});
   // rain: streaks of varied length, speed and opacity (RGBA vertex colours; the tail fades), splash rings on the meadow
-  const RN=760,rp=new Float32Array(RN*6),rc=new Float32Array(RN*8),RD=[];const rainBand=()=>{const a=A0+.03*AL+rng()*AL*.94,r=4.85+rng()*1.55;return[Math.sin(a)*r,Math.cos(a)*r]};
+  const RAIN=part('rain');
+  const RN=760,rp=new Float32Array(RN*6),rc=new Float32Array(RN*8),RD=[];const rainBand=()=>{const a=A0+FW*.6+rng()*(AL-FW*1.2),r=4.85+rng()*1.55;return[Math.sin(a)*r,Math.cos(a)*r]};
   for(let i=0;i<RN;i++){const [x,z]=rainBand();RD.push({x,z,y:rng()*H,L:.14+rng()*.38,v:6.5+rng()*5,a:.18+rng()*.5});rc.set([.75,.82,.9,0,.85,.9,.97,RD[i].a],i*8)}
   const rainG=new THREE.BufferGeometry();rainG.setAttribute('position',new THREE.BufferAttribute(rp,3));rainG.setAttribute('color',new THREE.BufferAttribute(rc,4));
-  const rain=new THREE.LineSegments(rainG,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:0,depthWrite:false}));rain.name='rain';rain.frustumCulled=false;W.add(rain);
-  const SPN=90,splash=new THREE.InstancedMesh(new THREE.RingGeometry(.6,1,20).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xd8e6f0,transparent:true,opacity:.55,depthWrite:false}),SPN);splash.name='splashes';splash.frustumCulled=false;splash.userData.noInk=true;W.add(splash);const SPL=[];let spI=0;
+  const rain=put(new THREE.LineSegments(rainG,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:0,depthWrite:false})),'rain streaks',RAIN);rain.frustumCulled=false;
+  const SPN=90,splash=put(new THREE.InstancedMesh(new THREE.RingGeometry(.6,1,20).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xd8e6f0,transparent:true,opacity:.55,depthWrite:false}),SPN),'splashes',RAIN);splash.frustumCulled=false;splash.userData.noInk=true;fixedBox(splash,V3(-6.6,0,-6.6),V3(6.6,.1,1.2));const SPL=[];let spI=0;
 
-  // ---------- Goethe weather glass (left) ----------
-  const GX=-2.9,GZ=.3,S_MM=60,WALL=.028,body=smooth([[.001,.2],[.5,.24],[.95,.42],[1.2,.8],[1.26,1.25],[1.18,1.8],[.92,2.4],[.55,2.95],[.25,3.3],[.12,3.5],[.07,3.62],[.001,3.66]],5);
-  const flask=lathe(shellPts(body,WALL),shell,128);flask.position.set(GX,0,GZ);flask.name='Goethe glass flask';flask.castShadow=false;W.add(flask);
+  // ---------- Goethe weather glass (left): pear-shaped body, spout fused at the base, rising beside it, open at the top ----------
+  const GW=part('Goethe weather glass');
+  const GX=-2.9,GZ=.3,S_MM=60,WALL=.026;
+  const body=smooth([[.001,.3],[.36,.32],[.72,.43],[.97,.7],[1.07,1.08],[1.05,1.48],[.93,1.95],[.73,2.45],[.52,2.95],[.34,3.4],[.2,3.78],[.12,4.04],[.075,4.16],[.001,4.21]],5);
+  const flask=put(lathe(shellPts(body,WALL),shell,128),'glass body (trapped air above the water)',GW);flask.position.set(GX,0,GZ);flask.castShadow=false;
   const rIn=y=>{for(let i=1;i<body.length;i++)if(body[i][1]>=y){const a=body[i-1],b=body[i],t=(y-a[1])/((b[1]-a[1])||1);return a[0]+(b[0]-a[0])*t-WALL}return 0};
-  const foot=lathe(smooth([[.001,0],[1.05,0],[1.08,.06],[.98,.1],[.8,.13],[.62,.22],[.52,.26],[.001,.26]],4),walnut,96);foot.position.set(GX,0,GZ);foot.name='flask stand';W.add(foot);
-  const collar=new THREE.Mesh(new THREE.TorusGeometry(.55,.035,10,64),brass);collar.rotation.x=Math.PI/2;collar.position.set(GX,.27,GZ);W.add(collar);
-  // flask water with a wetting (concave) meniscus; its volume barely changes, so it is built once at the fill level
-  const WY=1.55,yAtR=[];let V0=0;for(let y=WY;y<3.62;y+=.01){const r=rIn(y);V0+=Math.PI*r*r*.01}
-  const A_fl=Math.PI*rIn(WY)**2,RB=.072,a_sp=Math.PI*RB*RB;
-  const wprof=[];for(let y=.25;y<=WY+.03;y+=.04)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY+.035)*.995,WY+.035]);for(let i=1;i<=8;i++){const t=i/8,rr=rIn(WY)*(1-t);wprof.push([rr,WY+.035*Math.pow(1-t,3)])}
-  const fw=lathe([[.001,.25]].concat(wprof),water,96);fw.position.set(GX,0,GZ);fw.name='water in flask';fw.castShadow=false;W.add(fw);
-  // spout: a bent tube fused near the bottom, rising vertically to an open flared lip
-  const SXp=GX+1.78,TOP=4.75,bend=new THREE.CubicBezierCurve3(V3(GX+1.05,.52,GZ),V3(GX+1.55,.34,GZ),V3(SXp,.42,GZ),V3(SXp,1.05,GZ));const straight=new THREE.LineCurve3(V3(SXp,1.05,GZ),V3(SXp,TOP,GZ));
+  const foot=put(lathe(smooth([[.001,0],[.95,0],[.98,.06],[.88,.1],[.7,.13],[.52,.22],[.42,.27],[.001,.27]],4),walnut,96),'turned walnut stand',GW);foot.position.set(GX,0,GZ);
+  const collar=put(new THREE.Mesh(new THREE.TorusGeometry(.45,.03,10,64),brass),'brass collar',GW);collar.rotation.x=Math.PI/2;collar.position.set(GX,.29,GZ);
+  // water in the body, with a wetting (concave) meniscus; its volume barely changes, so it is built once at the fill level
+  const WY=1.3;let V0=0;for(let y=WY;y<4.2;y+=.01){const r=Math.max(0,rIn(y));V0+=Math.PI*r*r*.01}
+  const A_fl=Math.PI*rIn(WY)**2,RB=.058,a_sp=Math.PI*RB*RB;
+  const wprof=[];for(let y=.33;y<=WY+.03;y+=.04)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY+.035)*.995,WY+.035]);for(let i=1;i<=8;i++){const t=i/8,rr=rIn(WY)*(1-t);wprof.push([rr,WY+.035*Math.pow(1-t,3)])}
+  const fw=put(lathe([[.001,.33]].concat(wprof),water,96),'water in the body',GW);fw.position.set(GX,0,GZ);fw.castShadow=false;
+  // spout: fused into the lower body, sweeping out and up beside it to an open, flared lip; a glass bridge steadies it
+  const SPG=part('spout (open to the air)',GW);
+  const SXp=GX+1.24,TOP=4.75,bend=new THREE.CubicBezierCurve3(V3(GX+.62,.46,GZ),V3(GX+1.0,.33,GZ),V3(SXp,.36,GZ),V3(SXp,.9,GZ));const straight=new THREE.LineCurve3(V3(SXp,.9,GZ),V3(SXp,TOP,GZ));
   const spPath=new THREE.CurvePath();spPath.add(bend);spPath.add(straight);
-  const spout=new THREE.Mesh(new THREE.TubeGeometry(spPath,180,RB+WALL,20,false),film);spout.name='spout';spout.castShadow=false;W.add(spout);
-  const lip=new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.012,.022,10,32),shell);lip.rotation.x=Math.PI/2;lip.position.set(SXp,TOP,GZ);W.add(lip);
-  const bendW=new THREE.Mesh(new THREE.TubeGeometry(bend,60,RB*.96,16,false),water);bendW.name='water in spout bend';bendW.castShadow=false;W.add(bendW);
-  const colG=new THREE.CylinderGeometry(RB*.96,RB*.96,1,20,1,true);colG.translate(0,.5,0);const col=new THREE.Mesh(colG,water);col.position.set(SXp,1.05,GZ);col.name='water column in spout';col.castShadow=false;W.add(col);
-  const menG=new THREE.LatheGeometry([[RB*.96,0],[RB*.8,-.025],[RB*.5,-.042],[.001,-.05]].map(([x,y])=>new THREE.Vector2(x,y)),20);const menisc=new THREE.Mesh(menG,water);menisc.name='spout meniscus';W.add(menisc);
-  const DN=40,dropM=new THREE.InstancedMesh(new THREE.SphereGeometry(.035,10,8),water,DN);dropM.name='spilled drops';dropM.userData.noInk=true;dropM.frustumCulled=false;W.add(dropM);const drops=[];
+  const spout=put(new THREE.Mesh(new THREE.TubeGeometry(spPath,200,RB+WALL,20,false),film),'spout tube',SPG);spout.castShadow=false;
+  const lip=put(new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.012,.02,10,32),shell),'open lip',SPG);lip.rotation.x=Math.PI/2;lip.position.set(SXp,TOP,GZ);
+  const mark=put(new THREE.Mesh(new THREE.TorusGeometry(RB+WALL+.006,.007,6,32),brass),'level mark (spout = body when sealed)',SPG);mark.rotation.x=Math.PI/2;mark.position.set(SXp,WY,GZ);
+  {const x0=GX+rIn(3.0)+WALL*.5,x1=SXp-RB-WALL*.5,br=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,x1-x0,12),shell);br.rotation.z=Math.PI/2;br.position.set((x0+x1)/2,3.0,GZ);put(br,'fused glass bridge',SPG)}
+  const SCG=part('spout water column',SPG);
+  const bendW=put(new THREE.Mesh(new THREE.TubeGeometry(bend,60,RB*.97,16,false),spoutW),'water in the bend',SCG);bendW.castShadow=false;
+  const colG=new THREE.CylinderGeometry(RB*.97,RB*.97,1,20,1,true);colG.translate(0,.5,0);const col=put(new THREE.Mesh(colG,spoutW),'water column',SCG);col.position.set(SXp,.9,GZ);col.castShadow=false;
+  const menisc=put(new THREE.Mesh(new THREE.LatheGeometry([[RB*.97,0],[RB*.8,-.02],[RB*.5,-.034],[.001,-.04]].map(([x,y])=>new THREE.Vector2(x,y)),20),spoutW),'meniscus (concave)',SCG);
+  const menRing=put(new THREE.Mesh(new THREE.TorusGeometry(RB*.9,.008,6,24),menM),'meniscus rim',SCG);menRing.rotation.x=Math.PI/2;
+  const DN=40,dropM=put(new THREE.InstancedMesh(new THREE.SphereGeometry(.035,10,8),spoutW,DN),'spilled drops',SPG);dropM.userData.noInk=true;dropM.frustumCulled=false;fixedBox(dropM,V3(SXp-.1,0,GZ-.1),V3(SXp+.6,TOP+.1,GZ+.1));const drops=[];
 
   // ---------- storm glass (right) ----------
+  const SG=part('storm glass');
   const SX=2.8,SZ=.4,SR=.5,SY0=.42,STOP=4.05;
   const tubeOut=smooth([[.001,SY0],[.3,SY0+.02],[.46,SY0+.1],[SR,SY0+.3],[SR,STOP-.2],[SR*.97,STOP]],4);
-  const tube=lathe(shellPts(tubeOut,.035),shell,96);tube.position.set(SX,0,SZ);tube.name='storm glass tube';tube.castShadow=false;W.add(tube);
+  const tube=put(lathe(shellPts(tubeOut,.035),shell,96),'sealed glass tube',SG);tube.position.set(SX,0,SZ);tube.castShadow=false;
   const sIn=SR-.035,LIQ=STOP-.4;
   const lp=[[.001,SY0+.04],[.28,SY0+.06],[sIn*.97,SY0+.32],[sIn*.995,LIQ+.03]];for(let i=1;i<=8;i++){const t=i/8;lp.push([sIn*.995*(1-t),LIQ+.03*Math.pow(1-t,3)])}
-  const liq=lathe(lp,sol,96);liq.position.set(SX,0,SZ);liq.name='camphor solution';liq.castShadow=false;W.add(liq);
-  const corkP=lathe([[.001,STOP-.32],[sIn*.98,STOP-.32],[sIn*.995,STOP+.02],[.001,STOP+.02]],cork,48);corkP.position.set(SX,0,SZ);corkP.name='cork';W.add(corkP);
-  const capT=lathe(smooth([[.001,STOP+.24],[.3,STOP+.24],[SR+.05,STOP+.2],[SR+.06,STOP+.05],[SR+.07,STOP-.18],[SR+.045,STOP-.2]],4).concat([[SR+.01,STOP-.2],[SR+.01,STOP+.18],[.001,STOP+.18]]).reverse(),brass,64);capT.position.set(SX,0,SZ);capT.name='brass cap';W.add(capT);
-  const knob=new THREE.Mesh(new THREE.SphereGeometry(.09,24,16),brass);knob.position.set(SX,STOP+.3,SZ);knob.castShadow=true;W.add(knob);
-  const baseS=lathe(smooth([[.001,0],[.95,0],[.98,.07],[.85,.12],[.72,.2],[.66,.42],[.6,.44],[.56,.3],[.001,.3]],4),walnut,96);baseS.position.set(SX,0,SZ);baseS.name='storm glass base';W.add(baseS);
-  const ringS=new THREE.Mesh(new THREE.TorusGeometry(.64,.03,10,64),brass);ringS.rotation.x=Math.PI/2;ringS.position.set(SX,.44,SZ);W.add(ringS);
-  // camphor crystals: fern-like dendrites (instanced elongated shards) + compact crystals settled at the bottom
+  const liq=put(lathe(lp,sol,96),'camphor solution',SG);liq.position.set(SX,0,SZ);liq.castShadow=false;
+  const corkP=put(lathe([[.001,STOP-.32],[sIn*.98,STOP-.32],[sIn*.995,STOP+.02],[.001,STOP+.02]],cork,48),'cork seal',SG);corkP.position.set(SX,0,SZ);
+  const capT=put(lathe(smooth([[.001,STOP+.24],[.3,STOP+.24],[SR+.05,STOP+.2],[SR+.06,STOP+.05],[SR+.07,STOP-.18],[SR+.045,STOP-.2]],4).concat([[SR+.01,STOP-.2],[SR+.01,STOP+.18],[.001,STOP+.18]]).reverse(),brass,64),'brass cap',SG);capT.position.set(SX,0,SZ);
+  const knob=put(new THREE.Mesh(new THREE.SphereGeometry(.09,24,16),brass),'cap knob',SG);knob.position.set(SX,STOP+.3,SZ);knob.castShadow=true;
+  const baseS=put(lathe(smooth([[.001,0],[.95,0],[.98,.07],[.85,.12],[.72,.2],[.66,.42],[.6,.44],[.56,.3],[.001,.3]],4),walnut,96),'walnut base',SG);baseS.position.set(SX,0,SZ);
+  const ringS=put(new THREE.Mesh(new THREE.TorusGeometry(.64,.03,10,64),brass),'brass ring',SG);ringS.rotation.x=Math.PI/2;ringS.position.set(SX,.44,SZ);
+  // camphor crystals: fern-like dendrites (instanced elongated shards) + a compact seed bed at the bottom
+  const CG=part('camphor crystals',SG);
   const SH=[];const clampIn=(v)=>{const dx=v.x-SX,dz=v.z-SZ,d=Math.hypot(dx,dz),m=sIn-.05;if(d>m){v.x=SX+dx/d*m;v.z=SZ+dz/d*m}return v};
-  const qa=new THREE.Quaternion(),up=V3(0,1,0);
   const bm=new THREE.Matrix4(),bx=V3(),by=V3(),bz=V3();let plane=V3(0,0,1);
   const addShard=(pos,dir,len,wid,th,grp)=>{by.copy(dir).normalize();bz.copy(plane).addScaledVector(by,-plane.dot(by)).normalize();bx.crossVectors(by,bz);bm.makeBasis(bx,by,bz);const q=new THREE.Quaternion().setFromRotationMatrix(bm);SH.push({p:clampIn(pos.clone()),q,s:V3(wid,len*.5,wid*.25),th,grp})};
   const frond=(o,dir,len,grp,th0=0,thSpan=1)=>{const side=V3(rng()-.5,0,rng()-.5).cross(dir).normalize();plane=side.clone().cross(dir).normalize();const n=14+Math.floor(rng()*6),d=dir.clone().normalize(),curl=V3(rng()-.5,rng()*.2,rng()-.5).multiplyScalar(.04);let pnt=o.clone();
@@ -324,119 +388,167 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
       pnt.addScaledVector(d,seg)}};
   for(let i=0;i<8;i++){const a=i/8*Math.PI*2+rng()*.5,r=.1+rng()*.24;const o=V3(SX+Math.cos(a)*r,SY0+.16+rng()*.08,SZ+Math.sin(a)*r);frond(o,V3(Math.cos(a)*(.25+rng()*.35),1,Math.sin(a)*(.25+rng()*.35)),.8+rng()*1.4,0,rng()*.2,.8)}
   for(let i=0;i<5;i++){const a=i/4*Math.PI*2+.4,o=V3(SX+Math.cos(a)*.18,LIQ-.04,SZ+Math.sin(a)*.18);frond(o,V3(Math.cos(a)*.5,-1,Math.sin(a)*.5),.55+rng()*.4,1,0,1)}
-  const shards=new THREE.InstancedMesh(new THREE.OctahedronGeometry(1,0),crystM,SH.length);shards.name='camphor crystals';shards.userData.noInk=true;shards.castShadow=false;shards.frustumCulled=false;W.add(shards);
-  const BASEN=90,BC=[];for(let i=0;i<BASEN;i++){const a=rng()*Math.PI*2,r=Math.pow(rng(),.7)*(sIn-.1),h=.05*(1-r/sIn)+rng()*.03;BC.push({p:V3(SX+Math.cos(a)*r,SY0+.07+h,SZ+Math.sin(a)*r),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*3,rng()*3,rng()*3)),s:.012+rng()*.022,th:r/sIn*.8+rng()*.2})}
-  const baseC=new THREE.InstancedMesh(new THREE.CylinderGeometry(.6,.6,1.6,6),crystM,BASEN);baseC.name='settled crystals';baseC.userData.noInk=true;baseC.frustumCulled=false;W.add(baseC);
-  const specG=new THREE.BufferGeometry(),specN=160,specP=new Float32Array(specN*3);for(let i=0;i<specN;i++){const a=rng()*6.283,r=Math.sqrt(rng())*(sIn-.06);specP.set([SX+Math.cos(a)*r,SY0+.4+rng()*(LIQ-SY0-.5),SZ+Math.sin(a)*r],i*3)}specG.setAttribute('position',new THREE.BufferAttribute(specP,3));
-  const specks=new THREE.Points(specG,new THREE.PointsMaterial({size:.02,color:0xffffff,transparent:true,opacity:0,depthWrite:false}));specks.name='suspended microcrystals';W.add(specks);
+  const tubeBox=[V3(SX-sIn,SY0,SZ-sIn),V3(SX+sIn,LIQ,SZ+sIn)];
+  const shards=put(new THREE.InstancedMesh(new THREE.OctahedronGeometry(1,0),crystM,SH.length),'fern fronds',CG);shards.userData.noInk=true;shards.castShadow=false;shards.frustumCulled=false;fixedBox(shards,...tubeBox);
+  const BASEN=110,BC=[];for(let i=0;i<BASEN;i++){const a=rng()*Math.PI*2,r=Math.pow(rng(),.7)*(sIn-.1),h=.05*(1-r/sIn)+rng()*.03;BC.push({p:V3(SX+Math.cos(a)*r,SY0+.07+h,SZ+Math.sin(a)*r),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*3,rng()*3,rng()*3)),s:.012+rng()*.022,th:r/sIn*.8+rng()*.2})}
+  const baseC=put(new THREE.InstancedMesh(new THREE.CylinderGeometry(.6,.6,1.6,6),crystM,BASEN),'seed bed (compact crystals)',CG);baseC.userData.noInk=true;baseC.frustumCulled=false;fixedBox(baseC,V3(SX-sIn,SY0,SZ-sIn),V3(SX+sIn,SY0+.3,SZ+sIn));
+  // a faint milky layer just above the bed: undissolved micro-crystals near saturation
+  const bedHaze=(()=>{const c=document.createElement('canvas');c.width=4;c.height=64;const g=c.getContext('2d'),q=g.createLinearGradient(0,0,0,64);q.addColorStop(0,'rgba(255,255,255,0)');q.addColorStop(.7,'rgba(255,255,255,.55)');q.addColorStop(1,'rgba(255,255,255,.9)');g.fillStyle=q;g.fillRect(0,0,4,64);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
+  const hz=put(new THREE.Mesh(new THREE.CylinderGeometry(sIn*.96,sIn*.96,.7,32,1,true),new THREE.MeshBasicMaterial({map:bedHaze,color:0xe8ecee,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide})),'milky haze near the bed',CG);hz.position.set(SX,SY0+.38,SZ);deco(hz);hz.renderOrder=3;
+  const specG=new THREE.BufferGeometry(),specN=160,specP=new Float32Array(specN*3);for(let i=0;i<specN;i++){const a=rng()*6.283,r=Math.sqrt(rng())*(sIn-.06);specP.set([SX+Math.cos(a)*r,SY0+.25+Math.pow(rng(),1.6)*(LIQ-SY0-.4),SZ+Math.sin(a)*r],i*3)}specG.setAttribute('position',new THREE.BufferAttribute(specP,3));
+  const specks=put(new THREE.Points(specG,new THREE.PointsMaterial({size:.02,color:0xffffff,transparent:true,opacity:0,depthWrite:false})),'suspended microcrystals',CG);
 
-  // ---------- stick barometer (back): carved walnut case, engraved brass register, mercury tube, thermometer ----------
+  // ---------- stick barometer (back): carved walnut case, engraved brass register, mercury tube, vernier, thermometer ----------
+  const BG=part('mercury barometer');
   const BX=0,BZ=-2.55,PY0=3.35,PH=2.9,PMIN=945,PMAX=1055,yOfP=P=>PY0+(P-PMIN)/(PMAX-PMIN)*PH;
   const cs=new THREE.Shape();cs.moveTo(-.28,.75);cs.lineTo(.28,.75);cs.lineTo(.28,3.05);cs.quadraticCurveTo(.3,3.18,.5,3.22);cs.lineTo(.5,6.35);cs.absarc(0,6.35,.5,0,Math.PI,false);cs.lineTo(-.5,3.22);cs.quadraticCurveTo(-.3,3.18,-.28,3.05);cs.lineTo(-.28,.75);
   const caseG=new THREE.ExtrudeGeometry(cs,{depth:.16,bevelEnabled:true,bevelSize:.035,bevelThickness:.035,bevelSegments:3,curveSegments:32});
   const uvb=caseG.attributes.uv;for(let i=0;i<uvb.count;i++)uvb.setXY(i,uvb.getY(i)/2.4,uvb.getX(i)/2.4); // grain runs up the trunk
-  const caseM=new THREE.Mesh(caseG,walnut);caseM.position.set(BX,0,BZ-.08);caseM.castShadow=true;caseM.receiveShadow=true;caseM.name='barometer case';W.add(caseM);
-  const plinthB=new THREE.Mesh(alignUV(new THREE.BoxGeometry(.9,.12,.5)),walnut);plinthB.position.set(BX,.06,BZ);plinthB.castShadow=true;W.add(plinthB);
-  const cist=lathe(smooth([[.001,.12],[.3,.12],[.34,.2],[.3,.34],[.36,.5],[.33,.64],[.24,.72],[.2,.8],[.001,.8]],4),walnut,64);cist.position.set(BX,0,BZ+.1);cist.name='cistern cover';W.add(cist);
-  const cistRing=new THREE.Mesh(new THREE.TorusGeometry(.355,.02,8,48),brass);cistRing.rotation.x=Math.PI/2;cistRing.position.set(BX,.5,BZ+.1);W.add(cistRing);
-  const fin=lathe(smooth([[.001,0],[.1,0],[.12,.05],[.07,.12],[.11,.22],[.06,.32],[.03,.4],[.001,.42]],5),brass,32);fin.position.set(BX,6.85+.03,BZ);fin.name='finial';W.add(fin);
-  // engraved register plate: colour map + roughness(G)/metalness(B) map from one drawing
-  const plate=(()=>{const w=512,h=Math.round(512*PH/.82),c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=w*2;c1.height=c2.height=h*2;const g=c1.getContext('2d'),q=c2.getContext('2d');g.scale(2,2);q.scale(2,2); // drawn at 2× for crisp engraving
+  const caseM=put(new THREE.Mesh(caseG,walnut),'carved walnut case',BG);caseM.position.set(BX,0,BZ-.08);caseM.castShadow=true;caseM.receiveShadow=true;
+  const plinthB=put(new THREE.Mesh(alignUV(new THREE.BoxGeometry(.9,.12,.5)),walnut),'case foot',BG);plinthB.position.set(BX,.06,BZ);plinthB.castShadow=true;
+  const cist=put(lathe(smooth([[.001,.12],[.3,.12],[.34,.2],[.3,.34],[.36,.5],[.33,.64],[.24,.72],[.2,.8],[.001,.8]],4),walnut,64),'cistern cover',BG);cist.position.set(BX,0,BZ+.1);
+  const cistRing=put(new THREE.Mesh(new THREE.TorusGeometry(.355,.02,8,48),brass),'cistern ring',BG);cistRing.rotation.x=Math.PI/2;cistRing.position.set(BX,.5,BZ+.1);
+  const fin=put(lathe(smooth([[.001,0],[.1,0],[.12,.05],[.07,.12],[.11,.22],[.06,.32],[.03,.4],[.001,.42]],5),brass,32),'finial',BG);fin.position.set(BX,6.85+.03,BZ);
+  // engraved register plate: colour map + roughness(G)/metalness(B) map from one drawing; a dark enamel channel behind the tube
+  const CH0=212,CH1=300;
+  const plate=(()=>{const w=512,h=Math.round(512*PH/.82),c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=w*2;c1.height=c2.height=h*2;const g=c1.getContext('2d'),q=c2.getContext('2d');g.scale(2,2);q.scale(2,2);
     const gb=g.createLinearGradient(0,0,w,0);gb.addColorStop(0,'#c9a35a');gb.addColorStop(.5,'#e4c784');gb.addColorStop(1,'#c29c55');g.fillStyle=gb;g.fillRect(0,0,w,h);
     const r2=mulberry(3);for(let i=0;i<2600;i++){g.fillStyle=`rgba(${r2()<.5?'90,60,20':'255,240,200'},${r2()*.03})`;g.fillRect(0,r2()*h,w,1)}
     q.fillStyle='rgb(0,140,215)';q.fillRect(0,0,w,h);
     const Y=P=>h-(P-PMIN)/(PMAX-PMIN)*h,line=(x0,y0,x1,y1,lw)=>{[g,q].forEach((c,k)=>{c.strokeStyle=k?'rgb(0,235,20)':'#0e0803';c.lineWidth=lw;c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke()})};
     const text=(s,x,y,size,al='center',font='Georgia, serif')=>{[g,q].forEach((c,k)=>{c.font=size+'px '+font;c.textAlign=al;c.textBaseline='middle';c.fillStyle=k?'rgb(0,235,20)':'#0e0803';c.fillText(s,x,y)});g.fillStyle='rgba(255,236,190,.35)';g.font=size+'px '+font;g.textAlign=al;g.fillText(s,x+1,y+1.5)};
-    const cx0=226,cx1=286;g.fillStyle='#efe9da';g.fillRect(cx0,0,cx1-cx0,h);q.fillStyle='rgb(0,150,0)';q.fillRect(cx0,0,cx1-cx0,h); // silvered channel behind the tube
-    line(cx0,0,cx0,h,3);line(cx1,0,cx1,h,3);line(8,0,8,h,2);line(w-8,0,w-8,h,2);
-    for(let P=PMIN;P<=PMAX;P++){const y=Y(P),L=P%10===0?46:P%5===0?30:16;line(cx0-L,y,cx0,y,P%10===0?3:1.6);if(P%10===0)text(String(P),cx0-78,y,30)}
-    for(let i=Math.ceil(PMIN/33.8639*20);i<=Math.floor(PMAX/33.8639*20);i++){const inHg=i/20,y=Y(inHg*33.8639),big=i%10===0,mid=i%2===0;line(cx1,y,cx1+(big?46:mid?28:14),y,big?3:1.4);if(mid)text(inHg.toFixed(1),cx1+(big?92:80),y,big?30:21)}
-    text('hPa',cx0-70,26,26);text('inHg',cx1+80,26,26);
-    [['STORMY',965],['RAIN',985],['CHANGE',1000],['FAIR',1020],['SET FAIR',1035],['VERY DRY',1048]].forEach(([s,P])=>text(s,62,Y(P),22,'center','Georgia, serif'));
+    const chg=g.createLinearGradient(CH0,0,CH1,0);chg.addColorStop(0,'#0c0f14');chg.addColorStop(.5,'#232a36');chg.addColorStop(1,'#0c0f14');g.fillStyle=chg;g.fillRect(CH0,0,CH1-CH0,h);q.fillStyle='rgb(0,70,0)';q.fillRect(CH0,0,CH1-CH0,h); // black enamel slot: the silver column stands out against it
+    line(CH0,0,CH0,h,3);line(CH1,0,CH1,h,3);line(8,0,8,h,2);line(w-8,0,w-8,h,2);
+    for(let P=PMIN;P<=PMAX;P++){const y=Y(P),L=P%10===0?44:P%5===0?28:15;line(CH0-L,y,CH0,y,P%10===0?3:1.6);if(P%10===0)text(String(P),CH0-76,y,30)}
+    for(let i=Math.ceil(PMIN/33.8639*20);i<=Math.floor(PMAX/33.8639*20);i++){const inHg=i/20,y=Y(inHg*33.8639),big=i%10===0,mid=i%2===0;line(CH1,y,CH1+(big?44:mid?26:13),y,big?3:1.4);if(mid)text(inHg.toFixed(1),CH1+(big?88:76),y,big?30:21)}
+    text('hPa',CH0-68,26,26);text('inHg',CH1+76,26,26);
+    [['STORMY',965],['RAIN',985],['CHANGE',1000],['FAIR',1020],['SET FAIR',1035],['VERY DRY',1048]].forEach(([s,P])=>text(s,58,Y(P),21,'center','Georgia, serif'));
     const t1=new THREE.CanvasTexture(c1);t1.colorSpace=THREE.SRGBColorSpace;t1.anisotropy=8;const t2=new THREE.CanvasTexture(c2);t2.anisotropy=8;return[t1,t2]})();
+  const REG=part('register (scale plates, bezel, glass)',BG);
   const plateM=new THREE.MeshPhysicalMaterial({map:plate[0],roughnessMap:plate[1],metalnessMap:plate[1],roughness:1,metalness:1,envMapIntensity:1.4});
-  const plateMesh=new THREE.Mesh(new THREE.PlaneGeometry(.82,PH),plateM);plateMesh.position.set(BX,PY0+PH/2,BZ+.13);plateMesh.name='engraved scale plates (hPa · inHg)';plateMesh.receiveShadow=true;W.add(plateMesh);
-  [[0,PY0+PH+.02,.88,.035],[0,PY0-.02,.88,.035],[-.43,PY0+PH/2,.035,PH+.07],[.43,PY0+PH/2,.035,PH+.07]].forEach(([x,y,w,h])=>{const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,.04),brass);b.position.set(BX+x,y,BZ+.15);b.castShadow=true;W.add(b)});
-  const regGlass=new THREE.Mesh(new THREE.PlaneGeometry(.84,PH+.04),film);regGlass.position.set(BX,PY0+PH/2,BZ+.24);regGlass.renderOrder=6;W.add(regGlass);
-  const tubeX=BX+(256/512-.5)*.82,btube=lathe(shellPts([[.05,PY0-.25],[.05,PY0+PH+.05],[.035,PY0+PH+.12],[.001,PY0+PH+.13]],.012),shell,24);btube.position.set(tubeX,0,BZ+.17);btube.name='barometer tube';btube.castShadow=false;W.add(btube);
-  const hgG=new THREE.CylinderGeometry(.036,.036,1,20,1,true);hgG.translate(0,.5,0);const hg=new THREE.Mesh(hgG,merc);hg.position.set(tubeX,PY0-.25,BZ+.17);hg.name='mercury column';W.add(hg);
-  const hgTop=new THREE.Mesh(new THREE.SphereGeometry(.036,20,10,0,Math.PI*2,0,Math.PI/2),merc);hgTop.scale.y=.55;hgTop.name='mercury meniscus (convex)';W.add(hgTop);
-  const setHand=new THREE.Mesh(new THREE.ConeGeometry(.028,.12,3),brass);setHand.rotation.z=Math.PI/2;setHand.name='set hand (reading 3 h ago)';W.add(setHand);
+  const plateMesh=put(new THREE.Mesh(new THREE.PlaneGeometry(.82,PH),plateM),'engraved scale plates (hPa · inHg)',REG);plateMesh.position.set(BX,PY0+PH/2,BZ+.13);plateMesh.receiveShadow=true;
+  [[0,PY0+PH+.02,.88,.035],[0,PY0-.02,.88,.035],[-.43,PY0+PH/2,.035,PH+.07],[.43,PY0+PH/2,.035,PH+.07]].forEach(([x,y,w,h])=>{const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,.06),brass);b.position.set(BX+x,y,BZ+.16);b.castShadow=true;REG.add(b)});
+  const regGlass=put(new THREE.Mesh(new THREE.PlaneGeometry(.84,PH+.04),film),'register glass',REG);regGlass.position.set(BX,PY0+PH/2,BZ+.3);regGlass.renderOrder=6;
+  const tubeX=BX+((CH0+CH1)/2/512-.5)*.82,TZ=BZ+.19,RHG=.058;
+  const HGG=part('mercury column',BG);
+  const btube=put(lathe(shellPts([[RHG+.014,PY0-.25],[RHG+.014,PY0+PH+.05],[RHG*.7,PY0+PH+.13],[.001,PY0+PH+.15]],.012),shell,24),'glass tube (vacuum above the mercury)',HGG);btube.position.set(tubeX,0,TZ);btube.castShadow=false;
+  const hgG=new THREE.CylinderGeometry(RHG,RHG,1,24,1,true);hgG.translate(0,.5,0);const hg=put(new THREE.Mesh(hgG,merc),'mercury',HGG);hg.position.set(tubeX,PY0-.25,TZ);
+  const hgTop=put(new THREE.Mesh(new THREE.SphereGeometry(RHG,24,12,0,Math.PI*2,0,Math.PI/2),merc),'convex meniscus',HGG);hgTop.scale.y=.6;
+  // vernier slider with a magnifier: a brass-bezelled lens riding on the meniscus; behind it, the column top drawn 1.8× wide
+  const VER=part('vernier & magnifier',HGG),LR=.1; // origin = apex of the meniscus; lens sits just inside the register glass
+  put(new THREE.Mesh(new THREE.TorusGeometry(LR,.013,10,48),brass),'lens bezel',VER).position.z=.085;
+  put(new THREE.Mesh(new THREE.CircleGeometry(LR,48),film),'magnifier lens',VER).position.z=.088;
+  {const MR=.07,mg=new THREE.CylinderGeometry(MR,MR,.028,32,1,true);mg.translate(0,-.056,0);const m1=put(new THREE.Mesh(mg,merc),'magnified column',VER);m1.scale.z=.45;m1.position.z=.035;
+   const mg2=new THREE.CylinderGeometry(.045,.045,.018,24,1,true);mg2.translate(0,-.079,0);const m2=put(new THREE.Mesh(mg2,merc),'magnified column (lower)',VER);m2.scale.z=.45;m2.position.z=.035;
+   const md=put(new THREE.Mesh(new THREE.SphereGeometry(MR,32,12,0,Math.PI*2,0,Math.PI/2),merc),'magnified meniscus',VER);md.scale.set(1,.6,.45);md.position.set(0,-MR*.6,.035);
+   const ivory=new THREE.Mesh(new THREE.CircleGeometry(LR*.98,48),makeMaterial({preset:'ceramic',color:'#ece4d2'}));ivory.position.z=-.005;put(ivory,'lens backing',VER);
+   const hair=put(new THREE.Mesh(new THREE.BoxGeometry(.34,.005,.004),new THREE.MeshBasicMaterial({color:0xb02016})),'hairline (reading line)',VER);hair.position.set(0,0,.092)}
+  const setHand=put(new THREE.Mesh(new THREE.ConeGeometry(.028,.12,3),brass),'set hand (reading 3 h ago)',BG);setHand.rotation.z=Math.PI/2;
   // thermometer on the trunk: ivory scale, spirit column
+  const THG=part('thermometer',BG);
   const thermo=(()=>{const c=document.createElement('canvas');c.width=128;c.height=768;const g=c.getContext('2d');g.fillStyle='#efe6d2';g.fillRect(0,0,128,768);g.strokeStyle='#2b1c0c';g.fillStyle='#2b1c0c';g.textAlign='right';g.textBaseline='middle';g.font='22px Georgia, serif';
     for(let T=-10;T<=40;T++){const y=740-(T+10)/50*712,L=T%10===0?30:T%5===0?20:10;g.lineWidth=T%5===0?2.4:1.2;g.beginPath();g.moveTo(88-L,y);g.lineTo(88,y);g.stroke();if(T%10===0)g.fillText(String(T),50,y)}g.font='20px Georgia, serif';g.fillText('°C',66,14);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t})();
-  const TY0=1.25,TH=1.6,thP=new THREE.Mesh(new THREE.PlaneGeometry(.3,TH+.08),new THREE.MeshPhysicalMaterial({map:thermo,roughness:.5,clearcoat:.6}));thP.position.set(BX-.05,TY0+TH/2,BZ+.13);thP.name='thermometer scale';W.add(thP);
-  const thT=lathe(shellPts([[.026,TY0-.06],[.026,TY0+TH+.02],[.001,TY0+TH+.05]],.008),shell,16);thT.position.set(BX+.06,0,BZ+.17);thT.castShadow=false;W.add(thT);
-  const bulb=new THREE.Mesh(new THREE.SphereGeometry(.045,16,12),new THREE.MeshPhysicalMaterial({color:0xb01818,roughness:.15,clearcoat:1}));bulb.position.set(BX+.06,TY0-.06,BZ+.17);W.add(bulb);
-  const spG=new THREE.CylinderGeometry(.012,.012,1,8);spG.translate(0,.5,0);const spirit=new THREE.Mesh(spG,bulb.material);spirit.position.set(BX+.06,TY0-.06,BZ+.17);spirit.name='thermometer spirit';W.add(spirit);
-  // window light from behind (sun through the sky) and a lightning flash
-  const sunL=new THREE.DirectionalLight(0xffe6c0,0);sunL.position.set(-1,7,-9);W.add(sunL);W.add(sunL.target);
-  const flashL=new THREE.DirectionalLight(0xdfe8ff,0);flashL.position.set(2,9,-8);W.add(flashL);
-  const keyL=D.scene.children.find(o=>(o.isDirectionalLight||o.isSpotLight)&&o.castShadow),key0=keyL?keyL.intensity:0;
+  const TY0=1.25,TH=1.6,thP=put(new THREE.Mesh(new THREE.PlaneGeometry(.3,TH+.08),new THREE.MeshPhysicalMaterial({map:thermo,roughness:.5,clearcoat:.6})),'thermometer scale',THG);thP.position.set(BX-.05,TY0+TH/2,BZ+.13);
+  const thT=put(lathe(shellPts([[.026,TY0-.06],[.026,TY0+TH+.02],[.001,TY0+TH+.05]],.008),shell,16),'thermometer tube',THG);thT.position.set(BX+.06,0,BZ+.17);thT.castShadow=false;
+  const bulb=put(new THREE.Mesh(new THREE.SphereGeometry(.045,16,12),new THREE.MeshPhysicalMaterial({color:0xb01818,roughness:.15,clearcoat:1})),'thermometer bulb',THG);bulb.position.set(BX+.06,TY0-.06,BZ+.17);
+  const spG=new THREE.CylinderGeometry(.012,.012,1,8);spG.translate(0,.5,0);const spirit=put(new THREE.Mesh(spG,bulb.material),'thermometer spirit',THG);spirit.position.set(BX+.06,TY0-.06,BZ+.17);
+  // light through the sky from behind (rim on the glass) and a lightning flash
+  const sunL=put(new THREE.DirectionalLight(0xffe6c0,0),'sunlight through the sky',W);sunL.position.set(-1,7,-9);W.add(sunL.target);
+  const flashL=put(new THREE.DirectionalLight(0xdfe8ff,0),'lightning flash',W);flashL.position.set(2,9,-8);
   // rain on the display case (when the diorama has one): lens-like droplets that grow, stick, then slip down the panes
   const caseObj=D.scene.getObjectByName('glass case');let CD=null;
   if(caseObj){const bb=new THREE.Box3().setFromObject(caseObj),dmM=makeMaterial({preset:'water',color:'#e4f2f6'});dmM.thickness=.05;dmM.normalMap=null;dmM.roughness=.01;dmM.attenuationDistance=20;
-    const dm=new THREE.InstancedMesh(new THREE.SphereGeometry(1,14,10),dmM,90);dm.name='droplets on the case';dm.userData.noInk=true;dm.frustumCulled=false;dm.castShadow=false;W.add(dm);CD={dm,half:(bb.max.x-bb.min.x)/2-.02,top:bb.max.y-.05,L:[]}}
+    const dm=put(new THREE.InstancedMesh(new THREE.SphereGeometry(1,14,10),dmM,90),'raindrops on the case',W);dm.userData.noInk=true;dm.frustumCulled=false;dm.castShadow=false;fixedBox(dm,bb.min.clone(),bb.max.clone());CD={dm,half:(bb.max.x-bb.min.x)/2-.02,top:bb.max.y-.05,L:[]}}
 
   // ---------- state & physics ----------
-  let Pc=p.P,Tc=p.T,P0=p.P0,hs=0,hsEq=0,Pin=p.P0,hist=[],phase=rng()*6,lastTrend=0,overflow=false,bubbled=false,cool=0,lastT=Tc,lastSky=-1,Mb=0,Mf=0,Mt=0,nucl=false,wasCryst=false,cover=.3,rainK=0,raining=false,wet=0,flash=0,hgShown=Pc,setP=Pc,lastSet=0,Gf=0,Gt=0,Gb=0;
-  const CLK=10,T0=288.15,eSat=T=>6.112*Math.exp(17.62*T/(243.12+T)),RHOG=998*9.80665/100/1000*S_MM; // hPa per scene unit of water
-  const S_=T=>Math.exp(.065*(T-16)),total=()=>p.conc*1.05,mass=()=>Mb+Mf+Mt;
+  const CLK=10,T0=288.15,eSat=T=>6.112*Math.exp(17.62*T/(243.12+T)),RHOG=998*9.80665/100/1000*S_MM,TAU_SP=.3,TAU_G=1.5,BED=.04; // RHOG: hPa per scene unit of water
+  const autoP=s=>1008+17*Math.cos(2*Math.PI*s/60+.3)+3*Math.sin(2*Math.PI*s/19+2.2); // a fair-weather high, a low ~27 h later, recovery
+  let Pc=p.auto>.5?autoP(0):p.P,Tc=p.T,P0=p.P0,hs=0,hsEq=0,Pin=p.P0,hist=[],tA=0,lastTrend=0,overflow=false,bubbled=false,cool=0,Tg=p.T,lastTg=p.T,lastSky=-1,Mb=0,Mf=0,Mt=0,nucl=false,wasFern=false,topped=false,cover=.3,rainK=0,raining=false,wet=0,flash=0,hgShown=Pc,setP=Pc,lastSet=0,Gf=0,Gt=0,Gb=0,armed=0;
+  const S_=T=>Math.exp(.065*(T-16)),total=()=>p.conc*1.05,mass=()=>Mb+Mf+Mt,fern=()=>Mf+Mt;
   const PinAt=h=>(P0-eSat(15))*((Tc+273.15)/T0)*(V0/(V0+a_sp*h))+eSat(Tc);
   const solve=()=>{let lo=-4,hi=8;for(let i=0;i<40;i++){const m=(lo+hi)/2,f=PinAt(m)-Pc-RHOG*m*(1+a_sp/A_fl);if(f>0)lo=m;else hi=m}return(lo+hi)/2};
   const ideal_mm=()=>(P0*(Tc+273.15)/T0-Pc)*100/(998*9.80665)*1000;
-  hs=hsEq=solve();
-  D.label('Goethe weather glass',()=>V3(GX,3.95,GZ));D.label('spout level',()=>V3(SXp,WY+hs+.25,GZ));D.label('trapped air · P_in',()=>V3(GX,2.6,GZ));
-  D.label('storm glass',()=>V3(SX,STOP+.65,SZ));D.label('crystals',()=>mass()>.004?V3(SX,.75,SZ):null);D.label('mercury barometer',()=>V3(BX,7.45,BZ));D.label('thermometer',()=>V3(BX+.06,TY0+TH+.25,BZ+.17));
-  D.event('glass sealed at '+fmt(P0,4)+' hPa and 15 °C; trapped air now follows P_in = (P₀ − e₀)·(T/T₀)·(V₀/V) + e(T)',V3(GX,2.4,GZ));D.seriesName='outside pressure P (hPa)';
+  hs=hsEq=solve();Pin=PinAt(hs);
+  // the storm glass has stood at the starting temperature for a long time: dissolved c = S(T), the excess as crystals
+  {const ex=Math.max(0,total()-BED-S_(Tg));Mb=Math.min(BED,total())+ex*.15;Mf=ex*.85;nucl=ex>0;wasFern=Mf>.02;Gf=clamp(Mf/.35,0,1);Gb=clamp(Math.sqrt(Mb/.3),0,1)}
+  const spoutY=()=>clamp(WY+hs,.45,TOP-.02);
+  DIO.weatherglass._live={spoutY,hgY:()=>yOfP(hgShown),bedY:()=>SY0+.15};
+  D.label('Goethe weather glass',()=>V3(GX,4.5,GZ),GW);D.label('spout column · water level',()=>V3(SXp,Math.max(1.1,spoutY())+.25,GZ),false,SPG);D.label('trapped air · P_in',()=>V3(GX,2.7,GZ),false,flask);D.label('flask water',()=>V3(GX-.45,WY-.3,GZ+.7),false,fw);
+  D.label('storm glass · sealed tube',()=>V3(SX,STOP+.65,SZ),false,SG);D.label('crystals',()=>mass()>.004?V3(SX+.05,.82,SZ+.3):null,false,CG);D.label('camphor solution',()=>V3(SX+.25,2.6,SZ+.35),false,liq);
+  D.label('mercury barometer',()=>V3(BX,7.45,BZ),false,BG);D.label('mercury column',()=>V3(tubeX+.3,yOfP(hgShown),TZ+.15),false,HGG);D.label('thermometer',()=>V3(BX+.06,TY0+TH+.25,BZ+.17),false,THG);
+  D.label('sky · cloud cover',()=>V3(-3.6,6.4,-4.7),false,deckMid);
+  D.event('glass sealed at '+P0.toFixed(1)+' hPa and 15 °C; trapped air now follows P_in = (P₀ − e₀)·(T/T₀)·(V₀/V) + e(T)',V3(GX,2.4,GZ));D.seriesName='outside pressure P (hPa)';
   // ---------- sky / weather rendering ----------
-  function drawSky(t){const g=skyCv.getContext('2d'),h=skyCv.height,hour=t%24,elev=Math.sin((hour-6)/12*Math.PI),day=Math.max(0,elev),dusk=Math.exp(-Math.pow(elev/.2,2)),c=cover;
-    const top=new THREE.Color().setHSL(.615,.6*(1-c*.8),.045+day*.33*(1-c*.45)+dusk*.04),hor=new THREE.Color().setHSL(.6,.22*(1-c*.6),.08+day*.64*(1-c*.42)).lerp(new THREE.Color().setHSL(.07,.6*(1-c*.7),.42*(1-c*.5)),dusk*.8);
-    const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#'+top.getHexString());gr.addColorStop(.75,'#'+top.clone().lerp(hor,.7).getHexString());gr.addColorStop(1,'#'+hor.getHexString());g.fillStyle=gr;g.fillRect(0,0,4,h);skyTex.needsUpdate=true;
-    // sun across the backdrop (hidden behind cover), stars at night
-    const sa=A0+AL*(.12+.76*clamp((hour-6)/12,0,1)),sy=1.6+day*5.2;sunG.position.set(Math.sin(sa)*6.45,sy,Math.cos(sa)*6.45);sunG.lookAt(0,sy,0);sunG.material.opacity=day>0?(1-c*.95):0;sunG.material.color.setHSL(.1,.8,.6+.2*day);
+  const css=c=>'#'+c.getHexString(),C1=new THREE.Color(),C2=new THREE.Color();
+  function drawSky(t){const g=skyCv.getContext('2d'),Wc=skyCv.width,Hc=skyCv.height,hour=t%24,elev=Math.sin((hour-6)/12*Math.PI),day=Math.max(0,elev),dusk=Math.exp(-Math.pow(elev/.22,2)),c=cover,storm=clamp((c-.5)/.5,0,1),fl=flash;
+    const top=new THREE.Color().setHSL(.6,.62*(1-c*.85),.05+day*.36*(1-c*.5)+dusk*.03),hor=new THREE.Color().setHSL(.58,.3*(1-c*.7),.1+day*.58*(1-c*.45)).lerp(new THREE.Color().setHSL(.06,.75*(1-c*.6),.45*(1-c*.5)),dusk*.75);
+    const gr=g.createLinearGradient(0,0,0,Hc);gr.addColorStop(0,css(top));gr.addColorStop(.6,css(top.clone().lerp(hor,.55)));gr.addColorStop(1,css(hor));g.fillStyle=gr;g.fillRect(0,0,Wc,Hc);
+    const su=.12+.76*clamp((hour-6)/12,0,1),sa=A0+AL*su,sy=1.6+day*5.2,glow=(day>0?1:dusk)*(1-c*.85);
+    if(glow>.01){const sc=new THREE.Color().setHSL(.09+.04*day,.9,.7),rgb=`${Math.round(sc.r*255)},${Math.round(sc.g*255)},${Math.round(sc.b*255)}`;g.save();g.translate(su*Wc,(1-sy/H)*Hc);g.scale(1,1.45);const rg=g.createRadialGradient(0,0,0,0,0,Wc*.42);rg.addColorStop(0,`rgba(${rgb},${.6*glow})`);rg.addColorStop(.25,`rgba(${rgb},${.22*glow})`);rg.addColorStop(1,`rgba(${rgb},0)`);g.fillStyle=rg;g.fillRect(-Wc,-Hc,2*Wc,2*Hc);g.restore()}
+    if(fl>0){g.fillStyle=`rgba(235,240,255,${fl*.7})`;g.fillRect(0,0,Wc,Hc)}
+    skyTex.needsUpdate=true;
+    sunG.position.set(Math.sin(sa)*6.58,sy,Math.cos(sa)*6.58);sunG.lookAt(0,sy,0);sunG.material.opacity=day>0?(1-c*.95):0;sunG.material.color.setHSL(.1,.8,.6+.2*day);
     starP.material.opacity=(1-Math.min(1,day*4))*(1-c)*.9;
-    const lit=.25+day*.75,storm=Math.max(0,(c-.55)/.45);layers.forEach((L,i)=>{L.m.userData.cover.value=clamp(c*(i===2?1.3:1)-(i===2?.45:0),0,1);L.m.color.setRGB(lit*(1-storm*.55)*(i===2?.7:1),lit*(1-storm*.52)*(i===2?.72:1),lit*(1-storm*.45)*(i===2?.78:1))});
-    hazes.forEach(m=>m.color.copy(hor));hillFar.color.setHSL(.58,.22*(1-c),.18+.32*day*(1-c*.5));hillNear.color.setHSL(.27,.28*(1-c*.6),.08+.2*day*(1-c*.45));
+    // clouds: sunlit side warm at low sun, white at noon; shadow side takes the sky colour, slate grey in storms
+    const sunC=C1.setHSL(.08+.05*day,.75-.45*day,.72+.16*day).multiplyScalar(.35+.85*Math.min(1,day*1.4)+dusk*.25).multiplyScalar(1-storm*.5);
+    const shade=C2.copy(top).lerp(hor,.5).multiplyScalar(.75).lerp(new THREE.Color(0x30363f),storm*.75).addScalar(.05*Math.min(1,day*2)*(1-storm));
+    decks.forEach((L,i)=>{const U=L.U;U.uCover.value=clamp(i===2?1.5*c-.62:i===0?.08+c*.95:c,0,1);U.uLit.value.copy(sunC).multiplyScalar(i===2?.75:1).addScalar(fl*.8);U.uShade.value.copy(shade).multiplyScalar(i===2?.8:1).addScalar(fl*.5);U.uSun.value.set(su,clamp((sy-1.6)/5.2,0,1))});
+    // hills: aerial perspective — the farther the range, the more it takes the horizon colour
+    const lightH=(.3+.7*Math.min(1,day*1.5))*(1-.45*storm);
+    hillFar.color.setHSL(.6,.25,.42*lightH).lerp(hor,.6);hillMid.color.setHSL(.36,.25,.3*lightH).lerp(hor,.38);hillNear.color.setHSL(.27,.35,.22*lightH).lerp(hor,.15);
+    [hazeFar,hazeMid,hazeNear].forEach(m=>m.color.copy(hor));
     sunL.intensity=day*(1-c*.8)*2.2;sunL.color.setHSL(.09,.6*(1-day*.5),.7);sunL.position.set(Math.sin(sa)*8,sy+3,Math.cos(sa)*8);
-    if(keyL)keyL.intensity=key0*(1-.35*c);D.scene.environmentIntensity=.85*(1-.3*c)}
+    // key light follows the painted sun: warm and hard in fair weather, dim, cool and flat under storm cloud, moonlit at night
+    if(keyL){const dir=V3(Math.sin(sa)*.85,.8+.35*day,.62).normalize();keyL.position.copy(keyT).addScaledVector(dir,keyD);
+      keyL.color.setHSL(.085+.03*day,.75-.4*day,.74+.1*day).lerp(C2.set(0xa8b4c4),storm*.85).lerp(C2.set(0x8ea2cc),(1-Math.min(1,day*3))*.7);
+      keyL.intensity=key0*(.3+.95*Math.min(1,day*1.6))*(1-.62*storm)*(1-.15*c)+key0*fl*.6}
+    envLights.forEach(([l,i0])=>{l.intensity=i0*(.7+.3*day)*(1-.35*storm)});D.scene.environmentIntensity=env0*(.55+.45*Math.min(1,day*2))*(1-.35*storm)}
+  const ev=(text,pos,color)=>D.event(text,pos,color);
   return{orbit:{target:V3(0,2.5,-.3),r:15,ph:1.2,th:.12},
-   live(k){if(k==='T'||k==='P'){Pc=p.P;Tc=p.T;return true}if(k==='auto'||k==='conc')return true;if(k==='P0'){P0=p.P0;D.event('re-sealed at '+fmt(P0,4)+' hPa',V3(GX,2.4,GZ));return true}return false},
+   live(k){if(k==='T'||k==='P'){Pc=p.P;Tc=p.T;return true}
+     if(k==='auto'){if(p.auto>.5){tA=D.t;Pc=autoP(0);hist=[];lastTrend=0;ev('auto weather (re)started: a fair-weather high, then a low moves in',V3(0,5.6,-4.6))}else{Pc=p.P;Tc=p.T}return true}
+     if(k==='conc')return true;if(k==='P0'){P0=p.P0;ev('re-sealed at '+P0.toFixed(1)+' hPa',V3(GX,2.4,GZ));return true}return false},
    step(h){const t=D.t;
-    if(p.auto>.5){const target=1010+14*Math.sin(2*Math.PI*t/70+phase)+6*Math.sin(2*Math.PI*t/23+1.3*phase);Pc+=(target-Pc)*Math.min(1,h*.8);Tc=p.T+2.5*Math.sin(2*Math.PI*((t+CLK)%24-9)/24)-(1013-Pc)*.04}
+    if(p.auto>.5){Pc+=(autoP(t-tA)-Pc)*Math.min(1,h*.8);Tc=p.T+2.5*Math.sin(2*Math.PI*((t+CLK)%24-9)/24)-(1013-Pc)*.04}
     // Goethe glass: equilibrium with air spring + vapour, then viscous relaxation of the column
-    hsEq=solve();hs+=(hsEq-hs)*Math.min(1,h/.15);Pin=PinAt(hs);const y=WY+hs;
-    if(y>TOP-.02&&!overflow){overflow=true;D.event('pressure difference '+fmt(Pin-Pc,3)+' hPa pushes water out of the spout (low pressure: storm weather)',V3(SXp,TOP,GZ),0x88c0ff)}if(y<TOP-.2)overflow=false;
+    hsEq=solve();const lag=(hsEq-hs)*S_MM;hs+=(hsEq-hs)*Math.min(1,h/TAU_SP);Pin=PinAt(hs);const y=WY+hs;
+    if(p.auto<=.5){if(!armed&&Math.abs(lag)>3){armed=Math.sign(lag);ev(armed>0?'outside pressure below P_in: the trapped air pushes water up the spout':'outside pressure above P_in: the outside air pushes the water back down the spout',V3(SXp,clamp(y,.9,TOP),GZ),armed>0?0x88c0ff:0xffd27a)}
+      if(armed&&Math.abs(lag)<.3&&!overflow){armed=0;ev('spout settles at Δh = '+(hs*S_MM).toFixed(1)+' mm: P_in − P = '+(Pin-Pc).toFixed(1)+' hPa, carried by the weight of the raised water',V3(SXp,clamp(y,.9,TOP),GZ),0x88c0ff)}}else armed=0;
+    if(y>TOP-.02&&!overflow){overflow=true;ev('pressure difference '+(Pin-Pc).toFixed(1)+' hPa pushes water out of the spout (low pressure: storm weather)',V3(SXp,TOP,GZ),0x88c0ff)}if(y<TOP-.2)overflow=false;
     if(y>TOP-.02){hs=TOP-.02-WY;if(rng()<h*14)drops.push({x:SXp+.09,y:TOP,z:GZ,v:0})}
-    if(y<.5&&!bubbled){bubbled=true;D.event('high pressure drives the column below the bend: air bubbles into the flask and the glass re-equilibrates',V3(GX+1.4,.45,GZ));P0=Pc*T0/(Tc+273.15)+eSat(15)-eSat(Tc)*T0/(Tc+273.15);hs=solve()}if(y>.9)bubbled=false;
-    // storm glass: conserved camphor, temperature-dependent solubility, metastable nucleation
-    const c=Math.max(0,total()-mass()),S=S_(Tc),sig=c/S-1,dTdt=(Tc-lastT)/h;lastT=Tc;cool=lerp(cool,dTdt,Math.min(1,h*2));
-    if(!nucl&&sig>.04){nucl=true;Mb=.002}
-    if(nucl&&sig>0){const g=.55*sig*h,fern=clamp((sig-.04)/.22,.1,.85),top=cool<-.35?clamp(-cool*.5,0,.6):0;Mf+=g*fern*(1-top);Mt+=g*fern*top;Mb+=g*(1-fern)}
-    if(sig<0){const k=-.9*sig*h;Mf=Math.max(0,Mf-k*2*Math.pow(Mf+1e-6,.667));Mt=Math.max(0,Mt-k*3.2*Math.pow(Mt+1e-6,.667));Mb=Math.max(0,Mb-k*Math.pow(Mb+1e-6,.667))}
-    if(mass()<.0015&&sig<0){Mb=Mf=Mt=0;nucl=false}
-    const has=mass()>.02;if(has&&!wasCryst)D.event('solution supersaturated (σ = '+fmt(sig,2)+'): camphor crystals nucleate',V3(SX,.75,SZ));if(!has&&wasCryst)D.event('warming raises solubility: all crystals redissolve, the liquid clears',V3(SX,2,SZ),0x88c0ff);wasCryst=has;
-    if(cool<-.6&&Mt>.01&&rng()<h*.4)D.event('rapid cooling grows fine feathery crystals at the top (folklore: "storm coming"; physically a temperature effect)',V3(SX,LIQ-.4,SZ));
+    if(y<.5&&!bubbled){bubbled=true;P0=(Pc-eSat(Tc))*T0/(Tc+273.15)+eSat(15);hs=hsEq=solve();armed=0;ev('high pressure drives the column below the bend: air bubbles into the flask; the glass is now effectively re-sealed at '+P0.toFixed(1)+' hPa',V3(GX+.9,.45,GZ))}if(y>.9)bubbled=false;
+    // storm glass: liquid temperature lags the air; conserved camphor, temperature-dependent solubility, metastable nucleation
+    Tg+=(Tc-Tg)*Math.min(1,h/TAU_G);const dTdt=(Tg-lastTg)/h;lastTg=Tg;cool=lerp(cool,dTdt,Math.min(1,h*2));
+    const c=Math.max(0,total()-mass()),S=S_(Tg),sig=c/S-1;
+    if(!nucl&&sig>.04){nucl=true;Mf=Math.max(Mf,.002)}
+    if(sig>0){const g=.55*sig*h,fr=nucl?clamp((sig-.04)/.22,.1,.85):0,top=cool<-1.5?clamp(-cool*.15,0,.6):0;Mf+=g*fr*(1-top);Mt+=g*fr*top;Mb+=g*(1-fr)}
+    if(sig<0){const k=-.9*sig*h;Mf=Math.max(0,Mf-k*2*Math.pow(Mf+1e-6,.667));Mt=Math.max(0,Mt-k*3.2*Math.pow(Mt+1e-6,.667));Mb=Math.max(0,Mb-k*.15*Math.pow(Mb+1e-6,.667))}
+    if(fern()<.0015&&sig<0){Mf=Mt=0;nucl=false}
+    const hasF=fern()>.02;
+    if(hasF&&!wasFern)ev('solution supersaturated (σ = '+sig.toFixed(3)+'): camphor crystals nucleate and grow into fern fronds',V3(SX,1.1,SZ));
+    if(!hasF&&wasFern)ev('warming raises solubility: the fern crystals redissolve and the liquid clears'+(Mb>.005?'; a small seed bed stays at the bottom':''),V3(SX,2,SZ),0x88c0ff);wasFern=hasF;
+    if(Mt>.02&&!topped){topped=true;ev('rapid cooling ('+(-cool).toFixed(1)+' K/h) grows fine feathery crystals at the top (folklore: "storm coming"; physically a temperature effect)',V3(SX,LIQ-.4,SZ))}if(Mt<.005)topped=false;
     // weather lore with physics: the 3-hour tendency, cloud cover and rain
     hist.push([t,Pc]);while(hist.length&&t-hist[0][0]>3)hist.shift();const tr=hist.length>1?Pc-hist[0][1]:0;
-    if(tr<-3&&lastTrend>=-3)D.event('pressure falling '+fmt(-tr,2)+' hPa in 3 h: deteriorating weather likely',V3(tubeX,yOfP(Pc),BZ+.2),0xff9a7a);if(tr>3&&lastTrend<=3)D.event('pressure rising '+fmt(tr,2)+' hPa in 3 h: clearing weather likely',V3(tubeX,yOfP(Pc),BZ+.2),0x88c0ff);lastTrend=tr;
+    if(tr<-3&&lastTrend>=-3)ev('pressure falling '+(-tr).toFixed(1)+' hPa in 3 h: deteriorating weather likely',V3(tubeX,yOfP(Pc),TZ),0xff9a7a);if(tr>3&&lastTrend<=3)ev('pressure rising '+tr.toFixed(1)+' hPa in 3 h: clearing weather likely',V3(tubeX,yOfP(Pc),TZ),0x88c0ff);lastTrend=tr;
     const coverT=clamp((1021-Pc)/34+clamp(-tr,0,6)*.06-clamp(tr,0,6)*.04,0,1);cover+=(coverT-cover)*Math.min(1,h*.6);
-    const rainNow=cover>.68;if(rainNow&&!raining)D.event('rain begins: cloud cover '+Math.round(cover*100)+' % as the low arrives',V3(0,2.5,-5.4),0x88c0ff);if(!rainNow&&raining&&cover<.6)D.event('rain eases as pressure recovers',V3(0,2.5,-5.4));if(rainNow)raining=true;else if(cover<.6)raining=false;
+    const rainNow=cover>.68;if(rainNow&&!raining)ev('rain begins: cloud cover '+Math.round(cover*100)+' % as the low arrives',V3(0,2.5,-5.4),0x88c0ff);if(!rainNow&&raining&&cover<.6)ev('rain eases as pressure recovers',V3(0,2.5,-5.4));if(rainNow)raining=true;else if(cover<.6)raining=false;
     rainK+=((raining?clamp((cover-.6)*2.5,.25,1):0)-rainK)*Math.min(1,h*1.5);wet=clamp(wet+(raining?h*.5:-h*.12),0,1);
     if(cover>.86&&rng()<h*.25)flash=1;
     // set hand records the reading 3 h ago (like the brass "set" pointer on period barometers)
     if(t-lastSet>3){setP=hist.length?hist[0][1]:Pc;lastSet=t}
    },
-   visual(dt){const y=clamp(WY+hs,.45,TOP-.02),vert=y>1.05;
-    col.scale.y=Math.max(.001,y-1.05);col.visible=vert;menisc.visible=vert;menisc.position.set(SXp,y,GZ);bendW.visible=y>.62;
+   visual(dt){const y=spoutY(),vert=y>.9;
+    col.scale.y=Math.max(.001,y-.9);col.visible=vert;menisc.visible=menRing.visible=vert;menisc.position.set(SXp,y,GZ);menRing.position.set(SXp,y-.004,GZ);bendW.visible=y>.6;
     for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.v-=9.8*dt;d.y+=d.v*dt;d.x+=.25*dt;if(d.y<.05)drops.splice(i,1)}while(drops.length>DN)drops.shift();{const m=new THREE.Matrix4();for(let i=0;i<DN;i++){const d=drops[i];if(d)m.makeTranslation(d.x,d.y,d.z);else m.makeScale(0,0,0);dropM.setMatrixAt(i,m)}dropM.instanceMatrix.needsUpdate=true}
-    // crystals: shard i is grown when its threshold lies below the group's growth fraction
-    const k=Math.min(1,dt*3);Gf+=(clamp(Mf/.35,0,1)-Gf)*k;Gt+=(clamp(Mt/.2,0,1)-Gt)*k;Gb+=(clamp(Mb/.25,0,1)-Gb)*k;
+    // crystals: shard i is grown when its threshold lies below the group's growth fraction; the bed by √mass (a thin layer shows early)
+    const k=Math.min(1,dt*3);Gf+=(clamp(Mf/.35,0,1)-Gf)*k;Gt+=(clamp(Mt/.2,0,1)-Gt)*k;Gb+=(clamp(Math.sqrt(Mb/.3),0,1)-Gb)*k;
     const m4=new THREE.Matrix4(),sv=V3();for(let i=0;i<SH.length;i++){const s=SH[i],G=s.grp?Gt:Gf,f=clamp((G-s.th)/.08,0,1);if(f<=0){m4.makeScale(0,0,0)}else{sv.copy(s.s).multiplyScalar(f);m4.compose(s.p,s.q,sv)}shards.setMatrixAt(i,m4)}shards.instanceMatrix.needsUpdate=true;
-    for(let i=0;i<BASEN;i++){const b=BC[i],f=clamp((Gb*1.1-b.th)/.15,0,1);if(f<=0)m4.makeScale(0,0,0);else{sv.setScalar(b.s*(.4+.6*f));m4.compose(b.p,b.q,sv)}baseC.setMatrixAt(i,m4)}baseC.instanceMatrix.needsUpdate=true;
-    const c=Math.max(0,total()-mass()),sig=c/S_(Tc)-1,haze=clamp((sig-.06)/.3,0,1);specks.material.opacity=haze*.8;sol.opacity=.1+haze*.38;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);
-    // mercury and set hand, thermometer spirit
-    hgShown+=(Pc-hgShown)*Math.min(1,dt*4);const yh=yOfP(hgShown);hg.scale.y=Math.max(.01,yh-(PY0-.25));hgTop.position.set(tubeX,yh,BZ+.17);setHand.position.set(tubeX+.09,yOfP(setP),BZ+.2);
+    for(let i=0;i<BASEN;i++){const b=BC[i],f=clamp((Gb*1.15-b.th)/.15,0,1);if(f<=0)m4.makeScale(0,0,0);else{sv.setScalar(b.s*(.4+.6*f));m4.compose(b.p,b.q,sv)}baseC.setMatrixAt(i,m4)}baseC.instanceMatrix.needsUpdate=true;
+    const c=Math.max(0,total()-mass()),sig=c/S_(Tg)-1,haze=clamp((sig-.06)/.3,0,1),near=clamp(1+sig/.35,0,1)*clamp(Mb/.02,0,1); // near: close to saturation with a bed present
+    specks.material.opacity=Math.max(haze*.8,near*.25);hz.material.opacity=.06+near*.22+haze*.3;sol.opacity=.1+haze*.38+near*.04;sol.color.setRGB(.075+haze*.28,.065+haze*.28,.035+haze*.28);
+    // mercury, vernier and set hand, thermometer spirit
+    hgShown+=(Pc-hgShown)*Math.min(1,dt*4);const yh=yOfP(clamp(hgShown,PMIN-8,PMAX+6));hg.scale.y=Math.max(.01,yh-(PY0-.25));hgTop.position.set(tubeX,yh,TZ);VER.position.set(tubeX,clamp(yh,PY0,PY0+PH)+RHG*.6,TZ);setHand.position.set(tubeX+.22,yOfP(setP),BZ+.24);
     spirit.scale.y=Math.max(.01,TY0+(clamp(Tc,-10,40)+10)/50*TH-(TY0-.06));
     // rain streaks, splashes, wet ground
     rain.material.opacity=rainK;rain.visible=rainK>.01;
@@ -444,27 +556,50 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     for(let i=0;i<SPN;i++){const s=SPL[i];if(!s||s.a>1){m4.makeScale(0,0,0)}else{s.a+=dt*4;const r=.03+s.a*.1;m4.makeScale(r,1,r);m4.setPosition(s.x,.03,s.z)}splash.setMatrixAt(i,m4)}splash.instanceMatrix.needsUpdate=true;splash.material.opacity=.5*rainK;
     groundM.clearcoat=wet*.9;groundM.roughness=.92-wet*.35;groundM.color.setRGB(.33-.12*wet,.42-.14*wet,.21-.08*wet);
     // sky decks drift at different speeds (motion parallax); storm scud only shows in heavy cover
-    layers.forEach(L=>{L.t.offset.x+=dt*L.speed*(1+cover*1.5)});scud.visible=cover>.5;
+    decks.forEach(L=>{L.t.offset.x+=dt*L.speed*(1+cover*1.5)});scud.visible=cover>.45;
     flash=Math.max(0,flash-dt*5);flashL.intensity=flash*6;
     if(CD){const L=CD.L,hf=CD.half;if(rainK>.2&&L.length<90&&rng()<dt*30*rainK){const pane=Math.floor(rng()*3);L.push({pane,u:(rng()*2-1)*(hf-.2),y:CD.top*(.35+rng()*.65),r:.012+rng()*.01,v:0,stick:rng()*2})}
       for(let i=L.length-1;i>=0;i--){const d=L[i];d.r=Math.min(.055,d.r+dt*(rainK>.2?.006:-.01));d.stick-=dt;if(d.stick<0&&d.r>.03){d.v=.25+d.r*14;if(rng()<dt*1.5)d.stick=rng()*1.2}else d.v*=.8;d.y-=d.v*dt;if(d.y<.08||d.r<.006)L.splice(i,1)}
       for(let i=0;i<90;i++){const d=L[i];if(!d){m4.makeScale(0,0,0)}else{const r=d.r;if(d.pane===0){m4.makeScale(r,r*1.3,r*.35);m4.setPosition(d.u,d.y,hf+.01)}else{const sx=d.pane===1?-1:1;m4.makeScale(r*.35,r*1.3,r);m4.setPosition(sx*(hf+.01),d.y,d.u)}}CD.dm.setMatrixAt(i,m4)}CD.dm.instanceMatrix.needsUpdate=true}
-    const tt=Math.floor(D.t*4);if(tt!==lastSky||flash>0){lastSky=tt;drawSky(D.t+CLK);if(flash>0){const g=skyCv.getContext('2d');g.fillStyle=`rgba(235,240,255,${flash*.7})`;g.fillRect(0,0,4,256);skyTex.needsUpdate=true}}
+    const tt=Math.floor(D.t*4);if(tt!==lastSky||flash>0){lastSky=tt;drawSky(D.t+CLK)}
     D.push(Pc)},
-   readouts(){const c=Math.max(0,total()-mass()),sig=c/S_(Tc)-1;const hr=Math.floor((D.t+CLK)%24);return[['time',String(hr).padStart(2,'0')+':00 · day '+(1+Math.floor((D.t+CLK)/24))],['P outside',fmt(Pc,5)+' hPa'],['T air',fmt(Tc,3)+' °C'],['P inside',fmt(Pin,5)+' hPa'],['spout Δh',fmt(hs*S_MM,3)+' mm'],['Δh ideal (P₀T/T₀−P)/ρg',fmt(ideal_mm(),3)+' mm'],['Hg column',fmt(Pc*.750062,4)+' mm'],['solubility S(T)',fmt(S_(Tc),3)],['supersat. σ',fmt(sig,3)],['crystal mass',fmt(mass(),3)],['cloud cover',Math.round(cover*100)+' %']]}}}};
+   clock(t){const tt=(t??D.t)+CLK,hr=Math.floor(tt%24),mn=Math.floor((tt%1)*6)*10;return String(hr).padStart(2,'0')+':'+String(mn).padStart(2,'0')+' · day '+(1+Math.floor(tt/24))},
+   readouts(){const c=Math.max(0,total()-mass()),sig=c/S_(Tg)-1,tr=hist.length>1?Pc-hist[0][1]:0,f1=v=>v.toFixed(1),dh=hs*S_MM,de=hsEq*S_MM;
+    return[['time scale','1 s = 1 h of weather'],['P outside',f1(Pc)+' hPa'],['3-h tendency',(tr>=0?'+':'−')+Math.abs(tr).toFixed(1)+' hPa'],['T air',f1(Tc)+' °C'],['P inside (trapped air)',f1(Pin)+' hPa'],
+     ['spout Δh (now)',f1(dh)+' mm'],['Δh at equilibrium',f1(de)+' mm'],['spout',overflow?'overflowing':Math.abs(de-dh)<.5?'settled':'settling…'],['Δh textbook (P₀T/T₀−P)/ρg',f1(ideal_mm())+' mm'],
+     ['mercury column',f1(Pc*.750062)+' mm'],['T storm-glass liquid',f1(Tg)+' °C'],['solubility S(T)',S_(Tg).toFixed(3)],['supersaturation σ',sig.toFixed(3)],['crystal mass',mass().toFixed(3)],['cloud cover',Math.round(cover*100)+' %']]}}}};
 // Camera hints for the director: keys are lowercase substrings of the event text (the same matching lessons use).
 DIO.weatherglass.shots={
- 'glass sealed at':{target:[-2.3,2.1,.3],dist:6.5},
- 're-sealed at':{target:[-2.3,2.1,.3],dist:6.5},
- 'pushes water out of the spout':{target:[-1.12,4.4,.3],dist:2.6},
- 'air bubbles into the flask':{target:[-1.5,.6,.3],dist:2.6},
- 'camphor crystals nucleate':{target:[2.8,1.2,.4],dist:3},
- 'all crystals redissolve':{target:[2.8,2,.4],dist:3.6},
- 'feathery crystals at the top':{target:[2.8,3.2,.4],dist:2.6},
- 'pressure falling':{target:[0,3,-1.2],dist:10},
- 'pressure rising':{target:[0,3,-1.2],dist:10},
+ 'glass sealed at':{target:[-2.4,2.3,.3],dist:7},
+ 're-sealed at':{target:[-2.4,2.3,.3],dist:7},
+ 'auto weather (re)started':{target:[0,3.2,-1.5],dist:12},
+ 'pushes water up the spout':{target:[-2.2,2.4,.3],dist:5.6},
+ 'pushes the water back down':{target:[-2.2,2.4,.3],dist:5.6},
+ 'spout settles':{target:[-2,2.6,.3],dist:5.4},
+ 'pushes water out of the spout':{target:[-1.66,4.4,.3],dist:2.6},
+ 'air bubbles into the flask':{target:[-2.1,.8,.3],dist:3.2},
+ 'camphor crystals nucleate':{target:[2.8,1.6,.4],dist:3.6},
+ 'crystals redissolve':{target:[2.8,1.8,.4],dist:3.8},
+ 'feathery crystals at the top':{target:[2.8,3.1,.4],dist:2.8},
+ 'pressure falling':{target:[0,4.4,-2.3],dist:4.2},
+ 'pressure rising':{target:[0,4.4,-2.3],dist:4.2},
  'rain begins':{target:[0,2.6,-4.2],dist:8.5},
  'rain eases':{target:[0,2.6,-4.2],dist:8.5}};
+// Process arrows for the director (drawn when Guides are on): world coordinates, or functions for moving ends.
+{const L=()=>DIO.weatherglass._live||{spoutY:()=>1.3,hgY:()=>4.3,bedY:()=>.57},GX=-2.9,GZ=.3,SXp=-1.66,SX=2.8,SZ=.4,BZ=-2.55,TZ=BZ+.19,tubeX=0;
+ const hgArrow=(up)=>[{from:()=>V3(tubeX-.32,L().hgY()+(up?-.45:.45),TZ+.2),to:()=>V3(tubeX-.32,L().hgY(),TZ+.2),label:up?'more air above the cistern: mercury rises':'less air above the cistern: mercury falls'},{from:[.9,.95,BZ+.4],to:[.3,.6,BZ+.3],label:up?'heavier air presses on the cistern':'lighter air presses on the cistern'}];
+ DIO.weatherglass.flows={
+  'pushes water up the spout':[{from:[GX,2.5,GZ],to:[GX,1.42,GZ],label:'trapped air presses on the water'},{from:[GX+.55,.62,GZ+.1],to:[SXp,.95,GZ+.1],label:'water flows through the bend'},{from:()=>V3(SXp+.25,L().spoutY()-.8,GZ),to:()=>V3(SXp+.25,L().spoutY(),GZ),label:'air pushes water up the spout'}],
+  'pushes the water back down':[{from:[SXp,5.4,GZ],to:()=>V3(SXp,L().spoutY()+.1,GZ),label:'outside air presses down the open spout'},{from:[SXp-.05,.85,GZ+.1],to:[GX+.5,.62,GZ+.1],label:'water returns to the body'}],
+  'spout settles':[{from:[SXp+.3,1.3,GZ],to:()=>V3(SXp+.3,L().spoutY(),GZ),label:'Δh: weight of water = P_in − P'}],
+  'pushes water out of the spout':[{from:[SXp,4.2,GZ],to:[SXp+.35,4.95,GZ],label:'trapped air overflows the spout'}],
+  'air bubbles into the flask':[{from:[SXp,5.2,GZ],to:[SXp,.9,GZ],label:'outside air drives the column below the bend'},{from:[GX+.8,.42,GZ+.1],to:[GX+.2,1.9,GZ+.1],label:'an air bubble rises into the flask'}],
+  'camphor crystals nucleate':[{from:[SX+.15,3.1,SZ+.2],to:[SX+.05,1.1,SZ+.2],label:'dissolved camphor comes out of solution'}],
+  'crystals redissolve':[{from:[SX,1,SZ+.2],to:[SX,2.8,SZ+.2],label:'crystals dissolve back into the liquid'}],
+  'feathery crystals at the top':[{from:[SX+.9,3.9,SZ],to:[SX+.1,3.35,SZ],label:'fast cooling: growth hangs from the top'}],
+  'pressure falling':hgArrow(false),
+  'pressure rising':hgArrow(true),
+  'rain begins':[{from:[-1.6,6.4,-4.9],to:[-1.6,1.2,-4.6],label:'rain from the thickening cloud'}]};}
 
 /* --- Double pendulum --- */
 DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower mass'],L1:[.5,3,1.5,'m','upper arm'],L2:[.5,3,1.5,'m','lower arm'],theta1:[-180,180,120,'°','upper angle'],theta2:[-180,180,-10,'°','lower angle'],g:[1,25,9.81,'m/s²','gravity'],eps:[0,.01,.001,'rad','twin offset']},
@@ -479,7 +614,7 @@ DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower
   const E=y=>{const [t1,t2,w1,w2]=y,{m1,m2,L1,L2,g}=p;return .5*(m1+m2)*L1*L1*w1*w1+.5*m2*L2*L2*w2*w2+m2*L1*L2*w1*w2*Math.cos(t1-t2)-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2)};const E0=E(s);
   const place=(P,y,tr)=>{const p1=V3(piv.x+p.L1*sc*Math.sin(y[0]),piv.y-p.L1*sc*Math.cos(y[0]),0),p2=V3(p1.x+p.L2*sc*Math.sin(y[1]),p1.y-p.L2*sc*Math.cos(y[1]),0);P.b1.position.copy(p1);P.b2.position.copy(p2);
     [[P.a1,piv,p1],[P.a2,p1,p2]].forEach(([a,u,v])=>{a.position.copy(u).add(v).multiplyScalar(.5);a.scale.y=u.distanceTo(v);a.rotation.z=-Math.atan2(v.x-u.x,u.y-v.y)});tr.add(p2)};
-  D.label('m₁',()=>A.b1.position.clone().add(V3(0,.35,0)),true);D.label('m₂',()=>A.b2.position.clone().add(V3(0,.35,0)),true);D.label('twin (offset ε)',()=>B.b2.position.clone().add(V3(0,-.4,0)));
+  D.label('m₁',()=>A.b1.position.clone().add(V3(0,.35,0)),true);D.label('m₂',()=>A.b2.position.clone().add(V3(0,.35,0)),true);D.label('twin (offset ε)',()=>B.b2.position.clone().add(V3(0,-.4,0)),B.b2);
   D.event('two pendulums released: identical except Δθ₂ = '+p.eps+' rad',A.b2.position);D.seriesName='separation |Δθ₂| (log scale)';
   return{orbit:{target:V3(0,4,0),r:14},
    step(h){s=rk(s,h);u=rk(u,h);const dv=Math.abs(Math.atan2(Math.sin(s[1]-u[1]),Math.cos(s[1]-u[1])));if(!diverged&&dv>10*d2r){diverged=true;D.event('chaos: the twins now differ by >10° (sensitive dependence on initial conditions)',A.b2.position.clone())}
@@ -495,7 +630,7 @@ DIO.lever={params:{m1:[.2,10,3,'kg','left mass'],x1:[-4,4,-2.5,'m','left positio
   const a1=new THREE.ArrowHelper(V3(0,-1,0),V3(),1,0x88c0ff,.2,.12),a2=new THREE.ArrowHelper(V3(0,-1,0),V3(),1,0xff9a7a,.2,.12);W.add(a1,a2);
   const r1=p.x1-p.fulcrum,r2=p.x2-p.fulcrum,rb=0-p.fulcrum,I=p.m1*r1*r1+p.m2*r2*r2+p.beam*(81/12+rb*rb)+.05;const tq=th=>-g*(p.m1*r1+p.m2*r2+p.beam*rb)*Math.cos(th);
   let th=0,w=0,hit=false,bal=false;const lim=Math.atan2(H-.1,4.5);
-  D.label('m₁',()=>w1.getWorldPosition(V3()).add(V3(0,.5,0)),true);D.label('m₂',()=>w2.getWorldPosition(V3()).add(V3(0,.5,0)),true);D.label('fulcrum',()=>V3(p.fulcrum,.4,.8));
+  D.label('m₁',()=>w1.getWorldPosition(V3()).add(V3(0,.5,0)),true);D.label('m₂',()=>w2.getWorldPosition(V3()).add(V3(0,.5,0)),true);D.label('fulcrum',()=>V3(p.fulcrum,.4,.8),ful);
   const net=tq(0);if(Math.abs(net)<.05*g){bal=true;D.event('Σ moments ≈ 0: the lever balances (m₁r₁ + m₂r₂ + M·r_beam = 0)',V3(p.fulcrum,H,0),0x88c0ff)}else D.event('net moment '+fmt(net,3)+' N·m: the lever tips '+(net>0?'left':'right'),V3(p.fulcrum,H+.1,0));
   D.seriesName='tilt angle θ (deg)';
   return{orbit:{target:V3(0,2,0),r:12.5,ph:1.2},
@@ -539,7 +674,7 @@ DIO.efield={params:{q1:[-5,5,3,'','charge q₁'],q2:[-5,5,-3,'','charge q₂'],d
   const pc=document.createElement('canvas');pc.width=pc.height=128;const g=pc.getContext('2d'),img=g.createImageData(128,128);for(let j=0;j<128;j++)for(let i=0;i<128;i++){const x=-6+12*i/127,z=-6+12*j/127,v=Math.tanh(Vp(x,Y,z)/3);const o=(j*128+i)*4;const band=Math.abs(Math.sin(v*12))<.12?40:0;img.data[o]=v>0?190+band:40+band;img.data[o+1]=60+band+(1-Math.abs(v))*40;img.data[o+2]=v<0?200+band:50+band;img.data[o+3]=Math.min(200,Math.abs(v)*220+30)}g.putImageData(img,0,0);
   const ptex=new THREE.CanvasTexture(pc);const plane=new THREE.Mesh(new THREE.CircleGeometry(6.3,64),new THREE.MeshBasicMaterial({map:ptex,transparent:true,opacity:.55,depthWrite:false,side:THREE.DoubleSide}));plane.rotation.x=-Math.PI/2;plane.position.y=Y;plane.name='potential map (equipotential bands)';W.add(plane);
   const tc=ball(.13,D.mats.chrome);W.add(tc);const tr=trail(800,0x9fe0ff);W.add(tr);let P=[0,Y+1.6,.8],Vv=[.6,0,0],gone=false,wait=0;const E0=()=>.5*p.m*(Vv[0]**2+Vv[1]**2+Vv[2]**2)+p.qt*Vp(...P);let Einit=E0();
-  D.label('q₁',()=>Q[0][1].clone().add(V3(0,.5,0)),true);D.label('q₂',()=>Q[1][1].clone().add(V3(0,.5,0)),true);D.label('test charge · q, m',()=>gone?null:tc.position.clone().add(V3(0,.3,0)));
+  D.label('q₁',()=>Q[0][1].clone().add(V3(0,.5,0)),true);D.label('q₂',()=>Q[1][1].clone().add(V3(0,.5,0)),true);D.label('test charge · q, m',()=>gone?null:tc.position.clone().add(V3(0,.3,0)),tc);
   D.event('test charge released; force F = qE, energy ½mv² + qV conserved',V3(...P));D.seriesName='potential V at test charge';
   return{orbit:{target:V3(0,Y,0),r:13,ph:.95},
    step(h){if(gone){wait+=h;if(wait>1.2){P=[0,Y+1.6,.8];Vv=[.6,0,0];gone=false;wait=0;tr.userData.count=0;Einit=E0()}return}const [ex,ey,ez]=Ef(...P),k=p.qt/p.m;Vv[0]+=k*ex*h;Vv[1]+=k*ey*h;Vv[2]+=k*ez*h;for(let d=0;d<3;d++)P[d]+=Vv[d]*h;
@@ -555,12 +690,12 @@ DIO.circuit={params:{V:[1,12,9,'V','battery emf'],R:[1,20,5,'kΩ','resistance'],
   const board=box(10.5,.15,6.5,D.mats.wood);board.position.y=.08;board.name='board';W.add(board);
   const bat=cyl(.45,1.6,makeMaterial({preset:'plastic',color:'#1d2a3a',roughness:.3}),48);bat.rotation.z=Math.PI/2;bat.position.set(0,Y+.4,-2.5);bat.name='battery';W.add(bat);const capb=cyl(.2,.15,D.mats.brass,16);capb.rotation.z=Math.PI/2;capb.position.set(.85,Y+.4,-2.5);W.add(capb);
   const res=cyl(.22,1.4,D.mats.ivory,24);res.rotation.x=Math.PI/2;res.position.set(4.5,Y+.1,0);res.name='resistor';W.add(res);[0x8b4513,0x111111,0xd04020,0xcfa84f].forEach((c,i)=>{const b=cyl(.235,.1,makeMaterial({preset:'ceramic',color:'#'+new THREE.Color(c).getHexString()}),32);b.rotation.x=Math.PI/2;b.position.set(4.5,Y+.1,-.45+i*.28);W.add(b)});
-  const plM=makeMaterial('steel');plM.emissive=new THREE.Color(0xffb050);plM.emissiveIntensity=0;const pl1=box(.12,1.6,1.4,plM),pl2=box(.12,1.6,1.4,plM.clone());pl1.position.set(-4.75,Y+.8,0);pl2.position.set(-4.25,Y+.8,0);pl1.name='capacitor plate +';pl2.name='capacitor plate −';W.add(pl1,pl2);
+  const plM=makeMaterial('steel');plM.emissive=new THREE.Color(0xffb050);plM.emissiveIntensity=0;const pl1=box(.12,1.6,1.4,plM),pl2=box(.12,1.6,1.4,plM.clone());pl1.position.set(-4.75,Y+.8,0);pl2.position.set(-4.25,Y+.8,0);pl1.name='capacitor plate +';pl2.name='capacitor plate −';const capG=new THREE.Group();capG.name='capacitor';capG.userData.label='capacitor';capG.add(pl1,pl2);W.add(capG);
   const sw=box(1,.08,.12,D.mats.brass);sw.position.set(-2,Y+.3,2.5);sw.name='switch';W.add(sw);
   const NE=70,el_=new THREE.InstancedMesh(new THREE.SphereGeometry(.06,10,8),new THREE.MeshBasicMaterial({color:0x9fe0ff}),NE);el_.name='electrons';el_.userData.noInk=true;W.add(el_);const eu=Array.from({length:NE},(_,i)=>i/NE);
   const glow=new THREE.PointLight(0xffb050,0,4);glow.position.set(-4.5,Y+.8,0);W.add(glow);
   let q=p.closed>.5?0:p.C*1e-3*p.V,lastSw=p.closed,tau=p.R*1e3*p.C*1e-3,t0=0,m1=false,m5=false;const Cf=p.C*1e-3,R=p.R*1e3;
-  D.label('battery · ε',()=>V3(0,Y+1.2,-2.5));D.label('resistor · R',()=>V3(4.5,Y+.8,0));D.label('capacitor · C',()=>V3(-4.5,Y+1.9,0));D.label('switch',()=>V3(-2,Y+.7,2.5));
+  D.label('battery · ε',()=>V3(0,Y+1.2,-2.5),bat);D.label('resistor · R',()=>V3(4.5,Y+.8,0),res);D.label('capacitor · C',()=>V3(-4.5,Y+1.9,0),capG);D.label('switch',()=>V3(-2,Y+.7,2.5),sw);
   D.event((p.closed>.5?'switch closed: capacitor charges through R':'switch open to battery: capacitor discharges through R')+', τ = RC = '+fmt(tau,3)+' s',V3(-2,Y+.3,2.5));D.seriesName='capacitor voltage V_C (V)';
   return{orbit:{target:V3(0,.8,0),r:12,ph:.95},
    live(k){if(k==='closed'){t0=D.t;m1=m5=false;D.event(p.closed>.5?'switch flipped: charging':'switch flipped: discharging',V3(-2,Y+.3,2.5));return true}return false},
@@ -584,7 +719,7 @@ DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,
   let dObj=p.do,regime=null,di=0,hi=0;
   const solve=()=>{di=Math.abs(dObj-fl)<1e-3?Infinity:1/(1/fl-1/dObj);hi=-p.ho*di/dObj;const r=!isFinite(di)?'inf':di>0?'real':'virtual';if(r!==regime){if(regime!==null)D.event(r==='inf'?'object at the focal point: rays leave parallel, image at infinity':r==='real'?'object beyond F: real, inverted image on the far side':'object inside F (or diverging lens): virtual, upright image',V3(-dObj,Y,0),0x88c0ff);regime=r}};
   const setLine=(l,pts)=>{l.geometry.setFromPoints(pts);if(l.material.isLineDashedMaterial)l.computeLineDistances()};
-  D.label('object',()=>V3(-dObj,Y+p.ho+.3,0));D.label('image',()=>isFinite(di)&&Math.abs(di)<7?V3(di,Y+hi+(hi<0?-.3:.3),0):null);D.label('F',()=>V3(-fl,Y-.35,0),true);D.label("F′",()=>V3(fl,Y-.35,0),true);
+  D.label('object',()=>V3(-dObj,Y+p.ho+.3,0),objA);D.label('image',()=>isFinite(di)&&Math.abs(di)<7?V3(di,Y+hi+(hi<0?-.3:.3),0):null,imgA);D.label('F',()=>V3(-fl,Y-.35,0),true);D.label("F′",()=>V3(fl,Y-.35,0),true);
   D.seriesName='image distance dᵢ';solve();D.event('1/f = 1/d_o + 1/d_i  with f = '+fmt(fl,3),V3(0,Y,0));
   return{orbit:{target:V3(0,Y,0),r:12,ph:1.25,th:.0},
    step(h){if(p.sweep>.5){dObj=3.4+2.9*Math.sin(D.t*.35);solve()}},

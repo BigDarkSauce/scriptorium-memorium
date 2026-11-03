@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, statue } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, statue, fillBookcase, readingTable, bench, globeStand, runner, quietShadows } from './props.js';
 import { Navigator } from '../nav.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, esc } from '../util.js';
 
@@ -21,10 +21,12 @@ export class Hub {
     this.keys = {}; this.shelfObjs = new Map(); this.scrollObjs = new Map();
     this.ui = el('div', { class: 'hub-ui' }); app.ui.append(this.ui);
     this.buildRoom(); this.buildShelves(); this.buildUI();
-    const R = this.lib.hub; this.camera.position.set(0, 1.7, R.d / 2 - 1.2); this.controls.target.set(0, 1.35, -R.d * .15); this.controls.update();
+    // opening view: from the reading floor, diagonally across the hall to the far corner, so one book-lined wall
+    // (cases, gallery tier, the user's bookcases) recedes on the left and the window wall with its atlantes closes the view
+    const R = this.lib.hub; this.camera.position.set(R.w * .07, 1.7, R.d * .28); this.controls.target.set(-R.w * .29, 1.75, -R.d * .22); this.controls.update();
     this.gfx.setView(this.scene, this.camera);
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
-      bounds: () => ({ minX: -this.lib.hub.w / 2, maxX: this.lib.hub.w / 2, minZ: -this.lib.hub.d / 2, maxZ: this.lib.hub.d / 2, h: this.lib.hub.h }),
+      bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
     this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
@@ -37,28 +39,48 @@ export class Hub {
   buildRoom() {
     if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
     const R = this.lib.hub; if (R.w === 15 && R.d === 12 && R.h === 4.8) Object.assign(R, { w: 18, d: 12, h: 7 });   // old default → the baroque hall with its gallery
-    this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal' }); this.scene.add(this.shell);
+    // Admont-like white-and-gold wall bookcases line every wall; sections behind the user's bookcases are left out
+    this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal', cases: 'white', caseSkip: this.caseSkip() }); this.scene.add(this.shell);
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
-    this.furn.clear();
+    if (!this.decor) { this.decor = new THREE.Group(); this.scene.add(this.decor); }
+    this.furn.clear(); this.decor.clear();
+    // the reading floor: a runner from the door to the window wall, two reading tables with lecterns and benches, two globes
+    const c = this.caseDepth(), rl = R.d - 2 * c - 2.2; if (rl > 2) { const rn = runner(rl, Math.min(1.6, R.w * .09)); rn.position.set(0, .005, .3); this.decor.add(rn); }
+    const tx = clamp(R.w * .13, 1.9, 3.2), tl = clamp(R.d * .2, 1.6, 3.0), tz = -R.d * .05;
+    [-1, 1].forEach(sd => {
+      const t = readingTable({ L: tl }); t.position.set(sd * tx, 0, tz); this.furn.add(t);
+      [-1, 1].forEach(k => { const b = bench({ L: tl - .3 }); b.position.set(sd * tx + k * .78, 0, tz); this.furn.add(b); });
+      if (R.d >= 9 && R.w >= 10) { const gl = globeStand({ celestial: sd > 0 }); gl.position.set(sd * tx, 0, -R.d / 2 + c + 1.9); gl.rotation.y = sd * .5; this.furn.add(gl); }
+    });
     const ch = armchair(); ch.position.set(-R.w / 2 + 2.2, 0, R.d / 2 - 2.4); ch.rotation.y = .6; this.furn.add(ch);
     const dk = readingDesk(); dk.position.set(R.w / 2 - 2.4, 0, R.d / 2 - 2.6); dk.rotation.y = -.4; this.furn.add(dk); this.desk = dk;
     // baroque: allegorical statues framing the window wall (back corners), facing the hall
     [-1, 1].forEach((sd, i) => { const st = statue({ variant: i ? 1 : 0, seed: i + 1 }); st.position.set(sd * (R.w / 2 - 1.15), 0, -R.d / 2 + 1.15); st.rotation.y = sd * -.75; this.furn.add(st); });
+    quietShadows(this.furn);
     this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0);
   }
   buildShelves() {
     this.shelfObjs.forEach(o => o.removeFromParent()); this.shelfObjs.clear(); this.scrollObjs.clear();
     this.lib.shelves.forEach(s => this.addShelfObj(s));
     this.lib.books.forEach(b => this.addScrollObj(b));
+    this.lib.shelves.forEach(s => this.refill(s.id));
   }
-  addShelfObj(s) { const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); this.shelfObjs.set(s.id, o); return o; }
+  // books packed around the scrolls of a bookcase (see props.fillBookcase); call after its scrolls change
+  refill(id) { const o = this.shelfObjs.get(id); if (o) fillBookcase(o, new Set(this.lib.books.filter(b => b.shelf === id && this.scrollObjs.get(b.id) && this.scrollObjs.get(b.id).parent === o).map(b => (b.tier || 0) + ':' + (b.slot || 0)))); }
+  caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
+  // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
+  caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
+  updateWallCases() { if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
+  // eye-level tiers first (scroll centres nearest 1.35 m), then the rest
+  tierOrder(u) { return [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35)); }
+  addShelfObj(s) { const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); quietShadows(o); this.shelfObjs.set(s.id, o); return o; }
   addScrollObj(b) {
     const so = this.shelfObjs.get(b.shelf); if (!so) return null;
-    const o = makeScroll(b); const p = slotPos(so, b.tier || 0, b.slot || 0); o.position.copy(p); so.add(o); this.scrollObjs.set(b.id, o); return o;
+    const o = makeScroll(b); const p = slotPos(so, b.tier || 0, b.slot || 0); o.position.copy(p); so.add(o); quietShadows(o); this.scrollObjs.set(b.id, o); return o;
   }
   freeSlot(shelf) {
     const so = this.shelfObjs.get(shelf.id); if (!so) return null; const u = so.userData, used = new Set(this.lib.books.filter(b => b.shelf === shelf.id).map(b => (b.tier || 0) + ':' + (b.slot || 0)));
-    for (let t = u.tiers - 1; t >= 0; t--) for (let s = 0; s < u.slotsPerTier; s++) if (!used.has(t + ':' + s)) return { tier: t, slot: s };
+    for (const t of this.tierOrder(u)) for (let s = 0; s < u.slotsPerTier; s++) if (!used.has(t + ':' + s)) return { tier: t, slot: s };
     return null;
   }
   // ---------- UI ----------
@@ -110,34 +132,34 @@ export class Hub {
     const R = this.lib.hub, dir = V3(); this.camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const p = this.controls.target.clone().addScaledVector(dir, .5);
     const s = { id: 'sh-' + uid(), name: kind === 'horizontal' ? 'New subject' : 'New subject', kind, x: clamp(p.x, -R.w / 2 + 1, R.w / 2 - 1), z: clamp(p.z, -R.d / 2 + 1, R.d / 2 - 1), rot: Math.atan2(-dir.x, -dir.z), color: SUBJECT_COLORS[this.lib.shelves.length % SUBJECT_COLORS.length] };
-    this.snap(s); this.lib.shelves.push(s); this.addShelfObj(s); this.selectShelf(s.id); this.app.saveLib();
+    this.snap(s); this.lib.shelves.push(s); this.addShelfObj(s); this.refill(s.id); this.updateWallCases(); this.selectShelf(s.id); this.app.saveLib();
     promptBox('Name this bookcase (its subject)', s.name).then(v => { if (v) { s.name = v; this.rebuildShelf(s); this.app.saveLib(); this.renderBuildPanel(); } });
   }
   rebuildShelf(s) {
     const old = this.shelfObjs.get(s.id); if (old) old.removeFromParent(); this.shelfObjs.delete(s.id);
-    this.addShelfObj(s); this.lib.books.filter(b => b.shelf === s.id).forEach(b => this.addScrollObj(b));
+    this.addShelfObj(s); this.lib.books.filter(b => b.shelf === s.id).forEach(b => this.addScrollObj(b)); this.refill(s.id); this.updateWallCases();
     if (this.selShelf === s.id) this.highlight(this.shelfObjs.get(s.id));
   }
   reflowBooks(s) {
-    const K = SHELF_KINDS[s.kind], per = Math.max(1, Math.floor((K.w - .2) / .17)); let i = 0;
-    this.lib.books.filter(b => b.shelf === s.id).forEach(b => { b.tier = K.tiers - 1 - Math.floor(i / per); b.slot = i % per; i++; if (b.tier < 0) { b.tier = 0; } });
+    const K = SHELF_KINDS[s.kind], per = Math.max(1, Math.floor((K.w - .2) / .17)), order = this.tierOrder({ tiers: K.tiers, tierH: (K.h - .12) / K.tiers }); let i = 0;
+    this.lib.books.filter(b => b.shelf === s.id).forEach(b => { b.tier = order[Math.min(order.length - 1, Math.floor(i / per))]; b.slot = i % per; i++; });
   }
   async deleteShelf(id) {
     const s = this.lib.shelves.find(x => x.id === id); if (!s) return;
     const books = this.lib.books.filter(b => b.shelf === id);
     if (books.length && !(await confirmBox(`Remove "${s.name}"? Its ${books.length} scroll(s) move to another bookcase.`, 'Remove'))) return;
     this.lib.shelves = this.lib.shelves.filter(x => x !== s); const o = this.shelfObjs.get(id); if (o) o.removeFromParent(); this.shelfObjs.delete(id);
-    books.forEach(b => { const target = this.lib.shelves.find(x => this.freeSlot(x)) || this.makeDefaultShelf(); const fs = this.freeSlot(target); Object.assign(b, { shelf: target.id, tier: fs.tier, slot: fs.slot }); this.addScrollObj(b); });
-    this.selectShelf(null); this.app.saveLib();
+    books.forEach(b => { const target = this.lib.shelves.find(x => this.freeSlot(x)) || this.makeDefaultShelf(); const fs = this.freeSlot(target); Object.assign(b, { shelf: target.id, tier: fs.tier, slot: fs.slot }); this.addScrollObj(b); this.refill(target.id); });
+    this.updateWallCases(); this.selectShelf(null); this.app.saveLib();
   }
-  makeDefaultShelf() { const R = this.lib.hub; const s = { id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .5, z: 0, rot: Math.PI / 2 }; this.snap(s); this.lib.shelves.push(s); this.addShelfObj(s); return s; }
+  makeDefaultShelf() { const R = this.lib.hub; const s = { id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .5, z: 0, rot: Math.PI / 2 }; this.snap(s); this.lib.shelves.push(s); this.addShelfObj(s); this.updateWallCases(); return s; }
   snap(s) {
     const R = this.lib.hub, K = SHELF_KINDS[s.kind], half = K.d / 2 + .03, lim = .9;
     const cands = [{ d: s.z + R.d / 2, set: () => { s.z = -R.d / 2 + half; s.rot = 0; } }, { d: R.d / 2 - s.z, set: () => { s.z = R.d / 2 - half; s.rot = Math.PI; } }, { d: s.x + R.w / 2, set: () => { s.x = -R.w / 2 + half; s.rot = Math.PI / 2; } }, { d: R.w / 2 - s.x, set: () => { s.x = R.w / 2 - half; s.rot = -Math.PI / 2; } }].sort((a, b) => a.d - b.d);
     if (cands[0].d < lim) cands[0].set();
     s.x = clamp(s.x, -R.w / 2 + .3, R.w / 2 - .3); s.z = clamp(s.z, -R.d / 2 + .3, R.d / 2 - .3);
   }
-  clampShelves() { this.lib.shelves.forEach(s => { this.snap(s); const o = this.shelfObjs.get(s.id); if (o) { o.position.set(s.x, 0, s.z); o.rotation.y = s.rot; } }); }
+  clampShelves() { this.lib.shelves.forEach(s => { this.snap(s); const o = this.shelfObjs.get(s.id); if (o) { o.position.set(s.x, 0, s.z); o.rotation.y = s.rot; } }); this.updateWallCases(); }
   selectShelf(id) { this.selShelf = id; this.highlight(id ? this.shelfObjs.get(id) : null); if (this.build) this.renderBuildPanel(); }
   highlight(o) { this.gfx.outline.enabled = !!o; this.gfx.outline.selectedObjects = o ? [o] : []; }
   // ---------- books ----------
@@ -147,12 +169,12 @@ export class Hub {
     let shelf = this.lib.shelves.find(s => s.id === this.addTarget && this.freeSlot(s)) || this.lib.shelves.find(s => this.freeSlot(s)) || this.makeDefaultShelf();
     const fs = this.freeSlot(shelf); const b = { id, title, shelf: shelf.id, tier: fs.tier, slot: fs.slot, color: shelf.color, icon: 'PDF', hasPdf: true, added: Date.now(), size: file.size };
     await this.app.store.set('pdf:' + id, file);
-    this.lib.books.push(b); const o = this.addScrollObj(b); this.app.saveLib();
+    this.lib.books.push(b); const o = this.addScrollObj(b); this.refill(shelf.id); this.app.saveLib();
     if (o) { o.userData.arrive = 0; o.scale.setScalar(.01); }
     toast(`"${title}" placed on ${shelf.name}`);
     this.app.ingest.pageCount(file).then(n => { if (n) { b.pages = n; this.app.saveLib(); } }).catch(() => {});
   }
-  async removeBook(id) { this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) o.removeFromParent(); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
+  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) o.removeFromParent(); this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
   // ---------- pointer ----------
   pick(e, list) { const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera); return this.ray.intersectObjects(list, true); }
   ownerOf(o, kind) { while (o && !(o.userData && o.userData.kind === kind)) o = o.parent; return o; }
@@ -173,7 +195,7 @@ export class Hub {
     if (sc) { const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(b.title)}</b><span>${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; } else this.tip.hidden = true;
   }
   pointerUp(e) {
-    if (this.dragging) { this.dragging = null; this.controls.enabled = this.nav.mode !== 'walk'; this.app.saveLib(); return; }
+    if (this.dragging) { this.dragging = null; this.controls.enabled = this.nav.mode !== 'walk'; this.updateWallCases(); this.app.saveLib(); return; }
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || e.target !== this.gfx.canvas) return; this.down = null;
     if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; if (!h) this.selectShelf(null); return; }
     const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
