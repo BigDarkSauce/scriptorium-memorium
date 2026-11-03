@@ -39,12 +39,12 @@ class App {
     const mine = parts.filter(p => !/^Example scroll/.test(p.analysis.sourceNote || '')); if (!mine.length) return;
     const shelf = this.lib.shelves[0]; const n = this.lib.books.filter(b => b.shelf === shelf.id).length;
     const b = { id: 'bk-' + uid(), title: 'My earlier scrolls', shelf: shelf.id, tier: 2 - Math.floor(n / 17), slot: n % 17, color: '#9c3a28', icon: 'V2', hasPdf: false };
-    this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 4.4 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
+    this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
   }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
   saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); }
   async loadRoom(id) {
-    const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 4.4 }, parts: [] };
+    const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 5.5 }, parts: [] };
     // example rooms saved before grounding existed get their verified sources and teaching fields once
     const b = this.lib && this.lib.books.find(x => x.id === id);
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
@@ -81,7 +81,7 @@ class App {
   // ---------- seed library: subject bookcases with example books and flagship dioramas ----------
   seedLibrary() {
     const L = legacyScrolls(); this.seedRooms = new Map();
-    const lib = { v: 3, hub: { w: 15, d: 12, h: 4.8 }, shelves: [], books: [] };
+    const lib = { v: 3, hub: { w: 18, d: 12, h: 7 }, shelves: [], books: [] };
     const W = lib.hub.w, D = lib.hub.d;
     const sh = (name, kind, x, z, rot, color) => { const s = { id: 'sh-' + uid(), name, kind, x, z, rot, color }; lib.shelves.push(s); return s; };
     const physics = sh('Physics', 'horizontal', -4.6, -D / 2 + .28, 0, '#8a2a1e');
@@ -95,7 +95,7 @@ class App {
       const n = slots.get(shelf.id) || 0; slots.set(shelf.id, n + 1);
       const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: tiers - 1 - Math.floor(n / per), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
-      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 4.4 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
+      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
     const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(groundChain(JSON.parse(JSON.stringify(s.analysis)))) });
     const scenePart = (spec, title, summary, steps) => ({ title, summary, analysis: normalizeChain(groundChain({ title, summary, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s[0], title: s[1], statement: s[2], math: s[3] || '', from: i ? ['S' + i] : [], bodies: s[4] || [], demos: i === steps.length - 1 || s[5] ? [JSON.parse(JSON.stringify(spec))] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });

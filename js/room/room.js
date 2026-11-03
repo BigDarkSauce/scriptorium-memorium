@@ -18,7 +18,7 @@ const SPACING = 2.9;
 export class BookRoom {
   constructor(app, book, data, opts = {}) {
     this.app = app; this.gfx = app.gfx; this.book = book; this.data = data; this.opts = opts;
-    this.data.dims = this.data.dims || { w: 12, d: 10, h: 4.4 }; this.data.parts = this.data.parts || [];
+    this.data.dims = this.data.dims || { w: 12, d: 10, h: 5.5 }; if (this.data.dims.h === 4.4) this.data.dims.h = 5.5; this.data.parts = this.data.parts || [];
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .3;
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .05, 120);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
@@ -30,7 +30,7 @@ export class BookRoom {
     this.gfx.setView(this.scene, this.camera);
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const D = this.data.dims; return { minX: -D.w / 2, maxX: D.w / 2, minZ: -D.d / 2, maxZ: D.d / 2, h: D.h }; },
-      obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => new THREE.Box3().setFromObject(o)) });
+      obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
     this.onDown = e => { this.down = { x: e.clientX, y: e.clientY }; }; this.onUp = e => this.pointerUp(e); this.onMove = e => this.pointerMove(e);
     this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if ((e.key === 'v' || e.key === 'V') && !this.reader) this.nav.toggle(); }; this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
@@ -70,7 +70,7 @@ export class BookRoom {
     this.slots = slots; this.placed = parts.map((p, i) => ({ part: p, slot: slots[i] })).filter(x => x.slot);
   }
   buildShell() {
-    if (this.shell) this.scene.remove(this.shell);
+    if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
     const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p) }); this.scene.add(this.shell);
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }

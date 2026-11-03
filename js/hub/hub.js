@@ -25,7 +25,7 @@ export class Hub {
     this.gfx.setView(this.scene, this.camera);
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => ({ minX: -this.lib.hub.w / 2, maxX: this.lib.hub.w / 2, minZ: -this.lib.hub.d / 2, maxZ: this.lib.hub.d / 2, h: this.lib.hub.h }),
-      obstacles: () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)) });
+      obstacles: () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
     this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
@@ -35,8 +35,9 @@ export class Hub {
   }
   // ---------- world ----------
   buildRoom() {
-    if (this.shell) { this.scene.remove(this.shell); }
-    const R = this.lib.hub; this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal' }); this.scene.add(this.shell);
+    if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
+    const R = this.lib.hub; if (R.w === 15 && R.d === 12 && R.h === 4.8) Object.assign(R, { w: 18, d: 12, h: 7 });   // old default → the baroque hall with its gallery
+    this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal' }); this.scene.add(this.shell);
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     this.furn.clear();
     const ch = armchair(); ch.position.set(-R.w / 2 + 2.2, 0, R.d / 2 - 2.4); ch.rotation.y = .6; this.furn.add(ch);

@@ -165,7 +165,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const mols=new THREE.InstancedMesh(new THREE.SphereGeometry(r,20,14),makeMaterial({preset:'plastic',color:'#ffffff',roughness:.25}),N);mols.castShadow=true;mols.userData.noInk=true;W.add(mols);
   const P=[],V=[];const gauss=()=>Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(2*Math.PI*Math.random());
   for(let i=0;i<N;i++){P.push([(Math.random()*2-1)*(BX-r),(Math.random()*2-1)*(BY-r),(Math.random()*2-1)*(BZ-r)]);const s=Math.sqrt(p.T);V.push([gauss()*s,gauss()*s,gauss()*s])}
-  let imp=0,win=0,Pm=NaN;const ex=BX-r,ey=BY-r,ez=BZ-r,area=2*(4*ey*ez+4*ex*ez+4*ex*ey),vol=8*ex*ey*ez; // molecule centres reflect at B − rconst m4=new THREE.Matrix4(),col=new THREE.Color();
+  let imp=0,win=0,Pm=NaN;const ex=BX-r,ey=BY-r,ez=BZ-r,area=2*(4*ey*ez+4*ex*ez+4*ex*ey),vol=8*ex*ey*ez;const m4=new THREE.Matrix4(),col=new THREE.Color(); // molecule centres reflect at B − r
   D.label('molecule · m',()=>V3(P[0][0],P[0][1]+Y0+.25,P[0][2]));D.label('container wall (pressure = impulse / area / time)',()=>V3(0,Y0+BY+.35,0));
   D.seriesName='speed histogram · red: Maxwell–Boltzmann';let temp=p.T;
   return{orbit:{target:V3(0,Y0,0),r:12,ph:1.1},
