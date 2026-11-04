@@ -14,7 +14,7 @@ export const WATER_CYCLE = {
     { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
     { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
     { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
-    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#2c5a60' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
+    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#3f7f88' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
     { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#4aa6c0' }, position: [.9, .05, 1.7] },
     { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint motes rising from the lake.', shape: { kind: 'particles', type: 'bubbles', count: 160, area: [2.2, 1.7, 2.6], size: .035 }, position: [.9, .05, 1.7] },
     { id: 'parcel', name: 'Air parcel', label: 'Air parcel · moist air from the lake', role: 'actor', describe: 'One rising bubble of lake air: you can ride it (POV).', shape: { kind: 'sphere', r: .07 }, material: { preset: 'cloud', color: '#eef6ff', emissive: '#4a6c86' }, position: [1.1, .1, 1.4] },
@@ -118,13 +118,12 @@ for(let i=0;i<60*120;i++) step(1/120); quiet=false;   // start from the steady s
 api.onStep(h=>step(h));
 if(api.scene.fog){ api.scene.fog.near=13; api.scene.fog.far=40; }   // aerial perspective: the far hills sink into haze
 // ---- sky: the landscape's sky dome shows only grey haze below the horizon, so it gives way to a painted screen-space gradient (repainted with the hour) ----
-{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) dome.visible=false; }
+const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity);   // hidden every frame (the materialiser restores the background objects when it finishes)
 const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
 const hz=new T.Color(), zn=new T.Color(), cc=new T.Color();
 function paintSky(day){ const warm=1-Math.min(1,day*1.7); hz.setRGB(.66+.22*warm,.71+.02*warm,.76-.18*warm).multiplyScalar(.45+.55*Math.min(1,day*1.5+.2)); zn.setRGB(.33+.1*warm,.47,.66-.12*warm).multiplyScalar(.4+.6*Math.min(1,day*1.5+.2));
   for(let i=0;i<GN;i++){ cc.copy(hz).lerp(zn,Math.pow(i/(GN-1),.75)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }
 api.scene.background=skyTex;
-const sunGlow=new T.Sprite(new T.SpriteMaterial({color:0xffd9a0,transparent:true,opacity:.35,blending:T.AdditiveBlending,depthWrite:false,fog:false})); sunGlow.scale.setScalar(1.6); sunGlow.userData.noInk=true; api.world.add(sunGlow);
 let lastHr=-1;
 // ---- visuals ----
 const white=new T.Color('#ffffff'), slate=new T.Color('#5e6670'), cms=meshes.map(m=>{const a=[];m&&m.traverse(o=>{if(o.isMesh)a.push(o);});return a;});
@@ -154,8 +153,8 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
   if(vapPts&&vapPts.geometry){ const a=vapPts.geometry.attributes.position, top=zb/VS, w=api.param('wind');
     for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(.12+.5*Math.min(1.5,heat())); let z=a.getZ(i)-dt*w*.03; if(y>top){y=0;z=(api.rand()-.5)*2.6;} if(z<-1.3) z+=2.6; a.setY(i,y); a.setZ(i,z); }
     a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
-  const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z); sunGlow.position.copy(sun.position);
-  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } }
+  const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);
+  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } if(dome) dome.visible=false; }
   const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
 
@@ -184,7 +183,7 @@ export const MARKET = {
   type: 'scene', title: 'A market finds its price', technique: 'card',
   environment: { preset: 'landscape', time: 16.5, azimuth: -8 },
   bodies: [
-    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone', color: '#7d776d' }, position: [0, .01, 0] },
+    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone', color: '#c4bbab' }, position: [0, .01, 0] },
     { id: 'board', name: 'Chalkboard', label: 'Demand and supply curves', role: 'actor', describe: 'Left: the staircases of buyers willing to buy (blue) and sellers willing to sell (red) at each price. Right: the price of every trade, in order.', shape: { kind: 'box', w: 6.4, h: 3.6, d: .1, round: .02 }, material: { preset: 'chalk', color: '#26332c' }, position: [0, 3.35, -3.5] },
     { id: 'boardframe', name: 'Board frame', role: 'decor', shape: { kind: 'box', w: 6.62, h: 3.82, d: .07, round: .02 }, material: { preset: 'darkwood' }, position: [0, 3.35, -3.56] },
     { id: 'legL', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [-3.2, 2.6, -3.62] },
@@ -293,8 +292,8 @@ api.readout('best bid / best ask',()=>(bid?f2(bid.p):'—')+' / '+(ask?f2(ask.p)
 api.readout('budget rule',()=>api.param('rule')>.5?'on (no trade at a loss)':'off');
 api.plot('trade price',()=>all.length?all[all.length-1].p:NaN);
 // late-afternoon sky: the landscape dome shows only haze below the horizon, so a painted gradient replaces it behind the square
-{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) dome.visible=false;
-  const n=64, d=new Uint8Array(n*4), a=new T.Color('#c9b48f'), b=new T.Color('#5f7fa6'), c=new T.Color(); for(let i=0;i<n;i++){ c.copy(a).lerp(b,Math.pow(i/(n-1),.7)); d[i*4]=c.r*255; d[i*4+1]=c.g*255; d[i*4+2]=c.b*255; d[i*4+3]=255; }
+{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) api.onFrame(()=>{ dome.visible=false; });   // every frame: the materialiser restores the background objects when it finishes
+  const n=64, d=new Uint8Array(n*4), a=new T.Color('#f0dcb4'), b=new T.Color('#9cbbe0'), c=new T.Color(); for(let i=0;i<n;i++){ c.copy(a).lerp(b,Math.pow(i/(n-1),.7)); d[i*4]=c.r*255; d[i*4+1]=c.g*255; d[i*4+2]=c.b*255; d[i*4+3]=255; }
   const tx=new T.DataTexture(d,1,n); tx.colorSpace=T.SRGBColorSpace; tx.magFilter=tx.minFilter=T.LinearFilter; tx.needsUpdate=true; api.scene.background=tx; }
 api.camera({target:[0,2.0,-.7],r:12.4,ph:1.2,th:.3});`,
   lessons: [
@@ -467,7 +466,7 @@ const KAP=12;   // pore traffic: water molecules per second crossing each way th
 const rates=()=>{ const k=KAP*api.param('pass')*Math.sqrt(api.param('T')), d=dhEff(); return [k*Math.exp(-K*d), k*xw()*Math.exp(K*d)]; };
 const hop=(from,top)=>{ let best=null,bd=9; for(const q of P){ if(q.w&&q.side===from&&q.y<top){ const d=Math.abs(q.x); if(d<bd){bd=d;best=q;} } } if(best){ best.side=-from; best.x=-best.x; if(from<0){visL--;visR++;cLR++;} else {visL++;visR--;cRL++;} } };   // the molecule nearest the pores goes through
 // the tagged molecule: Brownian motion with a little persistence (so a rider's view turns smoothly), plus the drift of the bulk flow
-const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0, tsay=0; const riding=()=>tr.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it
+const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0, tsay=0, tn=0; const riding=()=>tr.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it
 api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.min(hL,hR)+Y0-.05;
   for(const q of P){ q.x+=(rnd()-.5)*st; q.y+=(rnd()-.5)*st; q.z+=(rnd()-.5)*st;
     const lim=Y0+(q.side<0?hL:hR)-.05; if(q.y<Y0+.05)q.y=Y0+.05; if(q.y>lim)q.y=lim; if(q.z<-ZD)q.z=-ZD; if(q.z>ZD)q.z=ZD; if(q.x<-2.9)q.x=-2.9; if(q.x>2.9)q.x=2.9;
@@ -476,12 +475,12 @@ api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.mi
   const [jin,jout]=rates(); m+=(jin-jout)*h; nL=nW/2-m; nR=nW/2+m; hL=nL*HV; hR=nR*HV;
   const dv=visR-nR; if(rnd()<h*jin*Math.exp(-.4*dv)) hop(-1,top); if(rnd()<h*jout*Math.exp(.4*dv)) hop(1,top);
   // tagged molecule
-  const tau=.6, sg=.5*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();
+  const tau=.6, sg=.9*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();
   tq.x+=tq.vx*h; tq.y+=tq.vy*h; tq.z+=tq.vz*h; const tl=Y0+(tq.side<0?hL:hR)-.08;
-  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>1){tq.x=Math.sign(tq.x);tq.vx*=-1;}   // we follow it in the region next to the membrane
+  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>.8){tq.x=Math.sign(tq.x)*.8;tq.vx*=-1;}   // we follow it in the region next to the membrane
   tcool=Math.max(0,tcool-h); tsay=Math.max(0,tsay-h);
   if((tq.x<0?-1:1)!==tq.side){ const pr=Math.min(1,api.param('pass')*1.2)*(tq.side<0?Math.exp(-K*dhEff()):xw()*Math.exp(K*dhEff()));   // at the membrane: through a pore, or bounced back
-    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; if(riding()||tsay<=0){ tsay=20; api.event(ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
+    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; if(riding()||tsay<=0){ tsay=20; tn++; api.event((ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water')+' (crossing '+tn+')',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
   win+=h; if(win>=3){ const net=cLR-cRL; rate=[cLR/3,cRL/3]; netEma+=(net/3-netEma)*.5;
     if(!flowSaid&&net>=4&&nS>0){ flowSaid=true; api.event('Net water flow into the solution side: in 3 s, '+cLR+' molecules crossed into it and '+cRL+' came back',V(0,Y0+.6,.1),{id:'flow',sound:'pour'}); }
     if(!revSaid&&press()>0&&net<=-4){ revSaid=true; api.event('Reverse osmosis: pressed harder than the osmotic pressure, water is squeezed back into the pure side ('+cRL+' out, '+cLR+' in, in 3 s)',V(.6,Y0+1.2,.1),{id:'reverse',sound:'pour'}); }

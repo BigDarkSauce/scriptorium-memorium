@@ -151,8 +151,10 @@ const edit = await run(async () => {
   const p0 = o.position.clone(); v.pushUndo({ kind: 'transform', o, path: v.ds.pathOf(o), p: p0.clone(), r: o.rotation.clone(), s: o.scale.clone() }); o.position.x += 1; v.commitTransform();
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); const back = v.sel.position.distanceTo(p0) < 1e-6;
   v.editAction('hide'); const hidden = !v.sel.visible; v.editAction('hide');
-  const n0 = v.ds.extras.children.length; v.addObjectDialog(); document.querySelector('.modal-veil .btn.primary').click(); const added = v.ds.extras.children.length === n0 + 1;
-  v.select(v.ds.extras.children[v.ds.extras.children.length - 1]); v.editAction('remove'); const removed = v.ds.extras.children.length === n0;
+  // an added object goes into spec.bodies (scene specs) or spec.additions (built-in models)
+  const mine = () => [...v.ds.world.children, ...v.ds.extras.children].filter(c => String(c.userData.bodyId || '').startsWith('add-') || c.userData.added);
+  const n0 = mine().length; v.addObjectDialog(); document.querySelector('.modal-veil .btn.primary').click(); const added = mine().length === n0 + 1;
+  if (added) { v.select(mine()[n0]); v.editAction('remove'); } const removed = mine().length === n0;
   const k = Object.keys(v.ds.ranges)[0]; let slid = true; if (k) { const inp = document.getElementById('dp-' + k); inp.value = +inp.min + (inp.max - inp.min) * .7; inp.dispatchEvent(new Event('input')); inp.dispatchEvent(new Event('change')); S.pump(v, .2); slid = Math.abs(v.ds.p[k] - +inp.value) < 1e-6; }
   v.toggleEdit(false); return { back, hidden, added, removed, slid };
 });

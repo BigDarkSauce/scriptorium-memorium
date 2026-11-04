@@ -359,7 +359,7 @@
     }
   },
   "flows": {
-    "one random path": [
+    "like a coin flip": [
       {
         "from": [
           0,
@@ -415,7 +415,7 @@
         "label": "most paths end near N·p"
       }
     ],
-    "biased": [
+    "pile build up": [
       {
         "from": [
           0,
