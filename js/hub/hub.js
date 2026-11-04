@@ -269,6 +269,14 @@ export class Hub {
     this.sfx('unroll', { gain: .45 });
     toast(`"${title}" placed on ${shelf.name}`);
     this.app.ingest.pageCount(file).then(n => { if (n) { b.pages = n; this.app.saveLib(); } }).catch(() => {});
+    // the PDF's own Title metadata, when it is a real title, replaces the file-name title (the tag is redrawn)
+    if (this.app.ingest.pdfTitle) this.app.ingest.pdfTitle(file).then(t => { if (t && t !== b.title && b.title === title) { b.title = t; this.app.saveLib(); this.retag(b); } }).catch(() => {});
+  }
+  // redraw a scroll's name tag after its title changed (unless it is being opened)
+  retag(b) {
+    const o = this.scrollObjs.get(b.id); if (this.disposed || !o || !o.parent || (this.opening && this.opening.sc === o)) return;
+    const so = o.parent; o.removeFromParent(); this.trash([o]); this.scrollObjs.delete(b.id);
+    const n = this.addScrollObj(b); if (n && o.userData.arrive != null) { n.userData.arrive = o.userData.arrive; n.scale.copy(o.scale); } if (this.hover === o) this.hover = null; this.refill(so.userData.shelfId);
   }
   sfx(name, o) { if (this.app.sfx) this.app.sfx.play(name, o); }
   async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }

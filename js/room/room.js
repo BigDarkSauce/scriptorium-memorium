@@ -77,7 +77,11 @@ export class BookRoom {
     this.status('Finding the chapters…');
     try {
       const r = await this.app.ingest.splitBook(blob, { onProgress: k => this.status('Finding the chapters… ' + Math.round(k * 100) + '%') });
-      this.book.pages = r.pages; this.app.saveLib();
+      this.book.pages = r.pages;
+      // the PDF's own Title metadata (cleaned by splitBook) replaces the file-name title the hub gave the book
+      const ft = this.app.ingest.fileTitle ? this.app.ingest.fileTitle(blob) : '';
+      if (r.title && r.title !== this.book.title && (!ft || this.book.title === ft)) { this.book.title = r.title; const bt = this.ui.querySelector('.brand-title'); if (bt) bt.textContent = r.title; }
+      this.app.saveLib();
       this.data.parts = r.parts.map(p => ({ id: 'p-' + uid(), ...p })); this.data.splitMethod = r.method; this.save();
       this.status(`${r.parts.length} parts found (${{ outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows' }[r.method]}).`, 4000);
       this.layout(); this.buildShell(); this.buildStations(); if (!this.reader && !this.anim && this.nav && this.nav.mode !== 'walk') this.frameStart();
