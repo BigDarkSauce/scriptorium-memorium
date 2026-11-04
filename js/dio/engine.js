@@ -265,7 +265,7 @@ export class DioramaView {
   povGoal(eye) {
     const P = this.pov; if (!P) return this.ds.center.clone();
     if (P.lookAt && P.lookAt.getPos) { const q = P.lookAt.getPos(); if (q) return q.clone(); }
-    if (P.look) return eye.clone().add(P.look);
+    if (P.look) { const toC = this.ds.center.clone().sub(eye); if (toC.lengthSq() > 1e-6) toC.normalize(); return eye.clone().add(P.look.clone().multiplyScalar(.65).addScaledVector(toC, .35).normalize()); }   // along the path, tilted toward the model so the world stays in view
     const b = this.dir.beat, q = b && b.anchor && b.host !== P.a ? b.anchor() : null; if (q) return q.clone();
     const f = this.ds.center.clone().sub(eye); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize(); f.y = -.18; return eye.clone().add(f);
   }
