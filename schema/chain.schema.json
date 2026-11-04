@@ -99,7 +99,7 @@
             "type": "string"
           },
           "check": {
-            "type": "object",
+            "type": ["object", "null"],
             "properties": {
               "q": {
                 "type": "string"
@@ -386,7 +386,7 @@
             }
           },
           "table": {
-            "type": "object",
+            "type": ["object", "null"],
             "description": "a table of the source, rows copied exactly",
             "properties": {
               "caption": {
