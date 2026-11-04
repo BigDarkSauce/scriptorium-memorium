@@ -9,7 +9,7 @@ import { DioramaScene, isSceneSpec } from './scene.js';
 import { SHAPES } from './builder.js';
 import { PRESETS } from '../gfx/materials.js';
 import { Materializer, addInk, addOutlines } from '../gfx/materialize.js';
-import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet } from '../util.js';
+import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet , mathHTML, canvasMath } from '../util.js';
 import { askJSON, errCopy } from '../ai/claude.js';
 import { editPrompt } from '../ai/prompts.js';
 import { radialGlow } from '../gfx/textures.js';
@@ -127,7 +127,7 @@ export class DioramaView {
   }
   ensurePin(a, focus) {
     let pin = this.pins.get(a.name);
-    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', text: a.name })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
+    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', html: mathHTML(a.name) })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
     this.pins.forEach(p => p.classList.remove('focus')); if (focus) pin.classList.add('focus');
     pin._actor = a; if (this._hot && this._hot.length) pin.classList.toggle('hot', this._hot.some(h => h.name === a.name));
   }
@@ -153,11 +153,11 @@ export class DioramaView {
     L.forEach((l, i) => {
       if (i > this.lessonI) return;
       const done = i < this.lessonI, card = el('div', { class: 'lesson' + (done ? ' done' : ' current') }, [
-        el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: done ? '✓' : String(i + 1) }), el('b', { html: esc(l.title || 'Step ' + (i + 1)) })]),
-        l.question ? el('div', { class: 'lesson-q', html: '<b>Q</b> ' + esc(l.question) }) : null,
-        el('div', { class: 'lesson-text', html: esc(l.text || '') }),
-        done && l.explain ? el('div', { class: 'lesson-explain', html: esc(l.explain) }) : null,
-        done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + esc(l.opens) }) : null,
+        el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: done ? '✓' : String(i + 1) }), el('b', { html: mathHTML(l.title || 'Step ' + (i + 1)) })]),
+        l.question ? el('div', { class: 'lesson-q', html: '<b>Q</b> ' + mathHTML(l.question) }) : null,
+        el('div', { class: 'lesson-text', html: mathHTML(l.text || '') }),
+        done && l.explain ? el('div', { class: 'lesson-explain', html: mathHTML(l.explain) }) : null,
+        done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + mathHTML(l.opens) }) : null,
         !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : 'Play this step', onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
       box.append(card); if (!done) requestAnimationFrame(() => card.classList.add('in'));
     });
@@ -203,9 +203,18 @@ export class DioramaView {
       inp.onpointerdown = inp.onkeydown = () => { if (inp._from == null) inp._from = this.ds.p[k]; };
       inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; out.textContent = fmt(+inp.value) + (unit ? ' ' + unit : ''); this.setParam(k, +inp.value, false, true); };   // a model that rebuilds rebuilds once per frame while dragging
       inp.onchange = () => { if (inp._from != null && inp._from !== this.ds.p[k]) this.pushUndo({ kind: 'param', k, v: inp._from, label: name || k }); inp._from = null; inp.blur(); };
-      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { text: name || k }), out]), inp]));
+      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { html: mathHTML(name || k) }), out]), inp]));
     }
     if (!box.children.length) box.append(el('p', { class: 'dim small', text: 'No variables. Use Edit → Ask AI to add some.' }));
+    // what the model is doing right now, under the sliders that cause it (newest first)
+    this.dynBox = el('div', { class: 'dyn-box' }, [el('h4', { text: 'Dynamic changes' }), this.dynList = el('ul', { class: 'dyn-list' })]);
+    box.append(this.dynBox); (this._dyn || []).forEach(d => this.dynList.append(this.dynItem(d)));
+  }
+  dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text) })]); }
+  pushDyn(ev) {
+    const d = { text: ev.text, clock: this.clockText(ev.t), fresh: true }; this._dyn = [d].concat(this._dyn || []).slice(0, 12);
+    if (this.dynList) { const li = this.dynItem(d); this.dynList.prepend(li); setTimeout(() => { d.fresh = false; li.classList.remove('fresh'); }, 2500); while (this.dynList.children.length > 12) this.dynList.lastChild.remove(); }
+    if (this.tab !== 'Variables') { const t = this.ui && this.ui.querySelector('.tab[data-t="Variables"]'); t && t.classList.add('ping'); }
   }
   setParam(k, v, quiet, defer) {
     const ds = this.ds; if (!(k in ds.p)) return; ds.p[k] = clamp(v, ds.ranges[k][0], ds.ranges[k][1]);
@@ -253,7 +262,7 @@ export class DioramaView {
   exitPOV(keepCam, soft) {
     const P = this.pov; if (!P) return;
     if (soft && this.dir && !keepCam) { this.dir.move = null; this.dir.dip = { t: 0, done: false, apply: () => this.exitPOV(false) }; return; }   // leave through a dip, like entering
-    this.pov = null;
+    this.pov = null; if (P.faded) { P.faded.forEach((a, o) => this.povFade(o, false)); P.faded.clear(); }
     if (P.hide && P.a.obj) P.a.obj.traverse(o => { if (o.isMesh && o.userData._povVis !== undefined) { o.visible = o.userData._povVis; delete o.userData._povVis; } });
     const cv = this.gfx.renderer.domElement; cv.removeEventListener('pointerdown', this._povDown); removeEventListener('pointermove', this._povMove); removeEventListener('pointerup', this._povUp);
     if (keepCam) return;
@@ -280,6 +289,36 @@ export class DioramaView {
     const m = new THREE.Matrix4().lookAt(c.position, this.povGoal(c.position), V3(0, 1, 0)), q = new THREE.Quaternion().setFromRotationMatrix(m);
     q.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(P.pitch, P.yaw, 0, 'YXZ')));
     c.quaternion.rotateTowards(q, (P.drag ? 6 : 1.57) * dt);
+    this.povClear(dt);
+  }
+  // a clear view from inside the scene: whatever stands between the eye and what it looks at (or encloses the eye) turns
+  // see-through with a dashed outline of its edges, and comes back when it is out of the way
+  povClear(dt) {
+    const P = this.pov, c = this.camera; P.clrT = (P.clrT || 0) - dt; if (P.clrT > 0) return; P.clrT = .15;
+    const R = this.ds.orb ? this.ds.orb.r : 10, rc = this._povRay || (this._povRay = new THREE.Raycaster()), hit = new Set();
+    const fwd = V3(); c.getWorldDirection(fwd); const goal = this.povGoal(c.position), far = Math.max(.5, c.position.distanceTo(goal));
+    const big = o => { if (o.userData._povBig === undefined) { const b = new THREE.Box3().setFromObject(o), sz = b.getSize(V3()).length(); o.userData._povBig = sz > R * 1.6 || /sky|backdrop|ground|meadow|plinth|floor|hill|cloud|haze|terrain|sea|ocean|stars|lake|valley/i.test((o.name || '') + ' ' + (o.parent && o.parent.name || '')); } return o.userData._povBig; };
+    const cand = []; this.ds.world.traverse(o => { if (o.isMesh && o.visible && !big(o)) cand.push(o); });
+    // rays through the middle of the view (a 3×3 grid in the central half of the frame)
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { rc.setFromCamera(new THREE.Vector2(i * .35, j * .35), c); rc.far = far; rc.near = 0; rc.intersectObjects(cand, false).forEach(h => { if (h.distance < far * .97) hit.add(h.object); }); }
+    // anything whose box encloses the eye (the string you ride, a part you are inside) is in the way too, if it is opaque
+    cand.forEach(o => { if (o.userData._povVis !== undefined) return; const b = new THREE.Box3().setFromObject(o); if (b.containsPoint(c.position) && !(o.material && o.material.transparent)) hit.add(o); });
+    P.faded = P.faded || new Map();
+    hit.forEach(o => { if (!P.faded.has(o)) this.povFade(o, true); P.faded.set(o, 0); });
+    P.faded.forEach((age, o) => { if (!hit.has(o)) { const a = age + .15; if (a > .6) { this.povFade(o, false); P.faded.delete(o); } else P.faded.set(o, a); } });
+  }
+  povFade(o, on) {
+    if (on) {
+      o.userData._povMat = o.material; const ms = [].concat(o.material).map(m => { const k = m.clone(); k.transparent = true; k.opacity = Math.min(m.opacity ?? 1, .22); k.depthWrite = false; return k; });
+      o.material = Array.isArray(o.material) ? ms : ms[0];
+      const eg = new THREE.EdgesGeometry(o.geometry, 30), ln = new THREE.LineSegments(eg, new THREE.LineDashedMaterial({ color: 0xffe3a3, dashSize: .05, gapSize: .035, transparent: true, opacity: .85, depthTest: false }));
+      ln.computeLineDistances(); ln.renderOrder = 9; ln.userData.isInk = true; ln.name = 'pov outline'; o.add(ln); o.userData._povLine = ln;
+      // dash length in world units follows the object's size
+      const sz = new THREE.Box3().setFromObject(o).getSize(V3()).length(); ln.material.dashSize = Math.max(.01, sz * .04); ln.material.gapSize = ln.material.dashSize * .7;
+    } else {
+      if (o.userData._povMat) { [].concat(o.material).forEach(m => m.dispose()); o.material = o.userData._povMat; delete o.userData._povMat; }
+      const ln = o.userData._povLine; if (ln) { o.remove(ln); ln.geometry.dispose(); ln.material.dispose(); delete o.userData._povLine; }
+    }
   }
   highlightPins(actors) { this._hot = actors; const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
   refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
@@ -300,7 +339,7 @@ export class DioramaView {
     const tabs = el('div', { class: 'tabs' }), sections = { Instructions: this.lessonBox, Variables: this.paramBox, Objects: this.objBox };
     const srcs = Array.isArray(this.spec.sources) ? this.spec.sources.filter(x => x && (x.title || x.doi)) : [];
     if (srcs.length) sections.Sources = el('div', { class: 'dio-sources' }, [el('p', { class: 'dim small', text: 'The laws and values this diorama is built on:' }), el('ol', {}, srcs.map(x => el('li', {}, [renderSource(x)])))]);
-    Object.keys(sections).forEach((n, i) => { const b = el('button', { class: 'tab', role: 'tab', 'aria-selected': i === 0 ? 'true' : 'false', text: n, onclick: () => { tabs.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', 'false')); b.setAttribute('aria-selected', 'true'); Object.values(sections).forEach(s => s.hidden = true); sections[n].hidden = false; } }); tabs.append(b); if (i) sections[n].hidden = true; });
+    Object.keys(sections).forEach((n, i) => { const b = el('button', { class: 'tab', role: 'tab', 'aria-selected': i === 0 ? 'true' : 'false', text: n, 'data-t': n, onclick: () => { this.tab = n; b.classList.remove('ping'); tabs.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', 'false')); b.setAttribute('aria-selected', 'true'); Object.values(sections).forEach(s => s.hidden = true); sections[n].hidden = false; } }); tabs.append(b); if (i) sections[n].hidden = true; });
     this.fold = el('button', { class: 'ibtn fold', title: 'Fold the panel', 'aria-label': 'Fold panel', text: '‹', onclick: () => { this.panel.classList.toggle('folded'); this.fold.textContent = this.panel.classList.contains('folded') ? '›' : '‹'; } });
     this.panel = el('aside', { class: 'dio-panel glass', hidden: true }, [el('div', { class: 'panel-head' }, [tabs, this.fold]), el('div', { class: 'panel-body' }, Object.values(sections))]);
     u.append(this.panel);
@@ -346,10 +385,11 @@ export class DioramaView {
       const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, fk = Object.keys(flows).find(k => lt.includes(k));
       const tg = shot && shot.target, pos0 = tg ? (typeof tg === 'function' ? tg() : tg) : null, pos = pos0 ? (pos0.isVector3 ? pos0.clone() : new THREE.Vector3().fromArray(pos0)) : ev.pos ? ev.pos.clone() : null;
       this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null, evKey });
-    } else { const d = el('div', { text: ev.text }); this.ticker.append(d); setTimeout(() => d.remove(), this.dir.readTime(ev.text) * 1000); while (this.ticker.children.length > 2) this.ticker.firstChild.remove(); }
+    }
+    this.pushDyn(ev);   // every change is listed under Variables → Dynamic changes (the old top-of-screen ticker is gone)
     // sound, placed left/right where the event happens
     if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } this._sndT = this._sndT || new Map(); if (now - (this._sndT.get(evKey) || -1e9) > 3000) { this._sndT.set(evKey, now); if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); } }
-    this.evlog.prepend(el('li', { text: this.clockText(ev.t) + ' · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
+    this.evlog.prepend(el('li', { html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text) })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
     if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) { if (!this.awaitIdle) this.awaitT = 0; this.awaitIdle = true; } else this.runT = this.runDur; }
   }
@@ -558,11 +598,11 @@ export class DioramaView {
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
       this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
-      this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k)}</em> ${mathHTML(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
   }
   drawSpark() {
     const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
-    g.fillStyle = 'rgba(244,239,230,.55)'; g.font = '20px IBM Plex Mono, monospace'; g.fillText(ds.seriesName || '', 8, 22);
+    g.fillStyle = 'rgba(244,239,230,.55)'; g.font = '20px IBM Plex Mono, monospace'; g.textAlign = 'left'; canvasMath(g, ds.seriesName || '', 8, 22);
     const H = ds.sim && ds.sim.hist ? ds.sim.hist() : null;
     if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 34), bw - 2, v / mx * (c.height - 34)); }); return; }
     const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d);
@@ -647,7 +687,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
     g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.font = '14px "IBM Plex Mono", monospace';
     const lw = Math.min(w * .55, 26 + Math.max(...legend.map(l => g.measureText(l[2]).width)) + 40);
     g.fillStyle = 'rgba(250,246,236,.92)'; g.fillRect(24, 24, lw, 18 + legend.length * 24); g.strokeStyle = 'rgba(29,28,25,.4)'; g.lineWidth = 1; g.strokeRect(24, 24, lw, 18 + legend.length * 24);
-    legend.forEach(([col, n, name], i) => { g.fillStyle = col; g.beginPath(); g.arc(42, 42 + i * 24, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 11px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText(n, 42, 46 + i * 24); g.textAlign = 'left'; g.fillStyle = '#1d1c19'; g.font = '14px "IBM Plex Mono", monospace'; g.fillText(name.slice(0, 40), 58, 47 + i * 24); });
+    legend.forEach(([col, n, name], i) => { g.fillStyle = col; g.beginPath(); g.arc(42, 42 + i * 24, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 11px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText(n, 42, 46 + i * 24); g.textAlign = 'left'; g.fillStyle = '#1d1c19'; g.font = '14px "IBM Plex Mono", monospace'; canvasMath(g, name.slice(0, 40), 58, 47 + i * 24); });
   }
   // drafting chrome: border, corner marks, title block
   g.strokeStyle = 'rgba(29,28,25,.75)'; g.lineWidth = 1.5; g.strokeRect(14, 14, w - 28, h - 28);

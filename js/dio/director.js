@@ -9,7 +9,7 @@
 //    objects a sentence names (cause → effect)
 //  - the viewer stays in charge: grabbing the camera pauses the director's camera for a few seconds
 import * as THREE from 'three';
-import { el, esc, clamp } from '../util.js';
+import { el, esc, clamp, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const PACE = { slow: 150, normal: 210, fast: 300 };   // words per minute
@@ -51,7 +51,7 @@ export class Director {
     for (const x of sents) { const n = (cur + x).trim().split(/\s+/).length; if (cur && n > max) { out.push(cur.trim()); cur = x; } else cur += x; }
     if (cur.trim()) out.push(cur.trim()); return out;
   }
-  setCaption(title, text) { this.caption.hidden = false; this.caption.innerHTML = `<b>${esc(title || '')}</b> ${esc(text || '')}`; }
+  setCaption(title, text) { this.caption.hidden = false; this.caption.innerHTML = `<b>${mathHTML(title || '')}</b> ${mathHTML(text || '')}`; }
   clearCaption() { this.caption.hidden = true; }
   idle() { return !this.beat && !this.queue.length; }
   clear() { this.queue = []; this.endBeat(true); }
@@ -69,9 +69,9 @@ export class Director {
     // the callout, beside what it describes
     b.el = el('div', { class: 'callout k-' + b.kind }, [
       el('div', { class: 'co-kicker', text: (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why') + (b.part ? ' · ' + b.part : '') }),
-      b.question ? el('div', { class: 'co-q', html: '<b>Q</b> ' + esc(b.question) }) : null,
-      el('div', { class: 'co-text', html: esc(b.text) }),
-      b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + esc(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
+      b.question ? el('div', { class: 'co-q', html: '<b>Q</b> ' + mathHTML(b.question) }) : null,
+      el('div', { class: 'co-text', html: mathHTML(b.text) }),
+      b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + mathHTML(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
     b.el.addEventListener('mouseenter', () => b.paused = true); b.el.addEventListener('mouseleave', () => b.paused = false);
     this.layer.append(b.el); requestAnimationFrame(() => b.el && b.el.classList.add('in'));
     b.line = document.createElementNS(NS, 'path'); b.line.setAttribute('class', 'co-line'); this.svg.append(b.line);

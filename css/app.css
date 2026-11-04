@@ -143,7 +143,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 .clock { font-family: var(--f-display); font-size: 16px; min-width: 64px; font-variant-numeric: tabular-nums; }
 .dio-reads { position: absolute; right: calc(var(--gut) + max(0px, env(safe-area-inset-right,0px))); bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); width: 290px; max-height: calc(100vh - 120px); overflow: auto; padding: 10px 12px; display: grid; gap: 8px; }
 .reads { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-family: var(--f-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.reads i { font-style: normal; color: var(--ink-2); display: block; font-size: 10.5px; letter-spacing: .04em; }
+.reads em, .reads i.legacy { font-style: normal; color: var(--ink-2); display: block; font-size: 10.5px; letter-spacing: .04em; }
 .spark { width: 100%; height: 60px; }
 .evlog { list-style: none; margin: 0; padding: 0; max-height: 84px; overflow: auto; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); display: grid; gap: 3px; }
 .evlog li { border-left: 2px solid var(--brass-lo); padding-left: 6px; }
@@ -415,3 +415,29 @@ body:has(.reader:not([hidden])) .sound-btn { top: auto; right: auto; left: calc(
   .pov-bar { top: auto; bottom: calc(var(--gut) + 70px); max-width: calc(100vw - 20px); font-size: 12px; }
 }
 .pov-bar { top: calc(120px + env(safe-area-inset-top,0px)); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+/* typeset maths in plain-text labels (util.mathHTML) */
+sub, sup { font-size: .72em; line-height: 0; position: relative; vertical-align: baseline; }
+sup { top: -.45em; } sub { bottom: -.25em; }
+.m-sqrt { white-space: nowrap; display: inline-flex; align-items: flex-start; }
+.m-rad { border-top: .07em solid currentColor; padding: .02em .1em 0 .05em; margin-top: .12em; display: inline-flex; align-items: center; }
+.m-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: .82em; line-height: 1.05; margin: 0 .12em; }
+.m-frac > span:first-child { border-bottom: .07em solid currentColor; padding: 0 .15em .04em; }
+.m-frac > span:last-child { padding: .04em .15em 0; }
+i { font-style: italic; }
+/* Variables → Dynamic changes */
+.dyn-box { margin-top: 14px; border-top: 1px solid rgba(255,250,240,.12); padding-top: 10px; }
+.dyn-box h4 { margin: 0 0 6px; font: 500 15px var(--f-serif, serif); color: var(--ink); letter-spacing: .02em; }
+.dyn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 220px; overflow: auto; }
+.dyn-item { font-size: 13px; color: var(--ink-2); display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 4px 6px; border-radius: 8px; transition: background .8s, color .8s; }
+.dyn-item time { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3, #a99); white-space: nowrap; padding-top: 2px; }
+.dyn-item.fresh { background: rgba(255,217,138,.13); color: var(--ink); }
+.tab.ping::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--brass); margin-left: 6px; vertical-align: middle; }
+.ticker { display: none !important; }
+/* scroll reader placement: left / centre / right / full screen */
+.reader-dock { display: flex; gap: 4px; margin-left: auto; margin-right: 6px; }
+.reader-dock .ibtn[aria-pressed="true"] { background: rgba(60,40,20,.18); color: #5a3a12; }
+.reader.dock-left { right: auto; left: max(16px, env(safe-area-inset-left,0px)); }
+.reader.dock-center { right: auto; left: 50%; translate: -50% 0; }
+.reader.dock-full { left: max(12px, env(safe-area-inset-left,0px)); right: max(12px, env(safe-area-inset-right,0px)); width: auto; top: calc(64px + env(safe-area-inset-top,0px)); bottom: calc(10px + env(safe-area-inset-bottom,0px)); }
+.reader.dock-full .reader-body { max-width: 1100px; margin: 0 auto; width: 100%; }
+@media (max-width: 760px) { .reader-dock [data-dock="left"], .reader-dock [data-dock="center"], .reader-dock [data-dock="right"] { display: none; } }

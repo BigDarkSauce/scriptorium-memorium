@@ -143,3 +143,64 @@ export function disposeTree(roots, keep = null) {
 
 // Tiny event bus
 export const bus = { m: new Map(), on(k, f) { (this.m.get(k) || this.m.set(k, []).get(k)).push(f); return () => this.off(k, f); }, off(k, f) { const a = this.m.get(k); if (a) a.splice(a.indexOf(f) >>> 0, 1); }, emit(k, ...a) { (this.m.get(k) || []).slice().forEach(f => { try { f(...a); } catch (e) { console.error(e); } }); } };
+
+// ---------- typeset plain-text maths ----------
+// Labels, readouts, instructions and explanations are written as plain text ("m2", "T0", "x^2", "2π√(L/g)", "m1r1 = m2r2").
+// mathHTML turns them into properly typeset HTML: italic variables with real subscripts, superscript powers, radicals with a
+// vinculum, stacked fractions inside radicals and brackets, chemical formulas (H₂O), and proper operators (−, ×, ≤, ≥, ≠, ±, →, ≈).
+// Text inside $…$ is left untouched for MathJax. mathRuns gives the same sub/superscript split for SVG/canvas text.
+const SUBVAR = /(?<![A-Za-z_&#;])([A-FH-RT-Za-zα-ωΑ-Ω])(\d{1,2})(?![\d.]|[A-Za-z]{2})/g;   // m2, r1, T0, m1r1; not S5/G2 step ids or words
+const SUBUND = /(?<![A-Za-z0-9])([A-Za-zα-ωΑ-ΩΔ])_\{?([A-Za-z0-9α-ω]{1,6})\}?/g;   // P_in, v_x, T_{max}
+const CHEM = /\b((?:(?:[A-Z][a-z]?)\d*){2,})\b/g;
+const ELEMENTS = new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Fe Cu Zn Ag Au Hg Pb I Br Mn Cr Ni Co Sn Ti U'.split(' '));
+function chemOk(f) { const parts = f.match(/[A-Z][a-z]?\d*/g) || []; return /\d/.test(f) && parts.join('') === f && parts.every(p => ELEMENTS.has(p.replace(/\d+/, ''))); }
+function typesetPlain(s) {
+  let h = esc(s);
+  h = h.replace(/sqrt\(/g, '√(');
+  // powers: x^2, x^(n+1), x^{-1}, e^-x
+  h = h.replace(/\^\{([^}]+)\}/g, '<sup>$1</sup>').replace(/\^\(([^()]+)\)/g, '<sup>$1</sup>').replace(/\^([−-]?[\w.]+)/g, (m, p) => '<sup>' + p.replace(/^-/, '−') + '</sup>');
+  // simple numeric fractions
+  h = h.replace(/(?<![\d.\/])1\/2(?![\d.\/])/g, '½').replace(/(?<![\d.\/])1\/3(?![\d.\/])/g, '⅓').replace(/(?<![\d.\/])1\/4(?![\d.\/])/g, '¼').replace(/(?<![\d.\/])3\/4(?![\d.\/])/g, '¾');
+  // radicals: √(…) or √x gets a vinculum over its argument (a compact a/b inside becomes a stacked fraction)
+  const fr = (x, y) => `<span class="m-frac"><span>${x.trim()}</span><span>${y.trim()}</span></span>`;
+  const rad = x => { const q = /^([^\/\s]{1,24})\/([^\/\s]{1,24})$/.exec(x); return `<span class="m-sqrt">√<span class="m-rad">${q ? fr(q[1], q[2]) : x}</span></span>`; };
+  h = h.replace(/√\(((?:[^()]|\([^()]*\))+)\)/g, (m, x) => rad(x)).replace(/√([A-Za-zα-ω0-9.]+)/g, (m, x) => rad(x));
+  // compact fractions inside brackets elsewhere: (L/g) → stacked
+  h = h.replace(/\(([^()\/\s<>]{1,24})\/([^()\/\s<>]{1,24})\)/g, (m, x, y) => /[A-Za-zα-ω0-9]/.test(x) && /[A-Za-zα-ω0-9]/.test(y) ? fr(x, y) : m);
+  // chemical formulas, then variable subscripts
+  h = h.replace(CHEM, f => chemOk(f) ? f.replace(/(\d+)/g, '<sub>$1</sub>') : f);
+  h = h.replace(SUBVAR, (m, v, sub) => `<i>${v}</i><sub>${sub}</sub>`);
+  h = h.replace(SUBUND, (m, v, sub) => `<i>${v}</i><sub>${sub}</sub>`);
+  // operators
+  h = h.replace(/&lt;=/g, '≤').replace(/&gt;=/g, '≥').replace(/!=/g, '≠').replace(/\+\/?-/g, '±').replace(/-&gt;/g, '→').replace(/~=/g, '≈')
+    .replace(/(\d|\)|<\/sub>|<\/sup>)\s?\*\s?(\d|\(|[A-Za-z])/g, '$1 × $2')
+    .replace(/(\d|\)|<\/sub>|<\/sup>|[A-Za-z]) - (\d|\(|<i>|[A-Za-z]\b)/g, (m, a, b) => /\d|\)|sub|sup/.test(a) || /\d|\(/.test(b) ? `${a} − ${b}` : m)
+    .replace(/(^|[\s(=,])-(?=\d|\.\d|[A-Za-zα-ω(](?![a-z]{2}))/g, '$1−')
+    .replace(/(\(|=\s?|^)([A-Za-z])\s-\s([A-Za-z])(?=\)|\s|$)/g, '$1$2 − $3');
+  return h;
+}
+export function mathHTML(s) {
+  const str = String(s ?? ''); if (!str) return '';
+  return str.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g).map((seg, i) => i % 2 ? esc(seg) : typesetPlain(seg)).join('');
+}
+// runs for SVG/canvas: [{t, s:'sub'|'sup'|''}] (radicals and fractions stay inline there)
+export function mathRuns(s) {
+  const html = typesetPlain(String(s ?? '')).replace(/<span class="m-frac"><span>(.*?)<\/span><span>(.*?)<\/span><\/span>/g, '$1/$2').replace(/<span class="m-sqrt">√<span class="m-rad">(.*?)<\/span><\/span>/g, '√($1)').replace(/<\/?i>/g, '');
+  const out = []; const re = /<(sub|sup)>(.*?)<\/\1>/g; let last = 0, m;
+  const un = t => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  while ((m = re.exec(html))) { if (m.index > last) out.push({ t: un(html.slice(last, m.index)), s: '' }); out.push({ t: un(m[2]), s: m[1] }); last = re.lastIndex; }
+  if (last < html.length) out.push({ t: un(html.slice(last)), s: '' });
+  return out;
+}
+// write maths into an SVG <text> element as tspans with real sub/superscripts
+export function svgMath(textEl, s) {
+  const NS = 'http://www.w3.org/2000/svg'; while (textEl.firstChild) textEl.firstChild.remove();
+  const runs = mathRuns(s); if (runs.length <= 1 && !(runs[0] && runs[0].s)) { textEl.append(document.createTextNode(runs[0] ? runs[0].t : '')); return; }
+  for (const r of runs) { const t = document.createElementNS(NS, 'tspan'); t.textContent = r.t; if (r.s) { t.setAttribute('baseline-shift', r.s === 'sub' ? '-28%' : '38%'); t.setAttribute('font-size', '72%'); } textEl.append(t); }
+}
+// draw maths on a 2D canvas at (x, y) with the current font and textAlign 'left'; returns the width drawn
+export function canvasMath(g, s, x, y) {
+  const m = /(\d+(?:\.\d+)?)px/.exec(g.font), px = m ? +m[1] : 14, base = g.font; let cx = x;
+  for (const r of mathRuns(s)) { if (r.s) { g.font = base.replace(/(\d+(?:\.\d+)?)px/, (px * .72).toFixed(1) + 'px'); g.fillText(r.t, cx, y + (r.s === 'sub' ? px * .28 : -px * .38)); cx += g.measureText(r.t).width; g.font = base; } else { g.fillText(r.t, cx, y); cx += g.measureText(r.t).width; } }
+  return cx - x;
+}
