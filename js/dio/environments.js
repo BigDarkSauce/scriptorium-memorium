@@ -13,7 +13,8 @@ import { HorizontalBlurShader } from 'three/addons/shaders/HorizontalBlurShader.
 import { VerticalBlurShader } from 'three/addons/shaders/VerticalBlurShader.js';
 import { canvasTex } from '../gfx/textures.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
-import { woodSet, feltSet } from '../gfx/proc.js';
+import { woodSet, feltSet, alignUV, softDisc } from '../gfx/proc.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mulberry } from '../util.js';
 
 export const ENV_PRESETS = ['studio', 'lab', 'landscape', 'cosmos', 'micro', 'abstract', 'ocean', 'night', 'desk'];
@@ -139,18 +140,74 @@ const LOOKS = {
   micro: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
   abstract: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
   ocean: { bloomThreshold: 9, bloom: .2, contrast: 1.06, sat: 1.06, vignette: .26, grain: .02, warm: .01, exposure: .95 },
+  desk: { contrast: 1.12, sat: 1.04, vignette: .4, grain: .028, warm: .03, exposure: 1.0, bloomThreshold: 1.8, bloom: .26, tilt: 1 },
   night: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.12, sat: 1.0, vignette: .42, grain: .035, warm: 0, exposure: 1.05 }
 };
 
+// A writing desk: a long walnut top whose front edge runs out of the frame (the foreground plane), lit by a brass
+// desk lamp standing on it. The lamp's spot IS the key light (it starts at the bulb), so shadows fall away from a
+// light you can see.
+function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2] } = {}) {
+  const g = new THREE.Group(); g.name = 'desk'; g.userData.decorBase = true;
+  const W = woodSet('walnut'), tile = 2.4, rep = (t, x, y) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
+  const topM = new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .62, clearcoat: .7, clearcoatRoughness: .2, color: 0xffffff });
+  const top = new THREE.Mesh(alignUV(new RoundedBoxGeometry(w, .5, d, 3, .06), tile), topM); top.position.y = -.25; top.receiveShadow = true; top.name = 'walnut desk top'; g.add(top);
+  const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), makeMaterial({ preset: 'leather', color: '#3b2a1c' })); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);
+  // brass desk lamp: weighted base, two arms, a cone shade with the bulb inside
+  const L = new THREE.Group(); L.name = 'desk lamp'; const brass = makeMaterial('brass'), dark = makeMaterial({ preset: 'plastic', color: '#1c3a2c', roughness: .35 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(.55, .62, .14, 48), brass); base.position.y = .07; base.castShadow = true; L.add(base);
+  const P0 = new THREE.Vector3(0, .14, 0), P1 = new THREE.Vector3(.35, 2.6, .2), head = new THREE.Vector3(1.6, 3.7, 1.0);
+  const arm = (a, b) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, a.distanceTo(b), 12), brass); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); m.castShadow = true; L.add(m); };
+  arm(P0, P1); arm(P1, head); const knuckle = new THREE.Mesh(new THREE.SphereGeometry(.08, 16, 12), brass); knuckle.position.copy(P1); L.add(knuckle);
+  L.position.set(lampAt[0], 0, lampAt[1]); scene.add(L); L.updateMatrixWorld(true);
+  const headW = L.localToWorld(head.clone()), aimV = new THREE.Vector3(...aim), axis = aimV.clone().sub(headW).normalize();
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(.16, .62, .7, 40, 1, true), dark); shade.material.side = THREE.DoubleSide; shade.castShadow = true;
+  const sh = new THREE.Group(); sh.position.copy(head); sh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), axis); L.add(sh); shade.position.y = -.2; sh.add(shade);
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(.155, .6, .69, 40, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.35, 1.0), side: THREE.BackSide, toneMapped: false })); inner.position.y = -.2; sh.add(inner);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.14, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5, 3.6), toneMapped: false })); bulb.position.y = -.38; sh.add(bulb);
+  const glowS = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDisc(), color: 0xffd9a0, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false })); glowS.scale.setScalar(1.3); glowS.position.y = -.5; sh.add(glowS);
+  L.traverse(o => { o.userData.noInk = true; if (o.isMesh) o.receiveShadow = true; }); g.traverse(o => { o.userData.noInk = true; });
+  L.userData.decorBase = true; scene.add(g);
+  L.updateMatrixWorld(true); const bulbW = bulb.getWorldPosition(new THREE.Vector3()).addScaledVector(axis, .25);
+  return { g, lamp: L, bulbW, aim: aimV };
+}
+function moonDisc(scene, dir) {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(58, 56, 4, 64, 64, 62); gr.addColorStop(0, '#f6f3ea'); gr.addColorStop(.7, '#d8d4ca'); gr.addColorStop(.96, '#b8b4ac'); gr.addColorStop(1, 'rgba(180,176,170,0)'); x.fillStyle = gr; x.beginPath(); x.arc(64, 64, 62, 0, 7); x.fill();
+  const r = mulberry(8); for (let i = 0; i < 26; i++) { x.fillStyle = `rgba(120,118,112,${.12 + r() * .2})`; x.beginPath(); x.arc(30 + r() * 68, 30 + r() * 68, 3 + r() * 12, 0, 7); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, color: new THREE.Color(1.8, 1.8, 1.9), depthWrite: false, fog: false, toneMapped: false })); m.position.copy(dir).multiplyScalar(90); m.scale.setScalar(7);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDisc(), color: 0x8fa0d0, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); halo.position.copy(m.position); halo.scale.setScalar(26);
+  m.userData.noInk = halo.userData.noInk = true; scene.add(halo, m); return m;
+}
+
 export function setupEnvironment(scene, gfx, env = {}) {
+  const R = { gfx, input: Object.assign({}, env) };
+  buildEnvironment(R, scene, gfx, env); R.key = JSON.stringify(env);
+  scene.userData.envR = R; return R;
+}
+// A built-in model may choose the setting that suits its subject (an orbit in space, a wave over the sea). The
+// author's explicit choice (spec.environment.preset) always wins. Rebuilds with the same choice cost nothing.
+export function useEnvironment(scene, preset, opts = {}, spec = null) {
+  const R = scene && scene.userData.envR; if (!R) return null;
+  if (spec && spec.environment && spec.environment.preset) return R;
+  const want = Object.assign({}, R.input, opts, { preset }), key = JSON.stringify(want);
+  if (R.key === key) return R;
+  (R.objects || []).forEach(o => { o.removeFromParent(); o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) [].concat(m.material).forEach(x => x.dispose()); }); if (o.dispose && o.isLight) o.dispose(); });
+  scene.fog = null; scene.background = null;
+  for (const k of Object.keys(R)) if (k !== 'gfx' && k !== 'input') delete R[k];
+  buildEnvironment(R, scene, R.gfx, want); R.key = key; return R;
+}
+function buildEnvironment(R, scene, gfx, env) {
+  const before = new Set(scene.children);
   const preset = ENV_PRESETS.includes(env.preset) ? env.preset : 'studio';
-  const R = { preset, update() {}, base: null, sun: null, bgObjects: [] };
+  Object.assign(R, { preset, update() {}, base: null, sun: null, bgObjects: [] });
   scene.environment = gfx.envFor ? gfx.envFor(preset === 'desk' ? 'studio' : preset) : gfx.envStudio; scene.environmentIntensity = .85;
-  scene.userData.look = Object.assign({}, LOOKS[preset === 'desk' ? 'studio' : preset]);
+  scene.userData.look = Object.assign({}, LOOKS[preset]);
   const hemi = new THREE.HemisphereLight(0xffeedd, 0x2a1d10, .25); scene.add(hemi); R.hemi = hemi;
   const showBase = env.base !== false;
   switch (preset) {
-    case 'studio': case 'lab': case 'desk': {
+    case 'studio': case 'lab': {
       const lab = preset === 'lab';
       scene.background = bgGradient(lab ? '#2c3036' : '#3b2c1f', lab ? '#0e1013' : '#140e09'); scene.fog = new THREE.Fog(lab ? 0x0a0c0f : 0x0b0806, 30, 70);
       R.sun = spotKey(scene, { color: lab ? 0xf4f6ff : 0xffe6c8, pos: [7, 12, 6.5] });                         // key: high front-right spot, a soft pool of light on the plinth
@@ -162,6 +219,18 @@ export function setupEnvironment(scene, gfx, env = {}) {
       R.motes = motes(scene);
       break;
     }
+    case 'desk': {
+      scene.background = bgGradient('#33251a', '#0d0907'); scene.fog = new THREE.Fog(0x0d0907, 24, 60);
+      const dk = desk(scene, env.lamp ? { lampAt: env.lamp } : {}); R.base = dk.g; R.lamp = dk.lamp;
+      const d = dk.bulbW.distanceTo(dk.aim);
+      R.sun = new THREE.SpotLight(0xffd8a8, 3.4 * d * d, 0, .78, .55, 2); R.sun.position.copy(dk.bulbW); R.sun.castShadow = true; R.sun.shadow.mapSize.set(2048, 2048);
+      R.sun.shadow.camera.near = .3; R.sun.shadow.camera.far = d + 14; R.sun.shadow.bias = -.0001; R.sun.shadow.normalBias = .02; R.sun.shadow.radius = 3;
+      scene.add(R.sun); scene.add(R.sun.target); R.sun.target.position.copy(dk.aim);
+      R.fill = dirLight(scene, 0xb8c8e8, .22, [8, 4, 7]);                                                           // cool spill from a window off-frame right
+      R.rim = dirLight(scene, 0xffe2c0, 1.2, [3, 6, -10]);
+      hemi.intensity = .08; scene.environmentIntensity = .45; R.motes = motes(scene, 0xffd9a8, 90, [10, 6, 8]);
+      break;
+    }
     case 'landscape': {
       const sky = new Sky(); sky.scale.setScalar(450); sky.userData.noInk = true; scene.add(sky); R.sky = sky; R.bgObjects.push(sky);
       const u = sky.material.uniforms; u.turbidity.value = 3; u.rayleigh.value = 2.4; u.mieCoefficient.value = .005; u.mieDirectionalG.value = .8;
@@ -170,7 +239,7 @@ export function setupEnvironment(scene, gfx, env = {}) {
       R.rim = dirLight(scene, 0xdde8ff, .5, [-6, 5, -9]);
       const sunV = new THREE.Vector3();
       R.update = (t, p = {}) => {
-        const hour = p.hour ?? p.time ?? env.time ?? 10, elev = Math.sin((hour - 6) / 12 * Math.PI) * 62, az = (hour - 12) / 12 * 140;
+        const hour = p.hour ?? p.time ?? env.time ?? 10, elev = Math.sin((hour - 6) / 12 * Math.PI) * 62, az = (hour - 12) / 12 * 140 + (env.azimuth ?? 0);
         const phi = THREE.MathUtils.degToRad(90 - elev), th = THREE.MathUtils.degToRad(az); sunV.setFromSphericalCoords(1, phi, th);
         u.sunPosition.value.copy(sunV); R.sun.position.copy(sunV).multiplyScalar(30); const day = Math.max(0, Math.sin((hour - 6) / 12 * Math.PI));
         const storm = Math.min(1, Math.max(0, p.storm ?? p.cloud ?? 0));
@@ -178,7 +247,7 @@ export function setupEnvironment(scene, gfx, env = {}) {
         R.sun.color.setHSL(.08 + .05 * day, .6 - .3 * day, .55 + .2 * day); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
         gfx.renderer.toneMappingExposure = .55 + day * .35; R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
       };
-      if (showBase) R.base = plinth(scene, { felt: '#3e4c2c' });
+      if (showBase) R.base = plinth(scene, { felt: env.felt || '#3e4c2c' });
       break;
     }
     case 'cosmos': {
@@ -204,14 +273,19 @@ export function setupEnvironment(scene, gfx, env = {}) {
       break;
     }
     case 'ocean': {
-      const sky = new Sky(); sky.scale.setScalar(450); scene.add(sky); sky.material.uniforms.sunPosition.value.set(.4, .25, -1); sky.userData.noInk = true; R.bgObjects.push(sky);
-      R.sun = sunRig(scene, { intensity: 3, pos: [8, 6, -12] }); scene.fog = new THREE.Fog(0xa8c4d8, 25, 120); hemi.intensity = .4;
-      const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 1, 1), makeMaterial({ preset: 'water', color: '#1d5a78' })); sea.rotation.x = -Math.PI / 2; sea.position.y = -.6; sea.userData.noInk = true; scene.add(sea);
+      // env.sun: direction of the sun (the sky's bright spot and the key light agree)
+      const sd = new THREE.Vector3(...(env.sun || [.4, .25, -1])).normalize();
+      const sk = new Sky(); sk.scale.setScalar(450); scene.add(sk); sk.material.uniforms.sunPosition.value.copy(sd); sk.userData.noInk = true; R.bgObjects.push(sk); R.sky = sk;
+      R.sun = sunRig(scene, { intensity: 3, pos: sd.clone().multiplyScalar(15).toArray() }); scene.fog = new THREE.Fog(0xa8c4d8, 25, 120); hemi.intensity = .4;
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 1, 1), makeMaterial({ preset: 'water', color: '#1d5a78' })); sea.rotation.x = -Math.PI / 2; sea.position.y = -.6; sea.userData.noInk = true; scene.add(sea); R.sea = sea;
       break;
     }
     case 'night': {
       scene.background = bgGradient('#141a2a', '#03040a'); R.stars = stars(scene, 1200); R.bgObjects.push(R.stars); scene.environmentIntensity = .45; hemi.color.set(0x6070a0); hemi.intensity = .15;
-      R.sun = sunRig(scene, { intensity: .9, color: 0xaabbff, pos: [-6, 10, 4] });
+      // env.moon: direction of a visible moon; the key light then comes from it
+      const md = new THREE.Vector3(...(env.moon || [-6, 10, 4])).normalize();
+      R.sun = sunRig(scene, { intensity: .9, color: 0xaabbff, pos: md.clone().multiplyScalar(13).toArray() });
+      if (env.moon) { R.moon = moonDisc(scene, md); R.bgObjects.push(R.moon); }
       R.fill = dirLight(scene, 0xffb070, .35, [8, 3, 6]); R.rim = dirLight(scene, 0x8fa8ff, .8, [2, 6, -10]);
       if (showBase) R.base = plinth(scene);
       break;
@@ -226,5 +300,6 @@ export function setupEnvironment(scene, gfx, env = {}) {
     if (R.stars) R.stars.rotation.y += dt * .004;
     if (R.contact) R.contact.update();
   };
+  R.objects = scene.children.filter(o => !before.has(o));
   return R;
 }

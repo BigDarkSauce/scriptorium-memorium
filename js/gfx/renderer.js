@@ -44,16 +44,29 @@ export class Gfx {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), .32, .55, .86); c.addPass(this.bloom);
     c.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader); c.addPass(this.grade);
-    const pm = new THREE.PMREMGenerator(r);
-    this.envStudio = pm.fromScene(new RoomEnvironment(), .035).texture;
-    this.pmrem = pm; this.envs = {};
+    this.pmrem = new THREE.PMREMGenerator(r); this.envs = {};
+    this.makeStudioEnv();
     this.frameMs = 16; this._acc = 0; this._n = 0; this.lowQ = false;
-    this.resize(); addEventListener('resize', () => this.resize());
+    this.resize(); addEventListener('resize', () => { cancelAnimationFrame(this._rz); this._rz = requestAnimationFrame(() => this.resize()); });
+    // WebGL context loss (GPU reset, driver update, too many tabs): three.js stops drawing and restores its own state;
+    // the app pauses, rebuilds the pre-filtered environments (render-target contents are lost) and reopens the place.
+    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; this.showLost(true); }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.lost = false; this.showLost(false);
+      try { const old = this.envStudio; this.makeStudioEnv(); const kinds = Object.keys(this.envs); this.envs = {}; kinds.forEach(k => this.envFor(k)); if (old && old !== this.envStudio) old.dispose(); } catch (e) { console.warn(e); }
+      this.resize(); this.onRestore && this.onRestore();
+    }, false);
+  }
+  makeStudioEnv() { const sc = new RoomEnvironment(); this.envStudio = this.pmrem.fromScene(sc, .035).texture; this.envStudio.userData.shared = true; sc.dispose && sc.dispose(); }
+  showLost(on) {
+    let v = document.getElementById('gl-lost');
+    if (on && !v) { v = document.createElement('div'); v.id = 'gl-lost'; v.className = 'gl-lost glass'; v.setAttribute('role', 'status'); v.textContent = 'The graphics card was reset. Waiting for it to come back…'; document.body.append(v); }
+    if (!on && v) v.remove();
   }
   // Procedural HDR-like studio / sky environments (softboxes, sun disc) for reflections; cached per kind.
   envFor(kind = 'studio') {
     const k = ['landscape', 'ocean', 'night', 'cosmos', 'micro'].includes(kind) ? kind : (kind === 'lab' || kind === 'abstract' ? 'lab' : 'studio');
-    if (!this.envs[k]) { try { const sc = envScene(k); this.envs[k] = this.pmrem.fromScene(sc, .02, .1, 120).texture; sc.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } catch (e) { console.warn(e); this.envs[k] = this.envStudio; } }
+    if (!this.envs[k]) { try { const sc = envScene(k); this.envs[k] = this.pmrem.fromScene(sc, .02, .1, 120).texture; this.envs[k].userData.shared = true; sc.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } catch (e) { console.warn(e); this.envs[k] = this.envStudio; } }
     return this.envs[k];
   }
   // Per-scene look: scenes may set scene.userData.look = {contrast, sat, vignette, grain, warm, exposure}; others get the house look.
@@ -83,9 +96,12 @@ export class Gfx {
     this.composer.setPixelRatio(this.dpr); this.composer.setSize(w, h); this.grade.uniforms.uRes.value.set(w * this.dpr, h * this.dpr);
     if (this.camera && this.camera.isPerspectiveCamera) { this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   }
-  // Adaptive resolution: keep frames under ~22 ms
+  // Adaptive resolution: keep frames under ~22 ms. One-off stalls (shader compiles, a mode being built, a tab coming
+  // back from the background) are not frame cost and are left out of the average.
+  resetAdapt() { this._acc = 0; this._n = 0; this._skip = 8; }
   adapt(dtMs) {
-    this._acc += dtMs; this._n++;
+    if (!(dtMs > 0)) return; if (this._skip > 0) { this._skip--; return; }
+    this._acc += Math.min(dtMs, 100); this._n++;
     if (this._acc > 2000) {
       const avg = this._acc / this._n; this._acc = 0; this._n = 0; this.frameMs = avg;
       if (avg > 24 && this.dpr > .75) { this.dpr = Math.max(.75, this.dpr - .25); this.resize(); }

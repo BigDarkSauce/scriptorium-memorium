@@ -53,7 +53,7 @@ export function bmat(name) {
     default: m = S({ color: 0xcccccc });
   }
   if (name.startsWith('fresco')) { const t = frescoTex(+name.slice(6) || 1); m = S({ map: t, roughness: .95, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: .16, side: THREE.DoubleSide }); }
-  m.userData.bmat = name; MATS.set(name, m); return m;
+  m.userData.bmat = name; m.userData.shared = true; MATS.set(name, m); return m;   // shared: util.disposeTree leaves it (and its textures) alone
 }
 
 // Box-projected UVs in metres (applied after merging, in final coordinates).

@@ -13,14 +13,15 @@ import { FLAGSHIPS } from './seeds-scenes.js';
 import { groundChain } from './seeds-sources.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
-import { el, $, uid, toast, sleep, clamp } from './util.js';
+import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
 
 const LIB_KEY = 'library.v3';
 class App {
   constructor() {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
-    this.mode = null; this.last = performance.now(); this.t = 0;
+    this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0;
+    this.gfx.onRestore = () => { toast('Graphics restored'); this.restoreMode(); };
     initAI(); initEvidence();
     // sound: one speaker button, a soft click for every button, ambience per place
     this.sfx = sfx; document.body.append(sfx.button());
@@ -62,15 +63,34 @@ class App {
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
-  async switchMode(make) {
-    const g = this.gfx.grade.uniforms.uFade;
-    if (g.value < .99) { for (let k = g.value; k < 1; k += .08) { g.value = k; await sleep(16); } }
-    g.value = 1;
-    if (this.mode) { try { this.mode.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
-    this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32;
-    try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); this.mode = new Hub(this); }
-    await sleep(60); for (let k = 1; k > 0; k -= .05) { g.value = k; await sleep(16); } g.value = 0;
+  // Switches run one at a time (a second request while one is fading waits, and only the latest waiting one runs),
+  // so a double click or an exit pressed during a fade never leaves two modes alive.
+  switchMode(make) {
+    const tok = ++this._swTok;
+    const run = () => tok === this._swTok ? this._switch(make) : null;
+    return (this._sw = (this._sw || Promise.resolve()).then(run, run));
   }
+  async _switch(make) {
+    const g = this.gfx.grade.uniforms.uFade;
+    // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
+    const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
+    if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
+    g.value = 1;
+    const old = this.mode;
+    if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
+    this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32;
+    this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true;
+    try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
+    // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
+    if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
+    // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
+    if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.renderer.compileAsync(this.mode.scene, this.mode.camera), sleep(4000)]); } catch (e) { } }
+    this.gfx.resetAdapt();
+    await sleep(60); await fade(1, 0, 330); g.value = 0;
+  }
+  // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
+  retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
+  flushTrash() { if (!this.trash.length) return; const due = this.trash.filter(x => --x.frames <= 0); this.trash = this.trash.filter(x => x.frames > 0); due.forEach(x => { try { x.fn(); } catch (e) { console.warn(e); } }); }
   openHub(opts = {}) { this.history = []; sfx.ambience('library'); return this.switchMode(() => new Hub(this, opts)); }
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
@@ -88,9 +108,19 @@ class App {
   }
   loop() {
     requestAnimationFrame(() => this.loop());
-    const now = performance.now(), dt = Math.min(.05, (now - this.last) / 1000); this.last = now; this.t += dt;
-    if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { console.error(e); } }
-    this.gfx.adapt(dt * 1000); this.gfx.render(dt, this.t);
+    const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
+    if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)
+    if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
+    this.gfx.adapt(raw); this.gfx.render(dt, this.t);
+    this.flushTrash();
+    if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
+  }
+  // the context came back: environments are rebuilt by the renderer; reopen the current place so every render target is fresh
+  async restoreMode() {
+    const m = this.mode; if (!m) return;
+    if (m instanceof DioramaView) return this.openDiorama(m.spec, Object.assign({}, m.opts, { skipIntro: true, fromRect: null, autoTransition: false }));
+    if (m instanceof BookRoom) return this.openRoom(m.book.id);
+    return this.openHub();
   }
   // ---------- seed library: subject bookcases with example books and flagship dioramas ----------
   seedLibrary() {

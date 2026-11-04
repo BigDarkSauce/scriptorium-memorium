@@ -151,14 +151,16 @@ export class Director {
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
     if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = this.queue.length ? .12 : .3;   // more waiting → slower, so text never lags far behind the process
-    const bar = (b.el || b.capBar) && (b.el || b.capBar).querySelector('.co-time i'); if (bar) bar.style.width = Math.min(100, b.t / b.dur * 100) + '%';
+    if (b.bar === undefined) b.bar = (b.el || b.capBar) ? (b.el || b.capBar).querySelector('.co-time i') : null; if (b.bar) b.bar.style.width = Math.min(100, b.t / b.dur * 100).toFixed(1) + '%';
     // anchor on screen
     const p = b.anchor && b.anchor(); let sx = w * .5, sy = h * .42, on = false;
     if (p) { const q = p.clone().project(cam); if (q.z < 1) { sx = (q.x * .5 + .5) * w; sy = (-q.y * .5 + .5) * h; on = true; } }
     // callout placement: on the emptier side of the anchor, kept inside the safe frame
     const e = b.el; if (e) {
-      const cw = e.offsetWidth || 300, ch = e.offsetHeight || 80, panel = v.panel && !v.panel.hidden && !v.panel.classList.contains('folded') ? 380 : 24;
-      if (!b.rects || b.t - (b.rectT || -1) > .25) { b.rectT = b.t; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top; }
+      const panel = v.panel && !v.panel.hidden && !v.panel.classList.contains('folded') ? 380 : 24;
+      // layout is read at most every 0.25 s (callout size, pins), never between this frame's writes
+      if (!b.rects || b.t - (b.rectT || -1) > .25) { b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top; }
+      const cw = b.cw, ch = b.ch;
       const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; x = clamp(x, panel, w - cw - 24); y = clamp(y, 84, h - ch - 120); return [x, y]; };
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
         b.avoidT = b.t; b.avoid = [];

@@ -4,14 +4,15 @@ import { mulberry, makeNoise } from '../util.js';
 
 const cache = new Map();
 export function canvasTex(key, w, h, draw, { repeat, srgb = true, aniso = 8 } = {}) {
-  if (key && cache.has(key)) { const t = cache.get(key).clone(); if (repeat) t.repeat.set(repeat[0], repeat[1]); t.needsUpdate = true; return t; }
+  // the cached original is shared (never disposed); a clone shares its image and GPU upload but is the caller's to dispose
+  if (key && cache.has(key)) { const t = cache.get(key).clone(); delete t.userData.shared; if (repeat) t.repeat.set(repeat[0], repeat[1]); t.needsUpdate = true; return t; }
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'); draw(g, w, h);
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = aniso; t.wrapS = t.wrapT = THREE.RepeatWrapping;
   if (repeat) t.repeat.set(repeat[0], repeat[1]);
-  if (key) cache.set(key, t);
+  if (key) { cache.set(key, t); t.userData.shared = true; }
   return t;
 }
 function grain(g, w, h, r, n, a = .06) { for (let i = 0; i < n; i++) { g.fillStyle = `rgba(0,0,0,${r() * a})`; g.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2); } }

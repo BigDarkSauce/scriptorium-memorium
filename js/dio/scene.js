@@ -115,7 +115,7 @@ export class DioramaScene {
       spawn: (b, parent) => { const o = buildBody(Object.assign({ id: 'spawn' + Math.random().toString(36).slice(2, 7) }, b), ctx); patchTree(o, self.U); (parent || self.world).add(o); return o; },
       remove: o => { if (o) o.removeFromParent(); },
       label: (text, f, describe) => self.addActor(text, () => { try { return f(); } catch (e) { return null; } }, null, describe),
-      event: (text, pos, opts = {}) => self.fire(text, pos, opts.color, opts.id),
+      event: (text, pos, opts = {}) => self.fire(text, pos, opts.color, opts.id, opts.sound),
       onStep: f => self.hooks.step.push(f), onFrame: f => self.hooks.frame.push(f),
       readout: (n, f) => self.hooks.reads.push([n, f]), plot: (n, f) => { self.seriesName = n; self.hooks.series = f; },
       onClick: f => { self.hooks.click = f; }, camera: o => (self._camSet = true, Object.assign(self.orb, o.target ? { ...o, target: Array.isArray(o.target) ? V3(...o.target) : o.target } : o)),
@@ -157,8 +157,8 @@ export class DioramaScene {
     }
   }
   // ---------- running ----------
-  fire(text, pos, color = 0xffd27a, id) {
-    const ev = { t: this.t, text: String(text), pos: pos ? pos.clone() : null, color, id: id || null };
+  fire(text, pos, color = 0xffd27a, id, sound) {
+    const ev = { t: this.t, text: String(text), pos: pos ? pos.clone() : null, color, id: id || null, sound: sound || null };   // sound: a name for sfx.play (the engine plays it)
     this.events.push(ev); if (this.events.length > 200) this.events.shift();
     this.listeners.event.forEach(f => f(ev));
   }

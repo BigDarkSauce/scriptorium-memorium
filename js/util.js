@@ -119,5 +119,22 @@ export function typeset(node) {
   return new Promise(r => { const iv = setInterval(() => { if (window.MathJax && window.MathJax.typesetPromise) { clearInterval(iv); go().then(r); } }, 300); setTimeout(() => { clearInterval(iv); r(); }, 15000); });
 }
 
+// ---------- GPU resource disposal (duck-typed: no three.js import here) ----------
+// Collects the geometries, materials and textures an object tree uses.
+export function gpuSet(roots, set = new Set()) {
+  const addMat = m => { if (!m || set.has(m)) return; set.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) set.add(v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) set.add(v); } };
+  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
+    if (r.isScene) { if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
+  return set;
+}
+// Frees what `roots` use (object trees, or a Set from gpuSet), except what `keep` (object trees still on screen, or a Set from gpuSet) uses and anything
+// marked userData.shared (module caches: textures.js originals, baroque.js materials, renderer environments).
+export function disposeTree(roots, keep = null) {
+  const K = keep instanceof Set ? keep : gpuSet(keep || []);
+  const shared = x => x.userData && x.userData.shared, S = roots instanceof Set ? roots : gpuSet(roots);
+  S.forEach(x => { if (x.isMaterial && shared(x)) gpuSet({ traverse: f => f({ material: x }) }, K); });   // a cached material keeps its textures
+  S.forEach(x => { if (K.has(x) || shared(x) || typeof x.dispose !== 'function') return; try { x.dispose(); } catch (e) { } });
+}
+
 // Tiny event bus
 export const bus = { m: new Map(), on(k, f) { (this.m.get(k) || this.m.set(k, []).get(k)).push(f); return () => this.off(k, f); }, off(k, f) { const a = this.m.get(k); if (a) a.splice(a.indexOf(f) >>> 0, 1); }, emit(k, ...a) { (this.m.get(k) || []).slice().forEach(f => { try { f(...a); } catch (e) { console.error(e); } }); } };

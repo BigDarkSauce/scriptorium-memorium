@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, statue, fillBookcase, readingTable, bench, globeStand, runner, quietShadows } from './props.js';
 import { Navigator } from '../nav.js';
-import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, esc } from '../util.js';
+import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, esc, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const SUBJECT_COLORS = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f6f', '#7a2a4a'];
@@ -28,7 +28,8 @@ export class Hub {
     this.gfx.setView(this.scene, this.camera);
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
-      obstacles: () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
+      obstacles: () => this.obstacles() });
+    this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
     this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
@@ -38,13 +39,14 @@ export class Hub {
   }
   // ---------- world ----------
   buildRoom() {
-    if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
+    const gone = [];   // the old shell and furniture are freed once the rebuilt room has drawn
+    if (this.shell) { this.scene.remove(this.shell); gone.push(this.shell); }
     const R = this.lib.hub; if (R.w === 15 && R.d === 12 && R.h === 4.8) Object.assign(R, { w: 18, d: 12, h: 7 });   // old default → the baroque hall with its gallery
     // Admont-like white-and-gold wall bookcases line every wall; sections behind the user's bookcases are left out
     this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal', cases: 'white', caseSkip: this.caseSkip() }); this.scene.add(this.shell);
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     if (!this.decor) { this.decor = new THREE.Group(); this.scene.add(this.decor); }
-    this.furn.clear(); this.decor.clear();
+    gone.push(...this.furn.children, ...this.decor.children); this.furn.clear(); this.decor.clear(); if (gone.length) this.trash(gone);
     // the reading floor: a runner from the door to the window wall, two reading tables with lecterns and benches, two globes
     const c = this.caseDepth(), rl = R.d - 2 * c - 2.2; if (rl > 2) { const rn = runner(rl, Math.min(1.6, R.w * .09)); rn.position.set(0, .005, .3); this.decor.add(rn); }
     const tx = clamp(R.w * .13, 1.9, 3.2), tl = clamp(R.d * .2, 1.6, 3.0), tz = -R.d * .05;
@@ -58,10 +60,12 @@ export class Hub {
     // baroque: allegorical statues framing the window wall (back corners), facing the hall
     [-1, 1].forEach((sd, i) => { const st = statue({ variant: i ? 1 : 0, seed: i + 1 }); st.position.set(sd * (R.w / 2 - 1.15), 0, -R.d / 2 + 1.15); st.rotation.y = sd * -.75; this.furn.add(st); });
     quietShadows(this.furn);
-    this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0);
+    this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0); this.obstaclesDirty = true;
   }
+  // free removed objects a few frames later, keeping whatever the hall still shows (shared materials, cached textures)
+  trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); this.obstaclesDirty = true; this.shadowsDirty = true; }
   buildShelves() {
-    this.shelfObjs.forEach(o => o.removeFromParent()); this.shelfObjs.clear(); this.scrollObjs.clear();
+    const old = [...this.shelfObjs.values()]; this.shelfObjs.forEach(o => o.removeFromParent()); this.shelfObjs.clear(); this.scrollObjs.clear(); if (old.length) this.trash(old);
     this.lib.shelves.forEach(s => this.addShelfObj(s));
     this.lib.books.forEach(b => this.addScrollObj(b));
     this.lib.shelves.forEach(s => this.refill(s.id));
@@ -71,10 +75,12 @@ export class Hub {
   caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
   // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
-  updateWallCases() { if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
+  updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
   // eye-level tiers first (scroll centres nearest 1.35 m), then the rest
   tierOrder(u) { return [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35)); }
-  addShelfObj(s) { const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); quietShadows(o); this.shelfObjs.set(s.id, o); return o; }
+  // walk-mode collision boxes, recomputed only when bookcases or furniture change (or a bookcase is being dragged)
+  obstacles() { if (this.obstaclesDirty || this.dragging || !this._obs) { this._obs = this._obsFn(); this.obstaclesDirty = false; } return this._obs; }
+  addShelfObj(s) { this.obstaclesDirty = true; this.shadowsDirty = true; const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); quietShadows(o); this.shelfObjs.set(s.id, o); return o; }
   addScrollObj(b) {
     const so = this.shelfObjs.get(b.shelf); if (!so) return null;
     const o = makeScroll(b); const p = slotPos(so, b.tier || 0, b.slot || 0); o.position.copy(p); so.add(o); quietShadows(o); this.scrollObjs.set(b.id, o); return o;
@@ -137,7 +143,7 @@ export class Hub {
     promptBox('Name this bookcase (its subject)', s.name).then(v => { if (v) { s.name = v; this.rebuildShelf(s); this.app.saveLib(); this.renderBuildPanel(); } });
   }
   rebuildShelf(s) {
-    const old = this.shelfObjs.get(s.id); if (old) old.removeFromParent(); this.shelfObjs.delete(s.id);
+    const old = this.shelfObjs.get(s.id); if (old) { old.removeFromParent(); this.trash([old]); } this.shelfObjs.delete(s.id);
     this.addShelfObj(s); this.lib.books.filter(b => b.shelf === s.id).forEach(b => this.addScrollObj(b)); this.refill(s.id); this.updateWallCases();
     if (this.selShelf === s.id) this.highlight(this.shelfObjs.get(s.id));
   }
@@ -149,7 +155,7 @@ export class Hub {
     const s = this.lib.shelves.find(x => x.id === id); if (!s) return;
     const books = this.lib.books.filter(b => b.shelf === id);
     if (books.length && !(await confirmBox(`Remove "${s.name}"? Its ${books.length} scroll(s) move to another bookcase.`, 'Remove'))) return;
-    this.lib.shelves = this.lib.shelves.filter(x => x !== s); const o = this.shelfObjs.get(id); if (o) o.removeFromParent(); this.shelfObjs.delete(id);
+    this.lib.shelves = this.lib.shelves.filter(x => x !== s); const o = this.shelfObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.shelfObjs.delete(id);
     books.forEach(b => { const target = this.lib.shelves.find(x => this.freeSlot(x)) || this.makeDefaultShelf(); const fs = this.freeSlot(target); Object.assign(b, { shelf: target.id, tier: fs.tier, slot: fs.slot }); this.addScrollObj(b); this.refill(target.id); });
     this.updateWallCases(); this.selectShelf(null); this.app.saveLib();
   }
@@ -175,7 +181,7 @@ export class Hub {
     toast(`"${title}" placed on ${shelf.name}`);
     this.app.ingest.pageCount(file).then(n => { if (n) { b.pages = n; this.app.saveLib(); } }).catch(() => {});
   }
-  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) o.removeFromParent(); this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
+  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
   // ---------- pointer ----------
   pick(e, list) { const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera); return this.ray.intersectObjects(list, true); }
   ownerOf(o, kind) { while (o && !(o.userData && o.userData.kind === kind)) o = o.parent; return o; }
@@ -233,15 +239,19 @@ export class Hub {
   }
   // ---------- frame ----------
   update(dt) {
+    // the hall is static: its 2048² sun shadow map is redrawn only while something moves (opening, dragging, arriving)
+    const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false;
+    if (this.shadowsDirty !== false || this.opening || this.dragging || this._arriving) { sm.needsUpdate = true; this.shadowsDirty = false; }
     if (this.opening) { this.stepOpening(dt); return; }
     // walking (overview or first person) — see js/nav.js
     this.nav.update(dt, !!this.dragging);
-    this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
+    this._arriving = false;
+    this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { this._arriving = true; o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
   }
   dispose() {
     if (this.disposed) return; this.disposed = true;
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
-    this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = ''; this.gfx.renderer.shadowMap.autoUpdate = true;
   }
 }
