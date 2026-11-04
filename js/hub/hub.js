@@ -3,9 +3,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, statue, fillBookcase, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
-import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, esc, disposeTree } from '../util.js';
+import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const SUBJECT_COLORS = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f6f', '#7a2a4a'];
@@ -17,7 +17,8 @@ export class Hub {
     this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
-    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36 });
+    // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36, bloom: .15, bloomThreshold: 2.1 });
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
@@ -32,8 +33,8 @@ export class Hub {
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => this.obstacles() });
-    this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
-    this.onKeyD = e => { if (e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
+    this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children.filter(o => o.visible) : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
@@ -41,31 +42,56 @@ export class Hub {
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
   }
   // ---------- world ----------
-  buildRoom() {
-    const gone = [];   // the old shell and furniture are freed once the rebuilt room has drawn
-    if (this.shell) { this.scene.remove(this.shell); gone.push(this.shell); }
+  // fast: a live preview while a room-size slider is dragged (rebuilt at most every ~150 ms): the shell is built
+  // without its wall-case books and pier ornaments, sconces and chandelier metalwork (same lights, so no shader recompiles), and the furniture is only moved, not rebuilt;
+  // releasing the slider builds everything. A size the shell cannot be built at leaves the current room in place.
+  buildRoom(fast = false) {
     const R = this.lib.hub; if (R.w === 15 && R.d === 12 && R.h === 4.8) Object.assign(R, { w: 18, d: 12, h: 7 });   // old default → the baroque hall with its gallery
     // Admont-like white-and-gold wall bookcases line every wall; sections behind the user's bookcases are left out
-    this.shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal', cases: 'white', caseSkip: this.caseSkip() }); this.scene.add(this.shell);
+    let shell;
+    try { shell = makeRoomShell({ w: R.w, d: R.d, h: R.h, style: 'baroque', windowWall: 'back', palette: 'rose', floor: 'diagonal', cases: 'white', caseSkip: this.caseSkip(), fast }); }
+    catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
+    const gone = [];   // the old shell and furniture are freed once the rebuilt room has drawn
+    if (this.shell) { this.scene.remove(this.shell); gone.push(this.shell); }
+    this.shell = shell; this.scene.add(shell); shell.userData.dims = { w: R.w, d: R.d, h: R.h };
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     if (!this.decor) { this.decor = new THREE.Group(); this.scene.add(this.decor); }
-    gone.push(...this.furn.children, ...this.decor.children); this.furn.clear(); this.decor.clear(); if (gone.length) this.trash(gone);
-    // the reading floor: a runner from the door to the window wall, two reading tables with lecterns and benches, two globes
-    // (carpets: a wide runner and one under each reading table cover much of the marble, so the floor stays a quiet ground)
-    const c = this.caseDepth(), rl = R.d - 2 * c - 2.2, tx = clamp(R.w * .13, 1.9, 3.2), tl = clamp(R.d * .2, 1.6, 3.0), tz = -R.d * .05;
-    const rw = Math.min(2.5, R.w * .14, 2 * tx - 2.2); if (rl > 2) { const rn = runner(rl, rw); rn.position.set(0, .005, .3); this.decor.add(rn); }
+    if (!fast || !this.furn.children.length) { gone.push(...this.furn.children); this.furn.clear(); this.buildFurniture(); }
+    this.placeFurniture();
+    if (gone.length) this.trash(gone);
+    this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0); this.obstaclesDirty = true; this.shadowsDirty = true;
+    return true;
+  }
+  // the reading floor: two reading tables with lecterns and benches, two globes, a fauteuil, a desk, and two display
+  // columns of the classical orders framing the window wall (back corners): a Corinthian column in pavonazzetto and a
+  // Solomonic one in rosso antico, both with gilt capitals, on pedestals, each carrying an entablature fragment.
+  // Each piece's userData.place(R, c) sets its position from the room size (placeFurniture).
+  buildFurniture() {
+    const R = this.lib.hub, F = this.furn, tl = clamp(R.d * .2, 1.6, 3.0), info = (this.shell && this.shell.userData.baroque) || {};
+    const at = (o, fn) => { o.userData.place = fn; F.add(o); return o; };
+    const lay = (R, c) => { const tx = clamp(R.w * .13, 1.9, 3.2); return { tx, tz: -R.d * .05 }; };
     [-1, 1].forEach(sd => {
-      const cw = Math.min(2.1, 2 * (tx - rw / 2) - .02); if (cw > 1.2) { const cp = runner(tl + 1.5, cw); cp.position.set(sd * tx, .007, tz); this.decor.add(cp); }
-      const t = readingTable({ L: tl }); t.position.set(sd * tx, 0, tz); this.furn.add(t);
-      [-1, 1].forEach(k => { const b = bench({ L: tl - .3 }); b.position.set(sd * tx + k * .78, 0, tz); this.furn.add(b); });
-      if (R.d >= 9 && R.w >= 10) { const gl = globeStand({ celestial: sd > 0 }); gl.position.set(sd * tx, 0, -R.d / 2 + c + 1.9); gl.rotation.y = sd * .5; this.furn.add(gl); }
+      at(readingTable({ L: tl }), (R, c) => { const { tx, tz } = lay(R, c); return [sd * tx, tz, 0]; });
+      [-1, 1].forEach(k => at(bench({ L: tl - .3 }), (R, c) => { const { tx, tz } = lay(R, c); return [sd * tx + k * .78, tz, 0]; }));
+      at(globeStand({ celestial: sd > 0 }), (R, c) => { const { tx } = lay(R, c); return R.d >= 9 && R.w >= 10 ? [sd * tx, -R.d / 2 + c + 1.9, sd * .5] : null; });
     });
-    const ch = armchair(); ch.position.set(-R.w / 2 + 2.2, 0, R.d / 2 - 2.4); ch.rotation.y = .6; this.furn.add(ch);
-    const dk = readingDesk(); dk.position.set(R.w / 2 - 2.4, 0, R.d / 2 - 2.6); dk.rotation.y = -.4; this.furn.add(dk); this.desk = dk;
-    // baroque: allegorical statues framing the window wall (back corners), facing the hall
-    [-1, 1].forEach((sd, i) => { const st = statue({ variant: i ? 1 : 0, seed: i + 1 }); st.position.set(sd * (R.w / 2 - 1.15), 0, -R.d / 2 + 1.15); st.rotation.y = sd * -.75; this.furn.add(st); });
-    quietShadows(this.furn);
-    this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0); this.obstaclesDirty = true;
+    at(armchair(), R => [-R.w / 2 + 2.2, R.d / 2 - 2.4, .6]);
+    this.desk = at(readingDesk(), R => [R.w / 2 - 2.4, R.d / 2 - 2.6, -.4]);
+    const H = clamp((info.yE || 5.3) * .6, 2.1, 3.3), pH = clamp((info.yE || 5.3) * .17, .7, .95);
+    [{ order: 'corinthian', marble: 'pavonazzetto', gilt: true, die: 'scag-dark' }, { order: 'solomonic', marble: 'rosso', gilt: true, die: 'scag-dark' }].forEach((o, i) => {
+      const sd = i ? 1 : -1; at(displayColumn({ ...o, H, pedestal: pH }), R => [sd * (R.w / 2 - 1.15), -R.d / 2 + 1.15, 0]);
+    });
+    quietShadows(F);
+  }
+  placeFurniture() {
+    const R = this.lib.hub, c = this.caseDepth();
+    if (this.decor.children.length) { const old = [...this.decor.children]; this.decor.clear(); this.trash(old); }
+    this.furn.children.forEach(o => { const p = o.userData.place && o.userData.place(R, c); o.visible = !!p; if (p) { o.position.set(p[0], 0, p[1]); o.rotation.y = p[2]; } });
+    // carpets: a wide runner from the door to the window wall and one under each reading table (flat, 5–9 mm above
+    // the marble, never overlapping each other: a quiet ground for the reading floor)
+    const rl = R.d - 2 * c - 2.2, tx = clamp(R.w * .13, 1.9, 3.2), tl = clamp(R.d * .2, 1.6, 3.0), tz = -R.d * .05;
+    const rw = Math.min(2.5, R.w * .14, 2 * tx - 2.2); if (rl > 2) { const rn = runner(rl, rw); rn.position.set(0, .005, .3); this.decor.add(rn); }
+    [-1, 1].forEach(sd => { const cw = Math.min(2.1, 2 * (tx - rw / 2) - .02); if (cw > 1.2) { const cp = runner(tl + 1.5, cw); cp.position.set(sd * tx, .008, tz); this.decor.add(cp); } });
   }
   // free removed objects a few frames later, keeping whatever the hall still shows (shared materials, cached textures)
   trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); this.obstaclesDirty = true; this.shadowsDirty = true; }
@@ -74,7 +100,6 @@ export class Hub {
     this.lib.shelves.forEach(s => this.addShelfObj(s));
     if (this.repairSlots()) this.app.saveLib();
     this.lib.books.forEach(b => this.addScrollObj(b));
-    this.lib.shelves.forEach(s => this.refill(s.id));
     this.glowDirty = true;
   }
   // Libraries saved while several PDFs were imported at once can hold books sharing one shelf+tier+slot (or a slot the
@@ -96,8 +121,8 @@ export class Hub {
     if (bad.length) console.info(`Scriptorium: ${bad.length} scroll(s) shared a shelf slot and were moved to free slots`);
     return bad.length;
   }
-  // books packed around the scrolls of a bookcase (see props.fillBookcase); call after its scrolls change
-  refill(id) { const o = this.shelfObjs.get(id); if (o) fillBookcase(o, new Set(this.lib.books.filter(b => b.shelf === id && this.scrollObjs.get(b.id) && this.scrollObjs.get(b.id).parent === o).map(b => (b.tier || 0) + ':' + (b.slot || 0)))); }
+  // (the user's bookcases hold scrolls only: their empty slots keep their velvet cradles, see props.scrollRests)
+  refill() { }
   caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
   // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
@@ -176,7 +201,7 @@ export class Hub {
     const add = el('button', { class: 'btn primary', text: '+ Add PDF scroll', onclick: () => this.pickPDF() });
     const more = el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog() });
     u.append(el('div', { class: 'hub-actions glass' }, [add, this.buildBtn, more]));
-    this.hint = el('div', { class: 'hint glass', text: 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk · click a scroll to open it' }); u.append(this.hint);
+    this.hint = el('div', { class: 'hint glass', text: 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk (Space jumps) · click a scroll to open it' }); u.append(this.hint);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
     this.fileIn = el('input', { type: 'file', accept: 'application/pdf', multiple: true, hidden: true }); u.append(this.fileIn);
@@ -184,7 +209,7 @@ export class Hub {
   }
   toggleBuild(on = !this.build) {
     this.build = on; this.buildBtn.classList.toggle('on', on); this.buildBtn.textContent = on ? 'Done arranging' : 'Arrange library';
-    this.buildPanel.hidden = !on; this.hint.textContent = on ? 'Click a bookcase to select it · drag it along the floor · it snaps to walls' : 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk · click a scroll to open it';
+    this.buildPanel.hidden = !on; this.hint.textContent = on ? 'Click a bookcase to select it · drag it along the floor · it snaps to walls' : 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk (Space jumps) · click a scroll to open it';
     if (!on) this.selectShelf(null); this.renderBuildPanel();
   }
   renderBuildPanel() {
@@ -194,8 +219,9 @@ export class Hub {
     P.append(el('h4', { text: 'Room size' }));
     [['w', 'Width', 8, 40], ['d', 'Depth', 8, 40], ['h', 'Height', 3.2, 9]].forEach(([k, label, a, b]) => {
       const out = el('b', { text: R[k].toFixed(1) + ' m' }), inp = el('input', { type: 'range', min: a, max: b, step: .1, value: R[k], 'aria-label': label });
-      inp.oninput = () => { out.textContent = (+inp.value).toFixed(1) + ' m'; };
-      inp.onchange = () => { R[k] = +inp.value; this.buildRoom(); this.clampShelves(); this.app.saveLib(); };
+      // live: while dragging, the room follows at most every ~150 ms (fast rebuild); on release it is built in full
+      inp.oninput = () => { out.textContent = (+inp.value).toFixed(1) + ' m'; R[k] = +inp.value; this.liveResize(); };
+      inp.onchange = () => { R[k] = +inp.value; clearTimeout(this._rzT); this._rzT = null; if (this.buildRoom()) this.clampShelves(); this.app.saveLib(); };
       P.append(el('label', { class: 'ctrl' }, [el('span', {}, [label, out]), inp]));
     });
     const s = this.selShelf && this.lib.shelves.find(x => x.id === this.selShelf);
@@ -212,6 +238,19 @@ export class Hub {
           el('button', { class: 'btn small danger', text: 'Remove', onclick: () => this.deleteShelf(s.id) })]));
     }
     P.append(el('p', { class: 'dim small', text: 'Tip: name each bookcase by subject (Maths, Physics, Biology…). Bookcases snap flush to the nearest wall.' }));
+  }
+  // Every slider step shows at once: the built hall is stretched to the new size (a scale on the shell, no rebuild)
+  // and the bookcases and furniture move with their walls; 150 ms after the slider stops moving the shell is rebuilt
+  // at that size (fast path); on release it is built in full.
+  liveResize() {
+    this.previewSize();
+    clearTimeout(this._rzT); this._rzT = setTimeout(() => { this._rzT = null; if (!this.disposed && this.buildRoom(true)) this.clampShelves(); }, 150);
+  }
+  previewSize() {
+    const R = this.lib.hub, d0 = this.shell && this.shell.userData.dims; if (!d0) return;
+    this.shell.scale.set(R.w / d0.w, R.h / d0.h, R.d / d0.d);
+    this.lib.shelves.forEach(s => { this.snap(s, true); const o = this.shelfObjs.get(s.id); if (o) { o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; } });
+    this.placeFurniture(); this.glowDirty = true; this.shadowsDirty = true; this.obstaclesDirty = true;
   }
   addShelf(kind) {
     const R = this.lib.hub, dir = V3(); this.camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
@@ -314,33 +353,49 @@ export class Hub {
     const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
     if (sc) this.openScroll(sc);
   }
-  // ---------- the opening: fly → lift → unfold in light → dive into the page ----------
+  // ---------- the opening: fly → lift → unroll in light → dive into the page ----------
+  // The camera flies (1.4 s) to stand 1.05 m before the point where the middle of the unrolled sheet will be, looking at
+  // that point from the first frame to the last (its target never jumps); the scroll rises from its slot and turns to
+  // face it; the sheet then unrolls downward from the roll (1.5 s) with a weighted rod on its lower edge, and only then
+  // does the light swell (sheet glow, a warm point light, a touch of bloom) in step with it; fully open it holds a beat,
+  // and the camera moves in toward the sheet as the screen fades (1 s); the room opens when the fade is complete.
   openScroll(sc) {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
-    this.app.sfx && this.app.sfx.play('unroll');
-    this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null);
-    const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion()));
+    this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null); this.gfx.canvas.style.cursor = '';
+    if (this.hover) { this.hover.userData.paper.emissiveIntensity = 0; this.hover = null; }
+    const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
     if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }
     const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() };
-    O.liftTo = wp.clone().addScaledVector(outward, .55).setY(Math.max(1.35, wp.y)); O.camTo = O.liftTo.clone().addScaledVector(outward, .95).add(V3(0, .05, 0));
+    O.liftTo = wp.clone().addScaledVector(outward, .6).setY(Math.max(1.62, wp.y));
+    O.look = O.liftTo.clone().add(V3(0, -.3, 0));                        // the middle of the unrolled sheet
+    O.camTo = O.look.clone().addScaledVector(outward, 1.05).add(V3(0, .08, 0));
+    O.into = O.look.clone().addScaledVector(outward, .3);
     O.start = wp.clone(); O.q0 = sc.getWorldQuaternion(new THREE.Quaternion());
-    // reparent to the scene so it can float free
-    this.scene.attach(sc); O.sheet = makeSheet(.4, .62); sc.add(O.sheet); O.sheet.position.set(0, -.05, 0); O.sheet.rotation.y = 0;
-    O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.camTo, O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
-    O.light = new THREE.PointLight(0xffe2a8, 0, 6, 2); sc.add(O.light); O.light.position.set(0, -.3, .3);
+    this.scene.attach(sc);   // reparent to the hall so it can float free
+    // facing: the scroll's axis (local z) across the view, its front (local −x) toward the viewer, kept level
+    O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.liftTo.clone().add(outward), O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
+    O.sheet = makeSheet(.42, .6, b.title); sc.add(O.sheet);
+    O.light = new THREE.PointLight(0xffe2a8, 0, 4, 2); sc.add(O.light); O.light.position.set(-.45, -.3, 0);
     this.hint.textContent = 'Opening "' + b.title + '"…';
   }
   stepOpening(dt) {
-    const O = this.opening; O.t += dt; const t = O.t, c = this.camera, sc = O.sc;
-    const k1 = easeInOutQuint(Math.min(1, t / 1.3));
-    c.position.lerpVectors(O.from.p, O.camTo, k1); this.controls.target.lerpVectors(O.from.t, O.liftTo, k1); c.lookAt(this.controls.target);
-    const k2 = easeOut(clamp((t - .35) / 1.0, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
-    const k3 = clamp((t - 1.35) / 1.25, 0, 1), e3 = easeInOutQuint(k3);
-    O.sheet.scale.y = Math.max(.001, e3); sc.rotation.z += 0; O.sheet.material.emissiveIntensity = e3 * 1.6; O.light.intensity = e3 * 6; sc.userData.paper.emissiveIntensity = e3 * .8;
-    this.gfx.bloom.strength = this.scene.userData.look.bloom + e3 * .5;
-    const k4 = clamp((t - 2.7) / 1.1, 0, 1), e4 = easeInOutQuint(k4);
-    if (k4 > 0) { const into = O.liftTo.clone().add(V3(0, -.3, 0)); c.position.lerpVectors(O.camTo, into.clone().lerp(O.camTo, .18), e4); this.controls.target.copy(into); c.lookAt(into); this.gfx.grade.uniforms.uFade.value = e4; }
-    if (t > 3.85 && !O.done) { O.done = true; this.gfx.bloom.strength = this.scene.userData.look.bloom; this.app.openRoom(O.b.id, { fromHub: true }); }
+    const O = this.opening, T_FLY = 1.4, T_UN = 1.5, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
+    O.t += dt; const t = O.t, c = this.camera, sc = O.sc, S = O.sheet.userData;
+    const k1 = ease(Math.min(1, t / T_FLY));   // (cubic in-out: the turn toward the scroll never exceeds ~5° a frame at 30 fps)
+    this.controls.target.lerpVectors(O.from.t, O.look, k1);
+    const k2 = easeOut(clamp((t - .3) / 1.05, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
+    // the unroll, and the light with it (nothing glows before the sheet moves)
+    const k3 = clamp((t - T_UN) / D_UN, 0, 1), e3 = ease(k3);
+    if (k3 > 0 && !O.sound) { O.sound = true; this.sfx('unroll'); }
+    S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = k3 > 0;
+    S.sheet.material.emissiveIntensity = e3 * 1.1; O.light.intensity = e3 * 5; sc.userData.paper.emissiveIntensity = e3 * .5;
+    this.gfx.bloom.strength = this.scene.userData.look.bloom + e3 * .35;
+    // the dive: only once the sheet is fully open (and has held a beat)
+    const k4 = clamp((t - T_DIVE) / D_DIVE, 0, 1), e4 = ease(k4);
+    if (k4 > 0) c.position.lerpVectors(O.camTo, O.into, e4); else c.position.lerpVectors(O.from.p, O.camTo, k1);
+    c.lookAt(this.controls.target);
+    this.gfx.grade.uniforms.uFade.value = ease(clamp((k4 - .25) / .75, 0, 1));
+    if (k4 >= 1 && !O.done) { O.done = true; this.app.openRoom(O.b.id, { fromHub: true }); }
   }
   // ---------- frame ----------
   update(dt) {

@@ -15,10 +15,15 @@ export function bmat(name) {
   if (MATS.has(name)) return MATS.get(name);
   let m;
   const S = o => new THREE.MeshStandardMaterial(o), P = o => new THREE.MeshPhysicalMaterial(o);
-  if (name.startsWith('scag-')) { // scagliola / polished marble
+  if (name.startsWith('col-')) { // polished column marble; statuary a touch softer than the coloured stones
+    const k = name.slice(4), white = k === 'statuary'; m = P({ map: marbleTex(k, { size: 512, seed: 6 }), vertexColors: true, roughness: white ? .34 : .22, clearcoat: white ? .3 : .7, clearcoatRoughness: white ? .35 : .1, envMapIntensity: white ? .9 : 1.1, sheen: white ? .2 : 0, sheenColor: new THREE.Color(0xfff4e8) });
+  } else if (name.startsWith('scag-')) { // scagliola / polished marble
     const k = name.slice(5); m = P({ map: marbleTex(k, { size: 512, seed: 2 }), roughness: .3, clearcoat: .75, clearcoatRoughness: .14, envMapIntensity: 1.1 }); m.userData.boxUV = .9;
   } else switch (name) {
     case 'gilt': { const t = gildTex(); m = S({ color: 0xffffff, map: t.map, roughnessMap: t.rough, metalness: 1, roughness: 1, envMapIntensity: 3.4 }); m.userData.boxUV = 2.2; break; } // env kept low in the hub/rooms (renderer HOUSE look): gilt carries its own
+    // thin gilt mouldings (door frames, beads): the same leaf at ~4× the size, so an 18 mm strip shows one leaf over a
+    // long run instead of a dashed row of 57 mm squares that shimmers as the view moves
+    case 'gilt-fine': { const t = gildTex(); m = S({ color: 0xffffff, map: t.map, roughnessMap: t.rough, metalness: 1, roughness: .85, envMapIntensity: 3.4 }); m.userData.boxUV = .55; break; }
     case 'gilt-dim': { const t = gildTex(); m = S({ color: 0xd8c08a, map: t.map, roughnessMap: t.rough, metalness: .85, roughness: 1.15, envMapIntensity: 2.3 }); m.userData.boxUV = 2.2; break; }
     case 'stucco': m = S({ color: 0xf3ede2, map: plaster([240, 234, 222], 'stucco', .1), roughness: .78 }); m.userData.boxUV = .35; break;
     // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
@@ -39,9 +44,7 @@ export function bmat(name) {
       m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aVar;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif'); };
       m.customProgramCacheKey = () => 'spines-atlas-1'; m.userData.noCast = true; break; }
     case 'paint': m = S({ color: 0xf0ebe0, roughness: .55 }); break;
-    // carved figures: one vertex-coloured geometry each (hollows and creases baked darker, see bakeAO); a little less
-    // sheen and env than plain statuary so the modelling, not a milky rim, carries the form
-    case 'statuary-head': case 'statuary-carved': m = P({ map: marbleTex('statuary', { size: 512, seed: 4 }), vertexColors: true, roughness: .44, clearcoat: .16, clearcoatRoughness: .45, sheen: .1, sheenColor: new THREE.Color(0xfff4e8), envMapIntensity: .8 }); m.userData.boxUV = 1.6; break;
+    // antique marbles of the columns: vertex-coloured (flute hollows baked darker), UVs in metres set by the column builder
     case 'statuary': m = P({ map: marbleTex('statuary', { size: 512, seed: 4 }), roughness: .36, clearcoat: .25, clearcoatRoughness: .4, sheen: .3, sheenColor: new THREE.Color(0xfff4e8), envMapIntensity: 1.1 }); m.userData.boxUV = 1.6; break;
     case 'books': m = S({ map: bookSpinesTex(), roughness: .72 }); break;
     case 'pages': m = S({ map: parchment('deskbook', 256, 256), roughness: .85 }); break;
@@ -96,26 +99,18 @@ export class Acc {
   }
 }
 
-// ---------- carved figures (statues, atlantes) ----------
-// A figure is built in unit height (≈ 1 = crown) as ONE vertex-coloured geometry: every part carries a 'color' (carved
-// hollows darker), then bakeAO() darkens the creases where forms meet (arm against flank, drapery folds, hair against
-// the face, the hem on the plinth), so the carving reads as stone under the hall's soft light from 4–8 m.
-// Gilt parts go to addGilt. Budget: ≤ ~25k triangles a figure; the callers merge by material.
-const UP = V(0, 1, 0), TAU = Math.PI * 2;
+// ---------- classical columns (the Greek and Roman orders after Vitruvius and Vignola) ----------
+// Built in the column's own frame (y up from its foot, the front toward +z); proportions in units of the lower
+// diameter D. Shafts and round mouldings are surfaces of revolution with a per-vertex shade (the hollows of flutes,
+// scotiae and volute channels darker) and UVs in metres, so one antique-marble material per stone serves every
+// column: 'col-statuary' (white bases, capitals, entablatures), 'col-giallo', 'col-verde', 'col-rosso',
+// 'col-pavonazzetto' (shafts). Capitals may be gilt. Everything merges by material through an Acc; a column with
+// pedestal, capital and entablature fragment stays under ~30k triangles.
+const TAU = Math.PI * 2;
 const G1 = (x, c, s) => Math.exp(-((x - c) * (x - c)) / (s * s));
 const sstep = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
-const adist = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
-// Catmull-Rom through a [[y, r], …] profile table (smooth: no shading kinks at the knots)
-function spline(tab, y) {
-  const n = tab.length; if (y <= tab[0][0]) return tab[0][1]; if (y >= tab[n - 1][0]) return tab[n - 1][1];
-  let i = 0; while (i < n - 2 && y > tab[i + 1][0]) i++;
-  const t = (y - tab[i][0]) / (tab[i + 1][0] - tab[i][0]), p0 = tab[Math.max(0, i - 1)][1], p1 = tab[i][1], p2 = tab[i + 1][1], p3 = tab[Math.min(n - 1, i + 2)][1];
-  return .5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
-}
-// carved fold profile: broad rounded ridges (+1) and narrow, deep hollows (−1), as drapery is cut in marble
-const fold = ph => 1 - 2 * Math.pow(1 - Math.abs(Math.sin(ph / 2)), 2.6);
-const hollow = (f, k = .6) => 1 - k * Math.pow((1 - f) / 2, 1.4); // shade for a fold value
-// a parametric grid (u around / across, v along) → indexed geometry with normals, uv and a shade colour.
+const TEX_M = .55;   // metres one marble texture repeat covers on a column
+// a parametric grid (u across, v along) → indexed geometry with normals, uv and a shade colour.
 // fn(u, v) → [x, y, z, shade]. Outward normal = ∂u × ∂v (flip reverses it).
 function surf(nu, nv, fn, closeU = false, flip = false) {
   const cu = closeU ? nu : nu + 1, n = cu * (nv + 1), pos = new Float32Array(n * 3), col = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = [];
@@ -128,219 +123,202 @@ function surf(nu, nv, fn, closeU = false, flip = false) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
-// surface of revolution about a swaying, sheared axis (contrapposto). rf(y, θ, v) → [radius, shade]; θ = 0 faces +z,
-// π/2 faces +x. cx(y): axis offset in x; shear(y): y += shear·(x − cx) (tilted hips / shoulders); zs(y): depth ratio.
-function revolve(y0, y1, nu, nv, rf, { cx = () => 0, zs = () => .78, shear = () => 0, th0 = 0, th1 = TAU, yf = null, flip = false } = {}) {
-  const full = Math.abs(th1 - th0 - TAU) < 1e-6;
-  return surf(nu, nv, (u, v) => { const th = th0 + (th1 - th0) * u, y = yf ? yf(th, v) : y0 + (y1 - y0) * v, [r, k] = rf(y, th, v), c = cx(y), x = c + r * Math.sin(th); return [x, y + shear(y) * (x - c), r * Math.cos(th) * zs(y), k]; }, full, flip);
-}
-// a tube from a to b, radius rf(t, θ) → [r, shade] (open ends: cover them with joints)
-function tube(a, b, rf, nu = 14, nv = 8) {
-  const d = b.clone().sub(a), dn = d.clone().normalize(), e1 = (Math.abs(dn.y) < .9 ? V(0, 1, 0) : V(1, 0, 0)).cross(dn).normalize(), e2 = dn.clone().cross(e1);
-  return surf(nu, nv, (u, v) => { const th = u * TAU, [r, k] = rf(v, th), c = Math.cos(th) * r, s = Math.sin(th) * r; return [a.x + d.x * v + e1.x * c + e2.x * s, a.y + d.y * v + e1.y * c + e2.y * s, a.z + d.z * v + e1.z * c + e2.z * s, k]; }, true);
-}
-// tapered limb between two points (tube + spherical joints)
-function limb(add, a, b, r0, r1, seg = 12) {
-  add(tube(a, b, t => [r0 + (r1 - r0) * t, 1], seg, 3)); add(new THREE.SphereGeometry(r0, seg, 8), Mx(a.x, a.y, a.z)); add(new THREE.SphereGeometry(r1, seg, 8), Mx(b.x, b.y, b.z));
-}
-// a band of drapery along pts: width wf(t), folds across it, a thin two-sided slab; out(P) is the outward direction
-function ribbon(add, pts, wf, out, { folds = 3, depth = .012, thick = .008, nu = 9, nv = 26, ph = 0, hem = 0 } = {}) {
-  const cur = new THREE.CatmullRomCurve3(pts), fr = [];
-  for (let j = 0; j <= nv; j++) { const t = j / nv, P = cur.getPointAt(t), T = cur.getTangentAt(t), B = T.clone().cross(out(P)).normalize(), O = B.clone().cross(T).normalize(); fr.push({ P, B, O, T, t }); }
-  [1, -1].forEach(sg => add(surf(nu, nv, (u, v) => {
-    const F = fr[Math.round(v * nv)], x = u * 2 - 1, f = fold(x * Math.PI * folds + ph + F.t * 2), wd = wf(F.t), hz = hem * sstep(.85, 1, F.t) * (f + 1) / 2;
-    const o = sg * thick / 2 + depth * (.5 * f + .5) * (1 - .5 * x * x);
-    return [F.P.x + F.B.x * x * wd / 2 + F.O.x * o - F.T.x * hz, F.P.y + F.B.y * x * wd / 2 + F.O.y * o - F.T.y * hz, F.P.z + F.B.z * x * wd / 2 + F.O.z * o - F.T.z * hz, sg > 0 ? hollow(f, .55) : .7];
-  }, false, sg < 0)));
-}
-// lathe with drapery folds: radius modulated by sin(k·θ) with amplitude amp(y) (used for small gilt work)
-function drapedLathe(profile, folds = 9, amp = () => 0, segs = 40, zScale = .8, phase = 0, phiStart = 0, phiLength = Math.PI * 2) {
-  const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs, phiStart, phiLength);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), th = Math.atan2(z, x), k = 1 + amp(y) * Math.sin(folds * th + y * 4 + phase) + amp(y) * .4 * Math.sin(folds * 2.3 * th + 1.7); p.setXYZ(i, x * k, y, z * k * zScale); }
-  geo.computeVertexNormals(); return geo;
-}
-// A hand: palm, curled fingers and thumb. z = along the forearm, `back` = the direction the back of the hand faces.
-function hand(add, Wr, dir, back, sc = 1) {
-  const z = dir.clone().normalize(), x = back.clone().cross(z).normalize(), y = z.clone().cross(x), B = new THREE.Matrix4().makeBasis(x, y, z);
-  const at = (px, py, pz, sx, sy, sz, rx = 0) => B.clone().setPosition(Wr.clone().addScaledVector(x, px * sc).addScaledVector(y, py * sc).addScaledVector(z, pz * sc)).multiply(Mx(0, 0, 0, rx, 0, 0, sx * sc, sy * sc, sz * sc));
-  const pt = (px, py, pz) => Wr.clone().addScaledVector(x, px * sc).addScaledVector(y, py * sc).addScaledVector(z, pz * sc);
-  add(new THREE.SphereGeometry(1, 12, 8), at(0, 0, .022, .021, .011, .026));
-  add(new THREE.SphereGeometry(1, 12, 8), at(0, -.009, .05, .02, .011, .019, .7));
-  limb(add, pt(.016, -.004, .012), pt(.022, -.014, .036), .0075 * sc, .006 * sc, 8);
-  return pt(0, -.016, .03); // the hollow of the palm
-}
-// Local occlusion baked into the vertex colours: for each vertex, the area of nearby surface lying in front of it
-// (within R, weighted by distance and angle). Density-independent; creases, folds and contacts go darker.
-function bakeAO(geo, R = .032, k = 1.5, lo = .4) {
-  const p = geo.attributes.position.array, nr = geo.attributes.normal.array, col = geo.attributes.color.array, N = p.length / 3;
-  const ids = new Int32Array(N), map = new Map(), P = [], Nn = [], Ar = [];
-  for (let i = 0; i < N; i++) {
-    const key = Math.round(p[i * 3] * 5000) + ',' + Math.round(p[i * 3 + 1] * 5000) + ',' + Math.round(p[i * 3 + 2] * 5000);
-    let id = map.get(key); if (id === undefined) { id = Ar.length; map.set(key, id); P.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); Nn.push(0, 0, 0); Ar.push(0); }
-    ids[i] = id; Nn[id * 3] += nr[i * 3]; Nn[id * 3 + 1] += nr[i * 3 + 1]; Nn[id * 3 + 2] += nr[i * 3 + 2];
+// A closed surface of revolution: nu steps round (u ∈ [0, 1], the seam duplicated with its normals averaged, so
+// the texture never smears across it), rows at the given v values. fn(u, v) → [x, y, z, shade]. UVs in metres:
+// u along the circumference of radius rRef, v = height.
+function lathe3(nu, vs, fn, rRef = .2) {
+  const cu = nu + 1, nv = vs.length - 1, n = cu * (nv + 1), pos = new Float32Array(n * 3), col = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = [];
+  let q = 0;
+  for (let j = 0; j <= nv; j++) for (let i = 0; i < cu; i++, q++) {
+    const r = fn(i === nu ? 1 : i / nu, vs[j]), k = r[3] == null ? 1 : clamp(r[3], .3, 1.05);
+    pos[q * 3] = r[0]; pos[q * 3 + 1] = r[1]; pos[q * 3 + 2] = r[2]; col[q * 3] = k; col[q * 3 + 1] = k * (.98 + .02 * k); col[q * 3 + 2] = k * (.95 + .05 * k);
+    uv[q * 2] = i / nu * TAU * rRef / TEX_M; uv[q * 2 + 1] = r[1] / TEX_M;
   }
-  for (let t = 0; t < N; t += 3) {
-    const a = t * 3, b = a + 3, c = a + 6, ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
-    const ar = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 6; Ar[ids[t]] += ar; Ar[ids[t + 1]] += ar; Ar[ids[t + 2]] += ar;
-  }
-  const M = Ar.length, grid = new Map(), cell = q => Math.floor(q / R);
-  for (let j = 0; j < M; j++) { const key = cell(P[j * 3]) + ',' + cell(P[j * 3 + 1]) + ',' + cell(P[j * 3 + 2]); let l = grid.get(key); if (!l) grid.set(key, l = []); l.push(j); }
-  const ao = new Float32Array(M), norm = Math.PI * R * R / 3, R2 = R * R;
-  for (let j = 0; j < M; j++) {
-    const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2], nl = Math.hypot(Nn[j * 3], Nn[j * 3 + 1], Nn[j * 3 + 2]) || 1, nx = Nn[j * 3] / nl, ny = Nn[j * 3 + 1] / nl, nz = Nn[j * 3 + 2] / nl;
-    const gx = cell(x), gy = cell(y), gz = cell(z); let occ = 0;
-    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
-      const l = grid.get((gx + a) + ',' + (gy + b) + ',' + (gz + c)); if (!l) continue;
-      for (let s = 0; s < l.length; s++) { const q = l[s], dx = P[q * 3] - x, dy = P[q * 3 + 1] - y, dz = P[q * 3 + 2] - z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > R2 || d2 < 1e-10) continue; const d = Math.sqrt(d2), cs = (dx * nx + dy * ny + dz * nz) / d; if (cs > .1) occ += Ar[q] * (1 - d / R) * cs; }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * cu + i, b = a + 1, c = a + cu, d = c + 1; idx.push(a, b, d, a, d, c); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  const nr = g.attributes.normal;
+  for (let j = 0; j <= nv; j++) { const a = j * cu, b = a + nu, x = nr.getX(a) + nr.getX(b), y = nr.getY(a) + nr.getY(b), z = nr.getZ(a) + nr.getZ(b), l = Math.hypot(x, y, z) || 1; nr.setXYZ(a, x / l, y / l, z / l); nr.setXYZ(b, x / l, y / l, z / l); }
+  return g;
+}
+// a turned moulding from a profile [[r, y, shade?], …] (bottom to top round the outside, metres)
+function latheP(pts, nu = 48) { const rr = pts.reduce((a, p) => a + p[0], 0) / pts.length; return lathe3(nu, pts.map((_, j) => j), (u, j) => { const [r, y, k] = pts[j], th = u * TAU; return [r * Math.sin(th), y, r * Math.cos(th), k == null ? 1 : k]; }, rr); }
+// profile helpers: a convex quarter/half round (torus) and a concave hollow (scotia, cavetto), appended bottom → top
+const torusP = (out, cr, cy, R, a0 = -Math.PI / 2, a1 = Math.PI / 2, n = 7) => { for (let k = 0; k <= n; k++) { const a = a0 + (a1 - a0) * k / n; out.push([cr + R * Math.cos(a), cy + R * Math.sin(a), .9 + .1 * Math.cos(a)]); } return out; };
+const scotiaP = (out, r, y0, y1, depth, n = 7) => { for (let k = 0; k <= n; k++) { const t = k / n, s = Math.sin(Math.PI * t); out.push([r - depth * s, y0 + (y1 - y0) * t, 1 - .45 * s]); } return out; };
+// a box with a shade colour and metre UVs (for vertex-coloured marble materials)
+function boxC(w, h, d, shade = 1) {
+  const g = new THREE.BoxGeometry(w, h, d), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv, c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) { const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), x = p.getX(i) / TEX_M, y = p.getY(i) / TEX_M, z = p.getZ(i) / TEX_M; if (ax > .5) uv.setXY(i, z, y); else if (ay > .5) uv.setXY(i, x, z); else uv.setXY(i, x, y); c[i * 3] = shade; c[i * 3 + 1] = shade; c[i * 3 + 2] = shade; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g;
+}
+const withC = (g, shade = 1) => { const n = g.attributes.position.count, c = new Float32Array(n * 3).fill(shade); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2)); return g; };
+// The orders: column height in lower diameters (with base and capital), capital height (D), base (Attic) or none.
+export const ORDERS = {
+  doric: { h: 6.5, cap: .37, base: false, flutes: 20, arris: true },          // Greek Doric (Parthenon ≈ 5.5 D; a little slenderer here)
+  ionic: { h: 9, cap: .3, base: true, flutes: 24 },
+  corinthian: { h: 10, cap: 1.12, base: true, flutes: 24 },
+  composite: { h: 10, cap: 1.12, base: true, flutes: 24 },
+  solomonic: { h: 9.5, cap: 1.12, base: true, flutes: 10, twist: 3 } };       // Bernini's baldacchino: three turns, a composite capital
+// The column's lower diameter for a given total height (base + shaft + capital).
+export const colDiameter = (order, H) => H / (ORDERS[order] || ORDERS.ionic).h;
+// The shaft: entasis (straight for the lower third, then tapering to 5/6 D, after Vignola), apophyges flaring into
+// the base and under the astragal, flutes with fillets (Ionic, Corinthian) or sharp arrises (Doric) that end in
+// rounded stops; a Solomonic shaft winds round its axis (an offset circle turning `twist` times) with helical flutes.
+function shaftGeo(D, y0, Hs, o) {
+  const r0 = D / 2, nf = o.flutes || 0, arris = !!o.arris, tw = o.twist || 0;
+  const ts = [0, .004, .01, .018, .028, .04, .055, .075], mid = tw ? 20 * tw : 14;
+  for (let k = 1; k < mid; k++) ts.push(.075 + .85 * k / mid);
+  ts.push(.925, .945, .96, .972, .982, .99, .996, 1);
+  const nu = tw ? 96 : Math.max(48, nf * (arris ? 6 : 8)), pitch = nf ? TAU / nf : 1;
+  return lathe3(nu, ts, (u, t) => {
+    const th = u * TAU, z = t * Hs;
+    let r = r0 * (t < 1 / 3 ? 1 : 1 - Math.pow((t - 1 / 3) / (2 / 3), 1.15) / 6);
+    if (!arris) r += r0 * (.04 * Math.exp(-z / (.06 * D)) + .05 * Math.exp(-(Hs - z) / (.05 * D)));
+    let a = th, k = 1;
+    if (tw) { const env = sstep(0, .08, t) * sstep(1, .92, t), ph = TAU * tw * sstep(0, 1, t * .98 + .01); r *= 1 - .12 * env + .22 * env * Math.cos(th - ph); a = th - ph; k = .9 + .1 * Math.cos(th - ph); }
+    if (nf) {
+      const fade = arris ? sstep(.985, .965, t) : sstep(.02, .055, t) * sstep(.975, .94, t), f = ((a / pitch) % 1 + 1) % 1;
+      let d = 0; if (arris) d = 1 - (2 * f - 1) * (2 * f - 1); else { const s = (f - .13) / .74; if (s > 0 && s < 1) d = Math.sqrt(Math.max(0, 1 - (2 * s - 1) * (2 * s - 1))); }
+      const fd = (arris ? .16 : .3) * pitch * r * fade;
+      r -= fd * d; k *= 1 - .4 * d * fade;
     }
-    ao[j] = clamp(1 - k * occ / norm, lo, 1);
-  }
-  for (let i = 0; i < N; i++) { const a = ao[ids[i]]; col[i * 3] *= a; col[i * 3 + 1] *= a; col[i * 3 + 2] *= a; }
-  geo.attributes.color.needsUpdate = true; return geo;
+    return [r * Math.sin(th), y0 + z, r * Math.cos(th), k];
+  }, r0);
 }
-// collects a figure's stone parts (shade colour on every part), merges them and bakes the occlusion
-class Fig {
-  constructor() { this.parts = []; this.add = (geo, m4, shade = 1) => this.push(geo, m4, shade); }
-  push(geo, m4, shade = 1) {
-    const g = geo.index ? geo.toNonIndexed() : geo.clone(); if (m4) g.applyMatrix4(m4); if (!g.attributes.normal) g.computeVertexNormals();
-    const n = g.attributes.position.count;
-    if (!g.attributes.color) { const c = new Float32Array(n * 3); for (let i = 0; i < n; i++) { c[i * 3] = shade; c[i * 3 + 1] = shade * (.97 + .03 * shade); c[i * 3 + 2] = shade * (.93 + .07 * shade); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
-    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
-    g.morphAttributes = {}; g.clearGroups(); this.parts.push(g); return g;
-  }
-  bake(R = .032, k = 1.5, lift = 0) { const g = mergeGeometries(this.parts, false); bakeAO(g, R, k); if (lift) g.translate(0, lift, 0); this.parts = []; return g; }
+// An Ionic volute in its own plane (local xy, the face toward +z): a spiral band (logarithmic, 2¾ turns) standing
+// proud of a backing disc, the channel between the turns left in shadow, an eye at the centre. s = +1 winds out to the right.
+function volute(add, M, R0, depth, s = 1, eye = .17) {
+  const turns = 2.75, Phi = turns * TAU, k = Math.log(1 / eye) / Phi, r = f => R0 * Math.exp(-k * f), shape = new THREE.Shape(), N = 40 * turns;
+  for (let i = 0; i <= N; i++) { const f = Phi * i / N, q = r(f); i ? shape.lineTo(s * q * Math.sin(f), q * Math.cos(f)) : shape.moveTo(s * q * Math.sin(f), q * Math.cos(f)); }
+  for (let i = N; i >= 0; i--) { const f = Phi * i / N, q = r(f) - .5 * (r(f) - r(f + TAU)); shape.lineTo(s * q * Math.sin(f), q * Math.cos(f)); }
+  const band = new THREE.ExtrudeGeometry(shape, { depth: depth * 1.6, bevelEnabled: false, curveSegments: 1 }); band.translate(0, 0, -depth * .2);
+  add(withC(band), M);
+  const disc = new THREE.CylinderGeometry(R0 * 1.03, R0 * 1.03, depth, 40); disc.rotateX(Math.PI / 2); disc.translate(0, 0, -depth * .62);
+  add(withC(disc, .62), M);
+  add(withC(new THREE.SphereGeometry(R0 * eye * 1.15, 12, 8), .95), M.clone().multiply(Mx(0, 0, depth * .9, 0, 0, 0, 1, 1, .6)));
 }
-// ---------- figures (unit height ≈ 1; caller scales; `add` must take vertex colours: bmat('statuary-carved')) ----------
-// A bearing atlas: arms raised to a cushion at y = 1, head bowed under the load: a modelled chest (pectorals with a
-// shadowed lower edge, sternum, three rows of the rectus, linea alba, obliques, serratus), muscled arms and big hands.
-export function atlasFigure(add, mirror = 1, { herm = false, addTerm = null, addGilt = null, seed } = {}) {
-  const F = new Fig(), a = F.add, m = mirror, P = (x, y, z) => V(x * m, y, z), gilt = addGilt || a;
-  if (herm) { // a herm-atlas: the torso rises from a tapering term wrapped in drapery and a gilt acanthus cuff
-    const term = new THREE.CylinderGeometry(.17 * Math.SQRT2, .11 * Math.SQRT2, .47, 4, 1); term.rotateY(Math.PI / 4); term.scale(1, 1, .78); (addTerm || a)(term, Mx(0, .235, 0));
-    if (addGilt) { addGilt(new THREE.BoxGeometry(.25, .025, .19), Mx(0, .012, 0)); addGilt(new THREE.BoxGeometry(.37, .03, .29), Mx(0, .46, 0));
-      for (let k = 0; k < 6; k++) addGilt(new THREE.SphereGeometry(.016 - k * .0013, 8, 6), Mx(0, .4 - k * .05, .143 - k * .006, 0, 0, 0, 1, 1.25, .7));
-      addGilt(drapedLathe([[0, .45], [.17, .45], [.18, .48], [.15, .53], [0, .535]], 14, y => .12 * clamp((.53 - y) / .08, 0, 1), 40, .8), Mx(0, 0, 0)); }
-    // the drapery knotted round the hips, cut in deep hanging folds
-    const HIP = [[.45, .17], [.5, .156], [.55, .132], [.59, .108], [.615, .088]];
-    a(revolve(.46, .615, 88, 14, (y, th) => { const f = fold(11 * th + 1.2 * Math.sin(y * 9) + 1), am = .03 * sstep(.6, .47, y) + .004; return [spline(HIP, y) + am * (.5 * f + .25), hollow(f, .65 * clamp(am / .02, 0, 1))]; }));
-    a(new THREE.SphereGeometry(.05, 12, 10), Mx(.06 * m, .56, .085, .3, 0, .4 * m, .9, 1.4, .35)); // a fold of the drape over the hip
-  } else { // legs: weight on one leg, the other knee forward (contrapposto under load)
-    limb(a, P(-.062, .04, .0), P(-.066, .265, .005), .022, .034); limb(a, P(-.066, .265, .005), P(-.07, .49, -.005), .036, .05);
-    limb(a, P(.07, .05, .06), P(.075, .27, .05), .022, .033); limb(a, P(.075, .27, .05), P(.07, .49, .0), .035, .049);
-    a(drapedLathe([[0, .44], [.098, .44], [.118, .47], [.115, .53], [.1, .57], [0, .575]], 12, y => .07 * clamp((.56 - y) / .12, 0, 1), 36, .78), Mx(0, 0, 0));
-  }
-  // torso, bowed forward under the weight
-  const TA = [[.5, .1], [.55, .09], [.6, .094], [.65, .106], [.7, .123], [.74, .135], [.775, .139], [.8, .118], [.82, .085], [.845, .045]];
-  a(revolve(.5, .845, 76, 36, (y, th) => {
-    const rb = spline(TA, y), xm = Math.sin(th) * rb, ax = Math.abs(xm), c = Math.cos(th), fr = Math.pow(Math.max(0, c), 1.5);
-    let d = 0, cav = 0;
-    d += .032 * G1(ax, .054, .04) * G1(y, .738, .034) * sstep(.69, .716, y) * fr;                              // pectorals
-    const ce = G1(y, .7, .011) * G1(ax, .056, .045) * fr; d -= .01 * ce; cav += .55 * ce;                         // their shadowed lower edge
-    const sg = G1(xm, 0, .012) * G1(y, .735, .045) * fr; d -= .012 * sg; cav += .35 * sg;                          // sternum
-    for (const yr of [.67, .634, .598]) { d += .013 * G1(ax, .026, .017) * G1(y, yr, .015) * fr; const gr = G1(y, yr + .018, .006) * G1(ax, .026, .03) * fr; d -= .004 * gr; cav += .32 * gr; }
-    const la = G1(xm, 0, .007) * sstep(.57, .6, y) * sstep(.716, .69, y) * fr; d -= .008 * la; cav += .45 * la;   // linea alba
-    d += .014 * G1(ax, .088, .026) * G1(y, .6, .04) * Math.max(0, c * .6 + .4);                                   // obliques
-    for (let k = 0; k < 3; k++) { const se = G1(ax, .106, .013) * G1(y, .655 + .022 * k, .008) * Math.max(0, c); d += .006 * se; cav += .14 * se; }
-    const nv = G1(xm, 0, .008) * G1(y, .577, .007) * fr; d -= .009 * nv; cav += .55 * nv;                          // navel
-    d += .02 * G1(y, .812, .03) * Math.max(0, .5 - c * .5);                                                         // trapezius
-    return [rb + d, 1 - cav];
-  }, { zs: () => .64 }), Mx(0, 0, -.005, .12));
-  // a bearded head bowed and turned a little under the load; the neck strained forward
-  a(tube(V(0, .81, -.005), V(0, .875, .05), t => [.046 - .006 * t, 1], 16, 4));
-  a(headGeo({ beard: true, seed: seed != null ? seed : (m > 0 ? 1 : 2) }), Mx(0, .887, .074, .34, -.18 * m, 0, .062, .062, .062));
-  // a mantle knotted on the shoulder, falling behind the back, with a fold across the breast
-  a(drapedLathe([[.07, .84], [.13, .82], [.16, .77], [.155, .7], [.14, .62], [.13, .56]], 6, y => .07 * clamp((.84 - y) / .3, 0, 1), 26, .75, 2 + m, Math.PI * .58, Math.PI * .84), Mx(0, 0, -.01));
-  ribbon(a, [V(-.14 * m, .82, .0), V(-.08 * m, .77, .075), V(.02 * m, .71, .09), V(.09 * m, .655, .07), V(.135 * m, .61, .0)], () => .05, p => V(p.x * .4, .3, p.z + .06).normalize(), { folds: 2, depth: .01, thick: .012, nv: 20 });
-  a(new THREE.SphereGeometry(.034, 12, 10), Mx(-.125 * m, .815, .025, 0, 0, 0, 1, .8, .9));
-  // arms raised to the load: deltoid, biceps, the forearm swelling below the elbow, hands flat under the cushion
-  [-1, 1].forEach(s => {
-    const S = V(s * .138, .79, 0), E = V(s * .196, .93, -.012), Hd = V(s * .085, .982, .022);
-    a(new THREE.SphereGeometry(1, 16, 12), Mx(s * .142, .792, .004, 0, 0, -s * .5, .056, .046, .053));
-    a(tube(S, E, t => [.041 - .009 * t + .007 * G1(t, .45, .2), 1], 16, 10));
-    a(new THREE.SphereGeometry(.033, 14, 10), Mx(E.x, E.y, E.z));
-    a(tube(E, Hd, t => [.033 + .006 * G1(t, .22, .18) - .013 * t, 1], 16, 10));
-    a(new THREE.SphereGeometry(.021, 12, 8), Mx(Hd.x, Hd.y, Hd.z));
-    hand(a, Hd, V(-s * .9, .15, .1), V(0, -1, 0), 1.3);
-  });
-  add(F.bake(.034, 1.5), new THREE.Matrix4());
+// An acanthus leaf on the bell of a capital at angle th: lobed outline, raised midrib with a groove either side,
+// cupped across, the tip curling forward and down. Two-sided (front and back sheets). rbell(y) = the bell radius.
+function acanthus(add, M, th, y0, h, w, lift, out, rbell, D) {
+  const er = V(Math.sin(th), 0, Math.cos(th)), et = V(Math.cos(th), 0, -Math.sin(th)), thick = .012 * D;
+  [1, -1].forEach(sg => add(surf(8, 12, (u, v) => {
+    const x = u * 2 - 1, ax = Math.abs(x), lob = 1 - .26 * Math.pow(Math.abs(Math.sin(v * Math.PI * 3.5)), 4);
+    const wd = w / 2 * Math.pow(Math.sin(Math.PI * Math.min(1, v * 1.06)), .5) * lob * (1 - .25 * v);
+    const cu = sstep(.6, 1, v), yy = y0 + h * v - cu * cu * h * .22;
+    const rr = rbell(Math.min(yy, y0 + h)) + lift + out * Math.pow(v, 1.7) + cu * h * .3 + .02 * D * (1 - ax * ax) * (1 - .5 * v) + sg * thick / 2;
+    const P = er.clone().multiplyScalar(rr).addScaledVector(et, x * wd); P.y = yy;
+    return [P.x, P.y, P.z, sg > 0 ? 1 - .3 * G1(ax, .2, .08) - .25 * ax * ax - .15 * cu : .6];
+  }, false, sg < 0), M));
 }
-// A draped allegorical figure in contrapposto holding an attribute: weight on one leg (that hip higher, the shoulder
-// lower), the free knee forward under a chiton cut in deep folds, a himation wrapped round the hips with a rolled
-// upper edge and a band over the shoulder, a cape behind, one arm bent holding the attribute before the breast, the
-// other lowered gathering a fall of the mantle. variant 0 book · 1 globe · 2 ring (astronomy) · 3 tablet · 4 torch
-export function drapedFigure(add, addGilt, variant = 0, seed = 1) {
-  const F = new Fig(), a = F.add, s = seed % 2 ? 1 : -1, w = -s, ph = seed * 1.7, LIFT = .022, Gd = (geo, mm) => addGilt(geo, Mx(0, LIFT, 0).multiply(mm));
-  const thK = s * .5, thW = w * Math.PI / 2;
-  const cx = y => w * (.022 * G1(y, .46, .2) - .012 * G1(y, .8, .09));
-  const shear = y => w * (.1 * G1(y, .5, .08) - .08 * G1(y, .79, .05));
-  const LOW = [[0, .158], [.04, .146], [.12, .13], [.24, .12], [.36, .119], [.46, .126], [.53, .117], [.6, .094]];
-  const TOR = [[.54, .1], [.6, .088], [.64, .093], [.68, .1], [.72, .104], [.76, .106], [.785, .1], [.81, .08], [.83, .052], [.85, .03]];
-  const knee = (y, th) => .05 * G1(adist(th, thK), 0, .5) * (y < .3 ? .5 + .5 * y / .3 : G1(y, .3, .17));
-  const zsT = y => .64 + .06 * G1(y, .7, .05), bl = y => sstep(.54, .62, y);
-  const rLow = (y, th) => spline(LOW, y) + knee(y, th), rTor = (y, th) => spline(TOR, y) + .027 * (G1(adist(th, .45), 0, .3) + G1(adist(th, -.45), 0, .3)) * G1(y, .7, .04);
-  const rB = (y, th) => rLow(y, th) * (1 - bl(y)) + rTor(y, th) * bl(y), zsB = y => .78 * (1 - bl(y)) + zsT(y) * bl(y);
-  const onBody = (th, y, off) => { const r = rB(y, th) + off, c = cx(y), x = c + r * Math.sin(th); return V(x, y + shear(y) * (x - c), r * Math.cos(th) * zsB(y)); };
-  const outw = P => P.clone().sub(V(cx(P.y), P.y - .03, 0)).normalize();
-  // chiton: deep folds from the hips to the ground (a straight column of them over the weight-bearing leg), the cloth
-  // pulled smooth over the free knee and hanging from it
-  a(revolve(0, .6, 104, 25, (y, th) => {
-    const tw = th + .2 * Math.sin(3 * th + ph) + .09 * Math.sin(5 * th + 2 * ph), f = fold(11 * tw + .7 * Math.sin(y * 5 + ph));
-    const am = (.01 + .046 * sstep(.58, .02, y)) * (1 + .5 * G1(adist(th, thW), 0, .9)) * (1 - .8 * G1(adist(th, thK), 0, .45) * G1(y, .31, .09));
-    return [rLow(y, th) + am * (.5 * f + .2), hollow(f, .72 * clamp(am / .03, 0, 1))];
-  }, { cx, shear, zs: () => .78 }));
-  a(new THREE.SphereGeometry(1, 14, 10), Mx(s * .072 + cx(0), .014, .152, 0, s * .25, 0, .03, .019, .05)); // the free foot's toes
-  // bodice with fine folds gathered at the girdle under the breast
-  a(revolve(.54, .85, 64, 20, (y, th) => { const f = fold(17 * th + 9 * y + ph), am = .005 * (1 + 1.4 * G1(y, .655, .03)) * sstep(.84, .8, y); return [rTor(y, th) + am * (.5 * f + .3), hollow(f, .45 * Math.min(1, am / .01))]; }, { cx, shear, zs: zsT }));
-  a(revolve(.636, .657, 72, 4, (y, th, v) => [rTor(y, th) + .005 + .006 * Math.sin(Math.PI * v), 1], { cx, shear, zs: zsT }));
-  // himation round the hips: hem high over the free knee, low on the weight side, its edge zig-zagging; a rolled top
-  const yb = th => .27 + .1 * Math.cos(adist(th, thK)), yt = th => .56 + .045 * Math.cos(adist(th, thW));
-  const hemZ = th => .016 * (fold(9 * th + ph + 1) + 1) / 2, V0 = 1 / 17;
-  a(revolve(0, 1, 80, 17, (y, th, v) => {
-    const vv = clamp((v - V0) / (1 - V0), 0, 1), f = fold(9 * th + w * 10 * (y - yb(th)) + ph + 1), am = .017 * (1 - .55 * vv);
-    const r = rLow(y, th) + (v < V0 / 2 ? .008 : .034 + am * (.5 * f + .3)) - .02 * sstep(.8, 1, vv);
-    return [r, (v < V0 / 2 ? .55 : 1) * hollow(f, .6 * (1 - .4 * vv))];
-  }, { cx, shear, zs: () => .78, yf: (th, v) => { const vv = clamp((v - V0) / (1 - V0), 0, 1); return v < V0 / 2 ? yb(th) - hemZ(th) + .01 : yb(th) - hemZ(th) * (1 - vv) + (yt(th) - yb(th)) * vv; } }));
-  const roll = []; for (let i = 0; i < 48; i++) { const th = i / 48 * TAU; roll.push(onBody(th, yt(th) - .004 + .005 * Math.sin(th * 6 + ph), .024 + .006 * Math.sin(th * 7 + ph))); }
-  a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(roll, true), 64, .015, 7, true));
-  // the end of the himation drawn up across the breast and over the shoulder of the weight-bearing side
-  ribbon(a, [onBody(s * .55, .565, .03), onBody(s * .15, .635, .026), onBody(w * .3, .71, .02), onBody(w * .9, .785, .018), V(cx(.82) + w * .072, .832, -.012), onBody(w * 2.3, .75, .024), onBody(w * 2.6, .6, .05)],
-    t => .075 + .02 * Math.sin(t * Math.PI), outw, { folds: 3, depth: .013, thick: .009, nv: 30, ph });
-  // cape falling from the shoulders behind (two-sided, deep folds)
-  [[.052, false, 1, 36, 18], [.044, true, .7, 20, 9]].forEach(([off, flip, sh, nu, nv]) => a(revolve(.03, .8, nu, nv, (y, th) => { const f = fold(7 * th + 1.5 * Math.sin(y * 4 + ph) + ph), am = .03 * sstep(.8, .1, y) + .006; return [rB(y, th) + off - .03 * sstep(.68, .8, y) + am * (.5 * f + .3), sh * hollow(f, .55)]; }, { cx, shear, zs: zsB, th0: Math.PI - 1.15, th1: Math.PI + 1.15, flip })));
-  // arms: chiton sleeves to above the elbow (buttoned folds), bare forearms, hands
-  const arm = (S, E, Wr, back, r0 = .027) => {
-    const M = S.clone().lerp(E, .6);
-    a(tube(S.clone().lerp(E, -.1), M, (t, th) => { const f = fold(7 * th + t * 2.5 + ph); return [.04 - .006 * t + .005 * (.5 * f + .3) - .01 * sstep(.82, 1, t), hollow(f, .5)]; }, 28, 10));
-    a(tube(S.clone().lerp(E, .5), E, t => [r0 - .003 * t, 1], 14, 4)); a(new THREE.SphereGeometry(r0 - .003, 12, 8), Mx(E.x, E.y, E.z));
-    a(tube(E, Wr, t => [r0 - .003 + .004 * G1(t, .25, .2) - .009 * t, 1], 14, 8)); a(new THREE.SphereGeometry(r0 - .011, 10, 8), Mx(Wr.x, Wr.y, Wr.z));
-    return hand(a, Wr, Wr.clone().sub(E), back, 1.05);
-  };
-  const S1 = onBody(s * Math.PI / 2, .775, -.012), E1 = V(s * .158, .64, .03), W1 = V(s * .1, .7, .145);
-  const S2 = onBody(w * Math.PI / 2, .775, -.012), E2 = V(w * .155, .625, -.02), W2 = V(w * .142, .5, .045);
-  const H = arm(S1, E1, W1, V(0, -1, 0)), H2 = arm(S2, E2, W2, V(w, -.2, -.3));
-  // a fall of the mantle gathered in the lowered hand, hanging in folds with a zig-zag hem
-  ribbon(a, [H2.clone().add(V(0, .03, -.01)), H2.clone().add(V(w * .01, -.08, .012)), H2.clone().add(V(w * .016, -.2, .022)), H2.clone().add(V(w * .02, -.3, .03))], t => .045 + .05 * t, P => V(w * .55, 0, .85).normalize(), { folds: 2.5, depth: .014, thick: .01, nv: 18, ph: ph + 2, hem: .02 });
-  // carved head turned toward the attribute; hair waved back over the ears into a knot; a gilt fillet
-  const hx = cx(.9) + w * .008, HQ = Mx(hx, .905, .02, .12, .35 * s, w * .06, .056, .056, .056);
-  a(tube(V(cx(.8), .8, -.008), V(hx * .9, .878, .012), t => [.031 - .004 * t, 1], 14, 4));
-  a(headGeo({ female: true, seed }), HQ);
-  [-1, 1].forEach(sd => {
-    a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(sd * .4, .66, .62), V(sd * .84, .44, .26), V(sd * .96, .2, -.24), V(sd * .64, .16, -.78), V(sd * .2, .26, -1.02)]), 22, .21, 8), HQ, .92);
-    a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(sd * .2, .92, .5), V(sd * .34, 1.04, 0), V(sd * .3, .86, -.6), V(sd * .14, .52, -.98)]), 16, .16, 8), HQ, .95);
-  });
-  a(new THREE.SphereGeometry(.56, 14, 10), HQ.clone().multiply(Mx(0, .3, -1.05, 0, 0, 0, 1.1, .85, .85)));
-  [-.32, .32].forEach(x => a(new THREE.TorusGeometry(.3, .13, 6, 12), HQ.clone().multiply(Mx(x, .3, -1.18, 0, Math.PI / 2, 0))));
-  Gd(new THREE.TorusGeometry(1.04, .05, 6, 40), HQ.clone().multiply(Mx(0, .42, -.08, Math.PI / 2 - .35, 0, 0, .92, 1, 1)));
-  // the attribute, resting in the raised hand
-  if (variant === 0) { const BM = Mx(H.x, H.y + .052, H.z + .006, -.38, s * .3); a(new THREE.BoxGeometry(.082, .108, .026), BM); [-1, 1].forEach(k => a(new THREE.BoxGeometry(.088, .114, .006), BM.clone().multiply(Mx(0, 0, k * .015)), .95)); Gd(new THREE.BoxGeometry(.03, .03, .03), BM.clone().multiply(Mx(0, 0, .02, 0, 0, Math.PI / 4, 1, 1, .2))); }
-  else if (variant === 1) { a(new THREE.SphereGeometry(.066, 18, 12), Mx(H.x, H.y + .062, H.z)); Gd(new THREE.TorusGeometry(.074, .006, 6, 40), Mx(H.x, H.y + .062, H.z, .4, 0, .3)); Gd(new THREE.TorusGeometry(.074, .005, 6, 40), Mx(H.x, H.y + .062, H.z, Math.PI / 2, 0, 0)); }
-  else if (variant === 2) { Gd(new THREE.TorusGeometry(.07, .008, 6, 36), Mx(H.x, H.y + .085, H.z, 0, s * .5)); Gd(new THREE.TorusGeometry(.055, .006, 6, 30), Mx(H.x, H.y + .085, H.z, Math.PI / 2, s * .5)); Gd(new THREE.CylinderGeometry(.006, .006, .07, 6), Mx(H.x, H.y + .035, H.z)); }
-  else if (variant === 3) { a(new THREE.BoxGeometry(.1, .14, .02), Mx(H.x, H.y + .068, H.z, -.2, s * .2)); }
-  else { Gd(new THREE.CylinderGeometry(.012, .016, .22, 8), Mx(H.x, H.y + .05, H.z)); Gd(new THREE.ConeGeometry(.032, .085, 10), Mx(H.x, H.y + .2, H.z)); }
-  a(new THREE.BoxGeometry(.38, .022, .33), Mx(cx(0) * .5, -.011, 0)); // the plinth the figure is carved with
-  add(F.bake(.032, 1.5, LIFT), new THREE.Matrix4());
+// A stalk rising from the bell and ending in a spiral: points (th, r, y) up to the start of the scroll, then the scroll
+// in the vertical plane through angle thEnd, centre (rc, yc), radius rho shrinking over 1.6 turns (over the top, out, down, in).
+function helix(add, M, pts, thEnd, rc, yc, rho, rad) {
+  const P = pts.map(([t, r, y]) => V(r * Math.sin(t), y, r * Math.cos(t))), er = V(Math.sin(thEnd), 0, Math.cos(thEnd));
+  for (let k = 0; k <= 12; k++) { const ps = k / 12 * Math.PI * 1.6, q = rho * (1 - .62 * k / 12), c = er.clone().multiplyScalar(rc - q * Math.cos(ps)); c.y = yc + q * Math.sin(ps); P.push(c); }
+  add(withC(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P), 44, rad, 6)), M);
+}
+// Concave-sided abacus of the Corinthian and Composite capitals (corners chamfered), extruded upward from y = 0.
+function abacusGeo(a, sag, ch, h) {
+  const s = new THREE.Shape(), C = [[a, a], [-a, a], [-a, -a], [a, -a]];
+  for (let i = 0; i < 4; i++) {
+    const [x0, y0] = C[i], [x1, y1] = C[(i + 1) % 4], dx = Math.sign(x1 - x0), dy = Math.sign(y1 - y0);
+    const p0 = [x0 + dx * ch, y0 + dy * ch], p1 = [x1 - dx * ch, y1 - dy * ch], mx = (x0 + x1) / 2, my = (y0 + y1) / 2, nx = -Math.sign(mx) * (Math.abs(mx) > 1e-6 ? 1 : 0), ny = -Math.sign(my) * (Math.abs(my) > 1e-6 ? 1 : 0);
+    if (i === 0) s.moveTo(p0[0], p0[1]); else s.lineTo(p0[0], p0[1]);
+    s.quadraticCurveTo(mx + nx * sag * 2, my + ny * sag * 2, p1[0], p1[1]);
+  }
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 10 }); g.rotateX(-Math.PI / 2); return withC(g);
+}
+// A column's merged parts (per material, in its own frame), cached by its parameters: rebuilding a hall at a new
+// width or depth (or moving a display column) re-uses them instead of re-turning every flute and leaf.
+const _cols = new Map();
+export function addColumn(A, M, o = {}) {
+  const key = JSON.stringify([o.order, o.marble, o.trim, !!o.gilt, +(+o.H || 3).toFixed(3), +(+o.D || 0).toFixed(3), !!o.entab, o.plinth]);
+  let c = _cols.get(key);
+  if (!c) { const A2 = new Acc(), info = column(A2, null, o), parts = []; for (const [mat, list] of A2.m) parts.push([mat, mergeGeometries(list, false)]); A2.m.clear(); c = { parts, info }; _cols.set(key, c); if (_cols.size > 24) _cols.delete(_cols.keys().next().value); }
+  c.parts.forEach(([mat, geo]) => A.add(mat, geo, M)); return c.info;
+}
+// Pushes one column into the accumulator A at frame M (its foot at y = 0 of M; null = its own frame).
+// o: { order, marble (shaft stone), trim (base/capital stone, 'statuary'), gilt (gilt capital), H (base + shaft + capital, m),
+//      D (lower diameter; default H / order height), entab (an entablature fragment on top), plinth (Greek Doric stylobate block) }
+// Returns { top, D, half } (top of the topmost part, the lower diameter, the half width of the footprint).
+export function column(A, M, o = {}) {
+  const ord = ORDERS[o.order] || ORDERS.ionic, H = o.H || 3, D = o.D || H / ord.h, r0 = D / 2;
+  const shaftM = bmat('col-' + (o.marble || 'giallo')), trimM = bmat('col-' + (o.trim || 'statuary')), capM = o.gilt ? bmat('gilt') : trimM, gilt = bmat('gilt');
+  M = M || new THREE.Matrix4();
+  const add = mat => (geo, m) => A.add(mat, geo, m ? M.clone().multiply(m) : M), T = add(trimM), S = add(shaftM), C = add(capM);
+  const capH = ord.cap * D;
+  let y = 0, half = D * .68;
+  // ---- base ----
+  if (ord.base) {
+    const pl = D * .167; T(boxC(D * 1.36, pl, D * 1.36), Mx(0, pl / 2, 0));
+    const p = [], u = v => v * D; // the Attic base: torus, fillet, scotia, fillet, torus, fillet
+    torusP(p, u(.5975), pl + u(.0625), u(.0625));
+    p.push([u(.57), pl + u(.125), .8], [u(.57), pl + u(.14), .75]); scotiaP(p, u(.57), pl + u(.14), pl + u(.225), u(.055));
+    p.push([u(.578), pl + u(.236), .85]); torusP(p, u(.535), pl + u(.2825), u(.0425), -.95, Math.PI / 2, 6);
+    p.push([u(.52), pl + u(.325), .85], [u(.52), pl + u(.333), .9]);
+    T(latheP(p, 64)); y = pl + u(.333);
+  } else if (o.plinth !== false) { const st = D * .12; T(boxC(D * 1.42, st, D * 1.42), Mx(0, st / 2, 0)); y = st; half = D * .71; }
+  // ---- shaft ----
+  const Hs = H - y - capH;
+  S(shaftGeo(D, y, Hs, ord)); y += Hs;
+  const rt = r0 * 5 / 6;
+  // ---- capital ----
+  if (o.order === 'doric') { // annulets and a broad echinus under a square abacus
+    const p = [[rt * .98, y - D * .01, .9], [rt + D * .012, y + D * .012, 1], [rt + D * .002, y + D * .024, .7], [rt + D * .016, y + D * .038, 1], [rt + D * .006, y + D * .05, .7], [rt + D * .02, y + D * .064, 1]];
+    for (let k = 0; k <= 8; k++) { const a = k / 8 * Math.PI / 2; p.push([rt + D * .02 + D * .18 * Math.sin(a), y + D * .064 + D * .13 * (1 - Math.cos(a)), .85 + .15 * Math.sin(a)]); }
+    p.push([D * .5, y + D * .194, 1]); C(latheP(p, 64));
+    C(boxC(D * 1.24, D * .175, D * 1.24), Mx(0, y + D * .19 + D * .0875, 0)); y += D * .365;
+  } else if (o.order === 'ionic') { // astragal, egg-and-dart echinus, volutes on front and back joined by the bolsters, thin abacus
+    const at = []; torusP(at, rt + D * .005, y + D * .01, D * .028, -Math.PI / 2, Math.PI / 2, 6); C(latheP([[rt * .97, y - D * .02, .9], ...at, [rt * .96, y + D * .04, .9]], 48));
+    C(lathe3(128, [0, .25, .5, .75, 1], (u, v) => { const th = u * TAU, egg = Math.max(0, Math.cos(16 * th)), rr = rt + D * (.02 + .07 * Math.sin(v * Math.PI / 2)) + D * .018 * Math.pow(egg, 3) * Math.sin(v * Math.PI); return [rr * Math.sin(th), y + D * (.035 + .085 * v), rr * Math.cos(th), .62 + .38 * Math.pow(egg, .6)]; }, rt));
+    const zf = D * .4, vx = D * .5, vy = y + D * .02, R0 = D * .205, dep = D * .03;
+    [-1, 1].forEach(sx => [1, -1].forEach(sz => volute(C, Mx(sx * vx, vy, sz * zf, 0, sz > 0 ? 0 : Math.PI, 0), R0, dep, sx * sz)));
+    const bol = lathe3(32, [0, .1, .25, .4, .48, .52, .6, .75, .9, 1], (u, v) => { const th = u * TAU, w = Math.abs(v - .5) * 2, rr = R0 * (.98 - .3 * Math.pow(1 - w, .8)) + (Math.abs(v - .5) < .03 ? D * .012 : 0); return [rr * Math.sin(th), -zf * .98 + 2 * zf * .98 * v, rr * Math.cos(th), .8 + .2 * w]; }, R0);
+    [-1, 1].forEach(sx => C(bol, Mx(sx * vx, vy, 0, Math.PI / 2)));
+    C(boxC(2 * vx, D * .1, 2 * zf + D * .008, .9), Mx(0, y + D * .17, 0));
+    C(boxC(D * 1.1, D * .085, D * 1.0), Mx(0, y + D * .222 + D * .0425, 0)); y += D * .305;
+  } else { // Corinthian / Composite: bell with two rows of acanthus, caulicoli and helices (or Ionic corner volutes), concave abacus
+    const hc = capH, comp = o.order === 'composite' || o.order === 'solomonic';
+    const bell = yy => { const t = clamp((yy - y) / hc, 0, 1); return rt + D * (.015 + .05 * t * t) + (t > .8 ? D * .3 * Math.pow((t - .8) / .2, 2) * .3 : 0); };
+    const at = []; torusP(at, rt + D * .005, y + D * .01, D * .028, -Math.PI / 2, Math.PI / 2, 6); C(latheP([[rt * .97, y - D * .02, .9], ...at, [rt * .97, y + D * .04, .9]], 48));
+    const bp = []; for (let k = 0; k <= 10; k++) { const yy = y + D * .03 + (hc * .86 - D * .03) * k / 10; bp.push([bell(yy), yy, .7 + .3 * k / 10]); } bp.push([bell(y + hc * .86) * .8, y + hc * .865, 1]); C(latheP(bp, 40));
+    for (let k = 0; k < 8; k++) acanthus(C, null, (k + .5) * TAU / 8, y + D * .02, hc * (comp ? .3 : .34), D * .34, D * .03, D * .05, bell, D);
+    for (let k = 0; k < 8; k++) acanthus(C, null, k * TAU / 8, y + hc * .12, hc * (comp ? .44 : .5), D * .32, D * .012, D * .07, bell, D);
+    if (!comp) {
+      for (let f = 0; f < 4; f++) [-1, 1].forEach(s => {
+        const tc = f * Math.PI / 2 + s * .36, yb = y + hc * .5, tC = f * Math.PI / 2 + s * Math.PI / 4;
+        C(withC(new THREE.CylinderGeometry(D * .035, D * .03, hc * .12, 8)), Mx(Math.sin(tc) * (bell(yb) + D * .03), yb + hc * .06, Math.cos(tc) * (bell(yb) + D * .03)));
+        helix(C, null, [[tc, bell(yb + hc * .1) + D * .04, yb + hc * .1], [(tc * 2 + tC) / 3, bell(yb + hc * .2) + D * .08, yb + hc * .2]], tC, D * .66, y + hc * .76, D * .07, D * .02);
+        const tI = f * Math.PI / 2 + s * .07;
+        helix(C, null, [[tc, bell(yb + hc * .1) + D * .035, yb + hc * .1], [(tc + tI * 2) / 3, bell(yb + hc * .2) + D * .05, yb + hc * .22]], tI, bell(y + hc * .76) + D * .06, y + hc * .76, D * .035, D * .014);
+      });
+    } else { // Composite: an egg-and-dart echinus and four large Ionic volutes facing the diagonals
+      C(lathe3(96, [0, .5, 1], (u, v) => { const th = u * TAU, egg = Math.max(0, Math.cos(12 * th)), rr = bell(y + hc * .62) + D * (.02 + .03 * Math.sin(v * Math.PI)) + D * .02 * Math.pow(egg, 3) * Math.sin(v * Math.PI); return [rr * Math.sin(th), y + hc * (.56 + .12 * v), rr * Math.cos(th), .65 + .35 * egg]; }, rt));
+      for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2, rc = D * .56; volute(C, Mx(Math.sin(a) * rc, y + hc * .7, Math.cos(a) * rc, 0, a, 0), D * .17, D * .028, 1); }
+    }
+    const a = D * .7, ah = hc * .14;
+    C(abacusGeo(a * .965, D * .1, D * .05, ah * .45), Mx(0, y + hc * .86 - .002, 0)); C(abacusGeo(a, D * .1, D * .06, ah * .55), Mx(0, y + hc * .86 + ah * .45 - .004, 0));
+    for (let f = 0; f < 4; f++) { const t = f * Math.PI / 2, rr = a - D * .1 + D * .012; add(gilt)(withC(new THREE.SphereGeometry(D * .055, 12, 8)), Mx(Math.sin(t) * rr, y + hc * .93, Math.cos(t) * rr, 0, t, 0, 1, 1, .5)); }
+    y += hc; half = Math.max(half, a);
+  }
+  // ---- entablature fragment: three fasciae, a frieze, dentils and a projecting cornice ----
+  if (o.entab) {
+    const w = (o.order === 'doric' ? D * 1.24 : o.order === 'ionic' ? D * 1.1 : D * 1.4) + D * .02;
+    let yy = y - .003;
+    [[.1, 0], [.12, .02], [.14, .04]].forEach(([hh, pj]) => { T(boxC(w + D * pj * 2, D * hh, w + D * pj * 2, .9 + pj), Mx(0, yy + D * hh / 2, 0)); yy += D * hh - .002; });
+    T(boxC(w + D * .12, D * .04, w + D * .12), Mx(0, yy + D * .02, 0)); yy += D * .04 - .002;
+    S(boxC(w + D * .04, D * .36, w + D * .04, .95), Mx(0, yy + D * .18, 0)); yy += D * .36 - .002;
+    T(boxC(w + D * .14, D * .05, w + D * .14), Mx(0, yy + D * .025, 0)); yy += D * .05 - .002;
+    const dw = D * .06, dh = D * .09, dn = Math.max(3, Math.floor((w + D * .14) / (dw * 2))), sp = (w + D * .14) / dn, e = (w + D * .14) / 2 + dw * .25;
+    for (let s = 0; s < 4; s++) { const t = s * Math.PI / 2; for (let k = 0; k < dn; k++) { const x = -(w + D * .14) / 2 + sp * (k + .5); T(boxC(dw, dh, dw * .9, .85), Mx(Math.cos(t) * x + Math.sin(t) * e, yy + dh / 2, -Math.sin(t) * x + Math.cos(t) * e)); } }
+    T(boxC(w + D * .14 + dw * .1, dh + .004, w + D * .14 + dw * .1, .7), Mx(0, yy + dh / 2, 0)); yy += dh;
+    T(boxC(w + D * .42, D * .12, w + D * .42), Mx(0, yy + D * .06, 0)); yy += D * .12 - .002;
+    T(boxC(w + D * .36, D * .06, w + D * .36, .95), Mx(0, yy + D * .03, 0)); yy += D * .06;
+    y = yy; half = Math.max(half, (w + D * .42) / 2);
+  }
+  return { top: y, D, half };
 }
 // Pedestal: base, die, cornice (scagliola die, stucco mouldings, gilt beads). Footprint w × d, height h. Pushes into acc.
 export function pedestal(acc, M, w = .62, d = .62, h = 1, die = 'scag-rose') {
@@ -386,55 +364,6 @@ export function cartoucheShape() {
   return s;
 }
 
-// ---------- carved heads (statues and atlantes) ----------
-// A head carved from a displaced sphere: unit radius, face toward +z, crown toward +y. Brow ridge, eye sockets with
-// the eyeballs left standing, a nose with alae, cheekbones, parted lips, chin, ears; a mass of hair (waved for a
-// female figure, curled for a bearded one) and an optional curled beard and moustache. Shading does the rest.
-const _heads = new Map();
-export function headGeo({ female = false, beard = false, seed = 1 } = {}) {
-  const key = (female ? 'f' : 'm') + (beard ? 'b' : '') + seed; if (_heads.has(key)) return _heads.get(key);
-  const geo = new THREE.SphereGeometry(1, 48, 36), p = geo.attributes.position, col = new Float32Array(p.count * 3);
-  const G = (x, y, cx, cy, sx, sy) => Math.exp(-((x - cx) * (x - cx) / (sx * sx) + (y - cy) * (y - cy) / (sy * sy)));
-  const sm = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
-  const fk = female ? .7 : 1;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(x), f = sm(.05, .5, z), lon = Math.atan2(x, z);
-    let d = 0, cav = 0;
-    // face: brow, sockets (eyeballs and lids left standing), nose with alae, cheekbones, parted lips, chin, ears
-    d += .13 * fk * G(x, y, 0, .3, .52, .08) * f; cav += .22 * G(ax, y, .3, .2, .2, .05) * f; // brow, its shadow over the eyes
-    const sock = G(ax, y, .3, .1, .16, .11) * f; d -= .21 * sock; cav += .72 * sock;
-    const eye = G(ax, y, .29, .08, .08, .055) * f; d += .12 * eye; cav -= .42 * eye;
-    d += .04 * G(ax, y, .29, .15, .1, .025) * f; d -= .02 * G(ax, y, .3, .015, .1, .02) * f;
-    const nose = (.13 * G(x, y, 0, .04, .06, .15) + .27 * G(x, y, 0, -.22, .08, .12) + .1 * G(x, y, 0, -.36, .085, .055)) * f * (female ? .92 : 1.08); d += nose; cav += .22 * G(ax, y, .12, -.2, .06, .14) * f; // shadowed flank of the nose
-    d += .07 * G(ax, y, .105, -.36, .05, .045) * f; const nost = G(ax, y, .07, -.43, .035, .02) * f; d -= .05 * nost; cav += .6 * nost;
-    d += .09 * G(ax, y, .44, -.1, .16, .13) * f;
-    const hol = G(ax, y, .32, -.33, .12, .13) * f; d -= .05 * hol * (1 - fk * .5); cav += .18 * hol;
-    const nl = G(ax, y, .2, -.42, .04, .1) * f; cav += .3 * nl; // naso-labial fold
-    d += .08 * G(x, y, 0, -.5, .2, .05) * f; const mg = G(x, y, 0, -.565, .22, .018) * f; d -= .07 * mg; cav += .7 * mg; d += .075 * G(x, y, 0, -.62, .16, .045) * f;
-    const cg = G(x, y, 0, -.73, .14, .03) * f; d -= .03 * cg; cav += .25 * cg;
-    d += .13 * fk * G(x, y, 0, -.87, .2, .12) * f;
-    const ear = sm(.75, .95, ax), earB = G(z, y, -.08, .0, .12, .24) * ear; d += .16 * earB; cav += .35 * G(z, y, -.05, .02, .05, .12) * ear;
-    // hair: a raised cap with a sharp edge at the hairline (dipping at the temples), waved (female) or curled
-    const hairline = .48 - .14 * G(ax, 0, .45, 0, .2, 1) - .6 * sm(.1, -.6, z);
-    const hm = sm(hairline - .04, hairline + .03, y) * sm(-.98, -.6, y);
-    if (hm > 0) {
-      const wave = female ? Math.sin(lon * 10 + y * 2.5) : Math.sin(x * 21 + y * 8) * Math.sin(y * 19 - z * 11);
-      d += hm * (female ? .11 + .055 * wave + .08 * G(ax, y, .72, .05, .3, .35) - .03 * sm(.6, 1, y) - .05 * G(x, 0, 0, 0, .05, 1) * sm(.3, .8, y) : .14 + .08 * Math.max(0, wave)); // (a centre parting)
-      cav += hm * (female ? .4 * Math.max(0, -wave) + .06 : .45 * Math.max(0, -wave) + .1) + .35 * G(y - hairline, 0, 0, 0, .05, 1) * sm(-.2, .3, z); // deep-cut waves; shadow under the hairline
-    }
-    if (beard) { // beard over jaw and chin, moustache over the upper lip, the lower lip left free
-      const bm = sm(-.22, -.48, y) * sm(-.55, -.12, z) * (1 - .92 * G(x, y, 0, -.6, .15, .07)), curl = Math.sin(x * 23 + y * 9) * Math.sin(y * 21 + z * 7);
-      d += bm * (.26 + .1 * Math.max(0, curl)) + .1 * G(ax, y, .14, -.48, .15, .045) * f + .12 * G(x, y, 0, -1, .3, .22) * f;
-      cav += bm * .3 * Math.max(0, -curl) + .25 * G(ax, y, .26, -.52, .05, .05) * f;
-    }
-    cav += .4 * sm(-.75, -1, y) * sm(0, .6, z); // shadow under the chin
-    const sx = (female ? .84 : .8) * (1 - (female ? .15 : .2) * sm(-.2, -1, y)), sy = female ? 1.0 : 1.14, sz = .95, zf = 1 + .09 * sm(-.3, -.9, y) * f;
-    p.setXYZ(i, x * (1 + d) * sx, y * (1 + d) * sy, z * (1 + d) * sz * zf);
-    const k = clamp(1 - cav, .3, 1.06); col[i * 3] = k; col[i * 3 + 1] = k * (.97 + .03 * k); col[i * 3 + 2] = k * (.92 + .08 * k);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.computeVertexNormals(); _heads.set(key, geo); return geo;
-}
 
 // ---------- books: instanced, one draw call for every volume in a room ----------
 let _bookGeo;
@@ -471,7 +400,8 @@ export function bookRow(out, M, xa, xb, y, hmax, zf, dmax, r) {
 export function bookMesh(items) {
   if (!items.length) return null;
   // very large halls (> 9k volumes): spine and top only, half the triangles (the covers only show at gaps)
-  const n0 = items.length, geo = n0 > 9000 ? bookGeo().clone().setDrawRange(0, 12) : bookGeo().clone(), n = n0, im = new THREE.InstancedMesh(geo, bmat('spines'), n), va = new Float32Array(n), c = new THREE.Color();
+  const n0 = items.length, geo = bookGeo().clone(), n = n0, im = new THREE.InstancedMesh(geo, bmat('spines'), n), va = new Float32Array(n), c = new THREE.Color();
+  if (n0 > 9000) geo.setDrawRange(0, 12);   // (setDrawRange returns nothing: calling it in the expression above left geo undefined and the shell unbuilt)
   items.forEach((b, i) => { im.setMatrixAt(i, b.m); va[i] = b.v; im.setColorAt(i, c.setScalar(b.c)); });
   geo.setAttribute('aVar', new THREE.InstancedBufferAttribute(va, 1));
   im.castShadow = false; im.receiveShadow = true; im.name = 'books'; im.userData.books = n; im.computeBoundingSphere(); return im;
@@ -487,10 +417,10 @@ export const CASE_FINISHES = {
   walnut: { car: 'walnut', back: 'walnut-dark', trim: 'gilt', flute: 'walnut', plinth: 'walnut-dark', inset: 'scag', niche: 'boiserie-walnut' },
   pale: { car: 'pale', back: 'pale-dark', trim: 'pale-dark', flute: 'pale', plinth: 'pale-dark', inset: null, niche: 'pale' } };
 // One bookcase section in a wall-local frame M (wall plane z = 0, room toward +z): x0..x1, y0..y1 (cornice included), depth D.
-function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche = null, cornice = true, pitch = .36 } = {}) {
+function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche = null, cornice = true, pitch = .36, stile = .045 } = {}) {
   const car = bmat(F.car), back = bmat(F.back), trim = bmat(F.trim), plinth = bmat(F.plinth), W = x1 - x0, cx = (x0 + x1) / 2;
   const B = (mat, x, y, z, a, b, c) => A.add(mat, new THREE.BoxGeometry(a, b, c), M.clone().multiply(Mx(x, y, z)));
-  const cH = cornice ? .16 : 0, top = y1 - cH, st = .045;
+  const cH = cornice ? .16 : 0, top = y1 - cH, st = stile;
   let yb = y0;
   if (!niche && y0 < .05) { B(plinth, cx, .05, (D + .02) / 2, W, .1, D + .02); B(trim, cx, .102, D + .02, W, .012, .012); yb = .108; }
   if (!niche && base && top - yb > 1.9) { // closed cupboard for folios, two fielded doors per section, a ledge on top
@@ -501,21 +431,25 @@ function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche
   }
   if (niche) { // an open niche for a hanging scroll: framed panelling behind it, a shelf bridge above it when there is room
     const nt = niche.top, nm = bmat(F.niche), yd = niche.dado || .9;
-    B(nm, cx, (yd + nt) / 2, .012, W, nt - yd, .024);
-    B(back, cx, (yd + nt) / 2, .03, W - .16, nt - yd - .2, .012);
-    [[0, nt - .1, W - .14, .014], [0, yd + .1, W - .14, .014], [-(W - .16) / 2, (yd + nt) / 2, .014, nt - yd - .2], [(W - .16) / 2, (yd + nt) / 2, .014, nt - yd - .2]].forEach(([ox, y, a, b]) => B(trim, cx + ox, y, .042, a, b, .01));
+    // panelling 36 mm deep (before the dado ring's 26 mm and the pilasters' 32 mm gilt edges), its fielded panel 12 mm
+    // prouder, the gilt frame 3 mm prouder again
+    B(nm, cx, (yd + nt) / 2, .018, W, nt - yd, .036);
+    B(back, cx, (yd + nt) / 2, .042, W - .16, nt - yd - .2, .012);
+    [[0, nt - .1, W - .14, .014], [0, yd + .1, W - .14, .014], [-(W - .16) / 2, (yd + nt) / 2, .014, nt - yd - .2], [(W - .16) / 2, (yd + nt) / 2, .014, nt - yd - .2]].forEach(([ox, y, a, b]) => B(trim, cx + ox, y, .046, a, b, .01));
     [-1, 1].forEach(s => B(trim, cx + s * (W / 2 - .008), (y0 + nt) / 2, D - .004, .016, nt - y0, .016)); // gilt jamb beads
     if (top - nt < .3) { if (cornice) caseCornice(A, M, F, x0, x1, top, D, true); return; }
     B(car, cx, nt + .025, D / 2, W, .05, D); B(trim, cx, nt + .006, D + .002, W, .012, .008);
     yb = nt + .05;
   }
   // carcass: back, side stiles, shelves with gilt edges, the books
-  B(back, cx, (yb + top) / 2, .011, W, top - yb, .022);
+  // the back: 34 mm thick, so it covers the dado and skirting rings (26 mm proud of the wall), the pilaster bases (30 mm)
+  // and their gilt edges (32 mm) with 2 mm or more to spare, and 2 mm short of the section's ends (never in a stile's plane)
+  B(back, cx, (yb + top) / 2, .017, W - .004, top - yb, .034);
   [x0 + st / 2, x1 - st / 2].forEach(x => { B(car, x, (yb + top) / 2, D / 2, st, top - yb, D); B(trim, x, (yb + top) / 2, D + .002, .01, top - yb, .004); });
   const rows = Math.max(1, Math.round((top - yb) / pitch)), p = (top - yb) / rows;
   for (let k = 0; k < rows; k++) {
     const yy = yb + k * p; if (k > 0) { B(car, cx, yy, (D - .01) / 2, W - 2 * st, .022, D - .01); B(trim, cx, yy - .002, D - .008, W - 2 * st, .01, .005); }
-    bookRow(books, M, x0 + st, x1 - st, yy + (k > 0 ? .011 : 0), p - .055, D - .03, D - .07, r);
+    if (books) bookRow(books, M, x0 + st, x1 - st, yy + (k > 0 ? .011 : 0), p - .055, D - .03, D - .07, r);
   }
   if (cornice) caseCornice(A, M, F, x0, x1, top, D);
 }
@@ -523,7 +457,7 @@ function caseCornice(A, M, F, x0, x1, top, D) {
   const car = bmat(F.car), trim = bmat(F.trim), W = x1 - x0, cx = (x0 + x1) / 2;
   const B = (mat, x, y, z, a, b, c) => A.add(mat, new THREE.BoxGeometry(a, b, c), M.clone().multiply(Mx(x, y, z)));
   B(car, cx, top + .035, (D + .02) / 2, W, .07, D + .02);
-  A.add(F.trim === 'gilt' ? bmat('eggdart') : car, bandPlane(W, .046, .085), M.clone().multiply(Mx(cx, top + .035, D + .021)));
+  A.add(F.trim === 'gilt' ? bmat('eggdart') : car, bandPlane(W, .046, .085), M.clone().multiply(Mx(cx, top + .035, D + .023)));   // 3 mm before the frieze
   B(trim, cx, top + .076, (D + .05) / 2, W, .012, D + .05);
   B(car, cx, top + .107, (D + .09) / 2, W, .05, D + .09);
   B(trim, cx, top + .14, (D + .1) / 2, W, .016, D + .1);
@@ -564,7 +498,7 @@ function subtract(spans, blocks) {
 }
 // Builds every wall bookcase of a baroque shell (ctx from makeBaroqueShell). skip: footprints whose sections are left out
 // (the user's own bookcases standing at the wall); niches: [{x, z}] wall positions that need an open niche (hanging scrolls).
-function buildWallCases(ctx, { skip = [], niches = [] } = {}) {
+function buildWallCases(ctx, { skip = [], niches = [], fast = false } = {}) {
   const grp = new THREE.Group(); grp.name = 'wall-cases'; const A = new Acc(), books = [], F = CASE_FINISHES[ctx.cases] || CASE_FINISHES.white;
   const { walls, WM, D, yLow, yWin, yg, yE, gWalls, windowWall, door, doorW, palette, fixedBlocks, pp, dadoH } = ctx;
   walls.forEach((W, wi) => {
@@ -592,8 +526,11 @@ function buildWallCases(ctx, { skip = [], niches = [] } = {}) {
       });
     });
     const kept = secs.filter(sc => !userBlocks.some(([a, b]) => overlaps(sc.x0, sc.x1, a, b)));
-    kept.forEach(sc => caseSection(A, books, M, F, sc.x0, sc.x1, 0, top, D, r, { base, niche: sc.niche ? { top: ctx.nicheTop, dado: dadoH } : null }));
-    piers.forEach(s => { if (kept.some(sc => Math.abs(sc.x1 - (s - pp / 2)) < .01 || Math.abs(sc.x0 - (s + pp / 2)) < .01) && !userBlocks.some(([a, b]) => overlaps(s - pp / 2, s + pp / 2, a, b))) casePier(A, M, F, s, pp, 0, top - .16, D, palette); });
+    // stiles at least wide enough to reach 6 mm past the side of the shell's pilaster behind a pier (the section ends at the
+    // narrower case pier): the pilaster's side then lies inside the stile instead of in the stile's inner face
+    const stile = Math.max(.045, (ctx.pw - pp) / 2 + .006);
+    kept.forEach(sc => caseSection(A, fast ? null : books, M, F, sc.x0, sc.x1, 0, top, D, r, { base, stile, niche: sc.niche ? { top: ctx.nicheTop, dado: dadoH } : null }));
+    if (!fast) piers.forEach(s => { if (kept.some(sc => Math.abs(sc.x1 - (s - pp / 2)) < .01 || Math.abs(sc.x0 - (s + pp / 2)) < .01) && !userBlocks.some(([a, b]) => overlaps(s - pp / 2, s + pp / 2, a, b))) casePier(A, M, F, s, pp, 0, top - .16, D, palette); });
     if (piers.length) ctx.pierFronts[W.name] = piers;
     // the gallery tier: shelves between the shell's pilasters, shallower, no cupboards
     if (yg != null && gWalls.has(W.name)) {
@@ -601,7 +538,7 @@ function buildWallCases(ctx, { skip = [], niches = [] } = {}) {
       for (let i = 0; i < n; i++) {
         let a = W.pil[i] + ctx.pw / 2 + .015, b = W.pil[i + 1] - ctx.pw / 2 - .015; if (i === 0 && tM) a = Math.max(a, -L / 2 + .32); if (i === n - 1 && tP) b = Math.min(b, L / 2 - .32); if (b - a < .3) continue;
         const k = Math.max(1, Math.round((b - a) / 1.05));
-        for (let j = 0; j < k; j++) caseSection(A, books, M, F, a + (b - a) * j / k, a + (b - a) * (j + 1) / k, yg + .02, yE - .04, .3, r, { pitch: .4 });
+        for (let j = 0; j < k; j++) caseSection(A, fast ? null : books, M, F, a + (b - a) * j / k, a + (b - a) * (j + 1) / k, yg + .02, yE - .04, .3, r, { pitch: .4 });
       }
     }
   });
@@ -618,7 +555,7 @@ function buildWallCases(ctx, { skip = [], niches = [] } = {}) {
 const NEXT = { back: 'right', front: 'left', left: 'back', right: 'front' }, PREV = { back: 'left', front: 'right', left: 'front', right: 'back' };
 function oddCount(len, bay) { const x = len / bay; let n = Math.max(1, Math.round(x)); if (n % 2 === 0) n = Math.abs(len / (n - 1) - bay) < Math.abs(len / (n + 1) - bay) && n > 1 ? n - 1 : n + 1; return n; }
 
-export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', door = true, palette = 'rose', floor = 'diagonal', gallery = 'auto', atlantes = 'auto', bay = 3.2, avoid = null, chandeliers = true, frescoSeed = 1, cases = false, caseSkip = [], niches = [] } = {}) {
+export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', door = true, palette = 'rose', floor = 'diagonal', gallery = 'auto', atlantes = 'auto', doorColumns = true, bay = 3.2, avoid = null, chandeliers = true, frescoSeed = 1, cases = false, caseSkip = [], niches = [], fast = false } = {}) {
   const g = new THREE.Group(); g.name = 'room-shell';
   const A = new Acc(), FX = new Acc(), flames = [];
   const scag = bmat('scag-' + palette), gilt = bmat('gilt'), stucco = bmat('stucco'), wallM = bmat('wall'), dadoM = bmat(palette === 'teal' ? 'scag-dark' : 'scag-red');
@@ -692,7 +629,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       P(new THREE.BoxGeometry(pw + .035, baseH * .2, pd + .002), gilt, 0, baseH * .65, (pd + .002) / 2);
       P(new THREE.BoxGeometry(pw + .02, baseH * .25, pd), stucco, 0, baseH * .875, pd / 2);
       const sh = yE - capH - baseH; P(new THREE.BoxGeometry(pw, sh, pd), scag, 0, baseH + sh / 2, pd / 2);
-      [-1, 1].forEach(sd => P(new THREE.BoxGeometry(.024, sh, pd + .004), gilt, sd * (pw / 2 - .012), baseH + sh / 2, (pd + .004) / 2));
+      [-1, 1].forEach(sd => P(new THREE.BoxGeometry(.024, sh, pd + .004), gilt, sd * (pw / 2 - .01), baseH + sh / 2, (pd + .004) / 2));   // gilt edges 2 mm beyond the shaft's sides
       // capital (above any bookcase: it may project)
       const y0 = yE - capH;
       P(new THREE.BoxGeometry(pw + .03, .035, .06), gilt, 0, y0 + .018, .03);
@@ -802,52 +739,59 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   // ---- door: double door, gilt-beaded frame, hood and cartouche ----
   if (door) {
     const W = walls[1], M = WM(W), D = (mat, geo, x, y, z) => A.add(mat, geo, M.clone().multiply(Mx(x, y, z)));
-    const wn = bmat('walnut'), wd = bmat('walnut-dark'), lw = doorW / 2 - .01;
+    const wn = bmat('walnut'), wd = bmat('walnut-dark'), gf = bmat('gilt-fine'), lw = doorW / 2 - .01;
     [-1, 1].forEach(sd => {
       const cx = sd * doorW / 4; D(wn, new THREE.BoxGeometry(lw, doorH, .07), cx, doorH / 2, .035);
-      [[.2, .26], [.56, .3], [.84, .12]].forEach(([fy, fh]) => { const ph = doorH * fh, py = doorH * fy; D(wd, new THREE.BoxGeometry(lw - .16, ph, .03), cx, py, .085); D(gilt, new THREE.BoxGeometry(lw - .12, .018, .034), cx, py + ph / 2 + .01, .085); D(gilt, new THREE.BoxGeometry(lw - .12, .018, .034), cx, py - ph / 2 - .01, .085); D(gilt, new THREE.BoxGeometry(.018, ph + .02, .034), cx - (lw - .12) / 2, py, .085); D(gilt, new THREE.BoxGeometry(.018, ph + .02, .034), cx + (lw - .12) / 2, py, .085); });
+      // fielded panels: the sunk walnut panel (front 30 mm before the leaf), its gilt frame 4 mm prouder; the frame's
+      // rails stop at the stiles (no two boxes overlap, so no faces share a plane)
+      [[.2, .26], [.56, .3], [.84, .12]].forEach(([fy, fh]) => { const ph = doorH * fh, py = doorH * fy, fw = lw - .12; D(wd, new THREE.BoxGeometry(lw - .16, ph, .03), cx, py, .085); [-1, 1].forEach(q => { D(gf, new THREE.BoxGeometry(fw - .018, .018, .034), cx, py + q * (ph / 2 + .01), .087); D(gf, new THREE.BoxGeometry(.018, ph + .038, .034), cx + q * fw / 2, py, .087); }); });
       D(gilt, new THREE.SphereGeometry(.035, 12, 10), sd * .1, doorH * .48, .11); D(gilt, new THREE.BoxGeometry(.05, .16, .02), sd * .1, doorH * .48, .075);
     });
     D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), -doorW / 2 - .11, (doorH + .22) / 2, .06); D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), doorW / 2 + .11, (doorH + .22) / 2, .06);
     D(stucco, new THREE.BoxGeometry(doorW + .44, .22, .12), 0, doorH + .11, .06);
-    D(gilt, new THREE.BoxGeometry(.03, doorH + .02, .13), -doorW / 2 - .015, doorH / 2, .065); D(gilt, new THREE.BoxGeometry(.03, doorH + .02, .13), doorW / 2 + .015, doorH / 2, .065); D(gilt, new THREE.BoxGeometry(doorW + .06, .03, .13), 0, doorH + .015, .065);
+    // the gilt bead round the opening stands 4 mm into it (its inner faces never share the stucco jambs' plane)
+    D(gf, new THREE.BoxGeometry(.034, doorH + .02, .13), -doorW / 2 - .013, doorH / 2, .065); D(gf, new THREE.BoxGeometry(.034, doorH + .02, .13), doorW / 2 + .013, doorH / 2, .065); D(gf, new THREE.BoxGeometry(doorW + .06, .034, .13), 0, doorH + .013, .065);
     D(stucco, new THREE.BoxGeometry(doorW + .7, .14, .3), 0, doorH + .29, .15); D(gilt, new THREE.BoxGeometry(doorW + .74, .04, .32), 0, doorH + .38, .16);
     const cs = Math.min(.7, (gWalls.has('front') ? yg - .2 : yE) - doorH - .5); if (cs > .25) { const cg = new THREE.ExtrudeGeometry(cartoucheShape(), { depth: .05, bevelEnabled: true, bevelThickness: .02, bevelSize: .02, bevelSegments: 2, curveSegments: 10 }); A.add(gilt, cg, M.clone().multiply(Mx(0, doorH + .42 + cs / 2, .05, 0, 0, 0, cs * .9, cs, 1))); A.add(bmat('scag-' + palette), new THREE.CircleGeometry(.24, 32), M.clone().multiply(Mx(0, doorH + .42 + cs / 2, .125, 0, 0, 0, cs * .9, cs, 1))); }
   }
-  // ---- atlantes (Metten): pairs carrying the entablature beside the central window and the door ----
-  if (useAtl) {
-    const st = bmat('statuary-carved');
-    walls.forEach(W => {
-      const isWin = W.name === windowWall, isDoor = door && W.name === 'front' && !gWalls.has('front'); if (!isWin && !isDoor) return;
-      const M = WM(W); let pair;
-      if (isWin) { const n = W.piers.length - 1; if (n < 3) return; const k = (n - 1) >> 1; pair = [W.piers[k], W.piers[k + 1]]; }
-      else { const cand = W.pil.filter(s => Math.abs(s) >= doorW / 2 + .3 + pw / 2); const l = Math.max(...cand.filter(s => s < 0)), r = Math.min(...cand.filter(s => s > 0)); if (!isFinite(l) || !isFinite(r)) return; pair = [l, r]; }
-      pair.forEach((s, j) => {
-        // the figures support the window bay rather than dominate the hall: in a low hall the herm-atlas carries the
-        // entablature (as at Metten); in a high one it stands at 2.3 m on its pedestal and carries a gilt urn on an abacus,
-        // so it stays below the eye's upper frame edge from across the room. White statuary, a stucco-and-gilt pedestal
-        // with a small scagliola panel (no rose term or pedestal block: the pink stays in the pilasters).
-        const pH = clamp(yE * .2, .7, 1.1), full = yE - pH - .2, carry = full <= 2.7, Hf = carry ? full : 2.3, M0 = M.clone().multiply(Mx(s, 0, .34));
-        if (Hf < 1) return;
-        pedestal(A, M0, .7, .62, pH, 'stucco');
-        if (pH > .9) { // a fielded panel on the die's face: gilt frame round a scagliola inset
-          const ph = pH - .62, pc = .145 + (pH - .3) / 2, P = (mat, geo, x, y) => A.add(mat, geo, M0.clone().multiply(Mx(x, y, .312)));
-          P(scag, new THREE.BoxGeometry(.44, ph - .1, .006), 0, pc); [-1, 1].forEach(k => { P(gilt, new THREE.BoxGeometry(.52, .022, .014), 0, pc + k * (ph / 2 - .02)); P(gilt, new THREE.BoxGeometry(.022, ph - .02, .014), k * .25, pc); });
-        }
-        const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .8, Hf, Hf * .8));
-        atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(bmat('statuary'), geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)) });
-        if (carry) A.add(gilt, new THREE.BoxGeometry(.62, .2, .52), M.clone().multiply(Mx(s, yE - .1, .3)));
-        else {
-          const yt = pH + Hf, U = (mat, geo, y) => A.add(mat, geo, M0.clone().multiply(Mx(0, y, -.02)));
-          U(stucco, new THREE.BoxGeometry(.46, .08, .38), yt + .04); U(gilt, new THREE.BoxGeometry(.5, .02, .42), yt + .09);
-          U(gilt, new THREE.LatheGeometry([[0, 0], [.1, 0], [.11, .03], [.06, .07], [.05, .1], [.14, .2], [.16, .3], [.12, .4], [.07, .45], [.09, .48], [0, .5]].map(([r, y]) => new THREE.Vector2(r, y)), 20), yt + .1);
-        }
-        A.add(stucco, new THREE.BoxGeometry(.7, E * .34 - .004, .6), M.clone().multiply(Mx(s, yE + E * .17, .3)));
-        A.add(scag, new THREE.BoxGeometry(.66, E * .28 - .004, .56), M.clone().multiply(Mx(s, yE + E * .48, .28)));
-        A.add(stucco, new THREE.BoxGeometry(.84, E * .26 - .004, .72), M.clone().multiply(Mx(s, yE + E * .75, .36)));
-        A.add(gilt, new THREE.BoxGeometry(.88, E * .06 - .004, .75), M.clone().multiply(Mx(s, yE + E * .91, .375)));
-        const wp = V(s, 0, .34).applyMatrix4(M); info.obstacles.push({ x: wp.x, z: wp.z, r: .5, kind: 'atlas' });
-      });
+  // ---- columns (they replace the atlantes of Metten; the option keeps its name): beside the central window a pair of
+  // Ionic columns in giallo antico on pedestals carries the entablature ressaut; at the door a pair of Greek Doric
+  // columns in verde antico carries the gallery deck (or, without a gallery, a ressaut). Each joins the obstacles,
+  // so the wall cases leave room for it and walkers go round it. ----
+  const ressaut = (M, s, wd, dz) => { // entablature break over a column (mitred onto the rings): stucco, scagliola frieze, cornice
+    A.add(stucco, new THREE.BoxGeometry(wd, E * .34 - .004, dz), M.clone().multiply(Mx(s, yE + E * .17, dz / 2)));
+    A.add(scag, new THREE.BoxGeometry(wd - .04, E * .28 - .004, dz - .04), M.clone().multiply(Mx(s, yE + E * .48, (dz - .04) / 2)));
+    A.add(stucco, new THREE.BoxGeometry(wd + .14, E * .26 - .004, dz + .12), M.clone().multiply(Mx(s, yE + E * .75, (dz + .12) / 2)));
+    A.add(gilt, new THREE.BoxGeometry(wd + .18, E * .06 - .004, dz + .15), M.clone().multiply(Mx(s, yE + E * .91, (dz + .15) / 2)));
+  };
+  if (useAtl) walls.forEach(W => {
+    if (W.name !== windowWall) return; const n = W.piers.length - 1; if (n < 3) return; const k = (n - 1) >> 1, M = WM(W);
+    [W.piers[k], W.piers[k + 1]].forEach(s => {
+      const pH = clamp(yE * .2, .7, 1.1), H = yE - pH + .006, D = Math.min(.5, H / ORDERS.ionic.h); if (H < 1.6) return;
+      const cz = D * .5 + .22, pw0 = D * 1.36 + .08, M0 = M.clone().multiply(Mx(s, 0, cz));
+      pedestal(A, M0, pw0, pw0, pH, 'stucco');
+      if (pH > .9) { // a fielded panel on the die's face: gilt frame round a scagliola inset (each layer 3 mm proud of the last)
+        const ph = pH - .62, pc = .145 + (pH - .3) / 2, P = (mat, geo, x, y, z) => A.add(mat, geo, M0.clone().multiply(Mx(x, y, pw0 / 2 + z)));
+        P(scag, new THREE.BoxGeometry(pw0 - .26, ph - .1, .006), 0, pc, .003); [-1, 1].forEach(q => { P(gilt, new THREE.BoxGeometry(pw0 - .18, .022, .014), 0, pc + q * (ph / 2 - .02), .007); P(gilt, new THREE.BoxGeometry(.022, ph - .062, .012), q * (pw0 / 2 - .1), pc, .006); });
+      }
+      addColumn(A, M0.clone().multiply(Mx(0, pH, 0)), { order: 'ionic', marble: 'giallo', H, D });
+      ressaut(M, s, pw0 + .06, cz + pw0 / 2 + .05);
+      const wp = V(s, 0, cz).applyMatrix4(M); info.obstacles.push({ x: wp.x, z: wp.z, r: pw0 / 2 + .1, kind: 'column' });
+    });
+  });
+  const doorColX = [];
+  if (door && doorColumns) {
+    const W = walls[1], M = WM(W), inv = M.clone().invert(), gal = gWalls.has('front'), top = gal ? yg - .17 : yE;
+    const H = top - (gal ? .2 : 0) + .004, D = Math.min(.46, H / ORDERS.doric.h), x = doorW / 2 + .32 + D * .71, cz = D * .71 + .06;
+    const free = !(avoid || []).some(p => { const q = V(p.x, 0, p.z).applyMatrix4(inv); return Math.abs(q.z) < .6 && Math.abs(Math.abs(q.x) - x) < 1.3; });
+    if (free && H > 2 && x + D < W.len / 2 - 1) [-1, 1].forEach(sd => {
+      const M0 = M.clone().multiply(Mx(sd * x, 0, cz));
+      addColumn(A, M0, { order: 'doric', marble: 'verde', trim: 'verde', H, D }); doorColX.push(sd * x);
+      if (gal) { // a plain architrave beam from the abacus to the deck, running back into the wall
+        const bw = D * 1.3, dz = cz + D * .7; A.add(stucco, new THREE.BoxGeometry(bw, .2 + .006, dz), M.clone().multiply(Mx(sd * x, top - .1 + .001, dz / 2 + .002)));
+        A.add(gilt, new THREE.BoxGeometry(bw + .03, .022, dz + .015), M.clone().multiply(Mx(sd * x, top - .2 + .02, (dz + .015) / 2 + .002)));
+      } else ressaut(M, sd * x, D * 1.3, cz + D * .7);
+      const wp = V(sd * x, 0, cz).applyMatrix4(M); info.obstacles.push({ x: wp.x, z: wp.z, r: D * .71 + .08, kind: 'column' });
     });
   }
   // ---- gallery (Admont / Mafra / Wiblingen): deck on consoles, serpentine balustrade, upper tier of books ----
@@ -917,7 +861,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const atlS = useAtl && W.name === windowWall && W.piers.length >= 4 ? [W.piers[(W.piers.length - 2) >> 1], W.piers[((W.piers.length - 2) >> 1) + 1]] : [];
     let y = gWalls.has(W.name) ? Math.min(yg + 1.5, yE - .4) : clamp(yE - .95, 2.35, 3.6), z = pd;
     if (cases && !gWalls.has(W.name) && !(W.name === windowWall && y > caseTops.win + .15)) { y = Math.min(y, caseTops.low - .55); z = CD + .035; } // on the case pilasters
-    W.pil.slice(1, -1).forEach(s => { if (atlS.includes(s) || (isDoor && Math.abs(s) < doorW / 2 + .3 + pw / 2)) return; if (useAtl && isDoor && !gWalls.has('front')) return; sconce(FX, M.clone().multiply(Mx(s, y, z)), flames); });
+    if (!fast) W.pil.slice(1, -1).forEach(s => { if (atlS.includes(s) || (isDoor && Math.abs(s) < doorW / 2 + .3 + pw / 2) || (isDoor && doorColX.some(c => Math.abs(c - s) < .9))) return; sconce(FX, M.clone().multiply(Mx(s, y, z)), flames); });
   });
   const lights = new THREE.Group(); lights.name = 'lights'; g.add(lights); g.userData.lights = lights;
   const hasWin = !!g.userData.window;
@@ -925,8 +869,9 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   const chs = chandeliers ? domes.slice() : []; if (chs.length > 3) { const k = chs.length; chs.splice(0, k, chs[0], chs[k >> 1], chs[k - 1]); }
   const sCh = clamp(h / 6, .75, 1.35), yc = clamp(Math.min(yE - .5, h * .62), 2.5, h - 1);
   chs.forEach(D => {
-    chandelier(FX, Mx(D.x, yc, D.z), sCh, flames);
+    if (!fast) { chandelier(FX, Mx(D.x, yc, D.z), sCh, flames);
     FX.add(gilt, new THREE.CylinderGeometry(.012, .012, h + D.rise - yc - .3 * sCh, 6), Mx(D.x, (h + D.rise + yc + .3 * sCh) / 2, D.z));
+    }   // (a fast preview leaves out the chandelier's metalwork, never its light: the light count, and so every shader, stays the same)
     const L = new THREE.PointLight(0xffc68c, 7 * yc * yc / 4 * (hasWin ? 1 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
   });
   // ---- the sun through the window wall: shadowed directional light + soft additive shafts ----
@@ -952,7 +897,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     if (sp.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); geo.computeVertexNormals(); geo.applyMatrix4(M); const sh = new THREE.Mesh(geo, bmat('shaft')); sh.name = 'sun-shafts'; sh.renderOrder = 5; sh.castShadow = false; sh.receiveShadow = false; g.add(sh); }
   }
   // ---- merge everything ----
-  A.build(g, { name: 'shell-' }).forEach(m => { if (m.material.userData.bmat === 'gilt' || m.material.userData.bmat === 'eggdart') m.castShadow = false; });
+  A.build(g, { name: 'shell-' }).forEach(m => { if (/^gilt|^eggdart/.test(m.material.userData.bmat)) m.castShadow = false; });
   const fxMeshes = FX.build(g, { name: 'fx-' }); fxMeshes.forEach(m => { m.castShadow = false; });
   if (flames.length) { // one Points draw call for every candle glow, with a gentle flicker
     const pg = new THREE.BufferGeometry().setFromPoints(flames);
@@ -967,11 +912,11 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const ctx = { walls, WM, D: CD, yLow: caseTops.low, yGal: caseTops.gal, yWin: caseTops.win, yg: galleryOn ? yg : null, yE, gWalls, windowWall, door, doorW, palette, pp: clamp(pw * .8, .26, .42), pw, gd, dadoH,
       nicheTop: info.nicheTop, fixedBlocks: info.obstacles.map(o => ({ x: o.x, z: o.z, r: o.r })), cases, pierFronts: {} };
     let cur = null, key = '';
-    g.userData.setCases = ({ skip = [], niches: ni = [] } = {}) => {
+    g.userData.setCases = ({ skip = [], niches: ni = [], fast: fc = fast } = {}) => {
       const k = JSON.stringify([skip.map(f => [f.x, f.z, f.w, f.d, f.rot, f.r].map(v => v == null ? 0 : +(+v).toFixed(2))), ni.map(p => [+p.x.toFixed(2), +p.z.toFixed(2)])]);
-      if (k === key && cur) return cur; key = k;
+      if (k === key && cur && !!cur.userData.fast === !!fc) return cur; key = k;
       if (cur) { cur.removeFromParent(); cur.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
-      cur = buildWallCases(ctx, { skip, niches: ni }); g.add(cur); info.books = cur.userData.books; return cur;
+      cur = buildWallCases(ctx, { skip, niches: ni, fast: fc }); cur.userData.fast = fc; g.add(cur); info.books = cur.userData.books; return cur;
     };
     g.userData.setCases({ skip: caseSkip, niches });
   }
