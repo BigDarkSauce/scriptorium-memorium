@@ -136,7 +136,7 @@ export class DioramaScene {
     return this.world.children[+v];
   }
   applyOverrides() {
-    const ov = this.spec.overrides || {}; this.ovList = [];
+    const ov = (!isSceneSpec(this.spec) && this.spec.ovV !== 2 ? null : this.spec.overrides) || {}; this.ovList = [];   // edits saved for the pre-v4 model graphs are ignored
     for (const path in ov) {
       const o = this.objectByPath(path), e = ov[path]; if (!o) continue;
       if (e.removed) { o.removeFromParent(); continue; }
