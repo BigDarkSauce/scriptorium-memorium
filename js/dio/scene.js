@@ -6,7 +6,7 @@ import { buildBody, buildShape } from './builder.js';
 import { setupEnvironment } from './environments.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { makeFrontUniforms, patchTree } from '../gfx/materialize.js';
-import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise } from '../util.js';
+import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 export const isSceneSpec = s => s && (s.type === 'scene' || Array.isArray(s.bodies));
@@ -38,6 +38,7 @@ export class DioramaScene {
     } else {
       const def = DIO[spec.type]; if (!def) throw new Error('Unknown diorama type "' + spec.type + '"');
       for (const k in def.params) { const r = ro[k]; const d = def.params[k]; this.ranges[k] = r && +r[1] > +r[0] ? [+r[0], +r[1], d[2], d[3], d[4]] : d; this.p[k] = clamp(d[2], this.ranges[k][0], this.ranges[k][1]); }
+      if (def.extraParams) for (const k in (spec.params || {})) { const v = spec.params[k]; if (this.ranges[k] || !/^[A-Za-z_]\w*$/.test(k) || !Array.isArray(v) || v.length < 2) continue; const lo = +v[0], hi = +v[1], c = v.length > 2 ? +v[2] : (lo + hi) / 2; if (isFinite(lo) && isFinite(hi) && hi > lo) { this.ranges[k] = [lo, hi, c, v[3] || '', v[4] || k]; this.p[k] = clamp(c, lo, hi); } }
       const sp = spec.params || {}; for (const k in sp) { if (this.ranges[k]) { const v = Array.isArray(sp[k]) ? +sp[k][2] : +sp[k]; if (isFinite(v)) this.p[k] = clamp(v, this.ranges[k][0], this.ranges[k][1]); } }
     }
   }
@@ -217,6 +218,6 @@ export class DioramaScene {
   }
   rebuildKeepView() { const keep = this.p; this.build(); }
   dispose() {
-    this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { for (const k in m) if (m[k] && m[k].isTexture && !m[k].userData?.shared) { } m.dispose(); }); });
+    disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
   }
 }
