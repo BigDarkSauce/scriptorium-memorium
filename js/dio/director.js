@@ -32,22 +32,31 @@ export class Director {
 
   // ---------- beats ----------
   // beat: {kind:'event'|'lesson'|'explain', title, text, anchor:()=>Vector3|null, focus:Object3D|null, names:[actor...]}
+  // the "kind" of an event: its words before ':' without numbers ("turning point x = 1.2 m" → "turning point x")
+  static evKey(text) { return String(text || '').split(':')[0].toLowerCase().replace(/[−\-+]?\d[\d.,]*\s*[a-zα-ω°%/·²³]*/gi, '').replace(/\s+/g, ' ').trim().slice(0, 48); }
   push(beat) {
     if (!beat || !beat.text) return;
+    // explanations longer than ~35 words become consecutive beats (each readable at any pace, never squeezed by the time cap)
+    if (beat.kind === 'explain' && !beat.part) { const parts = Director.split(beat.text, 35); if (parts.length > 1) { parts.forEach((t, i) => this.push(Object.assign({}, beat, { text: t, part: (i + 1) + '/' + parts.length, onEnd: i === parts.length - 1 ? beat.onEnd : null }))); return; } }
     // de-duplicate: the same sentence already queued or showing
     if ((this.beat && this.beat.text === beat.text) || this.queue.some(b => b.text === beat.text)) return;
     if (beat.kind === 'event') {
       const evq = this.queue.filter(b => b.kind === 'event'); if (evq.length >= 2) this.queue.splice(this.queue.indexOf(evq[0]), 1);   // only the newest events wait
-      if (this.v.running != null && this.cinematic) this.targetScale = Math.min(this.targetScale ?? 1, .3);   // slow the process now, while its description waits
+      if (this.v.running != null && this.cinematic) { this.targetScale = Math.min(this.targetScale ?? 1, .3); this.timeScale = Math.min(this.timeScale, .35); }   // slow the process at once, while its description waits
     }
     this.queue.push(beat); if (!this.beat) this.nextBeat();
+  }
+  static split(text, max) {
+    const sents = String(text).match(/[^.!?]+[.!?]+["”)]?\s*|[^.!?]+$/g) || [text], out = []; let cur = '';
+    for (const x of sents) { const n = (cur + x).trim().split(/\s+/).length; if (cur && n > max) { out.push(cur.trim()); cur = x; } else cur += x; }
+    if (cur.trim()) out.push(cur.trim()); return out;
   }
   setCaption(title, text) { this.caption.hidden = false; this.caption.innerHTML = `<b>${esc(title || '')}</b> ${esc(text || '')}`; }
   clearCaption() { this.caption.hidden = true; }
   idle() { return !this.beat && !this.queue.length; }
   clear() { this.queue = []; this.endBeat(true); }
   nextBeat() {
-    const b = this.queue.shift(); this.beat = b || null; if (!b) { this.timeScale = 1; this.targetScale = 1; return; }   // nothing left to read: the step plays at full speed (a lesson beat had set 0)
+    const b = this.queue.shift(); this.beat = b || null; if (!b) { this.targetScale = 1; return; }   // nothing left to read: the step eases back to full speed (a lesson beat had set 0)
     b.t = 0; b.dur = b.dur || this.readTime((b.title || '') + ' ' + b.text) + (b.kind === 'lesson' ? 1.2 : 0);
     // time dilation: slow the simulation while an event is being read (the process keeps moving, slowly)
     // (only during an instructed step: free exploration keeps its own camera and pace)
@@ -59,8 +68,10 @@ export class Director {
     if (this.cinematic && inStep && this.hold <= 0) this.frame(b);
     // the callout, beside what it describes
     b.el = el('div', { class: 'callout k-' + b.kind }, [
-      el('div', { class: 'co-kicker', text: b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why' }),
-      el('div', { class: 'co-text', html: esc(b.text) }), el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
+      el('div', { class: 'co-kicker', text: (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why') + (b.part ? ' · ' + b.part : '') }),
+      b.question ? el('div', { class: 'co-q', html: '<b>Q</b> ' + esc(b.question) }) : null,
+      el('div', { class: 'co-text', html: esc(b.text) }),
+      b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + esc(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
     b.el.addEventListener('mouseenter', () => b.paused = true); b.el.addEventListener('mouseleave', () => b.paused = false);
     this.layer.append(b.el); requestAnimationFrame(() => b.el && b.el.classList.add('in'));
     b.line = document.createElementNS(NS, 'path'); b.line.setAttribute('class', 'co-line'); this.svg.append(b.line);
@@ -85,15 +96,18 @@ export class Director {
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
-    if (kind === 'pov') { const a = b.host || (b.names || [])[0]; if (a && v.setPOV) { v.setPOV(a, { auto: true }); this.last = { kind, moving: false, subj: a }; return; } kind = 'close'; }
-    if (kind === 'wide' || !p) { const k = v.ds.overviewKey(); this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), false); this.last = { kind: 'wide', moving: false }; return; }
+    if (kind === 'pov') { const a = b.host || (b.names || [])[0]; if (a && v.setPOV) { v.setPOV(a, { auto: true, look: b.povLook }); this.last = { kind, moving: false, subj: a }; return; } kind = 'close'; }
+    if (kind === 'wide' || !p) { const k = v.ds.overviewKey(); if (this.last && this.last.kind === 'wide') return; this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), true); this.last = { kind: 'wide', moving: false, t: this.clock }; return; }
     // subject size: its mesh box, grown to include its label point and (for explanations) the other named objects
+    v.scene && v.scene.updateMatrixWorld(true);
     let box = null; if (b.focus) { box = new THREE.Box3().setFromObject(b.focus); if (box.isEmpty()) box = null; }
     if (box) { box.expandByPoint(p); if (kind === 'medium') (b.names || []).slice(0, 2).forEach(a => { const q = a.getPos && a.getPos(); if (q) box.expandByPoint(q); }); p = box.getCenter(V3()); }
     let r = box ? box.getSize(V3()).length() * .5 : .8;
+    if (kind === 'close' && b.kind === 'event') { const a0 = b.anchor && b.anchor(); if (a0) { p = a0.clone(); r = Math.min(r, R * .14); } }   // a close-up is about where it happens
     // same subject and kind as the shot on screen: keep it (no needless cut)
     const subj = b.host || b.focus || null;
     if (this.last && this.last.subj && this.last.subj === subj && this.last.kind === kind && !b.dist) return;
+    if (this.last && b.kind === 'event' && this.last.kind === kind && ((b.evKey && b.evKey === this.last.evKey) || this.clock - (this.last.t || -1e9) < 8)) return;   // hold a shot at least 8 s; a repeated kind of event keeps the shot
     const fov = kind === 'close' ? 24 : 36, half = THREE.MathUtils.degToRad(fov / 2), aspect = cam.aspect || 1.6;
     let dist = b.dist || clamp(r / Math.tan(half) * (kind === 'close' ? 1.25 : 1.55), R * .1, R * 1.4);
     if (b.dist) dist = b.dist * Math.tan(THREE.MathUtils.degToRad(this.baseFov() / 2)) / Math.tan(half);   // the model's hint was for the base lens
@@ -110,9 +124,14 @@ export class Director {
     if (kind === 'push') {
       const start = target.clone().addScaledVector(dir, dist * 1.45);
       this.cutTo(target.clone(), start, fov, true, () => { this.move = { from: start, to: pos, t0: target.clone(), k: 0, dur: 3.5 }; });
-      this.last = { kind, moving: true, subj };
-    } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj }; }
+      this.last = { kind, moving: true, subj, t: this.clock, evKey: b.evKey };
+    } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey }; }
+    this.accent(p, r);
   }
+  // the subject of each beat gets a soft accent light (the "hero" key of docs/research/presentation-craft.md §1)
+  accent(p, r) { const L = this.v.accentLight; if (!L || !p) return; const c = this.v.camera, up = V3(0, 1, 0); const side = V3().crossVectors(c.position.clone().sub(p).normalize(), up).normalize();
+    L.position.copy(p).addScaledVector(c.position.clone().sub(p).normalize(), r * 3 + 1).addScaledVector(up, r * 2.2 + .8).addScaledVector(side, r * 1.6); L.target.position.copy(p); L.target.updateMatrixWorld();
+    const d = L.position.distanceTo(p); L.angle = Math.min(.9, Math.atan2(r * 1.4, d)); L.userData.goal = 1.1 * d * d; }
   baseFov() { return this.v.baseFov || 40; }
   freeFrame(W) { const v = this.v, P = v.panel, Rp = v.readPanel; const L = P && !P.hidden && !P.classList.contains('folded') ? P.getBoundingClientRect().right + 12 : 70; const R = Rp && !Rp.hidden ? Rp.getBoundingClientRect().left - 12 : W - 24; return R - L > W * .35 ? [L, R] : [0, W]; }
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
@@ -139,8 +158,10 @@ export class Director {
   // ---------- per frame ----------
   update(dt, cam, w, h) {
     this.hold = Math.max(0, this.hold - dt);
-    this.timeScale += ((this.targetScale ?? 1) - this.timeScale) * Math.min(1, dt * 3);
+    this.timeScale += ((this.targetScale ?? 1) - this.timeScale) * Math.min(1, dt * 4);
     const v = this.v;
+    this.clock = (this.clock || 0) + dt;
+    { const L = v.accentLight; if (L) { const goal = this.beat && this.cinematic ? (L.userData.goal || 0) : 0; L.intensity += (goal - L.intensity) * Math.min(1, dt * 2); } }
     // cut dip (≈0.18 s down, 0.3 s up through a dark grade)
     const g = v.gfx && v.gfx.grade && v.gfx.grade.uniforms;
     if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
@@ -165,13 +186,14 @@ export class Director {
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
         b.avoidT = b.t; b.avoid = [];
         if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < 8; k++) { const q = V3(k & 1 ? bx.max.x : bx.min.x, k & 2 ? bx.max.y : bx.min.y, k & 4 ? bx.max.z : bx.min.z).project(cam); const qx = (q.x * .5 + .5) * w, qy = (-q.y * .5 + .5) * h; x0 = Math.min(x0, qx); y0 = Math.min(y0, qy); x1 = Math.max(x1, qx); y1 = Math.max(y1, qy); } b.avoid.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, k: 6 }); } }
-        [v.readPanel, v.panel].forEach(P => { if (P && !P.hidden) { const r = P.getBoundingClientRect(); b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
+        [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn')].forEach(P => { if (P && !P.hidden && P.getBoundingClientRect) { const r = P.getBoundingClientRect(); if (r.width) b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
       }
-      const cost = ([x, y]) => { let o = 0; for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
+      const cost = ([x, y]) => { let o = 0; for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
       const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
       const right0 = sx < w * .58; if (b.side == null) b.side = right0 ? 0 : 1;
       let best = b.side, bc = cost(place(C[b.side])); C.forEach((c, i) => { const k = cost(place(c)); if (k < bc * .7) { bc = k; best = i; } }); b.side = best;
-      let [x, y] = place(C[best]); const right = x > sx - cw / 2;
+      let [x, y] = place(C[best]); if (w < 760) { x = 10; y = h - ch - 128; }   // phones: a bottom sheet above the time bar
+      const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;

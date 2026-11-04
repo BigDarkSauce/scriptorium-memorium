@@ -44,7 +44,7 @@ export class DioramaScene {
   }
   // ---------- building ----------
   build() {
-    this.world.clear(); this.extras.clear(); this.actors = []; this.series = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
+    this.world.clear(); this.extras.clear(); this.actors = []; this.symbols = []; this.series = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
     const spec = this.spec;
     if (isSceneSpec(spec)) this.buildScene(); else this.buildModel();
     (spec.additions || []).forEach(b => { try { const o = buildBody(b, this.bodyCtx()); o.userData.added = true; this.extras.add(o); if (b.role === 'actor') this.addActor(o.userData.label, () => this.centerOf(o), o, b.describe); } catch (e) { console.warn(e); } });

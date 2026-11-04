@@ -30,8 +30,13 @@ export class DioramaView {
     if (!isSceneSpec(spec) && spec.overrides && spec.ovV !== 2) { spec.overridesV1 = spec.overrides; delete spec.overrides; }
     this.ds = new DioramaScene(this.gfx, spec);
     this.camera = this.ds.camera; this.scene = this.ds.scene;
+    // the beat's subject gets a soft warm accent (always present, intensity 0 at rest, so the light count never changes)
+    this.accentLight = new THREE.SpotLight(0xfff0d8, 0, 0, .5, .7, 2); this.accentLight.castShadow = false; this.accentLight.name = 'director accent'; this.accentLight.userData.isInk = true;
+    this.scene.add(this.accentLight, this.accentLight.target);
+    // ambience from the setting the model actually stages (a model may choose its own preset)
+    { const pre = (this.ds.env && this.ds.env.preset) || 'studio'; this.app.sfx && this.app.sfx.ambience({ landscape: 'outdoor', ocean: 'ocean', cosmos: 'space', night: 'outdoor', micro: 'micro', lab: 'lab', abstract: 'studio', desk: 'studio', studio: 'studio' }[pre] || 'studio'); }
     this.stage = 'init'; this.tourI = -1; this.pins = new Map(); this.lessonI = 0; this.flashes = [];
-    this.title = opts.title || spec.title || 'Diorama';
+    this.title = opts.title || spec.title || (spec.type && spec.type !== 'scene' ? spec.type.replace(/^./, c => c.toUpperCase()).replace('pendulum', ' pendulum') : 'Diorama');
     this.ui = el('div', { class: 'dio-ui' }); app.ui.append(this.ui);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: 2, maxDistance: 60, maxPolarAngle: Math.PI * .49, enabled: false });
@@ -164,15 +169,15 @@ export class DioramaView {
     if (l.reset !== false && i === this.lessonI) { /* keep state continuous */ }
     if (l.set) { for (const k in l.set) this.setParam(k, +l.set[k], true); this.renderParams(); }
     const fa = l.focus ? this.ds.actors.find(a => a.id === l.focus || a.name === l.focus || a.name.toLowerCase().includes(String(l.focus).toLowerCase())) : null;
-    this.lessonActor = fa; this.awaitIdle = false; this.dir.clear();   // starting a step is the reader's choice: what was showing gives way, and the new instruction is read before anything moves
+    this.lessonActor = fa; this.awaitIdle = false; this._stepKeys = new Set(); this.dir.clear();   // starting a step is the reader's choice: what was showing gives way, and the new instruction is read before anything moves
     const host = fa || this.namesIn(l.text)[0];
     this.dir.clearCaption();
     // cinematic: the instruction is read first (the model waits), then the step plays; without a subject it shows as a caption
     const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, lt = String(l.text || '').toLowerCase(), fk = Object.keys(flows).find(k => lt.includes(k));
     const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : null;
-    if (this.pov && this.pov.auto) this.exitPOV();
+    if (this.pov && this.pov.auto) this.exitPOV(false, true);
     if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
-    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: l.shot || (povA ? 'pov' : undefined), caption: !host && !povA, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
+    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: l.shot || (povA ? 'pov' : undefined), caption: !host && !povA, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     this.ds.playing = true; this.syncTimeUI();
     const until = String(l.until || ''); this.running = i; this.runT = 0; this.runDur = +l.run || (until ? 30 : 6); this.runUntil = until.startsWith('event:') ? until.slice(6).toLowerCase() : null; this.runReplay = !!replay;
@@ -180,10 +185,11 @@ export class DioramaView {
     const b = bar && bar.querySelector('.lesson-run .btn'); if (b) { b.textContent = 'Running…'; b.disabled = true; }
   }
   completeLesson() {
-    const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV();
-    if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; } this.readFocus = null; this.readPanel.classList.remove('compact');
+    const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV(false, true);
+    const unfold = () => { if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; } this.readFocus = null; this.readPanel.classList.remove('compact'); };
     const l = this.lessons()[i]; const fa = this.lessonActor;
-    if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
+    if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', onEnd: unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
+    if (!(l && l.explain && this.dir.cinematic)) unfold();
     if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
     this.renderLessons();
   }
@@ -214,15 +220,23 @@ export class DioramaView {
   // large ones (a flask, a cell) stay visible so you are inside them.
   setPOV(a, opts = {}) {
     if (!a) return this.exitPOV();
+    // entering (or switching) goes through a short dip to dark, so the eye never snaps across the scene
+    if (!opts.now && this.dir) { this.dir.move = null; this.dir.dip = { t: 0, done: false, apply: () => this.setPOV(a, Object.assign({}, opts, { now: true })) }; this.app.sfx && this.app.sfx.play('whoosh'); return; }
     const c = this.camera;
     if (!this.pov) this.povPrev = { p: c.position.clone(), t: this.controls.target.clone(), fov: c.fov, near: c.near };
     else this.exitPOV(true);
+    this.scene.updateMatrixWorld(true);   // a step's rebuild leaves world matrices stale: measure after updating them
     let size = .3, center = null; if (a.obj) { const bx = new THREE.Box3().setFromObject(a.obj); if (!bx.isEmpty()) { size = bx.getSize(V3()).length() * .5; center = bx.getCenter(V3()); } }
-    const R = this.ds.orb ? this.ds.orb.r : 10, hide = a.obj && size < R * .08;
+    const R = this.ds.orb ? this.ds.orb.r : 10, hide = !!a.obj && size < R * .08;
     if (hide) a.obj.traverse(o => { if (o.isMesh) { o.userData._povVis = o.visible; o.visible = false; } });
-    this.pov = { a, size, hide, yaw: 0, pitch: 0, look: null, last: null, auto: !!opts.auto, off: center && a.getPos() ? center.clone().sub(a.getPos()) : V3() };
+    const p0 = a.getPos();
+    // a small body: the eye is the body itself; a large container: the eye sits at its centre (you are inside it)
+    const off = !hide && center && p0 ? center.clone().sub(p0) : V3();
+    const lookAt = opts.look ? this.ds.actors.find(x => x.name === opts.look || x.name.toLowerCase().includes(String(opts.look).toLowerCase())) : null;
+    this.pov = { a, size, hide, yaw: 0, pitch: 0, look: null, last: null, auto: !!opts.auto, off, lookAt };
     this.dir && (this.dir.move = null); this.fly = null; this.controls.enabled = false;
     c.near = Math.max(.003, size * .03); c.fov = 74; c.updateProjectionMatrix();
+    if (p0) { const eye = p0.clone().add(off).addScaledVector(V3(0, 1, 0), hide ? size * .25 : 0); c.position.copy(eye); c.lookAt(this.povGoal(eye)); }
     const cv = this.gfx.renderer.domElement;
     this._povDown = e => { if (this.pov) this.pov.drag = { x: e.clientX, y: e.clientY, yaw: this.pov.yaw, pitch: this.pov.pitch }; };
     this._povMove = e => { const P = this.pov; if (!P || !P.drag || !(e.buttons & 1)) return; P.yaw = P.drag.yaw - (e.clientX - P.drag.x) * .005; P.pitch = clamp(P.drag.pitch - (e.clientY - P.drag.y) * .005, -1.2, 1.2); };
@@ -234,28 +248,38 @@ export class DioramaView {
     this.povBar.append(el('button', { class: 'ibtn', 'aria-label': 'Previous object', text: '‹', onclick: () => this.setPOV(others[(i - 1 + others.length) % others.length]) }),
       el('span', { html: `Seeing as <b>${esc(a.name.split(' · ')[0])}</b> · drag to look · Esc to leave` }),
       el('button', { class: 'ibtn', 'aria-label': 'Next object', text: '›', onclick: () => this.setPOV(others[(i + 1) % others.length]) }),
-      el('button', { class: 'btn small', text: 'Leave', onclick: () => this.exitPOV() }));
-    this.app.sfx && this.app.sfx.play && this.app.sfx.play('whoosh');
+      el('button', { class: 'btn small', text: 'Leave', onclick: () => this.exitPOV(false, true) }));
   }
-  exitPOV(keepCam) {
-    const P = this.pov; if (!P) return; this.pov = null;
+  exitPOV(keepCam, soft) {
+    const P = this.pov; if (!P) return;
+    if (soft && this.dir && !keepCam) { this.dir.move = null; this.dir.dip = { t: 0, done: false, apply: () => this.exitPOV(false) }; return; }   // leave through a dip, like entering
+    this.pov = null;
     if (P.hide && P.a.obj) P.a.obj.traverse(o => { if (o.isMesh && o.userData._povVis !== undefined) { o.visible = o.userData._povVis; delete o.userData._povVis; } });
     const cv = this.gfx.renderer.domElement; cv.removeEventListener('pointerdown', this._povDown); removeEventListener('pointermove', this._povMove); removeEventListener('pointerup', this._povUp);
     if (keepCam) return;
     const c = this.camera, q = this.povPrev; if (q) { c.position.copy(q.p); this.controls.target.copy(q.t); c.fov = q.fov; c.near = q.near; c.updateProjectionMatrix(); c.lookAt(q.t); }
     this.controls.enabled = true; if (this.povBar) this.povBar.hidden = true;
+    if (this.dir) this.dir.last = null;
+  }
+  // where the eye wants to look: a named target, else along the actor's path, else at what the current step is about, else level at the model
+  povGoal(eye) {
+    const P = this.pov; if (!P) return this.ds.center.clone();
+    if (P.lookAt && P.lookAt.getPos) { const q = P.lookAt.getPos(); if (q) return q.clone(); }
+    if (P.look) return eye.clone().add(P.look);
+    const b = this.dir.beat, q = b && b.anchor && b.host !== P.a ? b.anchor() : null; if (q) return q.clone();
+    const f = this.ds.center.clone().sub(eye); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize(); f.y = -.18; return eye.clone().add(f);
   }
   updatePOV(dt) {
     const P = this.pov, c = this.camera, p0 = P.a.getPos(); if (!p0) return;
-    const p = p0.clone().add(P.off).addScaledVector(V3(0, 1, 0), P.size * .25);
-    // where to look: along the actor's motion when it moves, else at what the current step is about, else at the model's centre
-    if (P.last) { const vel = p.clone().sub(P.last).divideScalar(Math.max(dt, 1e-3)); if (vel.length() > P.size * .4) P.look = (P.look || vel.clone()).lerp(vel.normalize(), Math.min(1, dt * 3)).normalize(); }
+    const p = p0.clone().add(P.off).addScaledVector(V3(0, 1, 0), P.hide ? P.size * .25 : 0);
+    // follow the line of motion, not its sign: an oscillator doesn't whip round at each turning point
+    if (P.last) { const vel = p.clone().sub(P.last); if (vel.length() / Math.max(dt, 1e-3) > P.size * .4) { vel.normalize(); if (P.look && vel.dot(P.look) < 0) vel.negate(); P.look = (P.look || vel.clone()).lerp(vel, Math.min(1, dt * 1.5)).normalize(); } }
     P.last = p.clone();
-    let fwd = P.look ? P.look.clone() : null;
-    if (!fwd) { const b = this.dir.beat, q = b && b.anchor && b.host !== P.a ? b.anchor() : null; fwd = (q || this.ds.center.clone()).sub(p); if (!q) fwd.y = 0; if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize(); if (!q) fwd.y = -.18; fwd.normalize(); }
-    const yawQ = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), P.yaw); fwd.applyQuaternion(yawQ);
-    const side = V3().crossVectors(fwd, V3(0, 1, 0)).normalize(); fwd.applyAxisAngle(side, P.pitch);
-    c.position.lerp(p, Math.min(1, dt * 8)); c.lookAt(c.position.clone().add(fwd));
+    c.position.lerp(p, Math.min(1, dt * 10));
+    // turn toward the goal at most ~90°/s (plus the learner's own drag offsets)
+    const m = new THREE.Matrix4().lookAt(c.position, this.povGoal(c.position), V3(0, 1, 0)), q = new THREE.Quaternion().setFromRotationMatrix(m);
+    q.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(P.pitch, P.yaw, 0, 'YXZ')));
+    c.quaternion.rotateTowards(q, (P.drag ? 6 : 1.57) * dt);
   }
   highlightPins(actors) { this._hot = actors; const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
   refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
@@ -312,19 +336,22 @@ export class DioramaView {
     // during a step, events about objects the step doesn't mention don't take the camera (they go to the ticker)
     const L = this.running != null ? this.lessons()[this.running] : null, lt0 = L ? ((L.title || '') + ' ' + (L.text || '')).toLowerCase() : '';
     const offTopic = L && host && host !== this.lessonActor && !lt0.includes(host.name.split(' · ')[0].toLowerCase());
-    if (this.dir.cinematic && this.stage === 'explore' && !offTopic) {
+    // one callout per kind of event: per step while a step runs, once per visit while exploring freely; after the awaited event, the ticker only
+    const evKey = Director.evKey(ev.text), keys = this.running != null ? (this._stepKeys = this._stepKeys || new Set()) : (this._freeKeys = this._freeKeys || new Set());
+    const repeat = keys.has(evKey); keys.add(evKey);
+    if (this.dir.cinematic && this.stage === 'explore' && !offTopic && !repeat && !this.awaitIdle) {
       // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
       const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, fk = Object.keys(flows).find(k => lt.includes(k));
       const tg = shot && shot.target, pos0 = tg ? (typeof tg === 'function' ? tg() : tg) : null, pos = pos0 ? (pos0.isVector3 ? pos0.clone() : new THREE.Vector3().fromArray(pos0)) : ev.pos ? ev.pos.clone() : null;
-      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null });
+      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null, evKey });
     } else { const d = el('div', { text: ev.text }); this.ticker.append(d); setTimeout(() => d.remove(), this.dir.readTime(ev.text) * 1000); while (this.ticker.children.length > 2) this.ticker.firstChild.remove(); }
     // sound, placed left/right where the event happens
-    if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); }
+    if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } this._sndT = this._sndT || new Map(); if (now - (this._sndT.get(evKey) || -1e9) > 3000) { this._sndT.set(evKey, now); if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); } }
     this.evlog.prepend(el('li', { text: this.clockText(ev.t) + ' · ' + ev.text })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
-    if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) this.awaitIdle = true; else this.runT = this.runDur; }
+    if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) { if (!this.awaitIdle) this.awaitT = 0; this.awaitIdle = true; } else this.runT = this.runDur; }
   }
   // ---------- input ----------
   wheel(e) {
@@ -338,7 +365,7 @@ export class DioramaView {
     if (document.querySelector('.modal-veil')) return;   // a dialog is open (replace, add, ask AI): Esc must not leave the diorama behind it
     if (this.stage === 'tour' && (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ')) { e.preventDefault(); this.next(); }
     else if (this.stage === 'tour' && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) { e.preventDefault(); this.prev(); }
-    else if (e.key === 'Escape') { if (this.pov) this.exitPOV(); else if (this.sel) this.deselect(); else this.exit(); }
+    else if (e.key === 'Escape') { if (this.pov) this.exitPOV(false, true); else if (this.sel) this.deselect(); else this.exit(); }
     else if ((e.key === 'p' || e.key === 'P') && this.stage === 'explore' && !this.editing) { const A = this.ds.actors; if (A.length) this.setPOV(A[(A.indexOf(this.pov && this.pov.a) + 1) % A.length]); }
     else if (e.key === 'e' || e.key === 'E') this.toggleEdit();
     else if (this.sel && this.tc) { if (e.key === 'g') this.tc.setMode('translate'); if (e.key === 'r') this.tc.setMode('rotate'); if (e.key === 's') this.tc.setMode('scale'); if (e.key === 'Delete') this.editAction('remove'); if (e.key === 'h') this.editAction('hide'); }
@@ -362,6 +389,7 @@ export class DioramaView {
   }
   nameOf(o) { return o.userData.label || o.name || (o.children[0] && o.children[0].geometry && o.children[0].geometry.type.replace('Geometry', '')) || (o.geometry ? o.geometry.type.replace('Geometry', '') : o.type); }
   select(o) {
+    if (o && o !== this.sel) this.app.sfx && this.app.sfx.play('tick', { gain: .6 });
     this.sel = o; this.gfx.outline.enabled = true; this.gfx.outline.selectedObjects = [o];
     if (!this.tc) {
       this.tc = new TransformControls(this.camera, this.gfx.canvas); this.tcHelper = this.tc.getHelper(); this.scene.add(this.tcHelper);
@@ -376,6 +404,7 @@ export class DioramaView {
   overrideOf(o) { this.spec.overrides = this.spec.overrides || {}; if (!isSceneSpec(this.spec)) this.spec.ovV = 2; const p = this.ds.pathOf(o); return (this.spec.overrides[p] = this.spec.overrides[p] || {}); }
   bodySpecOf(o) { if (o.userData.bodyId && isSceneSpec(this.spec)) return (this.spec.bodies || []).find(b => b.id === o.userData.bodyId); if (o.userData.added) return (this.spec.additions || [])[this.ds.extras.children.indexOf(o)]; return null; }
   commitTransform() {
+    this.app.sfx && this.app.sfx.play('wood', { gain: .45, pitch: 1.3 });
     const o = this.sel; if (!o) return; const b = this.bodySpecOf(o), R2D = 180 / Math.PI;
     if (b) { b.position = o.position.toArray().map(v => +v.toFixed(3)); b.rotation = [o.rotation.x, o.rotation.y, o.rotation.z].map(v => +(v * R2D).toFixed(2)); b.scale = o.scale.toArray().map(v => +v.toFixed(3)); }
     else { const ov = this.overrideOf(o); ov.offset = o.position.clone().sub(this.selBase).toArray().map(v => +v.toFixed(3)); ov.rotation = [o.rotation.x, o.rotation.y, o.rotation.z].map(v => +(v * R2D).toFixed(2)); ov.scale = o.scale.toArray().map(v => +v.toFixed(3)); const it = (this.ds.ovList || []).find(x => x.o === o); if (it) { it.off = V3(...ov.offset); it.applied = o.position.clone(); } else this.ds.ovList.push({ o, e: ov, off: V3(...ov.offset), applied: o.position.clone() }); }
@@ -495,7 +524,7 @@ export class DioramaView {
     else if (this.pov) this.updatePOV(dt);
     else if (this.controls.enabled) this.controls.update();
     ds.step(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale);
-    if (this.awaitIdle && this.dir.idle()) { this.awaitIdle = false; this.runT = this.runDur; }
+    if (this.awaitIdle) { this.awaitT = (this.awaitT || 0) + dt; if (this.dir.idle() || this.awaitT > 15) { this.awaitIdle = false; this.runT = this.runDur; } }
     if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) this.completeLesson(); }
     this.flashes = this.flashes.filter(f => { f.a += dt; f.s.scale.setScalar(.3 + f.a * 2.4); f.s.material.opacity = Math.max(0, 1 - f.a / 1.1); if (f.a > 1.1) { f.s.removeFromParent(); f.s.material.dispose(); return false; } return true; });
     // pins
@@ -503,12 +532,12 @@ export class DioramaView {
     this.dir.update(dt, this.camera, w, h);
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
-    if (!this._pr || t - this._pr > 1) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
+    if (!this._pr || t - this._pr > .5) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, this.dir.beat && this.dir.beat.el].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
     const placed = [], items = [], vis = (p, x) => { if (p._vis !== x) { p._vis = x; p.style.visibility = x; } };   // style writes only when something changed
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
       if (!src || this.stage === 'sketch' || this.stage === 'materialize') { vis(pin, 'hidden'); return; }
-      v.copy(src).project(this.camera); if (v.z > 1) { vis(pin, 'hidden'); return; }
+      v.copy(src).project(this.camera); if (v.z > 1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02 || (this.pov && pin._actor === this.pov.a)) { vis(pin, 'hidden'); return; }   // off-screen (or the actor you ride): no label pinned to the frame edge
       if (!pin._w) pin._w = pin.offsetWidth;
       items.push({ pin, x: clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10), y: clamp((-v.y * .5 + .5) * h, 22, h - 22), pr: (pin.classList.contains('hot') ? 4 : 0) + (pin.classList.contains('focus') ? 2 : 0) + (pin._actor ? 1 : 0) });
     });
@@ -520,6 +549,11 @@ export class DioramaView {
       vis(it.pin, ok && !under ? 'visible' : 'hidden');
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); const tf = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; if (it.pin._tf !== tf) { it.pin._tf = tf; it.pin.style.transform = tf; } }
     }
+    // weather you can hear: rain follows the model's rain (its own weather() if it has one, else any visible 'rain' object's opacity)
+    if (this.app.sfx && (!this._wt || t - this._wt > .5)) { this._wt = t; let rain = 0, wind = 0;
+      try { const W = ds.sim && ds.sim.weather && ds.sim.weather(); if (W) { rain = +W.rain || 0; wind = +W.wind || 0; } else { if (!this._rainObjs || t - (this._rainScan || 0) > 4) { this._rainScan = t; this._rainObjs = []; ds.world.traverse(o => { if (/rain/i.test(o.name || '') && o.material && !o.isGroup) this._rainObjs.push(o); }); }
+        this._rainObjs.forEach(o => { let vis = o.visible, q = o.parent; while (vis && q) { vis = q.visible; q = q.parent; } if (vis) rain = Math.max(rain, [].concat(o.material)[0].opacity ?? 1); }); } } catch (e) { }
+      this.app.sfx.setRain(Math.min(1, rain)); if (wind) this.app.sfx.setWind(Math.min(1, wind)); }
     if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd0 = ds.readouts(), F = this.readFocus; let rd = rd0;
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
