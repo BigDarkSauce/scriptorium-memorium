@@ -8,7 +8,26 @@
 import { EVIDENCE_RULES } from './evidence.js';
 export { EVIDENCE_RULES };
 
-export const LESSON_FORMAT = `LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".`;
+export const LESSON_FORMAT = `LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|medium|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".
+OPTIONAL EXPLAINER CUES on a lesson (actor names spelled as in "focus"; see EXPLAINER RULES):
+ "chain":["actor",…] the actors in the ORDER OF CAUSE, 2–8 per lesson (an entry may be {"a":"actor","note":"≤ 6 words"}); a highlight travels link by link with numbered badges ("Step k of n"); "chainPace":0.5–2 (seconds per link, default 0.9) or "chainOn":"event:<substring>" (one link per such event, in step with the motion)
+ "isolate":true | ["actor",…] everything except the subject (true: the focus and the actors the text names) is dimmed and greyed while the step plays
+ "peel":{"layers":["outermost actor",…],"mode":"ghost|lift|clip","order":"out-in|in-out","dwell":2.2,"restore":"step|beat|never"} reveals an inside one named layer at a time ("Layer k of n"), at most 6 layers, restored in reverse
+ "zoom":{"to":"small actor","from":"wide|current","perDecade":3,"fovEnd":30,"stations":[{"at":"actor","hold":2}],"back":false} one continuous zoom into a small part, pausing at stations named after the levels of organisation (leave "shot" out: "zoom" is the shot); the diorama needs "scale":{"m":<metres per world unit>} for its scale bar
+ "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.`;
+
+// Authoring rules for the explainer cues (docs/research/explainer-animation.md §7; the evidence for each is there).
+export const EXPLAINER_RULES = `EXPLAINER RULES (how a 3D demo's lessons show a mechanism):
+1. Start from the phenomenon or the problem (what happens without it, what you see or hear), not from the list of parts.
+2. Name the parts before the process: every actor's "describe" gives its JOB in ≤ 10 words (the tour introduces them first).
+3. Order every explanation along the causal chain and give that order as "chain" (cause first, effect last), never in the order of position.
+4. One scale per cause: when the cause moves to a smaller scale, use "zoom" with "stations" named after the levels of organisation (organ, tissue, cell, molecule).
+5. Peel ("peel") only to reveal the active part, and go back afterwards; use "isolate" for the subsystem that acts now, not on every lesson.
+6. A POV ("shot":"pov" or "track") only for what a part experiences (a squeeze, an impulse, its timing), never as the only view of the structure. Molecules move randomly, in crowds, and most collisions do nothing: in micro scenes say "random"/"diffuses", never "travels to", "heads for", "seeks" or "finds".
+7. Put a worked number with its unit on every mechanism that has one (a ratio, a period, a rate), in "explain" or a readout, e.g. 7:56 × 8:60 = 1:60.
+8. At most one counterfactual ("what if it weren't there") per diorama, marked as hypothetical.
+9. Name what is left out ("there are many parts; here are the three that matter").
+10. Keep 3–6 lessons, each with ≤ 8 chain links and on-object labels of ≤ 4 words (definitions go in the text); expand every acronym at first use.`;
 
 export const SCENE_SPEC = `SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (radius 7, top at y=0, units ≈ metres; keep content within |x|,|z| < 6.5, 0 < y < 8).
 {
@@ -21,7 +40,9 @@ export const SCENE_SPEC = `SCENE SPEC (type "scene") — a universal 3D diorama 
  "params":[{"key":"L","label":"string length","min":0.5,"max":4,"value":2,"unit":"m","rebuild":false}],
  "behaviors":[{"target":"id"|"prefix*"|"kind:tree","type":"sway|spin|bob|orbit|pulse|scale|move|glow|visible|opacity","axis":"x|y|z","amount":"expr","speed":"expr","center":[x,y,z]}],
  "code":"JS function body run once per build (dynamics; see API)",
- "lessons":[{"title":str,"question":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes","opens":str,"shot":"wide|push|close|pov","pov":"actor"}],
+ "lessons":[{"title":str,"question":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes","opens":str,"shot":"wide|push|medium|close|pov","pov":"actor", "chain":[...],"isolate":...,"peel":{...},"zoom":{...},"track":{...} (optional cues, see LESSON)}],
+ "scale":{"m":0.01},               // metres per world unit (only when the scene has a real size; enables the zoom's scale bar)
+ "tracks":{"name":[[x,y,z],...]},   // named camera paths a lesson can ride ("track":"name")
  "camera":{"target":[x,y,z]}
 }
 Shape kinds: box{w,h,d,round} sphere{r} cylinder{r,rt,rb,h} cone{r,h} torus{R,r} capsule{r,h} plane{w,h} disc{r} ring{ri,ro}
@@ -203,6 +224,7 @@ ${HARD_RULES}
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
 ${LESSON_FORMAT}
+${EXPLAINER_RULES}
 ${TEACHING_RULES}
 ${EVIDENCE_RULES}
 
@@ -310,6 +332,59 @@ export function checkDemos(A) {
   }));
   return out;
 }
+// Explainer-cue checks (tools/verify-chain.mjs): chain / isolate / peel / zoom names must be the model's actors (or the
+// scene's bodies); a chain link the lesson's text never names, a zoom without a scale, and directed-motion wording in a
+// POV of a micro or diffusive scene are warnings (docs/research/explainer-animation.md S1, S4, S6.7, S12).
+const DIFFUSIVE = { gas: ['molecule'], reaction: ['tracked molecule', 'molecule'] };
+const DIRECTED = /\b(travels? (to|toward|towards|straight)|heads? (for|to|toward|towards)|seeks?|finds?|goes straight|aims? (at|for)|makes? (its|their) way)\b/i;
+export function checkCues(A) {
+  const out = [];
+  (A.chain || []).forEach(st => (st.demos || []).forEach((d, i) => {
+    if (!d || typeof d !== 'object' || !Array.isArray(d.lessons)) return; const t = String(d.type || '').toLowerCase();
+    const B = BUILTIN_MODELS[t], bodies = Array.isArray(d.bodies) ? d.bodies : null; if (!B && !bodies) return;   // a scene still to be authored has no names yet
+    const names = B ? B.actors : bodies.flatMap(b => [b.id, b.name, b.label].filter(Boolean)).map(String);
+    const known = n => { const s = String(n || '').toLowerCase().trim(); if (!s) return false; return names.some(a => { const x = a.toLowerCase(); return x === s || x.split(' · ')[0] === s || x.includes(s); }); };
+    const micro = (d.environment && d.environment.preset === 'micro') || !!DIFFUSIVE[t] || (bodies || []).some(b => b && b.diffusive);
+    d.lessons.forEach((l, j) => {
+      if (!l || typeof l !== 'object') return; const at = { step: st.id, demo: i, type: t, lesson: j + 1 }, F = issue => out.push({ ...at, level: 'fault', issue }), W = issue => out.push({ ...at, level: 'warn', issue });
+      const words = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase();
+      if (l.shot && !['wide', 'push', 'medium', 'close', 'pov'].includes(l.shot)) F(`"shot":"${l.shot}" is not a shot (give "zoom" or "track" as its own field)`);
+      if (l.chain != null) {
+        if (!Array.isArray(l.chain) || l.chain.length < 2) F('"chain" needs at least 2 actors in causal order');
+        else {
+          const ns = l.chain.map(x => typeof x === 'string' ? x : x && (x.a || x.actor || x.name));
+          ns.forEach((n, k) => { if (!known(n)) F(`chain link ${k + 1} "${n}" is not an actor of this diorama`); else if (!words.includes(String(n).toLowerCase().split(' · ')[0])) W(`chain link ${k + 1} "${n}" is never named in the lesson's text: say what it does`); });
+          l.chain.forEach((x, k) => { if (x && typeof x === 'object' && x.note && String(x.note).trim().split(/\s+/).length > 6) W(`chain link ${k + 1}: its note has more than 6 words`); });
+          if (l.chain.length > 8) W(`chain has ${l.chain.length} links: more than 8 are split into several passes; consider two lessons`);
+        }
+        if (l.chainPace != null && !(+l.chainPace >= .5 && +l.chainPace <= 2)) W('"chainPace" should be 0.5–2 s per link');
+        if (l.chainOn && B && !untilMatches(t, l.chainOn)) F(`"chainOn" waits for "${l.chainOn}", which no ${t} event text contains`);
+      }
+      if (Array.isArray(l.isolate)) l.isolate.forEach(n => { if (!known(n)) F(`isolate names "${n}", which is not an actor`); });
+      else if (l.isolate != null && typeof l.isolate !== 'boolean') F('"isolate" must be true or a list of actors');
+      if (l.peel != null) {
+        const P = l.peel; if (!P || !Array.isArray(P.layers) || !P.layers.length) F('"peel" needs "layers": the actors from the outside in');
+        else { P.layers.forEach(n => { if (!known(n)) F(`peel layer "${n}" is not an actor`); }); if (P.layers.length > 6) W('peel has more than 6 layers (the rest are ignored)'); }
+        if (P && P.mode && !['ghost', 'lift', 'clip'].includes(P.mode)) F(`peel "mode":"${P.mode}" (ghost, lift or clip)`);
+        if (P && P.order && !['out-in', 'in-out'].includes(P.order)) F(`peel "order":"${P.order}" (out-in or in-out)`);
+        if (P && P.restore && !['step', 'beat', 'never'].includes(P.restore)) F(`peel "restore":"${P.restore}" (step, beat or never)`);
+      }
+      if (l.zoom != null) {
+        const Z = l.zoom; if (!Z || typeof Z !== 'object') F('"zoom" must be an object {"to":"actor",…}');
+        else {
+          if (Z.to && !known(Z.to)) F(`zoom "to":"${Z.to}" is not an actor`); if (!Z.to && !l.focus) F('zoom needs "to" (or the lesson\'s "focus")');
+          (Z.stations || []).forEach((x, k) => { const n = typeof x === 'string' ? x : x && (x.at || x.a); if (!known(n)) F(`zoom station ${k + 1} "${n}" is not an actor`); });
+          if (Z.fovEnd != null && !(+Z.fovEnd >= 10 && +Z.fovEnd <= 70)) W('zoom "fovEnd" should be 10–70°; the lens never changes by more than 10° anyway');
+          if (!(d.scale && +d.scale.m > 0)) W('zoom without the diorama\'s "scale":{"m":…}: no scale bar is drawn (none is ever invented)');
+        }
+      }
+      if (l.track != null && l.track !== 'actor') { const T = typeof l.track === 'string' ? (d.tracks || {})[l.track] : l.track, pts = Array.isArray(T) ? T : T && T.points; if (!Array.isArray(pts) || pts.length < 2 || pts.some(p => !Array.isArray(p) || p.length !== 3 || p.some(v => !isFinite(+v)))) F('"track" needs "points": at least two [x,y,z]'); }
+      const rides = l.shot === 'pov' || l.pov || l.track;
+      if (rides && micro && DIRECTED.test(words) && !/random|diffus|brownian|jostl|collid/.test(words)) W('a POV in a micro or diffusive scene describes directed motion ("travels to", "heads for", "seeks", "finds") without "random" or "diffuses": molecules do not aim (Jantzen et al. 2024)');
+    });
+  }));
+  return out;
+}
 // Which subsections a follow-up call must (re)write: missing ones, thin ones, and those holding uncited figures.
 export function gapsOf(report, sections, figures = []) {
   const out = new Map();
@@ -410,6 +485,7 @@ Make it beautiful and alive like a living miniature under glass: a composed scen
 Use the numbers of the study step (the book's own values) for params and readouts. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
 Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI. Values that are not in the study step are additions from outside the book: list them in a top-level "extra" array ({what, source}).
 ${SCENE_SPEC}
+${EXPLAINER_RULES}
 Return ONLY the JSON scene spec.`;
 }
 
@@ -441,6 +517,7 @@ ${HARD_RULES}
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
 ${LESSON_FORMAT}
+${EXPLAINER_RULES}
 ${TEACHING_RULES}
 ${EVIDENCE_RULES}
 Return ONLY JSON: ${CHAIN_FORMAT}`;

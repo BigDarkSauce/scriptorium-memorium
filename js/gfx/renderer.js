@@ -161,3 +161,10 @@ export class Gfx {
   }
 }
 
+// Hook for passes owned by other modules (e.g. js/dio/focus.js: the explainer focus mask). The pass is inserted just
+// before the grade pass (display-referred, after tone mapping); the returned function removes it again.
+Gfx.prototype.addPass = function (pass, before = this.grade) {
+  const P = this.composer.passes, i = P.indexOf(before); this.composer.insertPass(pass, i < 0 ? P.length : i);
+  pass.setSize(innerWidth * this.dpr, innerHeight * this.dpr);
+  return () => { const k = this.composer.passes.indexOf(pass); if (k >= 0) this.composer.removePass(pass); };
+};

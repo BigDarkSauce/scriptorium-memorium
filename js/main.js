@@ -66,7 +66,7 @@ class App {
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
     // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
-    if (b && b.example && r.threadV !== 1) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 1; store.set('room:' + id, r); }
+    if (b && b.example && (r.threadV || 0) < 2) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 2; store.set('room:' + id, r); }
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
@@ -218,8 +218,8 @@ class App {
         fill(st, ss, ['section', 'answers', 'opens']); n++;
         (st.demos || []).forEach(d => {
           const sd = (ss.demos || []).find(x => x.type === d.type && (x.title || '') === (d.title || '')); if (!sd) return;
-          fill(d, sd, ['purpose']);
-          (d.lessons || []).forEach(l => { const sl = l && l.title && (sd.lessons || []).find(x => x.title === l.title); if (sl) fill(l, sl, ['question', 'opens', 'shot', 'pov']); });
+          fill(d, sd, ['purpose', 'scale']);
+          (d.lessons || []).forEach(l => { const sl = l && l.title && (sd.lessons || []).find(x => x.title === l.title); if (sl) fill(l, sl, ['question', 'opens', 'shot', 'pov', 'chain', 'chainPace', 'chainOn', 'isolate', 'peel', 'zoom', 'track']); });
         });
       }
       // the coverage map follows the steps' sections
