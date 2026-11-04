@@ -556,9 +556,10 @@ const sketchCache = new Map();
 const STAGE_COLORS = ['#d1495b', '#2e86ab', '#e9a03b', '#3f7d6e', '#7b4b94'];
 const STOP = new Set(['the', 'and', 'with', 'from', 'into', 'that', 'this', 'than', 'over', 'under', 'glass', 'their', 'about']);
 const toks = t => String(t || '').toLowerCase().replace(/[^a-z0-9α-ω ]+/g, ' ').split(/\s+/).filter(x => x.length > 3 && !STOP.has(x));
+// whole words only: 'column' alone no longer pulls in 'mercury column'
 export function matchActors(actors, text) {
   const T = new Set(toks(text)); const full = String(text || '').toLowerCase();
-  return actors.map(a => { const n = a.name.split(' · ')[0].toLowerCase(); const ts = toks(n); const hit = full.includes(n) ? 10 : ts.filter(x => T.has(x) || [...T].some(y => y.startsWith(x.slice(0, 5)) && x.length > 4)).length; return { a, hit }; }).filter(x => x.hit > 0).sort((p, q) => q.hit - p.hit).map(x => x.a).slice(0, 5);
+  return actors.map(a => { const n = a.name.split(' · ')[0].toLowerCase(); const ts = toks(n); const word = x => T.has(x) || T.has(x + 's') || T.has(x.replace(/s$/, '')); const hit = new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(full) ? 10 : ts.length && ts.every(word) ? ts.length : 0; return { a, hit }; }).filter(x => x.hit > 0).sort((p, q) => q.hit - p.hit).map(x => x.a).slice(0, 5);
 }
 export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
@@ -568,7 +569,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   ds.step(0);
   // a stage plate shows the step's own state: let the model settle under the step's settings first (≈4 s of model time)
-  if (opts.focusText) { const pl = ds.playing; ds.playing = true; try { const t0 = performance.now(); for (let k = 0; k < 96 && performance.now() - t0 < 1500; k++) ds.step(.5); } catch (e) { } ds.playing = pl; }   // ≈48 model-seconds: slow processes (crystals, levels) reach the step's state
+  if (opts.focusText) { const pl = ds.playing; ds.playing = true; try { const t0 = performance.now(); for (let k = 0; k < 96 && performance.now() - t0 < 8000; k++) ds.step(.5); } catch (e) { } ds.playing = pl; }   // a fixed 48 model-seconds (the time cap only guards a runaway model)   // ≈48 model-seconds: slow processes (crystals, levels) reach the step's state
   let endKey = ds.overviewKey(), focus = [], fc = ds.center, fr = ds.radius;
   if (opts.focusText) {
     focus = matchActors(ds.actors, opts.focusText);
@@ -596,16 +597,18 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
       let p = null, rr = 24; if (a.obj) { const b3 = new THREE.Box3().setFromObject(a.obj); p = b3.getCenter(V3()); const s2 = b3.getSize(V3()).length() * .5; const e = p.clone().add(V3(s2, 0, 0)).project(cam), c0 = p.clone().project(cam); rr = clamp(Math.abs(e.x - c0.x) * .5 * w * .8, 14, 90); } else p = a.getPos && a.getPos();
       if (!p) return; const q = p.clone().project(cam); if (q.z > 1) return; pts.push({ a, i, x: (q.x * .5 + .5) * w, y: (-q.y * .5 + .5) * h, rr });
     });
+    // markers on (nearly) the same spot become one marker naming both, so circles never nest
+    for (let i = 0; i < pts.length; i++) for (let j = pts.length - 1; j > i; j--) { const P = pts[i], Q = pts[j]; if (Math.hypot(P.x - Q.x, P.y - Q.y) < Math.max(P.rr, Q.rr) * .55) { const big = P.rr >= Q.rr ? P : Q, small = big === P ? Q : P; big.alias = (big.alias || []).concat(small.a.name.split(' · ')[0], small.alias || []); pts.splice(pts.indexOf(small), 1); if (small === P) { i--; break; } } }
     // badges in a column on the side with more room, spaced so they never overlap; leader lines to each part
     const side = pts.reduce((s, p) => s + p.x, 0) / Math.max(1, pts.length) < w / 2 ? 1 : -1, colX = side > 0 ? Math.min(w - 50, Math.max(...pts.map(p => p.x + p.rr)) + 60) : Math.max(50, Math.min(...pts.map(p => p.x - p.rr)) - 60);
     pts.sort((p, q) => p.y - q.y); let lastY = -1e9; pts.forEach((p, n) => { p.by = clamp(Math.max(p.y, lastY + 34), 60, h - 60); lastY = p.by; p.i = n; });   // numbered top to bottom, no gaps
-    pts.forEach(({ a, i, x, y, rr, by }) => {
+    pts.forEach(({ a, i, x, y, rr, by, alias }) => {
       const col = STAGE_COLORS[i % STAGE_COLORS.length], bx = colX;
       g.strokeStyle = col; g.lineWidth = 2.5; g.globalAlpha = .9; g.setLineDash([]); g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
       const ex = x + side * rr * .8, ey = y + (by - y) * .2; g.beginPath(); g.moveTo(ex, ey); g.lineTo(bx - side * 14, by); g.stroke();
       g.fillStyle = col; g.beginPath(); g.arc(bx, by, 13, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#fff'; g.font = 'bold 14px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), bx, by + 1);
-      legend.push([col, i + 1, a.name]);
+      legend.push([col, i + 1, a.name.split(' · ')[0] + (alias && alias.length ? ' · ' + alias.join(' · ') : '')]);
     });
     g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.font = '14px "IBM Plex Mono", monospace';
     const lw = Math.min(w * .55, 26 + Math.max(...legend.map(l => g.measureText(l[2]).width)) + 40);

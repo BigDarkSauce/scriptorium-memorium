@@ -399,3 +399,7 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .gl-lost { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; padding: 14px 20px; border-radius: 14px; font-size: 14px; color: var(--ink); max-width: calc(100vw - 32px); text-align: center; }
 /* phones: the action bar spans the top, so the place name sits just under it instead of behind it */
 @media (max-width: 560px) { .brand { top: calc(var(--gut) + 54px + env(safe-area-inset-top,0px)); max-width: calc(100vw - 90px); } .brand-title { font-size: 18px; } .brand-sub { display: none; } }
+/* readability floor: no label below 11 px (mono kickers, kinds, provenance badges) */
+.side-panel h4, .part-list small, .coach-kicker, .reader-head .kicker, .step .kind, .sketch-card .kicker, .sketch-empty .kicker, .intuition b, .miscon b, .check b, .src-head, .co-kicker { font-size: 11px; }
+/* the speaker button steps aside while a scroll is open (the reader has its own header controls) */
+body:has(.reader:not([hidden])) .sound-btn { top: auto; right: auto; left: calc(var(--gut, 16px) + env(safe-area-inset-left,0px)); bottom: calc(var(--gut, 16px) + env(safe-area-inset-bottom,0px)); }

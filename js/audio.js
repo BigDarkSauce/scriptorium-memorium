@@ -111,9 +111,12 @@ class Sound {
     const A = { kind, g, nodes, timer: null };
     const every = (ms, fn) => { A.timer = setInterval(() => { if (!this.muted && document.visibilityState !== 'hidden') fn(); }, ms); };
     switch (kind) {
-      case 'library': case 'room':   // a large quiet hall: low room tone, air, a far clock, an occasional creak or page
+      case 'library':                // a large, high hall: low room tone, moving air, a far clock, an occasional page or creak
         layer('brown', 'lowpass', 160, .7, .35); layer('pink', 'bandpass', 600, .4, .025, [.07, 180]);
         every(1000, () => { this.tone(null, { f: 2400, d: .03, gain: .006, x: .2 }); if (Math.random() < .035) this.play(Math.random() < .5 ? 'paper' : 'wood', { gain: .12, x: Math.random() }); }); break;
+      case 'room':                   // a small panelled reading room: closer, warmer, candle flames ticking, no far clock
+        layer('brown', 'lowpass', 240, .7, .28); layer('pink', 'bandpass', 1200, .6, .012);
+        every(450, () => { if (Math.random() < .25) this.noiseHit(null, { f: 3000 + Math.random() * 2500, q: 5, d: .012, gain: .02 + Math.random() * .02, x: Math.random() }); if (Math.random() < .012) this.play('wood', { gain: .08, pitch: .8 + Math.random() * .4, x: Math.random() }); }); break;
       case 'studio': case 'lab':     // a workshop: soft mains hum and air handling
         layer('brown', 'lowpass', 220, .7, .25); layer('pink', 'bandpass', 900, .5, .015);
         { const o = c.createOscillator(), og = c.createGain(); o.frequency.value = 100; og.gain.value = .006; o.connect(og); og.connect(g); o.start(); nodes.push(o, og); } break;

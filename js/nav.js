@@ -68,7 +68,7 @@ export class Navigator {
       const v = this.vel.length(); this.bobT += dt * (v > .05 ? 2 * Math.PI * (1.7 + v * .25) * .5 : 0);
       const bob = v > .05 ? Math.sin(this.bobT * 2) * .018 * clamp(v / 1.4, 0, 1.6) : 0;
       // a footstep each time the stride reaches its lowest point (soft on marble; louder when hurrying)
-      const ph = Math.floor((this.bobT * 2 + Math.PI / 2) / Math.PI); if (v > .25 && ph !== this.stepPh) { this.stepPh = ph; sfx.play('step', { gain: clamp(v / 1.4, .4, 1.4), pitch: .9 + Math.random() * .2, x: .5 + (ph % 2 ? .08 : -.08) }); }
+      const ph = Math.floor((this.bobT * 2 + Math.PI / 2) / (2 * Math.PI));   // one footstep per bob cycle (~2 per second at 1.4 m/s) if (v > .25 && ph !== this.stepPh) { this.stepPh = ph; sfx.play('step', { gain: clamp(v / 1.4, .4, 1.4), pitch: .9 + Math.random() * .2, x: .5 + (ph % 2 ? .08 : -.08) }); }
       c.position.y += (EYE + bob - c.position.y) * Math.min(1, dt * 10);
       this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 6);
       const fov = FOV_WALK - this.zoom * 38; if (Math.abs(c.fov - fov) > .01) { c.fov = fov; c.updateProjectionMatrix(); }
