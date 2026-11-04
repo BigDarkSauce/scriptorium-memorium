@@ -68,6 +68,22 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 
 ## Presentation and navigation
 
+- **Shot grammar** (`director.frame`, see `docs/research/presentation-craft.md`): every beat gets one shot, never a floating drift.
+  - *wide*: the static overview, for a step without a named subject.
+  - *push*: a cut to a medium-wide view, a 3.5 s eased dolly, then a hold. Used for an instruction about one object.
+  - *medium*: static, framing the subject and the objects the sentence names. Used for explanations.
+  - *close*: a 24° lens, cut in through a 0.5 s dip in the grade. Used for an event on a small part.
+  - *pov*: the camera rides an actor (`engine.setPOV`).
+  - Two moving shots never follow each other. The subject sits on a third of the frame left free by the panels. The lens eases back to the base FOV when the learner takes the camera.
+  - Lessons may ask for a shot with `shot` and `pov`.
+- **Read, then watch**: an instruction beat freezes the model (`timeScale` 0) until it has been read (hover pauses, › skips). The step then plays; events slow time to 0.3×, or 0.12× while descriptions are queued. During a step the instruction panel folds and the readouts shrink to the quantities the step mentions.
+- **Point of view** (`engine.setPOV(actor)`, key P, the ◉ button in Objects):
+  - The camera sits at the actor at a 74° FOV with a tiny near plane, and looks along the actor's motion, or at the current subject, or level at the model. Drag to look; Esc leaves.
+  - Small actors are hidden so you see from them. Large ones (a flask, a cell) stay visible so you are inside them.
+- **Sound** (`js/audio.js`, WebAudio, no files):
+  - Ambience beds per place: library, room, studio/lab, outdoor with live rain and wind, ocean, space, micro.
+  - One-shot effects for UI, scrolls, bookcases, pedestals, footsteps (tied to the walk bob), cuts, POV, and every diorama event. An event uses `ev.sound` if given, otherwise a keyword guess, panned to where it happens.
+  - Mute and volume are remembered.
 - **`js/dio/director.js`** turns lesson steps and simulation events into *beats*, shown one at a time.
   - Each beat has a camera shot: a push-in to the subject's bounding sphere with a slight change of azimuth, then a slow drift.
   - Its callout is anchored to the subject in screen space, with a leader line and a reading timer: 1.6 s plus words ÷ reading speed (150/210/300 wpm), 3–14 s.
