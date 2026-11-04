@@ -283,7 +283,9 @@ export class DioramaView {
     this.paceSel.onchange = () => this.setPref('pace', this.paceSel.value);
     u.append(el('div', { class: 'dio-time glass' }, [this.playBtn, this.clock, this.speedSel, el('span', { class: 'sep' }), tog('cinematic', 'Cinematic', 'Camera follows each step and event; explanations appear beside what they describe, and time slows while you read', true), tog('guides', 'Guides', 'Show arrows for motion and links between the objects an explanation names', false), this.paceSel]));
     this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.evlog = el('ul', { class: 'evlog' });
-    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.spark, this.evlog]); u.append(this.readPanel);
+    // readouts stay small by default (six values) so they don't cover the model; one click shows all of them
+    this.readMore = el('button', { class: 'reads-more', onclick: () => { this.prefs.readsAll = !this.prefs.readsAll; savePrefs(this.prefs); this._rt = 0; } });
+    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.spark, this.evlog]); u.append(this.readPanel);
     this.ticker = el('div', { class: 'ticker' }); u.append(this.ticker);
     this.editBar = el('div', { class: 'edit-bar glass', hidden: true }); u.append(this.editBar);
     this.syncTimeUI();
@@ -509,6 +511,8 @@ export class DioramaView {
     }
     if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd0 = ds.readouts(), F = this.readFocus; let rd = rd0;
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
+      else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
+      this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
       this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
   }
   drawSpark() {

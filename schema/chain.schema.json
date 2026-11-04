@@ -164,6 +164,242 @@
                 },
                 "title": {
                   "type": "string"
+                },
+                "purpose": {
+                  "type": "string",
+                  "description": "the question this demo answers (distinct for every repeat of a diorama)"
+                },
+                "lessons": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "text"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "question": {
+                        "type": "string",
+                        "description": "the one question this lesson settles"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "set": {
+                        "type": "object"
+                      },
+                      "focus": {
+                        "type": "string"
+                      },
+                      "run": {
+                        "type": "number"
+                      },
+                      "until": {
+                        "type": "string",
+                        "description": "event:<substring of an api.event text>"
+                      },
+                      "explain": {
+                        "type": "string"
+                      },
+                      "opens": {
+                        "type": "string",
+                        "description": "the question it raises next = the next lesson's question"
+                      },
+                      "shot": {
+                        "enum": [
+                          "wide",
+                          "push",
+                          "close",
+                          "pov",
+                          "medium"
+                        ]
+                      },
+                      "pov": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "authors": {
+                      "type": "string"
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "doi": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "set by the app after checking OpenAlex"
+                    }
+                  },
+                  "description": "external data shown by the demo (labelled as added from outside the PDF)"
+                },
+                "extra": {
+                  "type": "array",
+                  "description": "material added from outside the PDF; shown with an 'Added from outside the PDF' badge",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "what"
+                    ],
+                    "properties": {
+                      "what": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "authors": {
+                            "type": "string"
+                          },
+                          "year": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "doi": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "note": {
+                            "type": "string"
+                          },
+                          "verified": {
+                            "type": "boolean",
+                            "description": "set by the app after checking OpenAlex"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "points": {
+                  "type": "array",
+                  "description": "plot only: measured data [[x,y,label?],…]"
+                }
+              }
+            }
+          },
+          "section": {
+            "type": "string",
+            "description": "id of the ONE subsection this step covers (e.g. 1.2.3, 1.0 for a chapter's opening text, p12-1 for an unnumbered heading, 3-w2 for a page window)"
+          },
+          "answers": {
+            "type": "string",
+            "description": "the question this step settles (= the previous step's 'opens')"
+          },
+          "opens": {
+            "type": "string",
+            "description": "the question this step raises next"
+          },
+          "ref": {
+            "type": "string",
+            "description": "where it is in the PDF: Eq. (1.3), Example 1.2, Table 1.1, p. 4"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "table": {
+            "type": "object",
+            "description": "a table of the source, rows copied exactly",
+            "properties": {
+              "caption": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "figures": {
+            "type": "array",
+            "description": "ids of the PDF's own figures/tables: 'Figure 3.2' → fig-3-2, 'Table 1.1' → tab-1-1, unnumbered on p. 12 → fig-p12-1",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extra": {
+            "type": "array",
+            "description": "material added from outside the PDF; shown with an 'Added from outside the PDF' badge",
+            "items": {
+              "type": "object",
+              "required": [
+                "what"
+              ],
+              "properties": {
+                "what": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "authors": {
+                      "type": "string"
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "doi": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "set by the app after checking OpenAlex"
+                    }
+                  }
                 }
               }
             }
@@ -203,6 +439,55 @@
           }
         }
       }
+    },
+    "question": {
+      "type": "string",
+      "description": "the question the whole part answers; step 1 answers it"
+    },
+    "coverage": {
+      "type": "array",
+      "description": "one entry per subsection id of the part (rebuilt by the app from each step's 'section')",
+      "items": {
+        "type": "object",
+        "required": [
+          "subsection",
+          "steps"
+        ],
+        "properties": {
+          "subsection": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "figuresSkipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverageReport": {
+      "type": "object",
+      "description": "written by the app (verifyChain in js/ai/prompts.js): subsections, covered, missing, thin, figures, figuresCited, figuresUncited, unknownFigures, threadBreaks, threadMissing, extrasUnsourced, numbers{checked,unmatched}, sections, followUps, ok"
+    },
+    "renumbered": {
+      "type": "object",
+      "description": "written by the app after a follow-up merge: old step id → new step id"
     }
-  }
+  },
+  "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md."
 }

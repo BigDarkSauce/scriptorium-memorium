@@ -179,6 +179,10 @@
           "title": {
             "type": "string"
           },
+          "question": {
+            "type": "string",
+            "description": "the one question this lesson settles"
+          },
           "text": {
             "type": "string"
           },
@@ -192,9 +196,26 @@
             "type": "number"
           },
           "until": {
-            "type": "string"
+            "type": "string",
+            "description": "event:<substring of an api.event text>"
           },
           "explain": {
+            "type": "string"
+          },
+          "opens": {
+            "type": "string",
+            "description": "the question it raises next = the next lesson's question"
+          },
+          "shot": {
+            "enum": [
+              "wide",
+              "push",
+              "close",
+              "pov",
+              "medium"
+            ]
+          },
+          "pov": {
             "type": "string"
           }
         }
@@ -244,6 +265,51 @@
     },
     "ranges": {
       "type": "object"
+    },
+    "extra": {
+      "type": "array",
+      "description": "material added from outside the PDF; shown with an 'Added from outside the PDF' badge",
+      "items": {
+        "type": "object",
+        "required": [
+          "what"
+        ],
+        "properties": {
+          "what": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "authors": {
+                "type": "string"
+              },
+              "year": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "doi": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean",
+                "description": "set by the app after checking OpenAlex"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

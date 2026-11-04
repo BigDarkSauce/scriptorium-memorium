@@ -81,6 +81,91 @@
                     "type": "integer"
                   }
                 }
+              },
+              "num": {
+                "type": "string"
+              },
+              "level": {
+                "type": "integer",
+                "description": "1 chapter, 2 section (a section is a part when its chapter is longer than 30 pages)"
+              },
+              "chapter": {
+                "type": "string",
+                "description": "the enclosing chapter or Part title"
+              },
+              "front": {
+                "type": "boolean"
+              },
+              "lowConfidence": {
+                "type": "boolean"
+              },
+              "subsections": {
+                "type": "array",
+                "description": "every subsection of the part, in order; nothing merged away (js/ai/ingest.js splitBook)",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "startPage",
+                    "endPage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "num": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "integer"
+                    },
+                    "startPage": {
+                      "type": "integer"
+                    },
+                    "endPage": {
+                      "type": "integer"
+                    },
+                    "intro": {
+                      "type": "boolean",
+                      "description": "the part's opening text before its first subsection"
+                    },
+                    "synthetic": {
+                      "type": "boolean",
+                      "description": "a page window of a part without headings"
+                    }
+                  }
+                }
+              },
+              "figureIndex": {
+                "type": "array",
+                "description": "metadata of the PDF figures cut from this part (the JPEGs stay in IndexedDB under figs:<bookId>:<partId>)",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "figure",
+                        "table"
+                      ]
+                    },
+                    "caption": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer"
+                    }
+                  }
+                }
               }
             }
           }
