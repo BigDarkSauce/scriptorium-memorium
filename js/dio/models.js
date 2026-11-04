@@ -363,6 +363,7 @@ DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:
   const a1=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0x88c0ff,.25,.15),'velocity 1',guides),a2=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0xff9a7a,.25,.15),'velocity 2',guides);
   // foreground: slotted brass masses on the bench at the lower-right frame edge
   {const F=part('slotted masses (foreground)'),q=inDisc(groundAt(orbit,.84,-.84),6.2);F.position.copy(q);for(let i=0;i<4;i++){const d=cyl(.34-i*.03,.09,brass,32);d.position.y=.045+i*.095;F.add(d)}const rod=cyl(.03,.6,brass,8);rod.position.y=.3;F.add(rod)}
+  const arrowAt=(a,x,v,s)=>{a.visible=Math.abs(v)>.01;a.position.set(x,TOP+s*.5+.42,0);a.setDirection(v>=0?V3X:V3NX);a.setLength(.3+Math.abs(v)*.35,.22,.14)};
   const M=p.m1+p.m2,P0=p.m1*p.v1+p.m2*p.v2,K0=.5*p.m1*p.v1**2+.5*p.m2*p.v2**2,vcm=P0/M;
   let x1=-3,x2=2.5,v1=p.v1,v2=p.v2,done=false,wait=0,hits=0,K=K0;
   COL.mid=()=>V3((x1+x2)/2,TOP+.4,0);COL.cm=()=>V3((p.m1*x1+p.m2*x2)/M,TOP+1.75,0);COL.x=()=>[x1,x2];
@@ -374,7 +375,7 @@ DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:
      ev(`collision: p ${fx(P0,2)} → ${fx(p.m1*v1+p.m2*v2,2)} kg·m/s, KE ${fx(K0,2)} → ${fx(K,2)} J; now v₁ = ${fx(v1,2)}, v₂ = ${fx(v2,2)} m/s`,V3((x1+x2)/2,TOP+.5,0),{sound:p.e<.3?'thud':'clack'})}
     if(Math.abs(x1)>6||Math.abs(x2)>6){done=true;if(hits)ev('gliders reach the end stops: centre of mass moved at '+fx(vcm,2)+' m/s the whole time',COL.cm(),{sound:'wood'})}},
    visual(){c1.position.x=x1;c2.position.x=x2;CM.position.x=(p.m1*x1+p.m2*x2)/M;
-    [[a1,x1,v1,s1],[a2,x2,v2,s2]].forEach(([a,x,v,s])=>{a.visible=Math.abs(v)>.01;a.position.set(x,TOP+s*.5+.42,0);a.setDirection(v>=0?V3X:V3NX);a.setLength(.3+Math.abs(v)*.35,.22,.14)});D.push(p.m1*v1+p.m2*v2)},
+    arrowAt(a1,x1,v1,s1);arrowAt(a2,x2,v2,s2);D.push(p.m1*v1+p.m2*v2)},
    readouts(){const k=.5*p.m1*v1*v1+.5*p.m2*v2*v2;return[['v₁',fx(v1,3)+' m/s'],['v₂',fx(v2,3)+' m/s'],['p total',fx(p.m1*v1+p.m2*v2,3)+' kg·m/s'],['v centre of mass',fx(vcm,3)+' m/s'],['KE total',fx(k,3)+' J'],['KE lost',fx(K0-k,3)+' J'],['collisions',String(hits)]]}}}};
 const V3X=V3(1,0,0),V3NX=V3(-1,0,0);
 {const Mid=()=>COL.mid?COL.mid():V3(0,1,0);
@@ -1016,9 +1017,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
    Chaos: the twins' separation grows ~e^(λt) (λ estimated as ln(|Δθ₂|/ε)/t). A flip = θ₂ passes an odd multiple of π. */
 const DPN={};
 DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower mass'],L1:[.5,3,1.5,'m','upper arm'],L2:[.5,3,1.5,'m','lower arm'],theta1:[-180,180,120,'°','upper angle'],theta2:[-180,180,-10,'°','lower angle'],g:[1,25,9.81,'m/s²','gravity'],eps:[0,.01,.001,'rad','twin offset']},
- build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.2,-.81]});if(own){R.sun.intensity*=2.4;if(R.fill)R.fill.intensity=.9;if(R.rim)R.rim.intensity=1.4;R.hemi.intensity=.3;D.scene.environmentIntensity=.7} // moonlit key, the lantern side as warm fill
+ build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.07,-.83]});if(own){R.sun.intensity*=5;if(R.fill)R.fill.intensity=1.2;if(R.rim)R.rim.intensity=2;R.hemi.intensity=.5;D.scene.environmentIntensity=1.1} // moonlit key, the lantern side as warm fill
  const piv=V3(0,6.4,0),sc=4.6/(p.L1+p.L2),oak=D.mats.wood,brass=D.mats.brass,steel=makeMaterial('steel');
-  const orbit={target:V3(0,3.9,0),r:15,ph:1.22,th:.34};
+  const orbit={target:V3(0,3.7,0),r:15,ph:1.32,th:.34};
   const FR=part('frame');[-3,3].forEach(x=>{const c=box(.35,6.9,.35,oak);c.position.set(x,3.45,-.7);FR.add(c);const f=box(.6,.12,1.4,oak);f.position.set(x,.06,-.7);FR.add(f)});put(box(6.6,.3,.34,oak),'cross bar',FR).position.set(0,6.75,-.7);put(box(.2,.16,.8,steel),'pivot bracket',FR).position.set(0,6.55,-.32);
   const r1=Math.cbrt(p.m1)*.22,r2=Math.cbrt(p.m2)*.22;
   const mk=(name,ghost)=>{const G=part(name,W,!ghost),gm=ghost?new T.MeshPhysicalMaterial({color:0x7ab0f0,transparent:true,opacity:.32,roughness:.2,depthWrite:false}):null;
@@ -1083,7 +1084,7 @@ DIO.lever={params:{m1:[.2,10,3,'kg','left mass'],x1:[-4,4,-2.5,'m','left positio
   return{orbit,
    step(h){tSt+=h;if(bal){if(!told&&tSt>2){told=true;ev('still balanced after 2 s: the moments m₁g·'+fx(-r1,2)+' m and m₂g·'+fx(r2,2)+' m cancel',V3(p.fulcrum,H+.3,0),{color:0x88c0ff,sound:'chime'})}return}
     const a=tq(th)/I-.6*w;w+=a*h;th+=w*h;const lim=th>0?limL:limR;if(Math.abs(th)>lim){th=Math.sign(th)*lim;if(!hit){hit=true;ev('beam strikes the ground, stopped at '+fx(th*DEG,1)+'°',LEV.end(),{sound:'thud'})}w=-w*.25}},
-   visual(){BM.rotation.z=th;[[a1,w1,p.m1],[a2,w2,p.m2]].forEach(([ar,m,ms])=>{m.getWorldPosition(ar.position);ar.position.y-=.05;ar.setLength(.3+ms*g*.025,.2,.12)});D.push(th*DEG)},
+   visual(){BM.rotation.z=th;w1.getWorldPosition(a1.position);a1.position.y-=.05;a1.setLength(.3+p.m1*g*.025,.2,.12);w2.getWorldPosition(a2.position);a2.position.y-=.05;a2.setLength(.3+p.m2*g*.025,.2,.12);D.push(th*DEG)},
    readouts(){return[['τ₁ = −m₁g r₁',fx(-p.m1*g*r1,2)+' N·m'],['τ₂ = −m₂g r₂',fx(-p.m2*g*r2,2)+' N·m'],['τ beam',fx(-p.beam*g*rb,2)+' N·m'],['Σ τ (θ = 0)',fx(net,2)+' N·m'],['θ',fx(th*DEG,2)+'°'],['I about fulcrum',fx(I,2)+' kg·m²']]}}}};
 {DIO.lever.shots={'moments ≈ 0':SHOT([0,2.2,0],10),'net moment':SHOT([0,2.2,0],10.5),'still balanced':SHOT([0,2.2,0],10),'beam strikes the ground':SHOT(()=>LEV.end?LEV.end().setY(1).toArray():[3,1,0],7)};
  DIO.lever.flows={'net moment':[{from:[-2.4,3.6,.6],to:[-2.4,2.6,.6],label:'m₁g × r₁ turns it one way'},{from:[2.8,3.6,.6],to:[2.8,2.6,.6],label:'m₂g × r₂ the other way'}],'beam strikes the ground':[{from:()=>LEV.ful.clone().add(V3(0,.6,.5)),to:()=>LEV.end().add(V3(0,.4,.5)),label:'the larger moment wins'}],'still balanced':[{from:[-2.5,3.4,.6],to:[2.5,3.4,.6],label:'equal and opposite moments'}]};}
@@ -1260,7 +1261,7 @@ DIO.circuit={params:{V:[1,12,9,'V','battery emf'],R:[1,20,5,'kΩ','resistance'],
 const LNS={};
 DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,4,'','object distance'],ho:[.3,1.5,.8,'','object height'],sweep:[0,1,0,'','sweep object (1 on)']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'desk');const Y=2.2,fl=Math.abs(p.f)<.05?.05:p.f,RB=Y-1.55,brass=D.mats.brass,walnut=makeMaterial('walnut'),steel=makeMaterial('steel');
-  const orbit={target:V3(.2,Y-.2,0),r:12,ph:1.22,th:.2};
+  const orbit={target:V3(.8,Y-.3,0),r:12.8,ph:1.22,th:.2};
   // optical bench: a steel rail on walnut feet, with brass carriers for candle, lens and screen
   const OB=part('optical bench');put(box(13.2,.12,.45,steel),'steel rail',OB).position.set(0,RB,0);[-5.8,5.8].forEach(x=>{const f=box(.6,RB-.06,.9,walnut);f.position.set(x,(RB-.06)/2,0);OB.add(f)});
   {const tex=ctex(2048,64,(g,w,h)=>{g.fillStyle='#e8dcc0';g.fillRect(0,0,w,h);g.fillStyle='#24170b';g.strokeStyle='#24170b';g.font='600 26px Georgia, serif';g.textAlign='center';for(let x=-6;x<=6;x+=.25){const px=(x+6.5)/13*w,big=Math.abs(x%1)<1e-6;g.lineWidth=big?3:1.5;g.beginPath();g.moveTo(px,0);g.lineTo(px,big?30:16);g.stroke();if(big)g.fillText(String(x),px,54)}});const sc=new T.Mesh(new T.PlaneGeometry(13,.2),new T.MeshPhysicalMaterial({map:tex,roughness:.5}));sc.position.set(0,RB+.061,.12);sc.rotation.x=-Math.PI/2;sc.name='scale';OB.add(sc)}
@@ -1282,8 +1283,8 @@ DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,
   // the image: a ghost of the candle scaled by m (inverted when real), and a white screen that catches a real image
   const IM=part('image',W,true);const ghostM=new T.MeshPhysicalMaterial({color:0x9fd0ff,transparent:true,opacity:.28,roughness:.3,depthWrite:false}),ghostF=new T.MeshBasicMaterial({color:new T.Color(2,1.3,.5),transparent:true,opacity:.6,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false});
   const ig=mkCandle(ghostM,ghostF);IM.add(ig.g);ig.g.children.forEach(o=>o.castShadow=false);
-  const SCR=part('screen',W,true);{const cardM=makeMaterial({preset:'card'});cardM.color.set(0xb8b2a6);const card=new T.Mesh(new T.PlaneGeometry(1.8,2.2),cardM);card.rotation.y=-Math.PI/2;card.position.y=Y;SCR.add(card);card.material.side=T.DoubleSide;const fr=box(.06,2.3,.08,walnut);fr.position.set(.04,Y,-.95);SCR.add(fr);const fr2=fr.clone();fr2.position.z=.95;SCR.add(fr2);carrier(SCR,0,Y-RB-1.4)}
-  const spot=put(new T.Sprite(new T.SpriteMaterial({map:softDisc(),color:0xffc070,transparent:true,blending:T.AdditiveBlending,depthWrite:false})),'image on the screen',SCR);
+  const SCR=part('screen',W,true);{const cardM=makeMaterial({preset:'card'});cardM.color.set(0x8a857c);cardM.roughness=1;const card=new T.Mesh(new T.PlaneGeometry(1.8,2.2),cardM);card.rotation.y=-Math.PI/2;card.position.y=Y;SCR.add(card);card.material.side=T.DoubleSide;const fr=box(.06,2.3,.08,walnut);fr.position.set(.04,Y,-.95);SCR.add(fr);const fr2=fr.clone();fr2.position.z=.95;SCR.add(fr2);carrier(SCR,0,Y-RB-1.4)}
+  const spot=put(new T.Sprite(new T.SpriteMaterial({map:softDisc(),color:0xffc070,transparent:true,opacity:.6,blending:T.AdditiveBlending,depthWrite:false})),'image on the screen',SCR);
   // rays: three principal rays (preallocated 3-point lines) and their dashed back-extensions
   const rayM=[0xffd27a,0xff9a7a,0x9fe0ff].map(c=>new T.LineBasicMaterial({color:c,transparent:true,opacity:.95,blending:T.AdditiveBlending,depthWrite:false}));
   const mkLine=(mat,n)=>{const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(new Float32Array(n*3),3));if(mat.isLineDashedMaterial)g.setAttribute('lineDistance',new T.BufferAttribute(new Float32Array(n),1));const l=new T.Line(g,mat);l.frustumCulled=false;return l};

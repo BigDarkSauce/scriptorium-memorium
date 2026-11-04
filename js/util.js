@@ -123,7 +123,7 @@ export function typeset(node) {
 // Collects the geometries, materials and textures an object tree uses.
 export function gpuSet(roots, set = new Set()) {
   const addMat = m => { if (!m || set.has(m)) return; set.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) set.add(v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) set.add(v); } };
-  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
+  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.isLight && o.shadow) set.add(o);   /* a shadow-casting light owns its shadow-map render target */ if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
     if (r.isScene) { if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
   return set;
 }

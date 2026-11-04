@@ -149,7 +149,7 @@ const LOOKS = {
 function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2] } = {}) {
   const g = new THREE.Group(); g.name = 'desk'; g.userData.decorBase = true;
   const W = woodSet('walnut'), tile = 2.4, rep = (t, x, y) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
-  const topM = new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .62, clearcoat: .7, clearcoatRoughness: .2, color: 0xffffff });
+  const topM = new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .66, clearcoat: .25, clearcoatRoughness: .45, envMapIntensity: .5, color: 0xffffff });
   const top = new THREE.Mesh(alignUV(new THREE.BoxGeometry(w, .5, d), tile), topM); top.position.y = -.25; top.receiveShadow = true; top.name = 'walnut desk top'; g.add(top);
   const blotM = makeMaterial({ preset: 'leather', color: '#2c3a2a' }); blotM.roughness = .85; blotM.clearcoat = 0; blotM.normalScale.set(.25, .25);
   const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), blotM); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);

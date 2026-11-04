@@ -26,6 +26,8 @@ const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 export class DioramaView {
   constructor(app, spec, opts = {}) {
     this.app = app; this.gfx = app.gfx; this.spec = spec; this.opts = opts;
+    // built-in models were rebuilt (v4): object paths saved for the old scene graph no longer point at the same parts, so set them aside
+    if (!isSceneSpec(spec) && spec.overrides && spec.ovV !== 2) { spec.overridesV1 = spec.overrides; delete spec.overrides; }
     this.ds = new DioramaScene(this.gfx, spec);
     this.camera = this.ds.camera; this.scene = this.ds.scene;
     this.stage = 'init'; this.tourI = -1; this.pins = new Map(); this.lessonI = 0; this.flashes = [];
@@ -369,7 +371,7 @@ export class DioramaView {
   }
   deselect() { this.sel = null; this.gfx.outline.selectedObjects = []; this.gfx.outline.enabled = false; if (this.tc) this.tc.detach(); this.editBar.hidden = true; this.renderObjects(); }
   offsetOf(o) { const ov = (this.spec.overrides || {})[this.ds.pathOf(o)]; return ov && ov.offset ? V3(...ov.offset) : V3(); }
-  overrideOf(o) { this.spec.overrides = this.spec.overrides || {}; const p = this.ds.pathOf(o); return (this.spec.overrides[p] = this.spec.overrides[p] || {}); }
+  overrideOf(o) { this.spec.overrides = this.spec.overrides || {}; if (!isSceneSpec(this.spec)) this.spec.ovV = 2; const p = this.ds.pathOf(o); return (this.spec.overrides[p] = this.spec.overrides[p] || {}); }
   bodySpecOf(o) { if (o.userData.bodyId && isSceneSpec(this.spec)) return (this.spec.bodies || []).find(b => b.id === o.userData.bodyId); if (o.userData.added) return (this.spec.additions || [])[this.ds.extras.children.indexOf(o)]; return null; }
   commitTransform() {
     const o = this.sel; if (!o) return; const b = this.bodySpecOf(o), R2D = 180 / Math.PI;

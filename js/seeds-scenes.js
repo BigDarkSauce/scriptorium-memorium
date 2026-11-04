@@ -184,7 +184,7 @@ export const MARKET = {
   type: 'scene', title: 'A market finds its price', technique: 'card',
   environment: { preset: 'landscape', time: 16.5, azimuth: -8 },
   bodies: [
-    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone' }, position: [0, .01, 0] },
+    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone', color: '#7d776d' }, position: [0, .01, 0] },
     { id: 'board', name: 'Chalkboard', label: 'Demand and supply curves', role: 'actor', describe: 'Left: the staircases of buyers willing to buy (blue) and sellers willing to sell (red) at each price. Right: the price of every trade, in order.', shape: { kind: 'box', w: 6.4, h: 3.6, d: .1, round: .02 }, material: { preset: 'chalk', color: '#26332c' }, position: [0, 3.35, -3.5] },
     { id: 'boardframe', name: 'Board frame', role: 'decor', shape: { kind: 'box', w: 6.62, h: 3.82, d: .07, round: .02 }, material: { preset: 'darkwood' }, position: [0, 3.35, -3.56] },
     { id: 'legL', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [-3.2, 2.6, -3.62] },
@@ -292,6 +292,10 @@ api.readout('share of the possible gains',()=>EQ.gain>0?Math.round(100*gains()/E
 api.readout('best bid / best ask',()=>(bid?f2(bid.p):'—')+' / '+(ask?f2(ask.p):'—'));
 api.readout('budget rule',()=>api.param('rule')>.5?'on (no trade at a loss)':'off');
 api.plot('trade price',()=>all.length?all[all.length-1].p:NaN);
+// late-afternoon sky: the landscape dome shows only haze below the horizon, so a painted gradient replaces it behind the square
+{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) dome.visible=false;
+  const n=64, d=new Uint8Array(n*4), a=new T.Color('#c9b48f'), b=new T.Color('#5f7fa6'), c=new T.Color(); for(let i=0;i<n;i++){ c.copy(a).lerp(b,Math.pow(i/(n-1),.7)); d[i*4]=c.r*255; d[i*4+1]=c.g*255; d[i*4+2]=c.b*255; d[i*4+3]=255; }
+  const tx=new T.DataTexture(d,1,n); tx.colorSpace=T.SRGBColorSpace; tx.magFilter=tx.minFilter=T.LinearFilter; tx.needsUpdate=true; api.scene.background=tx; }
 api.camera({target:[0,2.0,-.7],r:12.4,ph:1.2,th:.3});`,
   lessons: [
     { title: 'Cards before trading', question: 'At what price should trade happen?', text: 'The market is closed. Each buyer holds a card with the most they would pay: 9, 8, 7, down to 2. Each seller holds a card with their cost: 1, 2, 3, up to 8. On the board the blue staircase counts the buyers willing to buy at each price, and the red staircase counts the sellers willing to sell. Find where the curves cross.', set: { open: 0, income: 0, cost: 0, rule: 1 }, focus: 'board', shot: 'medium', run: 10, explain: 'The staircases cross at p = 5. At that price five buyers want to buy and five sellers want to sell; the fifth pair, value 5 and cost 5, gains nothing. Trading every unit whose value exceeds its cost gives the largest total gain possible: 8 + 6 + 4 + 2 = 20. At any lower price buyers outnumber sellers, and at any higher price sellers outnumber buyers.', opens: 'Can traders who know nothing find that price?' },
@@ -333,9 +337,9 @@ export const GALTON = {
     'bins are emptied': { target: [0, 1.4, .1], dist: 9 }
   },
   flows: {
-    'one random path': [{ from: [0, 6.25, .3], to: [.25, 5.8, .3], label: 'right with probability p' }, { from: [0, 6.25, .3], to: [-.25, 5.8, .3], label: 'left with 1 − p' }],
+    'like a coin flip': [{ from: [0, 6.25, .3], to: [.25, 5.8, .3], label: 'right with probability p' }, { from: [0, 6.25, .3], to: [-.25, 5.8, .3], label: 'left with 1 − p' }],
     '150 beads': [{ from: [-2.4, 3.3, .3], to: [-.6, 2.0, .3], label: 'few paths reach the edges' }, { from: [0, 3.6, .3], to: [0, 2.3, .3], label: 'most paths end near N·p' }],
-    'biased': [{ from: [0, 5.2, .3], to: [1.6, 2.6, .3], label: 'the pile drifts towards N·p' }]
+    'pile build up': [{ from: [0, 5.2, .3], to: [1.6, 2.6, .3], label: 'the pile drifts towards N·p' }]
   },
   code: `const T=api.THREE, N=Math.round(api.param('rows')), pegs=api.body('pegs'), bins=api.body('bins'), cg=api.body('curve'), lead=api.body('ball');
 const top=6.2, dy=3.7/N, dx=Math.min(.5,6.0/(N+2)), Z=.05, binY=.56, maxH=1.95, R=Math.min(.06,(dx-.03)/6.3), ROW=.22;   // ROW: seconds per row of pegs
@@ -463,7 +467,7 @@ const KAP=12;   // pore traffic: water molecules per second crossing each way th
 const rates=()=>{ const k=KAP*api.param('pass')*Math.sqrt(api.param('T')), d=dhEff(); return [k*Math.exp(-K*d), k*xw()*Math.exp(K*d)]; };
 const hop=(from,top)=>{ let best=null,bd=9; for(const q of P){ if(q.w&&q.side===from&&q.y<top){ const d=Math.abs(q.x); if(d<bd){bd=d;best=q;} } } if(best){ best.side=-from; best.x=-best.x; if(from<0){visL--;visR++;cLR++;} else {visL++;visR--;cRL++;} } };   // the molecule nearest the pores goes through
 // the tagged molecule: Brownian motion with a little persistence (so a rider's view turns smoothly), plus the drift of the bulk flow
-const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0;
+const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0, tsay=0; const riding=()=>tr.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it
 api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.min(hL,hR)+Y0-.05;
   for(const q of P){ q.x+=(rnd()-.5)*st; q.y+=(rnd()-.5)*st; q.z+=(rnd()-.5)*st;
     const lim=Y0+(q.side<0?hL:hR)-.05; if(q.y<Y0+.05)q.y=Y0+.05; if(q.y>lim)q.y=lim; if(q.z<-ZD)q.z=-ZD; if(q.z>ZD)q.z=ZD; if(q.x<-2.9)q.x=-2.9; if(q.x>2.9)q.x=2.9;
@@ -474,10 +478,10 @@ api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.mi
   // tagged molecule
   const tau=.6, sg=.5*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();
   tq.x+=tq.vx*h; tq.y+=tq.vy*h; tq.z+=tq.vz*h; const tl=Y0+(tq.side<0?hL:hR)-.08;
-  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>2.85){tq.x=Math.sign(tq.x)*2.85;tq.vx*=-1;}
-  tcool=Math.max(0,tcool-h);
+  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>1){tq.x=Math.sign(tq.x);tq.vx*=-1;}   // we follow it in the region next to the membrane
+  tcool=Math.max(0,tcool-h); tsay=Math.max(0,tsay-h);
   if((tq.x<0?-1:1)!==tq.side){ const pr=Math.min(1,api.param('pass')*1.2)*(tq.side<0?Math.exp(-K*dhEff()):xw()*Math.exp(K*dhEff()));   // at the membrane: through a pore, or bounced back
-    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; api.event(ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
+    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; if(riding()||tsay<=0){ tsay=20; api.event(ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
   win+=h; if(win>=3){ const net=cLR-cRL; rate=[cLR/3,cRL/3]; netEma+=(net/3-netEma)*.5;
     if(!flowSaid&&net>=4&&nS>0){ flowSaid=true; api.event('Net water flow into the solution side: in 3 s, '+cLR+' molecules crossed into it and '+cRL+' came back',V(0,Y0+.6,.1),{id:'flow',sound:'pour'}); }
     if(!revSaid&&press()>0&&net<=-4){ revSaid=true; api.event('Reverse osmosis: pressed harder than the osmotic pressure, water is squeezed back into the pure side ('+cRL+' out, '+cLR+' in, in 3 s)',V(.6,Y0+1.2,.1),{id:'reverse',sound:'pour'}); }
