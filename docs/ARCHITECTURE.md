@@ -64,7 +64,7 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 - Bookcases snap flush to the nearest wall. Books take free slots, top tier first.
 - Rooms lay out stations along the perimeter, starting with the left wall, and grow when the parts don't fit.
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
-- PDF ingestion (`js/ai/ingest.js`) tries the outline, then headings, then the contents page, then fixed windows. It strips running headers and footers and rejoins hyphenated words.
+- PDF ingestion (`js/ai/ingest.js`) merges the outline with numbered/bold headings (falling back to the contents page, then fixed windows), keeps every subsection with its pages, and cuts figures from the pages. The reader verifies coverage (`verifyChain`) and fills gaps with targeted follow-ups — see PROTOCOL.md, "Recipe for any AI".
 
 ## Presentation and navigation
 

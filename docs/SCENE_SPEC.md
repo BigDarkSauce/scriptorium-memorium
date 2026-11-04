@@ -1,6 +1,6 @@
 # Scene spec: the universal diorama format
 
-Every 3D diorama is one JSON object. Built-in physical models are compact (`{"type":"pendulum","params":{...}}`); everything else is a **scene**: bodies, variables, behaviours, a little dynamics code, a guided tour and lessons. The same text below is what the app sends to Claude, so any AI can author scenes.
+Every 3D diorama is one JSON object. Built-in physical models are compact (`{"type":"pendulum","params":{...}}`); everything else is a **scene**: bodies, variables, behaviours, a little dynamics code, a guided tour and lessons. The same text below is what the app sends to Claude, so any AI can author scenes. It is generated from `js/ai/prompts.js` by `node prompts/build.mjs`.
 
 ```text
 SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (radius 7, top at y=0, units ≈ metres; keep content within |x|,|z| < 6.5, 0 < y < 8).
@@ -44,6 +44,24 @@ Built-in physical models (use {"type":<name>,"title":str,"params":{...},"lessons
 
 2D interactive diagrams: plot{exprs,x,y,params,xlabel,ylabel,points} tangent{expr,x,y} riemann{expr,a,b,y} vectors{a,b} matrix{m} complex{z,w} unitcircle fourier{wave,n} distribution{mode:normal|clt,mu,sigma} parametric{xt,yt,t,x,y} phase{dx,dy,range,yrange,params} customsvg{svg}. "params" is {"key":[min,max,value]}. "points":[[x,y],...] marks measured data on a plot (cite it in "source", or in "extra" when it is from outside the PDF).
 ```
+
+## Lessons as a question thread
+
+Every lesson settles one question and opens the next, in the authored format of `js/seeds-legacy.js`:
+
+```json
+{"title":"Drop the pressure by hand","question":"What does a falling outside pressure do to the spout?",
+ "text":"Lower the outside pressure to 990 hPa and watch the spout.","focus":"spout column","set":{"P":990},
+ "until":"event:spout settles","explain":"In equilibrium P_in − P = ρ g Δh …",
+ "opens":"What happens when the pressure rises far above the sealing pressure?","shot":"close"}
+```
+
+- `question`: the one question this lesson settles. The first lesson's question is the question the chain step answers.
+- `opens`: the question it raises; the next lesson's `question` repeats it. The last lesson's `opens` is the question the step opens.
+- `run` (seconds) or `until: "event:<substring>"` (waits for an `api.event` whose text contains the substring).
+- `shot`: `wide`, `push`, `close` or `pov`; with `pov`, `pov` names the actor whose eye the camera rides.
+
+A chain demo also carries `purpose` (the question the whole demo answers); a diorama shown again in a later step needs a different purpose. Values that are not from the book go in a top-level `extra` (`[{what, source}]`) and are labelled as added from outside the PDF.
 
 ## Worked examples
 

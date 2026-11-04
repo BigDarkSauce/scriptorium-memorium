@@ -145,8 +145,10 @@ export class DioramaView {
       if (i > this.lessonI) return;
       const done = i < this.lessonI, card = el('div', { class: 'lesson' + (done ? ' done' : ' current') }, [
         el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: done ? '✓' : String(i + 1) }), el('b', { html: esc(l.title || 'Step ' + (i + 1)) })]),
+        l.question ? el('div', { class: 'lesson-q', html: '<b>Q</b> ' + esc(l.question) }) : null,
         el('div', { class: 'lesson-text', html: esc(l.text || '') }),
         done && l.explain ? el('div', { class: 'lesson-explain', html: esc(l.explain) }) : null,
+        done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + esc(l.opens) }) : null,
         !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : 'Play this step', onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
       box.append(card); if (!done) requestAnimationFrame(() => card.classList.add('in'));
     });

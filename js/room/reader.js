@@ -26,7 +26,7 @@ export class Reader {
   close() { this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   render() {
-    const P = this.part, R = this.el; R.innerHTML = '';
+    const P = this.part, R = this.el; R.innerHTML = ''; this._figs = null;   // figures may have been cut since the last render
     const head = el('header', { class: 'reader-head' }, [
       el('div', { class: 'reader-title' }, [el('div', { class: 'kicker', text: (P.subOf ? 'Sub-scroll' : 'Part ' + (this.room.partIndex(P) + 1)) + (P.startPage ? ` · pages ${P.startPage}–${P.endPage}` : '') }), el('h2', { text: P.title })]),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
@@ -59,16 +59,18 @@ export class Reader {
     if (!book.hasPdf) return { sections: null, figures: [] };
     const blob = await this.app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [] };
     if (st) st.textContent = 'Reading the subsections…';
-    const sec = await cached(partKey('sections', book.id, src.id), () => this.app.ingest.partSections(blob, src));
+    // a sub-scroll expands one step: it shares its parent's figures but is not checked against the parent's subsections
+    const sec = P.subOf ? { sections: null } : await cached(partKey('sections', book.id, src.id), () => this.app.ingest.partSections(blob, src));
     let figures = [];
     try { if (st) st.textContent = 'Cutting the figures out of the pages…'; figures = await cached(partKey('figs', book.id, src.id), () => this.app.ingest.extractFigures(blob, src.startPage || 1, src.endPage || src.startPage || 1, { onProgress: k => { if (st) st.textContent = 'Cutting the figures out of the pages… ' + Math.round(k * 100) + '%'; } })); } catch (e) { figures = []; }
     if (!src.figureIndex || src.figureIndex.length !== figures.length) { src.figureIndex = this.app.ingest.figureMeta(figures); this.save(); }
-    return { sections: sec.sections, figures, blob, src };
+    if (!sec.sections && !P.text) { try { P.text = undefined; this._text = await this.app.ingest.partText(blob, P.startPage || src.startPage || 1, P.endPage || src.endPage || 1); } catch (e) { } }
+    return { sections: sec.sections, figures, blob, src, text: this._text || '' };
   }
   async analyse(depth, n, st, go) {
     const P = this.part, book = this.room.book; go.disabled = true;
     try {
-      const M = await this.material(st); let images = [], attached = [], pageImgs = 0, text = P.text || '';
+      const M = await this.material(st); let images = [], attached = [], pageImgs = 0, text = P.text || M.text || '';
       if (!M.sections && !text && book.hasPdf) st.textContent = 'The PDF for this book is not stored in this browser.';
       const thinText = M.sections && M.sections.reduce((a, s) => a + s.inventory.chars, 0) < 400;
       if (thinText && imageLimit() && M.blob) { images = await this.app.ingest.pageImages(M.blob, P.startPage || 1, P.endPage || 1, imageLimit()); pageImgs = images.length; }
@@ -205,9 +207,11 @@ export class Reader {
     this.figureStore().then(F => {
       st.figures.forEach(id => {
         const f = F.get(id); if (!f) return;
-        const cap = el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), el('b', { text: ' ' + (f.label || id) + (f.caption ? ' ' : '') }), el('span', { text: String(f.caption || '').replace(/^(Figure|Fig\.?|Table)\s*[A-Z]?[\d.\-–]+[a-z]?\s*[.:\-–—|]?\s*/i, '') })]);
+        // the crop already shows the book's caption; repeat it only when the image is missing or was cut without it
+        const capInCrop = f.dataUrl && f.caption && f.src !== 'caption-only';
+        const cap = el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), el('b', { text: ' ' + (f.label || id) + (f.caption && !capInCrop ? ' ' : '') }), capInCrop ? null : el('span', { text: String(f.caption || '').replace(/^(Figure|Fig\.?|Table)\s*[A-Z]?[\d.\-–]+[a-z]?\s*[.:\-–—|]?\s*/i, '') })]);
         const fig = el('figure', { class: 'pdf-fig' + (f.dataUrl ? '' : ' noimg'), 'data-fig': id });
-        if (f.dataUrl) { const img = el('img', { src: f.dataUrl, alt: (f.label || 'Figure') + ' from the PDF, page ' + f.page, loading: 'lazy' }); img.onclick = () => lightbox(f); fig.append(img); }
+        if (f.dataUrl) { const img = el('img', { src: f.dataUrl, alt: (f.caption || f.label || 'Figure') + ' (from the PDF, page ' + f.page + ')', title: 'Click to enlarge', loading: 'lazy' }); img.onclick = () => lightbox(f); fig.append(img); }
         else fig.append(el('div', { class: 'pdf-fig-missing', text: 'The figure image is not stored in this browser (the PDF is needed to cut it out).' }));
         fig.append(cap); box.append(fig);
       });

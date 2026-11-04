@@ -130,6 +130,55 @@ def toc_parts(clean, n):
     return [{"title": t, "startPage": phys(p), "endPage": max(phys(p), phys(toc[i + 1][1]) - 1) if i + 1 < len(toc) else n} for i, (t, p) in enumerate(toc)]
 
 
+SUB_RE = re.compile(r"^((?:\d+|[A-Z])(?:\.\d+){1,3})\.?\s+([A-Z\u00C0-\u024F].{2,100})$")
+
+
+def subsections(clean, part, outline_items):
+    """Every numbered subsection heading (1.2, 1.2.3, A.1) inside a part, plus deeper outline entries in its page range.
+    The analysis must cover each one at equal or finer resolution (prompts/02-analyse-part.md, docs/PROTOCOL.md)."""
+    found, seen, last = [], set(), None
+    for pg in range(part["startPage"], part["endPage"] + 1):
+        for l in clean[pg - 1]:
+            m = SUB_RE.match(l.strip())
+            if not m or len(l) > 110:
+                continue
+            num, title = m.group(1), m.group(2).strip()
+            if num in seen or re.search(r"\.{4,}|\s\d+$", title):   # contents-page lines and repeats
+                continue
+            key = [int(x) if x.isdigit() else ord(x) for x in num.split(".")]
+            if last is not None and key < last:   # numbering must move forward
+                continue
+            seen.add(num); last = key
+            found.append({"id": "s" + num, "num": num, "title": title, "level": num.count(".") + 1, "startPage": pg})
+    for (d, t, pg) in outline_items:
+        if d >= 1 and part["startPage"] <= pg <= part["endPage"] and not any(t.lower() in (f["title"].lower(), (f["num"] + " " + f["title"]).lower()) or t.lower().endswith(f["title"].lower()) for f in found):
+            found.append({"id": "o" + str(len(found) + 1), "num": "", "title": t, "level": d + 1, "startPage": pg})
+    found.sort(key=lambda f: f["startPage"])
+    for i, f in enumerate(found):
+        f["endPage"] = max(f["startPage"], found[i + 1]["startPage"]) if i + 1 < len(found) else part["endPage"]
+    return found
+
+
+def outline_items(reader):
+    out = []
+    try:
+        ol = reader.outline if reader is not None else []
+    except Exception:
+        return out
+
+    def walk(arr, depth):
+        for o in arr:
+            if isinstance(o, list):
+                walk(o, depth + 1)
+                continue
+            try:
+                out.append((depth, (o.title or "").strip(), reader.get_destination_page_number(o) + 1))
+            except Exception:
+                pass
+    walk(ol, 0)
+    return out
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -150,6 +199,7 @@ def main():
         method = "windows"
         W = max(4, -(-n // 4)) if n <= 30 else 20
         parts = [{"title": f"Pages {s}–{min(n, s + W - 1)}", "startPage": s, "endPage": min(n, s + W - 1), "lowConfidence": True} for s in range(1, n + 1, W)]
+    OI = outline_items(reader)
     os.makedirs(os.path.join(outdir, "chapters"), exist_ok=True)
     for i, p in enumerate(parts, 1):
         body = "\n".join(f"[page {k}]\n" + "\n".join(clean[k - 1]) for k in range(p["startPage"], p["endPage"] + 1))
@@ -159,11 +209,14 @@ def main():
             f.write(body)
         p["file"] = "chapters/" + fn
         p["chars"] = len(body)
+        p["subsections"] = subsections(clean, p, OI)
     with open(os.path.join(outdir, "chapters.json"), "w", encoding="utf-8") as f:
         json.dump({"book": os.path.basename(path), "pages": n, "method": method, "parts": parts}, f, ensure_ascii=False, indent=2)
     print(f"{len(parts)} parts ({method}) -> {outdir}/chapters.json")
     for p in parts:
         print(f"  {p['startPage']:>4}-{p['endPage']:<4} {p['title'][:70]}")
+        for q in p.get("subsections", []):
+            print(f"         {'  ' * (q['level'] - 1)}{q['num']} {q['title'][:60]}  (p. {q['startPage']})")
 
 
 if __name__ == "__main__":

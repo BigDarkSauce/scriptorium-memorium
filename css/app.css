@@ -386,3 +386,6 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .reads-more { justify-self: start; background: none; border: 0; padding: 0; color: var(--brass); font-family: var(--f-mono); font-size: 11px; cursor: pointer; }
 .reads-more:hover { text-decoration: underline; }
 .dio-reads:not(.full) .evlog { max-height: 52px; }
+/* diorama lesson thread (used once js/dio/engine.js renders lesson.question / lesson.opens; see PROTOCOL.md stage 6) */
+.lesson-q { font-family: var(--f-italic); font-size: 14px; color: var(--brass-hi); } .lesson-q b { font-family: var(--f-mono); font-size: 10px; color: var(--brass); margin-right: 4px; }
+.lesson-opens { font-family: var(--f-italic); font-size: 13px; color: var(--brass); margin-top: 4px; }
