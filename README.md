@@ -16,14 +16,40 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 ## Run it
 
 - **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
-- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server (Python if you have it, otherwise the built-in PowerShell server in `launcher/serve.ps1`) and opens http://localhost:8000. Keep its window open while you use the app. Locally, AI work goes through *Copy prompt / Paste JSON* (see `docs/PROTOCOL.md`).
-- **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening the file directly:
+- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
+- **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening `index.html` directly:
 
 ```bash
-python3 -m http.server 8000      # then open http://localhost:8000
+./serve.sh                        # or: python3 -m http.server 8000   — then open http://localhost:8000
 ```
 
-three.js, MathJax and pdf.js load from CDNs, so you need to be online.
+Notes for running locally:
+- three.js, MathJax, pdf.js and the fonts load from CDNs, so you need to be online.
+- Your library, rooms and PDFs are stored in the browser (IndexedDB) for that address. Use the same address and port each time (http://localhost:8000) or you will see an empty library; *Import / export* moves a library between browsers.
+- The built-in Claude analysis and the research connectors only work inside claude.ai. Locally every AI step shows its prompt for *Copy prompt / Paste JSON* with any AI (see `docs/PROTOCOL.md`), and `tools/verify-chain.mjs` checks the answer before you paste it.
+
+## Check a chain from another AI
+
+Any AI's answer for one part can be checked offline before it is pasted into the app (Node 18 or later, nothing to install):
+
+```bash
+node tools/verify-chain.mjs answer.json                    # a chain, or a whole scriptorium-room/1 file
+node tools/verify-chain.mjs answer.json sections.json      # also check against the part's subsections and their text
+```
+
+It runs the app's own coverage check (`verifyChain` in `js/ai/prompts.js`) and the strict schema (`schema/chain.strict.schema.json`), and prints one line per fault: a subsection without steps or coarser than the book, a PDF figure nobody cites, a break in the question thread, a 3D demo without 3–6 lessons, a lesson waiting for an event the model never logs, outside data without a source. Numbers that are not in the PDF text are printed as warnings. Exit code 0 means the chain passes; `--json` prints the full report, `--loose` checks the base schema only. `examples/chain-coverage-example.json` passes.
+
+## Smoke test
+
+`tools/smoke.mjs` opens the whole app in headless Chromium and checks it end to end: boot, every seeded room and scroll, every built-in diorama, lessons, editing, the library arranger, import, WebGL context loss, memory leaks and console errors.
+
+```bash
+./serve.sh &                                               # serve the app on http://localhost:8000
+npm i -g playwright && npx playwright install chromium     # once
+node tools/smoke.mjs                                       # or: node tools/smoke.mjs http://localhost:8000/
+```
+
+A run takes about 3 minutes on a machine with a GPU and 10–15 minutes with software rendering. `SMOKE_OUT=dir` saves two canvas captures, `SMOKE_SLOW=1` also runs every built-in model through the drawing → real transition, `SMOKE_HEADED=1` shows the browser. Exit code 0 = all checks passed, 1 = a check failed, 2 = it could not start (no server or no playwright).
 
 ## Three materialisation techniques
 
@@ -47,7 +73,8 @@ js/hub/               library room and its props
 js/room/              book room, reading scroll, 2D diagrams
 js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
 prompts/              the portable prompt pack (same text the app sends; regenerate with `node prompts/build.mjs`)
-schema/               JSON Schemas: chain (with coverage, question thread, figures, extra), scene, room
+schema/               JSON Schemas: chain (with coverage, question thread, figures, extra) and its strict profile, scene, room
+tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test)
 examples/             example scenes, a room file, and a complete chain with its coverage map
 skill/                a Claude skill that turns a PDF into a room file
 docs/                 architecture, protocol, scene spec, user guide, pedagogy & grounding, research notes

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "scriptorium-scene/1",
+  "$id": "https://scriptorium.invalid/schema/scene.schema.json",
   "title": "Universal diorama scene",
   "type": "object",
   "required": [
@@ -219,7 +219,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "description": "3–6 lessons forming a question thread: lesson k+1 \"question\" = lesson k \"opens\""
     },
     "sources": {
       "type": "array",

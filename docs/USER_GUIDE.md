@@ -21,7 +21,8 @@
 - Parts are found automatically and hang from the **left wall** onward, then around the room.
 - **Click a hanging scroll** to read it.
   - **Analyse this part** writes the logical chain. Choose *Complete* or *Essential* (the length comes from the content) or an *Exact number of steps*.
-  - Without Claude, use **Paste JSON from another AI**.
+  - Without Claude, use **Paste JSON from another AI**. Before pasting, `node tools/verify-chain.mjs answer.json` checks the answer on your computer and lists anything missing.
+- **Where each demo's data comes from** is written under it: *From the PDF* with the table or page it comes from, *Data added from outside the PDF* with its source, or *Our drawing* when the demo shows no data of its own. The PDF's own figures appear in the step that explains them, captioned *From the PDF, p. N*.
 - **Each step** shows its terms with units, a plain picture (*Picture it*), the commonest mistake, a *Check yourself* question with a hidden answer, and where the claim comes from.
 - **Sources.** Inside claude.ai, Claude searches OpenAlex, Consensus and PubMed while it writes, if you have those connectors. The bar above the chain counts the sources:
   - **Verify against OpenAlex** checks each one: ✓ found, ? partial match, ✗ not found (treat these with suspicion).
@@ -36,7 +37,7 @@
 1. **The drawing.** You see the scene as a drawing, either on the scroll or full screen. Press **Transition** (or scroll down) to materialise it while the camera dives in.
 2. **The tour.** Scroll, press ↓ or press › to visit each significant body in turn. Its name appears beside it and stays there. Decor isn't toured, but it reacts to the simulation (trees sway with wind, windows glow at night…).
 3. **Explore.** A panel slides in on the left (described below). While a step plays, the **cinematic** presentation takes over:
-   - The camera moves to what the step is about and drifts slowly around it.
+   - Each moment gets one camera shot that suits it, and then the camera holds still: the **wide** view of the whole model; a slow **push** in towards the object an instruction is about; a still **medium** view framing the subject and the objects an explanation names; a **close** cut to a small part where an event happens; or a **point of view** riding along with an actor, when a step asks for it. Two moving shots never follow each other.
    - Each explanation appears beside the thing it describes, joined to it by a line.
    - Explanations come one at a time, and each stays as long as it takes to read. A thin bar shows the time left.
    - While you read an event, simulated time slows to about a third, so you can still see the process the text describes.

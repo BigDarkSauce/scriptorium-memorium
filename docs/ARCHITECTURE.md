@@ -48,7 +48,7 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 
 - `js/dio/scene.js` (`DioramaScene`) builds a scene without UI:
   - the environment preset (`environments.js`: studio, lab, landscape with Sky and a sun driven by the hour, cosmos, micro, abstract, ocean, night, plus an optional glass case);
-  - either a **built-in model** (`models.js`, 17 ported physics models running through an adapter) or a **scene spec** (`builder.js`: about 60 shapes and macros);
+  - either a **built-in model** (`models.js`, 16 ported physics models running through an adapter, plus the `custom3d` code host) or a **scene spec** (`builder.js`: about 60 shapes and macros);
   - the code API, declarative behaviours, and user edits (overrides and additions).
 - Actors come from `D.label` (built-in models), from `role:"actor"` bodies, or from `api.label`. Unlabelled objects are decor.
 - `js/dio/engine.js` (`DioramaView`) runs the stages:
@@ -64,7 +64,7 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 - Bookcases snap flush to the nearest wall. Books take free slots, top tier first.
 - Rooms lay out stations along the perimeter, starting with the left wall, and grow when the parts don't fit.
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
-- PDF ingestion (`js/ai/ingest.js`) merges the outline with numbered/bold headings (falling back to the contents page, then fixed windows), keeps every subsection with its pages, and cuts figures from the pages. The reader verifies coverage (`verifyChain`) and fills gaps with targeted follow-ups — see PROTOCOL.md, "Recipe for any AI".
+- PDF ingestion (`js/ai/ingest.js`) merges the outline with numbered/bold headings (falling back to the contents page, then fixed windows), keeps every subsection with its pages, and cuts figures from the pages. The reader verifies coverage (`verifyChain`) and fills gaps with targeted follow-ups — see PROTOCOL.md, "Recipe for any AI". `tools/verify-chain.mjs` runs the same check, plus the strict schema, offline on any chain file.
 
 ## Presentation and navigation
 
@@ -85,7 +85,7 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
   - One-shot effects for UI, scrolls, bookcases, pedestals, footsteps (tied to the walk bob), cuts, POV, and every diorama event. An event uses `ev.sound` if given, otherwise a keyword guess, panned to where it happens.
   - Mute and volume are remembered.
 - **`js/dio/director.js`** turns lesson steps and simulation events into *beats*, shown one at a time.
-  - Each beat has a camera shot: a push-in to the subject's bounding sphere with a slight change of azimuth, then a slow drift.
+  - Each beat gets one shot from the shot grammar above (`director.frame`), chosen from the beat: an instruction about one object gets a *push* (a 3.5 s eased dolly to the subject's bounding sphere, then a hold), an explanation a static *medium*, an event a *close* cut, a step with no named subject the *wide* view, and `shot`/`pov` in a lesson override the choice. The same subject keeps the shot on screen; nothing floats or drifts.
   - Its callout is anchored to the subject in screen space, with a leader line and a reading timer: 1.6 s plus words ÷ reading speed (150/210/300 wpm), 3–14 s.
   - During an instructed step, simulated time slows to 0.3× while an event is read (`timeScale`). A lesson waiting on `until: event:…` completes only after its beats have been read.
   - Optional guides are SVG arrows: motion direction from the anchor's screen velocity, plus links to the other actors the sentence names.

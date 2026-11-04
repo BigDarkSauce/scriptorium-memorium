@@ -3,7 +3,7 @@
 // scroll-books with legible, non-overlapping name tags; a fauteuil, a reading desk with lectern, allegorical statues.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { parchment, labelTex, leather, damaskTex, canvasTex, runnerTex } from '../gfx/textures.js';
+import { parchment, labelTex, leather, damaskTex, canvasTex, runnerTex, radialGlow } from '../gfx/textures.js';
 import { hashStr } from '../util.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { Acc, bmat, Mx, cartoucheShape, drapedFigure, pedestal, bookRow, bookMesh, rng, bandPlane } from '../gfx/baroque.js';
@@ -310,6 +310,16 @@ function celestialTex() {
 export function runner(len = 8, wid = 1.5) {
   const t = runnerTex(); t.repeat.set(1, len / (wid * 2)); const m2 = new THREE.MeshStandardMaterial({ map: t, roughness: 1 });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wid, len), m2); mesh.rotation.x = -Math.PI / 2; mesh.position.y = .005; mesh.receiveShadow = true; mesh.name = 'runner'; return mesh;
+}
+
+// A soft warm pool of light on the floor before a bookcase that holds the user's scrolls: an additive decal (no light,
+// no shader cost, never an obstacle or a pick target). w: the bookcase width (m). Local: centred, lying on y = 0.
+let _poolM;
+export function lightPool(w = 3.2) {
+  const mat = _poolM || (_poolM = new THREE.MeshBasicMaterial({ map: radialGlow('255,212,160'), color: 0xffd6a0, transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mat.userData.shared = true;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat); mesh.rotation.x = -Math.PI / 2; mesh.scale.set(w + 1.8, 2.6, 1);
+  mesh.renderOrder = 4; mesh.name = 'light-pool'; mesh.castShadow = mesh.receiveShadow = false; mesh.raycast = () => {}; return mesh;
 }
 
 // Small parts and gilt trim do not need to cast shadows (keeps the sun's shadow pass short). minR: world radius, m.

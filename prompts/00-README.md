@@ -13,10 +13,18 @@ Order of work (the full recipe, with checklists, is in `../docs/PROTOCOL.md` →
 
 The formats are documented in `../docs/PROTOCOL.md`, `../docs/SCENE_SPEC.md` and `../schema/`; a finished example is `../examples/chain-coverage-example.json`.
 
+## Check an answer before pasting it
+
+`node tools/verify-chain.mjs chain.json [sections.json]` (from the repository root, Node 18 or later, no installs) runs the app's own coverage check and the strict schema (`../schema/chain.strict.schema.json`) on a chain, and prints every fault: missing or coarse subsections, uncited figures, breaks in the question thread, demos without 3–6 lessons, lessons waiting for an event the model never logs, outside data without a source. Exit code 0 means it passes.
+
 ## Ids the app and any AI share
 
-- Subsections: the heading number ("1.2.3"); an opening text before the first subsection is "<chapter>.0"; unnumbered headings are "p<page>-<k>"; page windows of a part without headings are "<num>-w<k>".
-- Figures: "Figure 3.2" → `fig-3-2`, "Table 1.1" → `tab-1-1`, an unnumbered figure on page 12 → `fig-p12-1`.
+- Subsections: the heading's number ("1.2", "1.2.3", "A.1"); the text of a chapter before its first heading is "<chapter number>.0" (e.g. "1.0"; "p<page>.0" when the chapter has no number); an unnumbered heading is "p<page>-<k>" (k = its position in the part's list of subsections, from 1); a part with no headings inside is cut into windows of 2 pages, "<part number>-w<k>" (e.g. "3-w1" = the part's first two pages; "p<first page>-w<k>" when the part has no number).
+- Figures and tables: "Figure 3.2" → fig-3-2, "Fig. 2-3" → fig-2-3, "Figure 3.2a" → fig-3-2a, "Table 1.1" → tab-1-1, an unnumbered figure on page 12 → fig-p12-1, an unnumbered table on page 12 → tab-p12-1 (k counts the unnumbered figures, or tables, of that page from 1).
+
+## Where demo data comes from
+
+Data and points shown by a demo are the PDF's own unless the demo says otherwise: give their place in the demo's `ref` ("Table 1.1, p. 4"), and the reader labels them *From the PDF · Table 1.1, p. 4*. Data from outside the PDF goes in the demo's `extra` (`[{what, source}]`, or `source` with `"outside": true`) and is labelled *Data added from outside the PDF*. A demo with no data of its own is labelled *Our drawing*.
 
 ## Grounding and sources
 

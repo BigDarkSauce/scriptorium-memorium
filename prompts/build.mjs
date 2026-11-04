@@ -30,10 +30,18 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 
 The formats are documented in \`../docs/PROTOCOL.md\`, \`../docs/SCENE_SPEC.md\` and \`../schema/\`; a finished example is \`../examples/chain-coverage-example.json\`.
 
+## Check an answer before pasting it
+
+\`node tools/verify-chain.mjs chain.json [sections.json]\` (from the repository root, Node 18 or later, no installs) runs the app's own coverage check and the strict schema (\`../schema/chain.strict.schema.json\`) on a chain, and prints every fault: missing or coarse subsections, uncited figures, breaks in the question thread, demos without 3–6 lessons, lessons waiting for an event the model never logs, outside data without a source. Exit code 0 means it passes.
+
 ## Ids the app and any AI share
 
-- Subsections: the heading number ("1.2.3"); an opening text before the first subsection is "<chapter>.0"; unnumbered headings are "p<page>-<k>"; page windows of a part without headings are "<num>-w<k>".
-- Figures: "Figure 3.2" → \`fig-3-2\`, "Table 1.1" → \`tab-1-1\`, an unnumbered figure on page 12 → \`fig-p12-1\`.
+- Subsections: ${P.SUBSECTION_IDS}
+- Figures and tables: ${P.FIGURE_IDS}
+
+## Where demo data comes from
+
+Data and points shown by a demo are the PDF's own unless the demo says otherwise: give their place in the demo's \`ref\` ("Table 1.1, p. 4"), and the reader labels them *From the PDF · Table 1.1, p. 4*. Data from outside the PDF goes in the demo's \`extra\` (\`[{what, source}]\`, or \`source\` with \`"outside": true\`) and is labelled *Data added from outside the PDF*. A demo with no data of its own is labelled *Our drawing*.
 
 ## Grounding and sources
 
@@ -57,7 +65,7 @@ w('prompts/06-whole-room.md', `# A whole book room in one answer
 
 For AIs that can produce long outputs. Attach the PDF and send:
 
-` + block(`Read the attached book. Split it into its chapters (a section becomes its own part when its chapter is longer than 30 pages) with page ranges, and list every subsection of each part (ids: heading numbers, "p<page>-<k>" for unnumbered headings). Then for EACH part build a chain exactly as specified below: every subsection covered at the source's resolution or finer, the PDF's own examples, numbers, tables and figures first (figure ids: "Figure 3.2" → fig-3-2), outside additions only in "extra" with a source, and a question thread (each step "answers" the previous step's "opens"). Return ONLY one JSON object:
+` + block(`Read the attached book. Split it into its chapters (a section becomes its own part when its chapter is longer than 30 pages) with page ranges, and list every subsection of each part. Subsection ids: ${P.SUBSECTION_IDS} Then for EACH part build a chain exactly as specified below: every subsection covered at the source's resolution or finer, the PDF's own examples, numbers, tables and figures first (figure ids: ${P.FIGURE_IDS}), outside additions only in "extra" with a source, and a question thread (each step "answers" the previous step's "opens"). Return ONLY one JSON object:
 {"format":"scriptorium-room/1","book":{"title":str,"pages":n},"room":{"parts":[{"title":str,"num":"1","startPage":n,"endPage":n,"summary":"one sentence","subsections":[{"id":"1.1","title":str,"level":2,"startPage":n,"endPage":n}],"analysis":CHAIN}]}}
 where CHAIN is:
 ${P.CHAIN_FORMAT}
@@ -71,11 +79,14 @@ For 3D scenes not covered by the built-in models, put {"type":"scene","title":st
 Import the file in the app with *Import / export → Import JSON*. It appears as a new scroll on your first bookcase. Open each scroll once with the PDF attached to the book to run the coverage check.
 `);
 // the follow-up, shown with a small mock chain so its structure is visible
+// one coarse gap (1.1 already has S1) and one missing gap (1.2), so both kinds of thread instruction are shown
 const mockA = { question: '<the part question>', chain: [{ id: 'S1', section: '<1.1>', title: '<existing step>', answers: '<…>', opens: '<question S1 opens>' }] };
-const gaps = [{ id: '<1.2>', reason: 'missing: no step covers it' }];
+const gaps = [{ id: '<1.1>', reason: 'too coarse: 1 step(s) for content that needs about 3', existing: true }, { id: '<1.2>', reason: 'missing: no step covers it' }];
 w('prompts/07-fill-gaps.md', `# Fill the gaps the coverage check found
 
 The app runs this automatically (inside claude.ai) after the main analysis when a subsection is missing, coarser than the source, or holds a PDF figure no step explains. It sends only those subsections' text, so it costs a fraction of the first call. Outside claude.ai the coverage panel's *Write the missing steps* button shows this prompt for copy and paste.
+
+New steps get ids G1, G2, …; the app inserts them, renumbers the whole chain S1…Sn and remaps \`from\`. For a coarse subsection (one that already has steps) the new steps go right after its last existing step: the first new step answers a new question, which the app then writes into that existing step's \`opens\`, and the last new step opens what the existing step used to open.
 
 ` + block(P.followUpPrompt({ book: '<book title>', chapter: '<part title>', A: mockA, gaps, sections: demoSections, figures: demoFigures })));
 

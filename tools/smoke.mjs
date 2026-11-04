@@ -9,8 +9,9 @@
 //                                SMOKE_SLOW=1       also open every built-in model type with the drawing → real transition
 //                                SMOKE_HEADED=1     show the browser window
 //   The page loads three.js, MathJax and pdf.js from their CDNs, so the machine needs network access (or a page whose
-//   import map points at local copies). A software GPU (SwiftShader) is used when there is no real one; the test keeps
-//   rendering paused during the logic checks, so it takes about 1–3 minutes even then.
+//   import map points at local copies). A software GPU (SwiftShader) is used when there is no real one. A full run
+//   takes about 3 minutes on a machine with a GPU and 10–15 minutes with software rendering (rendering stays paused
+//   during the logic checks, but every scroll drawing and diorama still renders on the CPU); SMOKE_SLOW=1 adds more.
 //
 // WHAT IT CHECKS (each is one line of the report; any failure → exit code 1)
 //   boot         fresh profile (empty IndexedDB) reaches the library hub with the eight seeded books

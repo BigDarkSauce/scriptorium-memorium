@@ -29,6 +29,7 @@ export class Reader {
   }
   close() { this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
+  bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
   render() {
     const P = this.part, R = this.el; R.innerHTML = ''; this._figs = null;   // figures may have been cut since the last render
     const head = el('header', { class: 'reader-head' }, [
@@ -62,6 +63,8 @@ export class Reader {
     const P = this.part, book = this.room.book, src = P.subOf ? (this.room.data.parts.find(x => x.id === P.subOf) || P) : P;
     if (!book.hasPdf) return { sections: null, figures: [] };
     const blob = await this.app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [] };
+    // the prompts name the book by the PDF's own Title metadata when it has one (else the file name)
+    if (book.pdfTitle == null && this.app.ingest.pdfTitle) { try { book.pdfTitle = await this.app.ingest.pdfTitle(blob) || ''; if (this.app.saveLib) this.app.saveLib(); } catch (e) { } }
     if (st) st.textContent = 'Reading the subsections…';
     // a sub-scroll expands one step: it shares its parent's figures but is not checked against the parent's subsections
     const sec = P.subOf ? { sections: null } : await cached(partKey('sections', book.id, src.id), () => this.app.ingest.partSections(blob, src));
@@ -80,7 +83,7 @@ export class Reader {
       if (thinText && imageLimit() && M.blob) { images = await this.app.ingest.pageImages(M.blob, P.startPage || 1, P.endPage || 1, imageLimit()); pageImgs = images.length; }
       else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
       const meta = this.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
-      const prompt = chapterPrompt({ book: book.title, chapter, text, depth, n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
+      const prompt = chapterPrompt({ book: this.bookName(), chapter, text, depth, n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
       st.textContent = 'Claude is reading and planning. Long parts can take a minute or two.';
       const A = await askJSON(prompt, { images, tools: evidenceTools(), onTool: toolStatus(st), onText: t => { st.textContent = 'Writing the chain… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Analyse "' + P.title + '" in any AI' });
       if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
@@ -104,7 +107,7 @@ export class Reader {
       gaps.forEach(g => { const s = M.sections.find(x => x.id === g.id), k = s ? s.text.length : 0; if (cur.length && size + k > 100000) { batches.push(cur); cur = []; size = 0; } cur.push(g); size += k; }); if (cur.length) batches.push(cur);
       for (const b of batches) {
         if (st) st.textContent = `Filling ${b.length} gap${b.length > 1 ? 's' : ''}: ${b.map(g => g.id).join(', ')}…`;
-        const add = await askJSON(followUpPrompt({ book: this.room.book.title, chapter: P.title, A, gaps: b, sections: M.sections, figures: meta }), { tools: evidenceTools(), onTool: st ? toolStatus(st) : null, onText: t => { if (st) st.textContent = 'Writing the missing steps… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Write the missing steps in any AI' });
+        const add = await askJSON(followUpPrompt({ book: this.bookName(), chapter: P.title, A, gaps: b, sections: M.sections, figures: meta }), { tools: evidenceTools(), onTool: st ? toolStatus(st) : null, onText: t => { if (st) st.textContent = 'Writing the missing steps… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Write the missing steps in any AI' });
         if (add && (Array.isArray(add.steps) || Array.isArray(add.chain))) { mergeFollowUp(A, { ...add, steps: normalizeChain({ chain: add.steps || add.chain }).chain }, M.sections); A.coverageReport.followUps = (A.coverageReport.followUps || 0) + 1; }
       }
       rep = verifyChain(A, M.sections, meta); A.coverageReport = { ...rep, sections: secMeta, followUps: A.coverageReport.followUps };
@@ -121,7 +124,7 @@ export class Reader {
     let M = { sections: null, figures: [] }; try { M = await this.material(null); } catch (e) { }
     let text = ''; if (!M.sections && book.hasPdf) { try { const blob = await this.app.store.get('pdf:' + book.id); if (blob) text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || 1, 60000); } catch (e) { } }
     try {
-      const A = await manualRelay(chapterPrompt({ book: book.title, chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth: 'complete', sections: M.sections, figures: this.app.ingest.figureMeta(M.figures) }), 'Analyse "' + P.title + '" in any AI');
+      const A = await manualRelay(chapterPrompt({ book: this.bookName(), chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth: 'complete', sections: M.sections, figures: this.app.ingest.figureMeta(M.figures) }), 'Analyse "' + P.title + '" in any AI');
       if (!A || !Array.isArray(A.chain)) throw 0;
       P.analysis = normalizeChain(A); await this.checkAndFill(null, M, { auto: false }); this.save(); this.room.refreshStation(P); this.render(); toast('Chain imported');
     } catch (e) { if (e && e.code !== 'cancelled') toast('That JSON has no "chain"'); }
@@ -153,6 +156,7 @@ export class Reader {
     if (R.threadBreaks.length) notes.push('The question thread breaks before ' + R.threadBreaks.join(', ') + '.');
     if (R.extrasUnsourced.length) notes.push('Outside additions without a source in ' + R.extrasUnsourced.join(', ') + '.');
     if (R.numbers && R.numbers.unmatched.length) notes.push(`Numbers not found in the PDF text: ${R.numbers.unmatched.map(u => u.step + ' (' + u.values.join(', ') + ')').join('; ')}. Check them against the page.`);
+    if (R.demoIssues && R.demoIssues.length) notes.push('Demos to fix: ' + R.demoIssues.slice(0, 6).map(x => `${x.step} (${x.type}): ${x.issue}`).join('; ') + (R.demoIssues.length > 6 ? `; and ${R.demoIssues.length - 6} more` : '') + '.');
     if (R.unknownFigures && R.unknownFigures.length) notes.push('Figure ids that are not in this part: ' + R.unknownFigures.map(u => u.step + '→' + u.id).join(', ') + '.');
     notes.forEach(t => box.append(el('p', { class: 'cov-note', text: t })));
     if (bad || R.figuresUncited.length) { const st2 = el('span', { class: 'status' }); box.append(el('div', { class: 'row' }, [el('button', { class: 'btn small primary', text: 'Write the missing steps', onclick: e => this.fillGaps(e.target) }), st2])); }
@@ -223,7 +227,7 @@ export class Reader {
     return box;
   }
   renderDemo(d, st, i, demos) {
-    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = d.extra && (Array.isArray(d.extra) ? d.extra.length : true) || d.source && !d.source.fromPdf ? el('div', { class: 'demo-prov' }, [el('span', { class: 'extra-badge', text: 'Data added from outside the PDF' }), ' ', d.source ? renderSource(d.source) : el('span', { text: [].concat(d.extra).map(x => x && (x.what || '')).join('; ') })]) : el('div', { class: 'demo-prov own', text: 'Our drawing' + (d.purpose ? '' : '') }); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + esc(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: esc(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + esc(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
+    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + esc(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: esc(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + esc(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {
@@ -319,6 +323,28 @@ export class Reader {
       this.room.addPart(part, this.part); toast('Sub-scroll hung beside this one');
     } catch (e) { toast(errCopy(e)); }
   }
+}
+// Provenance of what a demo shows (docs/PROTOCOL.md, "Demo provenance"): data and points come from the PDF unless the
+// demo carries "extra" (or a "source" marked outside:true). "ref" (or pages, or a source naming the PDF) says where.
+// A demo with no data of its own is our drawing.
+export function demoOrigin(d) {
+  const ex = Array.isArray(d.extra) ? d.extra.filter(x => x && (x.what || x.source)) : d.extra && typeof d.extra === 'object' ? [d.extra] : d.extra ? [{ what: String(d.extra) }] : [];
+  const src = d.source && typeof d.source === 'object' ? d.source : typeof d.source === 'string' ? { title: d.source } : null;
+  // chains written before this rule cited outside data in "source" with a DOI or URL: still read as outside
+  const legacyOutside = src && src.outside == null && !src.fromPdf && !d.ref && (src.doi || src.url);
+  if (ex.length || (src && (src.outside === true || legacyOutside))) return { kind: 'outside', extra: ex, source: src && (src.outside === true || legacyOutside) ? src : null };
+  const pages = Array.isArray(d.pages) ? d.pages : d.page != null ? [d.page] : [];
+  const where = [d.ref || (src && (src.ref || src.title)) || '', pages.length && !/p\.\s*\d/.test(d.ref || '') ? 'p. ' + pages.join(', ') : ''].filter(Boolean).join(', ');
+  const hasData = (Array.isArray(d.points) && d.points.length) || !!d.ref || !!src || pages.length > 0 || !!d.data;
+  return hasData ? { kind: 'pdf', where } : { kind: 'own' };
+}
+function demoProvenance(d) {
+  const o = demoOrigin(d);
+  if (o.kind === 'outside') return el('div', { class: 'demo-prov' }, [el('span', { class: 'extra-badge', text: 'Data added from outside the PDF' }), ' ',
+    o.source ? renderSource(o.source) : null, o.source && o.extra.length ? ' · ' : null,
+    ...o.extra.map((x, k) => el('span', {}, [k ? '; ' : '', String(x.what || ''), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))]);
+  if (o.kind === 'pdf') return el('div', { class: 'demo-prov pdf' }, [el('span', { class: 'pdf-tag', text: 'From the PDF' }), o.where ? el('span', { text: ' ' + o.where }) : null, el('span', { class: 'dim', text: ' · drawn by us' })]);
+  return el('div', { class: 'demo-prov own', text: 'Our drawing' });
 }
 export function normalizeChain(A) {
   const strs = a => Array.isArray(a) ? a.map(String) : a != null && a !== '' ? [String(a)] : [];

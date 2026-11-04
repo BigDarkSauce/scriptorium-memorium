@@ -1009,6 +1009,30 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   'pressure falling':hgArrow(false),
   'pressure rising':hgArrow(true),
   'rain begins':[{from:[-1.6,5.2,-4.9],to:[-1.6,1.4,-4.6],label:'rain from the thickening cloud'}]};}
+// Default lessons (used when a weatherglass demo brings none). Same format as the lessons at the end of this file;
+// every `until` was checked by stepping the model headlessly from its default parameters, and the numbers in
+// "explain" are the ones that run produces.
+DIO.weatherglass.lessons=[
+ {title:'Read the barometer',question:'What holds the mercury column up?',focus:'mercury column',set:{auto:0,P:1013,T:15,P0:1013},run:6,shot:'close',
+  text:'Auto weather is off and the outside pressure is held at 1013 hPa. Look at the top of the mercury column in the brass window and read it against the scale.',
+  explain:'Above the mercury there is vacuum, so only the air pressing on the open cistern holds the column up: h = P/(ρ_Hg g) = 101 325 Pa ÷ (13 595 kg/m³ × 9.81 m/s²) ≈ 760 mm. Each hPa of air pressure holds 0.75 mm of mercury, so the barometer reads the weight of the air directly, in absolute terms.',
+  opens:'What does the Goethe glass do when the outside pressure falls?'},
+ {title:'A deep low',question:'What does the Goethe glass do when the outside pressure falls?',focus:'spout column',set:{P:995},until:'event:spout settles',run:30,shot:'pov',pov:'trapped air',
+  text:'Lower the outside pressure to 995 hPa, as a low arrives. You are inside the trapped air of the Goethe glass: watch it push the blue water up the spout until the column settles.',
+  explain:'The trapped air keeps close to its sealing pressure while the outside air now pushes 18 hPa less, so the difference lifts water up the open spout until the weight of the raised water balances it: P_in − P = ρgΔh. The spout settles near @@A mm, well below the textbook (P₀T/T₀ − P)/ρg ≈ @@B mm, because the trapped air expands as the water climbs and its pressure falls (readout “P inside”).',
+  opens:'Is a high spout always a sign of low pressure?'},
+ {title:'A warm afternoon',question:'Is a high spout always a sign of low pressure?',focus:'spout column',set:{P:1013,T:20},until:'event:spout settles',run:30,shot:'medium',
+  text:'Return the outside pressure to a normal 1013 hPa, but warm the air to 20 °C. Watch where the spout settles this time.',
+  explain:'Warming raises the pressure of the trapped air by about 3.5 hPa per kelvin for the air itself and 1.3 hPa per kelvin from extra water vapour, so 5 K of warming imitates a fall of about 24 hPa: the spout settles near @@C mm although the pressure is normal. A Goethe glass mixes temperature and pressure; only the barometer reads pressure alone.',
+  opens:'What makes crystals appear in the sealed storm glass?'},
+ {title:'A cold night',question:'What makes crystals appear in the sealed storm glass?',focus:'storm glass',set:{T:12},until:'event:crystals nucleate',run:40,shot:'push',
+  text:'Cool the air to 12 °C and watch the clear liquid of the storm glass on the right. (The Goethe glass reacts too: its cooled trapped air shrinks and the spout water sinks.)',
+  explain:'The sealed tube never feels the outside pressure, only the temperature. Camphor dissolves less in cold liquid (about 7 % less per kelvin in this model), so once the liquid has followed the air down (it lags by about an hour and a half), it holds more camphor than it can keep: the supersaturation σ = c/S − 1 passes 0.04 and fern fronds nucleate (σ = @@D here).',
+  opens:'Do the crystals vanish again when it warms?'},
+ {title:'Morning sun',question:'Do the crystals vanish again when it warms?',focus:'crystals',set:{T:20},until:'event:crystals redissolve',run:45,shot:'close',
+  text:'Warm the air to 20 °C. Watch the fronds thin from their tips while the seed bed at the bottom stays.',
+  explain:'Warming raises the solubility above the camphor in solution, so σ turns negative (@@E here) and the fronds dissolve within a few hours. The compact bed at the bottom meets the liquid only on its top face and dissolves far more slowly. The storm glass is a slow thermometer, not a barometer (Williams 2025).',
+  opens:'Explore: switch auto weather back on and see which instruments follow the storm and which follow the clock.'}];
 
 
 /* --- Double pendulum: two pendulums released together at night, under the moon; one is offset by ε ---

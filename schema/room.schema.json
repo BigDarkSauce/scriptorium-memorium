@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "scriptorium-room/1",
+  "$id": "https://scriptorium.invalid/schema/room.schema.json",
   "title": "A book room",
   "type": "object",
   "required": [
@@ -69,7 +69,7 @@
                 "type": "string"
               },
               "analysis": {
-                "$ref": "scriptorium-chain/1"
+                "$ref": "chain.schema.json"
               },
               "pedestal": {
                 "type": "object",

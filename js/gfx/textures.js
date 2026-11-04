@@ -113,6 +113,9 @@ export const MARBLES = {
   statuary: { base: '#ece8e1', cloud: ['#f7f4ef', '#ddd7ce', '#e6e1d9', '#f2eee8'], vein: '#a7a19a', vein2: '#cfc8bf', faint: true },
   warmgrey: { base: '#958a82', cloud: ['#a59a91', '#7f756e', '#b0a69c', '#8a7f77'], vein: '#5d544e', vein2: '#d8d0c6' },
   cream: { base: '#ebe5d8', cloud: ['#f5f1e8', '#ddd5c4', '#e4ddcf'], vein: '#b9ae9c', vein2: '#d8cfbf', faint: true },
+  // a soft dove-grey: the dark tile of the hall floor, close enough in value to the cream that the floor stays a ground,
+  // not the highest-contrast thing in view (presentation-craft value check)
+  dove: { base: '#bdb0a1', cloud: ['#c9bdaf', '#aea192', '#c4b8a9', '#b3a696'], vein: '#8a7d70', vein2: '#ddd3c6' },
   grey: { base: '#8e8a85', cloud: ['#a19d97', '#76726d', '#9a958e'], vein: '#55514c', vein2: '#c4bfb7' },
   red: { base: '#a3645a', cloud: ['#b8796c', '#8a4d44', '#c58c7f', '#97564c'], vein: '#5a2a24', vein2: '#e6c2b4' }
 };

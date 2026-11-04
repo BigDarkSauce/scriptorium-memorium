@@ -1,7 +1,7 @@
 // PDF ingestion in the browser (pdf.js), without AI. It finds the book's hierarchy, keeps every subsection's text
 // with its pages, and cuts the book's own figures out of the pages.
 //
-//  splitBook(blob)            → { pages, method, parts:[{ title, num, level, chapter?, startPage, endPage,
+//  splitBook(blob)            → { pages, method, title, parts:[{ title, num, level, chapter?, startPage, endPage,
 //                                  subsections:[{ id, num, title, level, startPage, endPage, chars }] }] }
 //     The hierarchy (level 1 = chapter, 2 = section, 3 = subsection, 4 = sub-subsection) comes from, in order:
 //       1. the PDF's own outline (bookmarks), at every depth;
@@ -19,9 +19,11 @@
 //  extractFigures(blob, from, to) → [{ id, label, kind, caption, page, bbox, w, h, src, dataUrl }]
 //     Figure regions from image XObjects (with their transforms), vector-drawing clusters, and "Figure n" captions;
 //     the page is rendered and the region (with its caption) cropped to a JPEG data URL (≤ 1200 px, q 0.82).
-// Running headers/footers and bare page numbers are stripped (book-to-skill's cleaning rules), hyphenated breaks rejoined.
-// The pure helpers (parseHeading, detectHeadings, buildParts, segmentSections, inventory, opRegions, findCaptions,
-// pairFigures, figureId) take plain arrays, so they run in node for tests.
+//     title = the PDF's Title metadata when it is a real title, else the file name (pdfTitle).
+// Running headers/footers (short lines recurring on the top or bottom baselines of more than half the pages) and bare
+// page numbers are stripped, hyphenated breaks rejoined, and the cells of a table row joined into one line ("0 | 2.0 | 1.5").
+// The pure helpers (parseHeading, detectHeadings, buildParts, stripFurniture, joinRows, segmentSections, inventory,
+// opRegions, findCaptions, pairFigures, figureId, cleanTitle) take plain arrays, so they run in node for tests.
 
 const CHAPTER_RE = /^\s*(chapter|unit|lesson|part|lecture|capítulo|capitulo|kapitel|chapitre|capitolo|hoofdstuk|rozdział|глава|розділ|часть|частина|第\s*[0-9一二三四五六七八九十百]+\s*[章节部]|제\s*\d+\s*장)\s*([0-9]{1,2}|[ivxlcdm]{1,6})?\b[.:\-–—]?\s*(.{0,90})$/i;
 const NUM_HEAD_RE = /^\s*((?:\d{1,2}|[A-Z])(?:\.\d{1,2}){0,3})(\.?)\s+(\S.{0,118})$/;
@@ -44,6 +46,19 @@ export async function openPDF(blob) {
   return p;
 }
 export async function pageCount(blob) { try { const d = await openPDF(blob); return d.numPages; } catch (e) { return 0; } }
+// The book's title: the PDF's Title metadata when it is a real title, else the file name (without .pdf).
+export function cleanTitle(t) {
+  t = String(t || '').replace(/\s+/g, ' ').trim().replace(/^microsoft (word|powerpoint|excel) - /i, '');
+  if (/^[\w.-]+\.\w{2,4}$/.test(t)) return '';          // a bare file name ("chapter3.pdf", "main.dvi") is not a title
+  t = t.replace(/\.(docx?|pptx?|odt|tex|dvi|pdf|indd|qxd|ps)$/i, '').trim();
+  if (t.length < 3 || /^(untitled|unknown|anonymous|title|document\s*\d*|none|null|\(?untitled\)?|print|slides?)$/i.test(t) || !/\p{L}{2}/u.test(t)) return '';
+  return t;
+}
+export const fileTitle = blob => blob && blob.name ? String(blob.name).replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() : '';
+export async function pdfTitle(blob) {
+  try { const m = await (await openPDF(blob)).getMetadata(); let x = m && m.info && m.info.Title; if (!cleanTitle(x) && m && m.metadata && typeof m.metadata.get === 'function') x = m.metadata.get('dc:title'); return cleanTitle(x) || fileTitle(blob); }
+  catch (e) { return fileTitle(blob); }
+}
 
 // Lines of one page: { text, size, x, x1, y, bold, gap } in PDF user space (y up). `gap` = space above the line
 // in units of its own size. With fonts:true the operator list is loaded first, so font names (…-Bold) are known.
@@ -244,23 +259,42 @@ export function ensureSubsections(p) {
   p.subsections.forEach((s, k) => { let id = s.id || (s.num ? s.num : `p${s.startPage}-${k + 1}`); while (used.has(id)) id += "'"; used.add(id); s.id = id; s.endPage = Math.max(s.startPage, Math.min(s.endPage || p.endPage, p.endPage)); });
   return p;
 }
+// Lines that can be running furniture on a page: the first and last two lines in reading order, plus every line on the
+// two highest and the two lowest baselines (a header drawn last in the content stream is still at the top of the page).
+export function edgeLines(L) {
+  const idx = new Set([0, 1, L.length - 2, L.length - 1].filter(i => i >= 0 && i < L.length));
+  const base = [...new Set(L.map(l => Math.round(l.y / 2) * 2).filter(isFinite))].sort((a, b) => b - a);
+  const keep = new Set([...base.slice(0, 2), ...base.slice(-2)]);
+  L.forEach((l, i) => { if (keep.has(Math.round(l.y / 2) * 2)) idx.add(i); });
+  return idx;
+}
 export function stripFurniture(pages) {
-  // remove lines that recur at the top or bottom of more than half the pages (running headers/footers), and bare page numbers
-  const edge = new Map(); const norm = s => s.replace(/\d+/g, '#').toLowerCase();
-  pages.forEach(L => { [L[0], L[1], L[L.length - 1], L[L.length - 2]].filter(Boolean).forEach(l => { const k = norm(l.text); edge.set(k, (edge.get(k) || 0) + 1); }); });
+  // remove short lines whose text (digits ignored) recurs on the edges of more than half the pages (running
+  // headers/footers, wherever they sit in the content stream), and bare page numbers on the edges
+  const norm = s => s.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().toLowerCase();
+  const E = pages.map(edgeLines), count = new Map();
+  pages.forEach((L, p) => { const seen = new Set(); E[p].forEach(i => { const t = L[i].text; if (t.length > 100) return; const k = norm(t); if (/^[#\W]*$/.test(k)) return; /* bare numbers: see below */ if (!seen.has(k)) { seen.add(k); count.set(k, (count.get(k) || 0) + 1); } }); });
   const lim = Math.max(3, pages.length * .5);
-  return pages.map(L => {
-    const kept = L.filter((l, i) => { const atEdge = i < 2 || i >= L.length - 2; if (atEdge && (edge.get(norm(l.text)) || 0) > lim) return false; if (/^(\d{1,4}|[ivxlcdm]{1,7})$/i.test(l.text) && atEdge) return false; return true; });
+  return pages.map((L, p) => {
+    // a bare number is a page number only when it is alone on its baseline (not the first cell of a table row)
+    const alone = (l, i) => !L.some((o, j) => j !== i && Math.abs(o.y - l.y) < 2);
+    const kept = L.filter((l, i) => { if (!E[p].has(i)) return true; if (l.text.length <= 100 && !/^[#\W]*$/.test(norm(l.text)) && (count.get(norm(l.text)) || 0) > lim) return false; if (/^(\d{1,4}|[ivxlcdm]{1,7})$/i.test(l.text) && alone(l, i)) return false; return true; });
     kept.forEach((l, k) => { l.gap = gapAbove(kept[k - 1], l); });
     return kept;
   });
+}
+// Cells on one baseline (a table row, an equation and its number) become one line: "0 | 2.0 | 1.5".
+export function joinRows(L) {
+  const out = [];
+  L.forEach((l, i) => { const p = out[out.length - 1]; if (p && Math.abs(p.y - l.y) < Math.max(1.5, Math.min(p.size, l.size) * .35) && l.x >= p.x1 - 1) { p.text += ' | ' + l.text; p.x1 = l.x1; p.cells++; } else out.push({ text: l.text, y: l.y, x: l.x, x1: l.x1, size: l.size, li: i, cells: 1 }); });
+  return out;
 }
 const normT = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 // ---------------------------------------------------------------- pure helpers: text per subsection
 // pages: cleaned line arrays for pages [from..]; subs: the part's subsections (ordered). Returns sections with text.
 export function segmentSections(pages, from, subs, { partTitle = '' } = {}) {
-  const flat = []; pages.forEach((L, k) => L.forEach((l, li) => flat.push({ page: from + k, li, text: l.text })));
+  const flat = []; pages.forEach((L, k) => joinRows(L).forEach(r => flat.push({ page: from + k, li: r.li, text: r.text })));   // a table row is one line
   const find = (title, page, num) => {
     const want = normT(title).slice(0, 40); if (!want) return -1;
     let idx = flat.findIndex(f => f.page === page && normT(f.text).startsWith(want));
@@ -331,7 +365,7 @@ function contentsNodes(clean, n, labels) {
 }
 export async function splitBook(blob, { onProgress, maxPartPages = MAX_PART_PAGES } = {}) {
   const doc = await openPDF(blob), n = doc.numPages;
-  const result = { pages: n, parts: [], method: 'none' };
+  const result = { pages: n, parts: [], method: 'none', title: await pdfTitle(blob) };
   const ol = await outlineNodes(doc);
   const olDepth = ol ? Math.max(...ol.map(o => o.level)) : 0;
   // scan pages for headings (bounded for very long books); font names (bold) cost an operator list per page
@@ -366,7 +400,7 @@ export async function partText(blob, from, to, maxChars = 180000) {
   const doc = await openPDF(blob); const pages = [];
   for (let i = from; i <= Math.min(to, doc.numPages); i++) pages.push(await pageLines(doc, i));
   const clean = stripFurniture(pages); let out = '';
-  clean.forEach((L, k) => { out += `\n[page ${from + k}]\n` + L.map(l => l.text).join('\n').replace(/(\w)-\n(\w)/g, '$1$2'); });
+  clean.forEach((L, k) => { out += `\n[page ${from + k}]\n` + joinRows(L).map(l => l.text).join('\n').replace(/(\w)-\n(\w)/g, '$1$2'); });
   return out.slice(0, maxChars);
 }
 // The part's text split per subsection. Parts imported before subsections existed get their headings detected now.
@@ -396,10 +430,12 @@ export async function pageImages(blob, from, to, max = 4) {
 }
 
 // ---------------------------------------------------------------- figures
-export function figureId(label, page, k) {
+// "Figure 3.2" → fig-3-2, "Figure 3.2a" → fig-3-2a, "Table 1.1" → tab-1-1; unnumbered: fig-p<page>-<k> or, for a
+// table, tab-p<page>-<k> (k counts the page's unnumbered figures, or tables, from 1). Same rule in the prompts.
+export function figureId(label, page, k, kind) {
   const m = String(label || '').match(CAPTION_RE);
-  if (m) { const kind = /^(table|tab|tabelle|tabla|таблица)/i.test(m[1]) ? 'tab' : 'fig'; return kind + '-' + m[2].toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
-  return `fig-p${page}-${k || 1}`;
+  if (m) { const kd = /^(table|tab|tabelle|tabla|таблица)/i.test(m[1]) ? 'tab' : 'fig'; return kd + '-' + m[2].toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+  return `${kind === 'table' ? 'tab' : 'fig'}-p${page}-${k || 1}`;
 }
 const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
 const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
@@ -495,8 +531,13 @@ export function pairFigures({ images, vectors }, captions, lines, view, page) {
     }
   }
   // large uncaptioned images and drawings are figures too (their label says so)
-  let k = 0; regions.forEach((r, i) => { if (used.has(i) || r.src === 'rules' || r.texty) return; const big = area(r.box) >= pw * ph * (r.src === 'image' ? .1 : .14); if (!big) return; k++; figs.push({ kind: 'figure', label: `Unlabelled figure on p. ${page}`, num: '', caption: '', box: r.box, src: r.src, uncaptioned: true, k }); });
-  return figs.map((f, j) => ({ ...f, page, id: f.uncaptioned ? figureId('', page, f.k) : figureId(f.label, page, j + 1) }));
+  // ruled grids with many text cells are uncaptioned tables (tab-p<page>-<k>)
+  let k = 0, kt = 0; regions.forEach((r, i) => {
+    if (used.has(i) || r.texty) return;
+    if (r.src === 'rules') { if ((r.cells || 0) >= 6 && area(r.box) >= pw * ph * .04) { kt++; figs.push({ kind: 'table', label: `Unlabelled table on p. ${page}`, num: '', caption: '', box: r.box, src: r.src, uncaptioned: true, k: kt }); } return; }
+    const big = area(r.box) >= pw * ph * (r.src === 'image' ? .1 : .14); if (!big) return; k++; figs.push({ kind: 'figure', label: `Unlabelled figure on p. ${page}`, num: '', caption: '', box: r.box, src: r.src, uncaptioned: true, k });
+  });
+  return figs.map((f, j) => ({ ...f, page, id: f.uncaptioned ? figureId('', page, f.k, f.kind) : figureId(f.label, page, j + 1, f.kind) }));
 }
 // Browser: cut the figures of pages from..to out of the rendered pages. Returns records with JPEG data URLs.
 export async function extractFigures(blob, from, to, { maxW = 1200, quality = .82, maxPerPart = 60, onProgress } = {}) {

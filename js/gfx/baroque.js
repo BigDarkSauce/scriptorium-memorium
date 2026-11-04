@@ -21,10 +21,13 @@ export function bmat(name) {
     case 'gilt': { const t = gildTex(); m = S({ color: 0xffffff, map: t.map, roughnessMap: t.rough, metalness: 1, roughness: 1, envMapIntensity: 3.4 }); m.userData.boxUV = 2.2; break; } // env kept low in the hub/rooms (renderer HOUSE look): gilt carries its own
     case 'gilt-dim': { const t = gildTex(); m = S({ color: 0xd8c08a, map: t.map, roughnessMap: t.rough, metalness: .85, roughness: 1.15, envMapIntensity: 2.3 }); m.userData.boxUV = 2.2; break; }
     case 'stucco': m = S({ color: 0xf3ede2, map: plaster([240, 234, 222], 'stucco', .1), roughness: .78 }); m.userData.boxUV = .35; break;
-    case 'wall': m = S({ color: 0xffffff, map: plaster([228, 219, 202], 'bwall', .09), roughness: .9 }); m.userData.boxUV = .22; break;
+    // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
+    case 'wall': m = S({ color: 0xffffff, map: plaster([218, 199, 170], 'bwall2', .09), roughness: .9 }); m.userData.boxUV = .22; break;
     // painted wood (Admont's white cases): ivory lacquer with the grain faintly showing through
     case 'cream': m = P({ color: 0xfbf6ec, map: figuredWood([244, 236, 220], 'ivory', { paint: 1 }), roughness: .4, clearcoat: .45, clearcoatRoughness: .28 }); m.userData.boxUV = .55; break;
-    case 'cream-back': m = S({ color: 0xffffff, map: figuredWood([214, 200, 174], 'ivoryb', { paint: 1, seed: 3 }), roughness: .72 }); m.userData.boxUV = .55; break;
+    // case interiors (backs, inner side panels) a shade deeper, as they sit in their own shadow: the shelves read as
+    // hollows framed by the ivory carcass instead of one flat white block
+    case 'cream-back': m = S({ color: 0xffffff, map: figuredWood([186, 166, 134], 'ivoryb2', { paint: 1, seed: 3 }), roughness: .78 }); m.userData.boxUV = .55; break;
     // figured walnut (Metten) and pale rococo oak (Mafra)
     case 'walnut': m = P({ map: figuredWood([128, 80, 46], 'walnut'), roughness: .42, clearcoat: .45, clearcoatRoughness: .22 }); m.userData.boxUV = .8; break;
     case 'walnut-dark': m = P({ map: figuredWood([80, 49, 29], 'walnutd', { seed: 5 }), roughness: .5, clearcoat: .3, clearcoatRoughness: .3 }); m.userData.boxUV = .8; break;
@@ -789,7 +792,8 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   { const s = new THREE.Shape(); s.moveTo(-Lx / 2 - .02, -Lz / 2 - .02); s.lineTo(Lx / 2 + .02, -Lz / 2 - .02); s.lineTo(Lx / 2 + .02, Lz / 2 + .02); s.lineTo(-Lx / 2 - .02, Lz / 2 + .02); s.lineTo(-Lx / 2 - .02, -Lz / 2 - .02); const hl = new THREE.Path(); const q = .12; hl.moveTo(-Lx / 2 + q, -Lz / 2 + q); hl.lineTo(-Lx / 2 + q, Lz / 2 - q); hl.lineTo(Lx / 2 - q, Lz / 2 - q); hl.lineTo(Lx / 2 - q, -Lz / 2 + q); hl.lineTo(-Lx / 2 + q, -Lz / 2 + q); s.holes.push(hl); const geo = new THREE.ExtrudeGeometry(s, { depth: .06, bevelEnabled: false }); geo.rotateX(Math.PI / 2); geo.translate(0, h, 0); A.add(gilt, geo); }
   // ---- floor: polished checkered marble ----
   {
-    const F = marbleFloor(floor, clamp(Math.min(w, d) / 16, .5, .8), floor === 'cubes' ? ['cream', 'warmgrey', 'red'] : ['cream', 'warmgrey']);
+    // the hall's diagonal floor: cream and dove-grey marble (close values: the floor is a ground, not a checkerboard)
+    const F = marbleFloor(floor, clamp(Math.min(w, d) / 16, .5, .8), floor === 'cubes' ? ['cream', 'warmgrey', 'red'] : ['cream', 'dove']);
     const fm = new THREE.MeshPhysicalMaterial({ map: F.map, roughnessMap: F.rough, roughness: 1, clearcoat: .6, clearcoatRoughness: .13, envMapIntensity: 1.0 });
     const geo = new THREE.PlaneGeometry(w, d); geo.rotateX(-Math.PI / 2); const p = geo.attributes.position, uv = geo.attributes.uv;
     for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / F.span[0] + .5, -p.getZ(i) / F.span[1] + .5);
@@ -819,11 +823,17 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       if (isWin) { const n = W.piers.length - 1; if (n < 3) return; const k = (n - 1) >> 1; pair = [W.piers[k], W.piers[k + 1]]; }
       else { const cand = W.pil.filter(s => Math.abs(s) >= doorW / 2 + .3 + pw / 2); const l = Math.max(...cand.filter(s => s < 0)), r = Math.min(...cand.filter(s => s > 0)); if (!isFinite(l) || !isFinite(r)) return; pair = [l, r]; }
       pair.forEach((s, j) => {
-        const pH = clamp(yE * .2, .7, 1.1), M0 = M.clone().multiply(Mx(s, 0, .34));
-        pedestal(A, M0, .7, .62, pH, 'scag-' + palette);
-        const Hf = yE - pH - .2; if (Hf < 1) return;
-        const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .82, Hf, Hf * .82));
-        atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(scag, geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)) });
+        // the figures support the window bay rather than dominate the hall: at most ~3 m of herm and torso (in a high
+        // hall the rest is a taller pedestal), white statuary on a stucco-and-gilt pedestal with a small scagliola panel
+        const pH0 = clamp(yE * .2, .7, 1.1), Hf = Math.min(yE - pH0 - .2, 3.0), pH = yE - .2 - Hf, M0 = M.clone().multiply(Mx(s, 0, .34));
+        if (Hf < 1) return;
+        pedestal(A, M0, .7, .62, pH, 'stucco');
+        if (pH > 1.4) { // a fielded panel on the die's face: gilt frame round a scagliola inset
+          const ph = pH - .62, pc = .145 + (pH - .3) / 2, P = (mat, geo, x, y) => A.add(mat, geo, M0.clone().multiply(Mx(x, y, .312)));
+          P(scag, new THREE.BoxGeometry(.44, ph - .1, .006), 0, pc); [-1, 1].forEach(k => { P(gilt, new THREE.BoxGeometry(.52, .022, .014), 0, pc + k * (ph / 2 - .02)); P(gilt, new THREE.BoxGeometry(.022, ph - .02, .014), k * .25, pc); });
+        }
+        const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .76, Hf, Hf * .76));
+        atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(bmat('statuary'), geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)) });
         A.add(gilt, new THREE.BoxGeometry(.62, .2, .52), M.clone().multiply(Mx(s, yE - .1, .3)));
         A.add(stucco, new THREE.BoxGeometry(.7, E * .34 - .004, .6), M.clone().multiply(Mx(s, yE + E * .17, .3)));
         A.add(scag, new THREE.BoxGeometry(.66, E * .28 - .004, .56), M.clone().multiply(Mx(s, yE + E * .48, .28)));
