@@ -127,12 +127,32 @@ export class Gfx {
   set quality(q) { this.setQuality(q); }
   setQuality(q) { if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.onQuality && this.onQuality(q); return q; }
   get qualityLevels() { return Object.keys(QUALITY); }
+  // bounded caches that fill over idle time (one baked AAA surface per kind and quality) - leak checks subtract these
+  cachedTextures() { return AAA.bakes.size; }
   // Precompile every program a scene will need across its states (sketch → real), without rendering:
   // variants = [{ apply(), restore() }]; each state is applied, compiled (parallel where KHR_parallel_shader_compile
   // exists) and restored synchronously. Texture/cube backgrounds get their background program from a 1×1 render.
   prewarm(scene, camera, variants = [], backgrounds = []) {
     const r = this.renderer, t0 = performance.now(), jobs = [];
-    const compile = () => { try { jobs.push(r.compileAsync ? r.compileAsync(scene, camera) : (r.compile(scene, camera), Promise.resolve())); } catch (e) { console.warn(e); } };
+    // r.compile() queues the programs (in parallel where KHR_parallel_shader_compile exists) and returns the material
+    // set. We poll readiness ourselves instead of using three's compileAsync: its poll calls currentProgram.isReady()
+    // unguarded, and variant materials restored/disposed meanwhile have no program -> uncaught TypeError + a promise
+    // that never settles. Missing programs count as done; the poll gives up after 6 s.
+    const props = r.properties;
+    const compile = () => {
+      try {
+        const set = r.compile(scene, camera); const mats = set ? [...set] : [];
+        jobs.push(new Promise(res => {
+          const t1 = performance.now();
+          const poll = () => {
+            let pending = 0;
+            for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; }
+            if (!pending || performance.now() - t1 > 6000) res(); else setTimeout(poll, 10);
+          };
+          poll();
+        }));
+      } catch (e) { console.warn(e); }
+    };
     // compile for the target the scene really renders into: the composer's linear half-float buffer (no tone mapping,
     // linear output). Compiling against the screen (render target null) builds sRGB + AgX variants that are never used.
     const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);

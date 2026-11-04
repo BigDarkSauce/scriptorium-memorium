@@ -87,7 +87,7 @@ export class DioramaView {
     this.mat.finish(); this.removeInk(); this.ds.speed = 1; this.syncControls(); this.ds.computeBounds();
     this.stage = 'tour'; this.tourI = -1; this.next();
   }
-  removeInk() { const rm = []; this.scene.traverse(o => { if (o.userData.isInk) rm.push(o); }); rm.forEach(o => o.removeFromParent()); if (rm.length) this.app.retire(() => disposeTree(rm, this.disposed ? null : this.scene)); }   // edge lines and hull shells (the hulls share their mesh's geometry, which stays)
+  removeInk() { const rm = []; this.scene.traverse(o => { if (o.userData.isInk && !o.isLight) rm.push(o); });   /* lights stay: removing one recompiles every program */ rm.forEach(o => o.removeFromParent()); if (rm.length) this.app.retire(() => disposeTree(rm, this.disposed ? null : this.scene)); }   // edge lines and hull shells (the hulls share their mesh's geometry, which stays)
   // rebuild the model; the old bodies' geometries and materials are freed once the new ones have rendered
   rebuild() { const old = [...this.ds.world.children, ...this.ds.extras.children]; this.ds.build(); this.app.retire(() => disposeTree(old, this.disposed ? null : this.scene)); }
   syncControls() { const k = this.ds.overviewKey(); this.controls.target.copy(k.target); this.camera.fov = k.fov; this.camera.position.copy(k.target).addScaledVector(k.dir, this.ds.orb.r); this.camera.near = .1; this.camera.far = 500; this.camera.updateProjectionMatrix(); this.controls.update(); this.controls.enabled = true; this.baseFov = k.fov; }

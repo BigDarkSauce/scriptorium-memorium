@@ -8,7 +8,7 @@ import * as THREE from 'three';
 
 // PREWARM.inkLights: also precompile the scene without its isInk lights (see Materializer.prewarm). Set to false once
 // engine.js removeInk() keeps lights in the scene (then that state never occurs).
-export const PREWARM = { inkLights: true };
+export const PREWARM = { inkLights: false };
 export const PAPER = new THREE.Color('#f3f0e8'), INK = new THREE.Color('#1d1c19'), AMBER = new THREE.Color('#e85d04');
 const KIND = { sphere: 0, plane: 1 };
 

@@ -91,7 +91,7 @@ class App {
     // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
     if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
     // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
-    if (this.mode && this.mode.scene && this.mode.camera) { const r = this.gfx.renderer; try { if (r.extensions.has('KHR_parallel_shader_compile')) await Promise.race([r.compileAsync(this.mode.scene, this.mode.camera), sleep(4000)]); else r.compile(this.mode.scene, this.mode.camera); } catch (e) { } }
+    if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
     this.gfx.resetAdapt();
     await sleep(60); await fade(1, 0, 330); g.value = 0;
   }

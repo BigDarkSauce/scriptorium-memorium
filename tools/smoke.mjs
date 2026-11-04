@@ -67,7 +67,7 @@ const HELPERS = `
     book: t => W.lib.books.find(b => b.title === t),
     bad(root = document.body) { const m = (root.innerText || '').match(/.{0,30}(\\bNaN\\b|\\bundefined\\b|\\[object Object\\]).{0,30}/g); return m ? m.slice(0, 3) : null; },
     pump(v, secs, until) { let T = W.t; for (let k = 0; k < secs / .05; k++) { T += .05; v.update(.05, T); if (until && until()) { W.t = T; return k * .05; } } W.t = T; return null; },
-    mem() { const r = W.gfx.renderer; return { geo: r.info.memory.geometries, tex: r.info.memory.textures, progs: r.info.programs.length, dom: document.getElementsByTagName('*').length }; },
+    mem() { const r = W.gfx.renderer; return { geo: r.info.memory.geometries, tex: r.info.memory.textures - (W.gfx.cachedTextures ? W.gfx.cachedTextures() : 0), progs: r.info.programs.length, dom: document.getElementsByTagName('*').length }; },
     capture(name) { const g = W.gfx; (g._realRender || g.render.bind(g))(1 / 60, W.t); const c = g.canvas, url = c.toDataURL('image/png'); const s = document.createElement('canvas'); s.width = 64; s.height = 40; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 64, 40); const d = x.getImageData(0, 0, 64, 40).data; let mn = 255, mx = 0; for (let i = 0; i < d.length; i += 4) { const l = d[i] + d[i + 1] + d[i + 2]; mn = Math.min(mn, l); mx = Math.max(mx, l); } return { name, url, range: mx - mn }; }
   };`;
 const run = async (fn, arg) => { try { return await page.evaluate(fn, arg); } catch (e) { return { __error: e.message.split('\n')[0] }; } };
