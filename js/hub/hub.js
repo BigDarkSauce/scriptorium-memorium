@@ -197,7 +197,7 @@ export class Hub {
     if (sc) { const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(b.title)}</b><span>${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; } else this.tip.hidden = true;
   }
   pointerUp(e) {
-    if (this.dragging) { this.dragging = null; this.controls.enabled = this.nav.mode !== 'walk'; this.updateWallCases(); this.app.saveLib(); return; }
+    if (this.dragging) { this.app.sfx && this.app.sfx.play('wood'); this.dragging = null; this.controls.enabled = this.nav.mode !== 'walk'; this.updateWallCases(); this.app.saveLib(); return; }
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || e.target !== this.gfx.canvas) return; this.down = null;
     if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; if (!h) this.selectShelf(null); return; }
     const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
@@ -206,6 +206,7 @@ export class Hub {
   // ---------- the opening: fly → lift → unfold in light → dive into the page ----------
   openScroll(sc) {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
+    this.app.sfx && this.app.sfx.play('unroll');
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null);
     const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion()));
     if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }

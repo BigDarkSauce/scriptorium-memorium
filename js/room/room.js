@@ -201,7 +201,7 @@ export class BookRoom {
     const st = this.stations.get(p.id); if (!st) return; if (this.reader) this.reader.close();
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
     const pos = c.clone().addScaledVector(n, 2.2).add(V3(0, -.2, 0)).addScaledVector(V3().crossVectors(n, V3(0, 1, 0)), -.55);
-    const open = () => { st.sheet.material.emissiveIntensity = .15; this.reader = new Reader(this.app, this, p); };
+    const open = () => { st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); };
     if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open);
     this.hint.hidden = true; this.tip.hidden = true;
   }
@@ -211,6 +211,7 @@ export class BookRoom {
     if (this.reader) this.reader.close();
     const c = st.ped.getWorldPosition(V3()).add(V3(0, PED_TOP + .085, 0)), n = st.slot.n;
     const pos = c.clone().addScaledVector(n, 1.1).add(V3(0, .45, 0));
+    this.app.sfx && this.app.sfx.play('wood', { pitch: 1.4, gain: .6 });
     this.flyTo(pos, c, 1.2, () => { this.unfold = { st, k: 0, c, n }; });
   }
   // ---------- frame ----------
