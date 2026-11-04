@@ -5,6 +5,10 @@
 //  • Shadows: one PCF-soft key light whose orthographic shadow camera is fitted to the plinth (2048², normal bias),
 //    plus real-time CONTACT SHADOWS: the world is rendered from below into a small depth-darkness target, blurred,
 //    and laid on the plinth top, so every object (moving ones too) sits on a soft occlusion pool.
+//  • Outdoor presets (landscape, ocean, night): the sun/moon is cascade 0 of a 2–3 cascade shadow set (quality level,
+//    js/gfx/aaa.js); the hemisphere light is not a flat ambient but the sky dome + ground bounce derived from the sun
+//    (ground radiance = ground albedo × sun irradiance on the ground); scene.userData.aaaAtmos describes the height
+//    fog and god rays for the renderer's atmosphere pass.
 //  • The plinth is a turned, varnished walnut base with a baize top and a brass inlay; the optional glass case is
 //    thin-shell glass in a slim brass frame.
 import * as THREE from 'three';
@@ -15,6 +19,7 @@ import { canvasTex } from '../gfx/textures.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
 import { woodSet, feltSet, alignUV, softDisc } from '../gfx/proc.js';
 import { mulberry } from '../util.js';
+import { AAA, resetWeather, aaaMaterial } from '../gfx/aaa.js';
 
 export const ENV_PRESETS = ['studio', 'lab', 'landscape', 'cosmos', 'micro', 'abstract', 'ocean', 'night', 'desk'];
 function bgGradient(inner, outer) {
@@ -26,6 +31,36 @@ function sunRig(scene, { color = 0xffe2bc, intensity = 3, pos = [6, 12, 7], size
   sun.shadow.mapSize.set(map, map); const c = sun.shadow.camera; c.left = -size; c.right = size; c.top = size; c.bottom = -size; c.near = 1; c.far = 50;
   sun.shadow.bias = -.00012; sun.shadow.normalBias = .022; sun.shadow.radius = 2; scene.add(sun); scene.add(sun.target); sun.target.position.set(0, 1.2, 0); return sun;
 }
+// Shadow cascades around the sun: cascade 0 is the key itself (fitted to the plinth); cascades 1–2 are zero-intensity
+// directional lights whose shadow maps cover ±34 and ±110 units (hedgerows, trees, far hills). Biases scale with the
+// texel size of each map (normal bias ≈ 2.2 texels, depth bias grows with the depth range).
+function cascadeRig(scene, R, n) {
+  const sun = R.sun; if (!sun || n < 2) return;
+  const sizes = [sun.shadow.camera.right, 34, 110]; R.cascades = [sun]; R.cascadeSizes = sizes;
+  for (let i = 1; i < Math.min(3, n); i++) {
+    const l = new THREE.DirectionalLight(0xffffff, 0), S = sizes[i], map = i === 1 && AAA.quality === 'high' ? 2048 : 1024; l.castShadow = true; l.name = 'sun shadow cascade ' + i; l.userData.cascade = i; l.userData.noInk = true;
+    l.shadow.mapSize.set(map, map); const c = l.shadow.camera; c.left = -S; c.right = S; c.top = S; c.bottom = -S; c.near = 1; c.far = S * 3 + 60; c.updateProjectionMatrix();
+    l.shadow.bias = -.0003 * i; l.shadow.normalBias = 2.2 * 2 * S / map; scene.add(l); scene.add(l.target); R.cascades.push(l);
+  }
+  placeCascades(R);
+}
+const _cd = new THREE.Vector3();
+function placeCascades(R) {
+  if (!R.cascades) return; const s = R.sun; _cd.copy(s.position).sub(s.target.position).normalize();
+  for (let i = 1; i < R.cascades.length; i++) { const l = R.cascades[i], S = R.cascadeSizes[i]; l.target.position.copy(s.target.position); l.position.copy(s.target.position).addScaledVector(_cd, S * 1.5 + 30); }
+}
+// Physically derived sky + bounce for the hemisphere light (irradiance units, like a DirectionalLight's intensity):
+// ground side = ρ_ground · E_sun · sin(elevation) (an infinite Lambertian ground seen by a downward face), sky side =
+// the clear-sky diffuse irradiance, ~15 % of the direct beam on a horizontal surface (more under cloud, which
+// scatters the beam). The atmosphere descriptor follows the same sun.
+function skyBounce(R, groundAlbedo, skyFrac = .15, cloud = 0, floor = .02) {
+  const s = R.sun, h = R.hemi; if (!s || !h) return;
+  _cd.copy(s.position).sub(s.target.position).normalize(); const sinE = Math.max(0, _cd.y), E = s.intensity * sinE;
+  h.intensity = 1; h.groundColor.copy(groundAlbedo).multiply(s.color).multiplyScalar(E * .85);
+  h.color.copy(R.skyTint || _sky).multiplyScalar(E * (skyFrac + cloud * .35) + floor);
+  const A = R.atmos; if (A) { A.sunDir.copy(_cd); A.sunColor.copy(s.color).multiplyScalar(s.intensity); A.amb.copy(h.color).multiplyScalar(.25); }
+}
+const _sky = new THREE.Color(.55, .7, 1);
 // Studio key as a spotlight: inverse-square falloff and a wide penumbra give the light pool of a product photograph.
 function spotKey(scene, { color = 0xffe6c8, pos = [7, 12, 6.5], lux = 3.6, angle = .62, map = 2048 } = {}) {
   const d = Math.hypot(pos[0], pos[1] - 1.2, pos[2]), s = new THREE.SpotLight(color, lux * d * d, 0, angle, .75, 2); s.position.set(...pos); s.castShadow = true;
@@ -36,7 +71,7 @@ function dirLight(scene, color, intensity, pos) { const l = new THREE.Directiona
 function cloneRep(t, rx, ry) { const c = t.clone(); c.repeat.set(rx, ry); c.needsUpdate = true; return c; }
 
 // Turned walnut plinth: ogee/bead profile, baize top inset, brass inlay ring. Top surface stays at y = 0.
-function plinth(scene, { r = 7.2, felt = '#1d3125', brass = true } = {}) {
+function plinth(scene, { r = 7.2, felt = '#1d3125', brass = true, turf = false } = {}) {
   const g = new THREE.Group(); g.name = 'display base'; g.userData.decorBase = true;
   const W = woodSet('plinth'), rim = .34, prof = [];
   const arc = (cx, cy, rad, a0, a1, n) => { for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; prof.push(new THREE.Vector2(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad)); } };
@@ -46,10 +81,11 @@ function plinth(scene, { r = 7.2, felt = '#1d3125', brass = true } = {}) {
   arc(r + .05, -.5, .08, Math.PI / 2, -Math.PI / 2, 10);                                          // bead
   prof.push(new THREE.Vector2(r + .06, -.62), new THREE.Vector2(r + .1, -.82)); arc(r + .18, -.86, .1, Math.PI * .9, Math.PI * 1.5, 6); // flared foot
   prof.push(new THREE.Vector2(r + .34, -.96), new THREE.Vector2(r + .34, -1.0), new THREE.Vector2(.01, -1.0));
-  const woodM = new THREE.MeshPhysicalMaterial({ map: cloneRep(W.map, 8, 1), normalMap: cloneRep(W.normalMap, 8, 1), roughnessMap: cloneRep(W.roughnessMap, 8, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .7, clearcoat: .85, clearcoatRoughness: .12, color: 0xffffff });
+  const woodM = new THREE.MeshPhysicalMaterial({ map: cloneRep(W.map, 8, 1), normalMap: cloneRep(W.normalMap, 8, 1), roughnessMap: cloneRep(W.roughnessMap, 8, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .7, clearcoat: .6, clearcoatRoughness: .3, color: 0xffffff });   // satin varnish: the key's reflection on the bullnose is a sheen, not a pin-point
   const base = new THREE.Mesh(new THREE.LatheGeometry(prof, 160), woodM); base.receiveShadow = true; base.castShadow = false; base.name = 'walnut base'; g.add(base);
   const F = feltSet(), feltM = new THREE.MeshPhysicalMaterial({ map: cloneRep(F.map, 10, 10), normalMap: cloneRep(F.normalMap, 10, 10), normalScale: new THREE.Vector2(.5, .5), color: new THREE.Color(felt), roughness: 1, sheen: .6, sheenRoughness: .75, sheenColor: new THREE.Color(felt).lerp(new THREE.Color(0xffffff), .12), envMapIntensity: .6 });
-  const top = new THREE.Mesh(new THREE.CircleGeometry(r - rim + .01, 128), feltM); top.rotation.x = -Math.PI / 2; top.position.y = .002; top.receiveShadow = true; top.name = 'baize'; g.add(top);
+  // outdoors the top is turf: AAA meadow soil and grass with parallax relief, its edge fractured against the brass inlay
+  const top = new THREE.Mesh(new THREE.CircleGeometry(r - rim + .01, 128), turf ? aaaMaterial('meadow', { color: felt, tile: 1.3, depth: .028, moss: 1, bound: { type: 'ring', x: 0, z: 0, rIn: -1, rOut: r - rim - .02 } }) : feltM); top.rotation.x = -Math.PI / 2; top.position.y = .002; top.receiveShadow = true; top.name = 'baize'; g.add(top);
   if (brass) { const ring = new THREE.Mesh(new THREE.TorusGeometry(r - rim + .02, .028, 10, 192), makeMaterial('brass')); ring.rotation.x = Math.PI / 2; ring.position.y = .008; ring.receiveShadow = true; g.add(ring); }
   g.traverse(o => { o.userData.noInk = true; }); scene.add(g); return g;
 }
@@ -154,7 +190,7 @@ function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2
   const blotM = makeMaterial({ preset: 'leather', color: '#2c3a2a' }); blotM.roughness = .85; blotM.clearcoat = 0; blotM.normalScale.set(.25, .25);
   const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), blotM); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);
   // brass desk lamp: weighted base, two arms, a cone shade with the bulb inside
-  const L = new THREE.Group(); L.name = 'desk lamp'; const brass = makeMaterial('brass'), dark = makeMaterial({ preset: 'plastic', color: '#1c3a2c', roughness: .35 });
+  const L = new THREE.Group(); L.name = 'desk lamp'; const brass = makeMaterial('brass'); brass.roughness = .42; const dark = makeMaterial({ preset: 'plastic', color: '#1c3a2c', roughness: .35 });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.55, .62, .14, 48), brass); base.position.y = .07; base.castShadow = true; L.add(base);
   const P0 = new THREE.Vector3(0, .14, 0), P1 = new THREE.Vector3(.35, 2.6, .2), head = new THREE.Vector3(1.6, 3.7, 1.0);
   const arm = (a, b) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, a.distanceTo(b), 12), brass); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); m.castShadow = true; L.add(m); };
@@ -163,9 +199,11 @@ function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2
   const headW = L.localToWorld(head.clone()), aimV = new THREE.Vector3(...aim), axis = aimV.clone().sub(headW).normalize();
   const shade = new THREE.Mesh(new THREE.CylinderGeometry(.16, .62, .7, 40, 1, true), dark); shade.material.side = THREE.DoubleSide; shade.castShadow = true;
   const sh = new THREE.Group(); sh.position.copy(head); sh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), axis); L.add(sh); shade.position.y = -.2; sh.add(shade);
-  const inner = new THREE.Mesh(new THREE.CylinderGeometry(.155, .6, .69, 40, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.35, 1.0), side: THREE.BackSide, toneMapped: false })); inner.position.y = -.2; sh.add(inner);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.14, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5, 3.6), toneMapped: false })); bulb.position.y = -.38; sh.add(bulb);
-  const glowS = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDisc(), color: 0xffd9a0, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false })); glowS.scale.setScalar(1.3); glowS.position.y = -.5; sh.add(glowS);
+  // the lamp head must read as a light without being the brightest thing in the frame: the shade's lining and the
+  // bulb stay below the bloom threshold and are tone-mapped (AgX rolls them off), the glow is a faint halo
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(.155, .6, .69, 40, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(.62, .5, .36), side: THREE.BackSide })); inner.position.y = -.2; sh.add(inner);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.14, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.28, .95) })); bulb.position.y = -.38; sh.add(bulb);
+  const glowS = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDisc(), color: 0xffd9a0, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false })); glowS.scale.setScalar(.95); glowS.position.y = -.5; sh.add(glowS);
   L.traverse(o => { o.userData.noInk = true; if (o.isMesh) o.receiveShadow = true; }); g.traverse(o => { o.userData.noInk = true; });
   L.userData.decorBase = true; scene.add(g);
   L.updateMatrixWorld(true); const bulbW = bulb.getWorldPosition(new THREE.Vector3()).addScaledVector(axis, .25);
@@ -194,7 +232,7 @@ export function useEnvironment(scene, preset, opts = {}, spec = null) {
   const want = Object.assign({}, R.input, opts, { preset }), key = JSON.stringify(want);
   if (R.key === key) return R;
   (R.objects || []).forEach(o => { o.removeFromParent(); o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) [].concat(m.material).forEach(x => x.dispose()); }); if (o.dispose && o.isLight) o.dispose(); });
-  scene.fog = null; scene.background = null;
+  scene.fog = null; scene.background = null; delete scene.userData.aaaAtmos;
   for (const k of Object.keys(R)) if (k !== 'gfx' && k !== 'input') delete R[k];
   buildEnvironment(R, scene, R.gfx, want); R.key = key; return R;
 }
@@ -202,6 +240,8 @@ function buildEnvironment(R, scene, gfx, env) {
   const before = new Set(scene.children);
   const preset = ENV_PRESETS.includes(env.preset) ? env.preset : 'studio';
   Object.assign(R, { preset, update() {}, base: null, sun: null, bgObjects: [] });
+  resetWeather(); delete scene.userData.aaaAtmos; delete scene.userData.aaaWet;
+  const nC = AAA.Q.cascades, atmos = o => { R.atmos = Object.assign({ sunDir: new THREE.Vector3(0, 1, 0), sunColor: new THREE.Color(), amb: new THREE.Color(), density: .01, height: 2, base: 0, g: .76, rayleigh: .25, maxDist: 150, skyFog: .3, god: .4 }, o); scene.userData.aaaAtmos = R.atmos; };
   scene.environment = gfx.envFor ? gfx.envFor(preset === 'desk' ? 'studio' : preset) : gfx.envStudio; scene.environmentIntensity = .85;
   scene.userData.look = Object.assign({}, LOOKS[preset]);
   const hemi = new THREE.HemisphereLight(0xffeedd, 0x2a1d10, .25); scene.add(hemi); R.hemi = hemi;
@@ -236,6 +276,8 @@ function buildEnvironment(R, scene, gfx, env) {
       const u = sky.material.uniforms; u.turbidity.value = 3; u.rayleigh.value = 2.4; u.mieCoefficient.value = .005; u.mieDirectionalG.value = .8;
       R.sun = sunRig(scene, { intensity: 3.6 }); scene.fog = R.fog = new THREE.Fog(0xc9d6e2, 45, 220); scene.environmentIntensity = .55;
       hemi.color.set(0xbcd4f0); hemi.groundColor.set(0x4a4030); hemi.intensity = .45;
+      cascadeRig(scene, R, nC); atmos({ density: .012, height: 2.2, base: -1, g: .76, rayleigh: .3, maxDist: 160, skyFog: .22, god: .45 });
+      const ground = new THREE.Color(.1, .12, .06);   // meadow albedo (linear)
       R.rim = dirLight(scene, 0xdde8ff, .5, [-6, 5, -9]);
       const sunV = new THREE.Vector3();
       R.update = (t, p = {}) => {
@@ -246,8 +288,10 @@ function buildEnvironment(R, scene, gfx, env) {
         R.sun.intensity = 4 * Math.pow(day, .6) * (1 - storm * .75); hemi.intensity = .2 + day * .45 * (1 - storm * .5);
         R.sun.color.setHSL(.08 + .05 * day, .6 - .3 * day, .55 + .2 * day); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
         gfx.renderer.toneMappingExposure = .55 + day * .35; R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
+        R.skyTint = _sky; placeCascades(R); skyBounce(R, ground, .15, storm);
+        if (R.atmos) { R.atmos.density = .012 + storm * .03; R.atmos.god = .45 * (1 - storm * .8); }
       };
-      if (showBase) R.base = plinth(scene, { felt: env.felt || '#3e4c2c' });
+      if (showBase) R.base = plinth(scene, { felt: env.felt || '#3e4c2c', turf: env.turf !== false });
       break;
     }
     case 'cosmos': {
@@ -277,6 +321,8 @@ function buildEnvironment(R, scene, gfx, env) {
       const sd = new THREE.Vector3(...(env.sun || [.4, .25, -1])).normalize();
       const sk = new Sky(); sk.scale.setScalar(450); scene.add(sk); sk.material.uniforms.sunPosition.value.copy(sd); sk.userData.noInk = true; R.bgObjects.push(sk); R.sky = sk;
       R.sun = sunRig(scene, { intensity: 3, pos: sd.clone().multiplyScalar(15).toArray() }); scene.fog = new THREE.Fog(0xa8c4d8, 25, 120); hemi.intensity = .4;
+      cascadeRig(scene, R, nC); atmos({ density: .014, height: 3, base: -.6, g: .8, rayleigh: .3, maxDist: 140, skyFog: .25, god: .5 });
+      skyBounce(R, new THREE.Color(.03, .06, .08), .15); const sea0 = R.update; R.update = (t, p) => { sea0(t, p); skyBounce(R, new THREE.Color(.03, .06, .08), .15); };
       // open sea: an opaque, glossy dielectric (no transmission: a 200 m transmissive plane re-renders the whole scene and
       // shows displaced ghost copies of everything above it); ripples come from the normal map, depth from the dark colour
       const seaM = makeMaterial({ preset: 'water', color: '#1d5a78' }); seaM.transmission = 0; seaM.thickness = 0; seaM.color.set(0x0f3448); seaM.roughness = .14; seaM.metalness = 0; seaM.envMapIntensity = 1.0; if (seaM.normalMap) { seaM.normalMap = seaM.normalMap.clone(); seaM.normalMap.repeat.set(40, 40); seaM.normalMap.needsUpdate = true; seaM.normalScale.set(.35, .35); }
@@ -289,6 +335,9 @@ function buildEnvironment(R, scene, gfx, env) {
       const md = new THREE.Vector3(...(env.moon || [-6, 10, 4])).normalize();
       R.sun = sunRig(scene, { intensity: .9, color: 0xaabbff, pos: md.clone().multiplyScalar(13).toArray() });
       if (env.moon) { R.moon = moonDisc(scene, md); R.bgObjects.push(R.moon); }
+      cascadeRig(scene, R, nC); atmos({ density: .03, height: .9, base: -.2, g: .7, rayleigh: .2, maxDist: 90, skyFog: .15, god: .15 });
+      R.skyTint = new THREE.Color(.35, .42, .7); R.nightFloor = .1;   // moonlit sky + airglow: night skylight does not vanish with a low moon
+      skyBounce(R, new THREE.Color(.09, .09, .08), .25, 0, R.nightFloor); R.update = () => { skyBounce(R, new THREE.Color(.09, .09, .08), .25, 0, R.nightFloor); };
       R.fill = dirLight(scene, 0xffb070, .35, [8, 3, 6]); R.rim = dirLight(scene, 0x8fa8ff, .8, [2, 6, -10]);
       if (showBase) R.base = plinth(scene);
       break;
@@ -302,6 +351,8 @@ function buildEnvironment(R, scene, gfx, env) {
     if (R.motes) { const a = R.motes.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) + dt * .08; if (y > R.motes.userData.motes.area[1]) y = 0; a.setY(i, y); a.setX(i, a.getX(i) + Math.sin(t * .3 + i) * .0015); } a.needsUpdate = true; }
     if (R.stars) R.stars.rotation.y += dt * .004;
     if (R.contact) R.contact.update();
+    // weather written by a model or a scene's code: { g: global wetness, x, z, r, a: wet spot, rain: 0..1 }
+    const w = scene.userData.aaaWet; if (w) { const u = AAA.uniforms; if (w.g != null) u.uAaaWet.value = w.g; if (w.rain != null) u.uAaaRain.value = w.rain; if (w.a != null) u.uAaaWetSpot.value.set(w.x || 0, w.z || 0, w.r || 1, w.a); }
   };
   R.objects = scene.children.filter(o => !before.has(o));
   return R;

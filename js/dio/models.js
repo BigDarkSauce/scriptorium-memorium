@@ -9,6 +9,7 @@ import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometr
 import { useEnvironment } from './environments.js';
 import { clamp, fmt, lerp, mod, mulberry, compile } from '../util.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
+import { aaaMaterial } from '../gfx/aaa.js';
 import { alignUV, cloudDensity, hillRidge, softDisc, relief, variation } from '../gfx/proc.js';
 // Lights: v2 ran with legacy light units; scale to physically based units so scenes keep their look.
 const PI = Math.PI;
@@ -82,14 +83,14 @@ function satin(m){const c=m.clone();c.clearcoat=Math.min(c.clearcoat||0,.3);c.cl
 // countryside around an outdoor plinth: hedgerow trees beyond the plinth and far hills in the haze, so the frame has
 // a middle and a far plane (aerial perspective comes from the landscape fog)
 function countryside(W,seed=3,camTh=null){const skip=camTh==null?null:a=>Math.abs(Math.atan2(Math.sin(a-camTh),Math.cos(a-camTh)))<1.35; // keep trees out of the camera's side
-  const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=makeMaterial({preset:'grass',color:'#5a7a3a'});
+  const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=aaaMaterial('meadow',{tile:2.4,depth:.05,moss:1,bound:{type:'ring',x:0,z:0,rIn:7.6,rOut:120}}); // meadow soil + grass with relief (js/gfx/aaa.js)
   const field=new T.Mesh(new T.RingGeometry(7.6,120,96,3).rotateX(-Math.PI/2),grass);field.position.y=-1.02;field.receiveShadow=true;g.add(field);
   const crown=new T.IcosahedronGeometry(1,1),trunk=new T.CylinderGeometry(.08,.12,1,6),NT=34,cr=new T.InstancedMesh(crown,leaf,NT*3),tr=new T.InstancedMesh(trunk,bark,NT),m4=new T.Matrix4(),q=new T.Quaternion(),sv=V3(1,1,1),pv=V3(0,0,0);let nt=0,nc=0;
   for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1,x=Math.sin(a)*d,z=Math.cos(a)*d;m4.compose(pv.set(x,-1+s*.7,z),q,sv.set(s,s*1.4,s));tr.setMatrixAt(nt++,m4);
    for(let k=0;k<3;k++){const c=s*(.8+r()*.5);m4.compose(pv.set(x+(r()-.5)*s,-1+s*(1.7+r()*.8),z+(r()-.5)*s),q,sv.set(c,c,c));cr.setMatrixAt(nc++,m4)}}
-  tr.count=nt;cr.count=nc;tr.computeBoundingSphere();cr.computeBoundingSphere();g.add(tr,cr);
+  tr.count=nt;cr.count=nc;tr.computeBoundingSphere();cr.computeBoundingSphere();tr.castShadow=cr.castShadow=true;cr.receiveShadow=true;g.add(tr,cr); // shadows land in the sun's outer cascades
   const hill=new T.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),hm=new T.MeshStandardMaterial({color:0x4a6040,roughness:1});
-  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
+  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.castShadow=h.receiveShadow=true;h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
   g.traverse(o=>{o.userData.noInk=true;o.userData.noContact=true});W.add(g);return g}
 // shots helper: target may be a function (moving bodies); dist is for the base lens
 const SHOT=(target,dist)=>({target,dist});
@@ -707,7 +708,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   // meadow strip under the sky: grass that gets wet (darker, clearcoated) when it rains; a fence and hedges for scale
   const MW=part('meadow (grass, hedges, fence)');
   const gr=new THREE.RingGeometry(4.75,6.55,192,4);gr.rotateX(-Math.PI/2);
-  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=skyHook(new THREE.MeshPhysicalMaterial({map:rp6(variation('grass').map),normalMap:rp6(relief('ground').normalMap),normalScale:new THREE.Vector2(1.2,1.2),color:0x2c3a1c,roughness:.95,clearcoat:0,clearcoatRoughness:.08}),'albedo','ground');
+  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=aaaMaterial('meadow',{tile:1.25,depth:.032,moss:1,bound:{type:'ring',x:0,z:0,rIn:4.75,rOut:6.55},pdo:false}); // AAA meadow (js/gfx/aaa.js): relief, fractured edges; rain wets it (see the weather below)
   const ground=deco(put(new THREE.Mesh(gr,groundM),'meadow ground',MW));ground.position.y=.02;ground.receiveShadow=true;
   const inMeadow=()=>rng()*AL;
   {const GN=1600,blade=new THREE.ConeGeometry(.012,.16,3);blade.translate(0,.08,0);const gm=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.8,sheen:.5,sheenColor:new THREE.Color(0xc8e090)});const tufts=put(new THREE.InstancedMesh(blade,gm,GN),'grass tufts',MW);tufts.userData.noInk=true;tufts.receiveShadow=true;const mm=new THREE.Matrix4(),qq=new THREE.Quaternion(),cc=new THREE.Color();
@@ -954,7 +955,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     rain.material.opacity=rainK;rain.visible=rainK>.01;
     if(rain.visible){const pa=rainG.attributes.position.array,sl=.06;for(let i=0;i<RN;i++){const d=RD[i];d.y-=dt*d.v*(.8+rainK*.4);if(d.y<0){if(rng()<.35*rainK){const s=SPL[spI%SPN]||(SPL[spI%SPN]={});Object.assign(s,{x:d.x,z:d.z,a:0});spI++}const q=rainBand();d.x=q[0];d.z=q[1];d.y+=H}pa[i*6]=d.x+sl*d.L;pa[i*6+1]=d.y+d.L;pa[i*6+2]=d.z;pa[i*6+3]=d.x;pa[i*6+4]=d.y;pa[i*6+5]=d.z}rainG.attributes.position.needsUpdate=true}
     for(let i=0;i<SPN;i++){const s=SPL[i];if(!s||s.a>1){m4.makeScale(0,0,0)}else{s.a+=dt*4;const r=.03+s.a*.1;m4.makeScale(r,1,r);m4.setPosition(s.x,.03,s.z)}splash.setMatrixAt(i,m4)}splash.instanceMatrix.needsUpdate=true;splash.material.opacity=.5*rainK;
-    groundM.clearcoat=wet*.9;groundM.roughness=.92-wet*.35;groundM.color.setRGB(.33-.12*wet,.42-.14*wet,.21-.08*wet);
+    D.scene.userData.aaaWet={g:wet,rain:rainK}; // wet ground: darker, glossier, puddles in the hollows, ripples while it rains (AAA wetness)
     // sky decks drift at different speeds (motion parallax); storm scud only shows in heavy cover
     decks.forEach(L=>{L.t.offset.x+=dt*L.speed*(1+cover*1.5)});scud.visible=cover>.45;
     flash=Math.max(0,flash-dt*5);flashL.intensity=flash*6;
@@ -1041,7 +1042,7 @@ DIO.weatherglass.lessons=[
    Chaos: the twins' separation grows ~e^(λt) (λ estimated as ln(|Δθ₂|/ε)/t). A flip = θ₂ passes an odd multiple of π. */
 const DPN={};
 DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower mass'],L1:[.5,3,1.5,'m','upper arm'],L2:[.5,3,1.5,'m','lower arm'],theta1:[-180,180,120,'°','upper angle'],theta2:[-180,180,-10,'°','lower angle'],g:[1,25,9.81,'m/s²','gravity'],eps:[0,.01,.001,'rad','twin offset']},
- build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.07,-.83]});if(own){R.sun.intensity*=5;if(R.fill)R.fill.intensity=1.2;if(R.rim)R.rim.intensity=2;R.hemi.intensity=.5;D.scene.environmentIntensity=1.1} // moonlit key, the lantern side as warm fill
+ build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.07,-.83]});if(own){R.sun.intensity*=6;if(R.fill)R.fill.intensity=2.4;if(R.rim)R.rim.intensity=3.2;R.nightFloor=.3;D.scene.environmentIntensity=1.6;if(D.scene.userData.look){D.scene.userData.look.exposure=1.25;D.scene.userData.look.vignette=.34}} // the low moon behind is the key (rims every edge), the lantern side a warm front fill; moonlit skylight (hemisphere floor) and a brighter exposure lift the faces out of the dark while the frame stays nocturnal
  const piv=V3(0,6.4,0),sc=4.6/(p.L1+p.L2),oak=D.mats.wood,brass=D.mats.brass,steel=makeMaterial('steel');
   const orbit={target:V3(0,3.7,0),r:15,ph:1.32,th:.34};
   const FR=part('frame');[-3,3].forEach(x=>{const c=box(.35,6.9,.35,oak);c.position.set(x,3.45,-.7);FR.add(c);const f=box(.6,.12,1.4,oak);f.position.set(x,.06,-.7);FR.add(f)});put(box(6.6,.3,.34,oak),'cross bar',FR).position.set(0,6.75,-.7);put(box(.2,.16,.8,steel),'pivot bracket',FR).position.set(0,6.55,-.32);

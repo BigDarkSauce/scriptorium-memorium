@@ -14,7 +14,7 @@ export const WATER_CYCLE = {
     { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
     { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
     { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
-    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#3f7f88' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
+    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'mud', color: '#3b3226' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
     { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#4aa6c0' }, position: [.9, .05, 1.7] },
     { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint motes rising from the lake.', shape: { kind: 'particles', type: 'bubbles', count: 160, area: [2.2, 1.7, 2.6], size: .035 }, position: [.9, .05, 1.7] },
     { id: 'parcel', name: 'Air parcel', label: 'Air parcel · moist air from the lake', role: 'actor', describe: 'One rising bubble of lake air: you can ride it (POV).', shape: { kind: 'sphere', r: .07 }, material: { preset: 'cloud', color: '#eef6ff', emissive: '#4a6c86' }, position: [1.1, .1, 1.4] },
@@ -71,6 +71,7 @@ const hAt=(x,z,objs)=>{ray.set(V(x,40,z),DOWN);const h=ray.intersectObjects(objs
 api.bodies().forEach(o=>{const id=o.userData.bodyId||'';if(/^(tree|pine|house|windsock|rock)/.test(id)) o.position.y=hAt(o.position.x,o.position.z)-(/^rock/.test(id)?.08:.03);});  // decor stands on the ground
 let lakeY;{const b=[];for(let i=0;i<=24;i++){const u=i/24-.5;b.push(hAt(LX+u*2.5,LZ-1.45,[ground]),hAt(LX+u*2.5,LZ+1.45,[ground]),hAt(LX-1.25,LZ+u*2.9,[ground]),hAt(LX+1.25,LZ+u*2.9,[ground]));}b.sort((a,c)=>a-c);lakeY=Math.max(hAt(LX,LZ,[ground])+.05,b[Math.floor(b.length*.12)]-.015);}
 lake.position.y=lakeY; vap.position.y=lakeY; api.body('lakebed').position.y=hAt(LX,LZ,[ground])+.004;   // the shoreline is where the terrain rises through the water plane
+ground.traverse(o=>{const a=o.material&&o.material.userData&&o.material.userData.aaa;if(a)a.set({shoreY:lakeY-.01,shoreBand:.1});});   // visuals: a band of wet mud along the water line
 // the air's path over the land: terrain height under the cloud, smoothed (air flows over, not through, the ridge)
 const base0=hAt(PX,HOME,[ground]), raw=[];for(let i=0;i<=210;i++){const z=4-i*.05;raw.push(Math.max(0,hAt(PX,z)-base0));}
 const lift=raw.map((_,i)=>{let s=0,n=0;for(let j=-14;j<=14;j++){const k=i+j;if(k<0||k>=raw.length)continue;const w=1-Math.abs(j)/15;s+=w*raw[k];n+=w;}return s/n;});
@@ -131,7 +132,7 @@ const vapPts=vap.children[0];
 const NR=420, RD=[], rg=new T.BufferGeometry(); rg.setAttribute('position',new T.BufferAttribute(new Float32Array(NR*6),3));
 const rl=new T.LineSegments(rg,new T.LineBasicMaterial({color:0xb8cfe0,transparent:true,opacity:.6,depthWrite:false})); rl.frustumCulled=false; rl.name='rain streaks'; rainB.add(rl);
 for(let i=0;i<NR;i++) RD.push({x:0,y:-1,z:0,v:4.5+api.rand()*1.5,c:i%2});
-let fr=0;
+let fr=0, wetA=0, wetZ=HOME;
 function sunDir(hr){ const el=Math.sin((hr-6)/12*Math.PI)*62, az=(hr-12)/12*140+AZ; return new T.Vector3().setFromSphericalCoords(1,(90-el)*Math.PI/180,az*Math.PI/180); }   // same sun path as the landscape light
 api.onFrame((dt)=>{ dt=Math.min(dt,.1);
   meshes.forEach((m,k)=>{ const c=C[k]; if(!m) return; if(!c){ m.visible=false; m.position.set(PX,base0+2,HOME); return; } m.visible=true;
@@ -142,6 +143,7 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
   parcel.position.copy(pp);
   // rain: streaks from each raining cloud's base to the ground under it
   const rk=Math.max(...C.map(c=>c?c.rk:0)); rl.visible=rk>.02; rl.material.opacity=.6*Math.min(1,rk+.2);
+  { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; if(c&&rk>.05) wetZ+=(c.z-wetZ)*Math.min(1,dt*.8); wetA=Math.max(0,Math.min(1,wetA+dt*(rk*.35-.012))); api.scene.userData.aaaWet={g:0,rain:rk,x:PX,z:wetZ,r:1.6,a:wetA}; }   // visuals: where the rain falls the ground darkens, puddles form and dry slowly
   { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; rainB.position.set(PX,0,c?c.z:HOME); rl.position.set(-PX,0,-(c?c.z:HOME)); if(!rl.visible) rg.boundingBox=new T.Box3(); }
   if(rl.visible){ const a=rg.attributes.position.array;
     for(let i=0;i<NR;i++){ const s=RD[i], c=C[s.c]; if(!c||c.rk<.02){ a[i*6+1]=a[i*6+4]=-5; continue; }

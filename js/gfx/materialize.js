@@ -6,6 +6,9 @@
 //  • Ink edges are real edge geometry, faded by the same field. Back faces through a section cut render as poché ink.
 import * as THREE from 'three';
 
+// PREWARM.inkLights: also precompile the scene without its isInk lights (see Materializer.prewarm). Set to false once
+// engine.js removeInk() keeps lights in the scene (then that state never occurs).
+export const PREWARM = { inkLights: true };
 export const PAPER = new THREE.Color('#f3f0e8'), INK = new THREE.Color('#1d1c19'), AMBER = new THREE.Color('#e85d04');
 const KIND = { sphere: 0, plane: 1 };
 
@@ -24,13 +27,55 @@ varying vec3 vFrontW;
 float frontHash(vec3 p){ p=floor(p*1.25); return fract(sin(dot(p,vec3(12.9898,78.233,45.164)))*43758.5453); }
 float frontD(vec3 p){ float d = uFrontKind==0 ? distance(p,uFrontC) : dot(p-uFrontC,uFrontN); return d + (frontHash(p)-.5)*uJitter; }
 `;
+// Sun shadow cascades (outdoor presets, js/dio/environments.js): the key light is cascade 0 (tight, around the plinth);
+// cascades 1..n−1 are zero-intensity directional lights whose shadow maps cover wider squares. The directional-light
+// loop takes ONE shadow for the sun from the first cascade that contains the fragment (blended over a 6 % band at the
+// edge) and skips the helpers. Materials without the define (none in a diorama) would simply get cascade 0 only.
+const DIR_SHADOW_LINE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+const SH = i => `getShadow( directionalShadowMap[ ${i} ], directionalLightShadows[ ${i} ].shadowMapSize, directionalLightShadows[ ${i} ].shadowIntensity, directionalLightShadows[ ${i} ].shadowBias, directionalLightShadows[ ${i} ].shadowRadius, vDirectionalShadowCoord[ ${i} ] )`;
+const CASC_PRE = `
+float aaaCascShadow = 1.0;
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS >= AAA_CASCADES
+{ vec3 c0 = vDirectionalShadowCoord[ 0 ].xyz; float e0 = min( min( c0.x, c0.y ), min( 1.0 - c0.x, 1.0 - c0.y ) );
+  float w0 = smoothstep( 0.0, 0.06, e0 ) * step( 0.0, c0.z ) * step( c0.z, 1.0 ); float s0 = 1.0, s1 = 1.0;
+  if ( w0 > 0.0 ) s0 = ${SH(0)};
+  if ( w0 < 1.0 ) {
+  #if AAA_CASCADES > 2
+    vec3 c1 = vDirectionalShadowCoord[ 1 ].xyz; float e1 = min( min( c1.x, c1.y ), min( 1.0 - c1.x, 1.0 - c1.y ) );
+    float w1 = smoothstep( 0.0, 0.06, e1 ) * step( 0.0, c1.z ) * step( c1.z, 1.0 ); float sa = 1.0, sb = 1.0;
+    if ( w1 > 0.0 ) sa = ${SH(1)};
+    if ( w1 < 1.0 ) sb = ${SH(2)};
+    s1 = mix( sb, sa, w1 );
+  #else
+    s1 = ${SH(1)};
+  #endif
+  }
+  aaaCascShadow = mix( s1, s0, w0 ); }
+#elif defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+aaaCascShadow = ${SH(0)};
+#endif
+`;
+function cascadeChunk(s) {
+  let ch = THREE.ShaderChunk.lights_fragment_begin;
+  if (!s.fragmentShader.includes('#include <lights_fragment_begin>') || !ch.includes(DIR_SHADOW_LINE)) return;
+  ch = ch.replace(DIR_SHADOW_LINE, `#if UNROLLED_LOOP_INDEX == 0
+		directLight.color *= ( directLight.visible && receiveShadow ) ? aaaCascShadow : 1.0;
+		#elif UNROLLED_LOOP_INDEX < AAA_CASCADES && NUM_DIR_LIGHT_SHADOWS >= AAA_CASCADES
+		directLight.color = vec3( 0.0 );
+		#else
+		${DIR_SHADOW_LINE}
+		#endif`).replace('#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )', CASC_PRE + '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )');
+  s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_begin>', ch);
+}
 export function patchMaterial(mat, U) {
   if (!mat || mat.userData.frontPatched || mat.isShaderMaterial || mat.isLineBasicMaterial || mat.isPointsMaterial || mat.isSpriteMaterial) return mat;
   mat.userData.frontPatched = true;
-  const prev = mat.onBeforeCompile;
+  const prev = mat.onBeforeCompile, casc = U._aaaCasc || 0;
+  if (casc > 1) mat.defines = Object.assign({}, mat.defines, { AAA_CASCADES: casc });
   mat.onBeforeCompile = (s, r) => {
     if (prev) prev(s, r);
     Object.assign(s.uniforms, U);
+    if (casc > 1) cascadeChunk(s);
     s.vertexShader = 'varying vec3 vFrontW;\n' + s.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vFrontW = (modelMatrix * vec4(transformed,1.0)).xyz;\n#ifdef USE_INSTANCING\n vFrontW = (modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz;\n#endif');
     if (!s.vertexShader.includes('vFrontW =')) s.vertexShader = s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vFrontW = (modelMatrix * vec4(transformed,1.0)).xyz;');
     let f = FRONT_GLSL + s.fragmentShader;
@@ -111,7 +156,10 @@ export function addOutlines(root, U, thick = .03) {
   list.forEach(o => { const h = new THREE.Mesh(o.geometry, mat); h.userData.isInk = true; h.raycast = () => {}; h.castShadow = false; h.receiveShadow = false; h.renderOrder = -1; o.add(h); });
   return mat;
 }
-export function patchTree(root, U) { root.traverse(o => { if (o.material) [].concat(o.material).forEach(m => patchMaterial(m, U)); }); }
+export function patchTree(root, U) {
+  const R = root.isScene && root.userData.envR; if (R) U._aaaCasc = R.cascades ? R.cascades.length : 0;   // spawned objects reuse the scene's choice
+  root.traverse(o => { if (o.material) [].concat(o.material).forEach(m => patchMaterial(m, U)); });
+}
 
 // ---------- camera keys (dolly zoom in tan space, frame height in log space) ----------
 // key: {target:Vector3, dir:Vector3 (from target to camera), fov (deg), frameH}
@@ -170,6 +218,29 @@ export class Materializer {
     this.parts.sort((a, b) => a.h - b.h);
     if (this.T.cut) world.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { if (m.userData.hull) m.clippingPlanes = [this.cut]; else if (!m.isShaderMaterial) { m.clippingPlanes = [this.cut]; if (!m.transparent && m.side !== THREE.BackSide) m.side = THREE.DoubleSide; } }); });
     this.pose = {}; this.buildIn = false;
+    // the fog stays attached in the drawing (only its range is pushed out of reach): taking scene.fog away and
+    // giving it back changed every material's program and recompiled the whole scene mid-transition
+    const f = this.fog0; this.fogR = f ? (f.isFogExp2 ? { density: f.density } : { near: f.near, far: f.far }) : null;
+    this.prewarm();
+  }
+  // Compile, while the screen is still veiled, every program the transition will need: the real state (sky and
+  // stars visible, texture background) and the end state (engine.removeInk takes the director's accent light out of
+  // the scene, which changes the light count of every program). Without this both happened mid-transition: the
+  // "lag when the diorama constructs and changes colour".
+  prewarm() {
+    const gfx = this.env && this.env.gfx; if (!gfx || !gfx.prewarm) return;
+    const sc = this.scene, bgo = (this.env.bgObjects || []);
+    const vis = () => bgo.map(o => o.visible), inkLights = PREWARM.inkLights ? [] : null;
+    if (inkLights) sc.traverse(o => { if (o.isLight && o.userData.isInk && o.visible) inkLights.push(o); });
+    let v0;
+    const real = { apply: () => { v0 = vis(); bgo.forEach(o => { o.visible = true; }); }, restore: () => bgo.forEach((o, i) => { o.visible = v0[i]; }) };
+    const variants = [real];
+    if (inkLights && inkLights.length) variants.push({ apply: () => { real.apply(); inkLights.forEach(l => { l.visible = false; }); }, restore: () => { inkLights.forEach(l => { l.visible = true; }); real.restore(); } });
+    this.prewarmVariants = variants.length; try { const t0 = performance.now(); this.warm = gfx.prewarm(sc, this.camera, variants, [this.bg0]); this.prewarmMs = performance.now() - t0; } catch (e) { console.warn(e); }
+  }
+  setFogVisible(on) {
+    const f = this.fog0, r = this.fogR; if (!f || !r) return;
+    if (f.isFogExp2) f.density = on ? r.density : 0; else { f.near = on ? r.near : 1e8; f.far = on ? r.far : 1e9; }
   }
   setProgress(t) {
     const U = this.U, T = this.T, R = this.R;
@@ -190,12 +261,14 @@ export class Materializer {
     if (T.cut) { const kr = sstep(span(t, .12, .62)); this.cut.constant = kr >= 1 ? 1e5 : this.minY + (this.maxY - this.minY) * (.35 + .7 * kr); }
     // the drawing sits on paper; the real environment (sky, stars, fog) arrives once the front has crossed the model
     const drawing = t < .74;
-    if (drawing !== this._drawing) { this._drawing = drawing; this.scene.background = drawing ? this.paperBg : this.bg0; this.scene.fog = drawing ? null : this.fog0; ((this.env && this.env.bgObjects) || []).forEach(o => { o.visible = !drawing; }); }
+    if (drawing !== this._drawing) { this._drawing = drawing; this.scene.background = drawing ? this.paperBg : this.bg0; if (this.scene.fog !== this.fog0) this.scene.fog = this.fog0; this.setFogVisible(!drawing); ((this.env && this.env.bgObjects) || []).forEach(o => { o.visible = !drawing; }); }
+    // the atmosphere (height fog, god rays) fades in with the real world
+    this.scene.userData.aaaAtmosK = drawing ? 0 : sstep(span(t, .74, .97));
     // the front
     U.uFrontR.value = t >= 1 ? 1e5 : T.frontAt(t, R);
     U.uSeamK.value = t > .02 && t < .99 ? 1 : 0;
     U.uJitter.value = R * .06;
   }
   sketchFrame() { this.setProgress(0); }
-  finish() { this.setProgress(1); this._drawing = null; this.setProgress(1); this.parts.forEach(p => { p.o.position.y = p.y0; }); this.cut.constant = 1e5; this.U.uFrontR.value = 1e5; this.U.uSeamK.value = 0; }
+  finish() { this.setProgress(1); this._drawing = null; this.setProgress(1); this.scene.userData.aaaAtmosK = 1; this.parts.forEach(p => { p.o.position.y = p.y0; }); this.cut.constant = 1e5; this.U.uFrontR.value = 1e5; this.U.uSeamK.value = 0; }
 }
