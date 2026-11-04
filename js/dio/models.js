@@ -81,7 +81,8 @@ function ellK(k){let a=1,b=Math.sqrt(1-k*k);for(let i=0;i<20;i++){const a1=(a+b)
 function satin(m){const c=m.clone();c.clearcoat=Math.min(c.clearcoat||0,.3);c.clearcoatRoughness=.6;c.roughness=Math.max(c.roughness,.72);return c}
 // countryside around an outdoor plinth: hedgerow trees beyond the plinth and far hills in the haze, so the frame has
 // a middle and a far plane (aerial perspective comes from the landscape fog)
-function countryside(W,seed=3,skip=null){const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=makeMaterial({preset:'grass',color:'#5a7a3a'});
+function countryside(W,seed=3,camTh=null){const skip=camTh==null?null:a=>Math.abs(Math.atan2(Math.sin(a-camTh),Math.cos(a-camTh)))<1.35; // keep trees out of the camera's side
+  const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=makeMaterial({preset:'grass',color:'#5a7a3a'});
   const field=new T.Mesh(new T.RingGeometry(7.6,120,96,3).rotateX(-Math.PI/2),grass);field.position.y=-1.02;field.receiveShadow=true;g.add(field);
   const crown=new T.IcosahedronGeometry(1,1),trunk=new T.CylinderGeometry(.08,.12,1,6),NT=34,cr=new T.InstancedMesh(crown,leaf,NT*3),tr=new T.InstancedMesh(trunk,bark,NT),m4=new T.Matrix4(),q=new T.Quaternion(),sv=V3(1,1,1),pv=V3(0,0,0);let nt=0,nc=0;
   for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1,x=Math.sin(a)*d,z=Math.cos(a)*d;m4.compose(pv.set(x,-1+s*.7,z),q,sv.set(s,s*1.4,s));tr.setMatrixAt(nt++,m4);
@@ -233,7 +234,7 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'landscape',{time:10.2});
   const a=p.angle/DEG,Rr=p.v0*p.v0*Math.sin(2*a)/p.g,Hm=p.v0*p.v0*Math.sin(a)**2/(2*p.g),Tf=2*p.v0*Math.sin(a)/p.g,sc=Math.min(10/Rr,4.5/Hm),X0=-5,Y0=.62;
   const orbit={target:V3(0,1.9,0),r:15.5,ph:1.3,th:.38};
-  const oak=D.mats.wood,iron=D.mats.iron,brass=D.mats.brass;countryside(W,5);
+  const oak=D.mats.wood,iron=D.mats.iron,brass=D.mats.brass;countryside(W,5,orbit.th);
   // cannon: two oak cheeks on an axle, spoked wheels, iron barrel on trunnions at the elevation angle
   const CN=part('cannon',W,true);CN.position.set(X0,0,0);
   [-.32,.32].forEach(z=>{const ch=box(1.5,.36,.1,oak);ch.position.set(-.25,.42,z);ch.rotation.z=.18;CN.add(ch);
@@ -491,7 +492,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const VS=part('glass vessel',W,true),GL=9,GX=XL+GL/2;
   const glass=put(new T.Mesh(new T.BoxGeometry(GL,2*BY,2*BZ),thinGlass({absorb:.02,edge:.7,card:.15})),'glass walls',VS);glass.position.set(GX,Y0,0);glass.renderOrder=5;
   {const e=.05,bars=[];[[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([a,b])=>{bars.push([GL,e,e,GX,Y0+a*BY,b*BZ]);bars.push([e,2*BY,e,GX+a*GL/2,Y0,b*BZ]);bars.push([e,e,2*BZ,GX+a*GL/2,Y0+b*BY,0])});bars.forEach(([sx,sy,sz,x,y,z])=>{const m=box(sx,sy,sz,brass);m.position.set(x,y,z);VS.add(m)})}
-  const ST=part('stand');[[XL+.6,-1.3],[XL+.6,1.3],[XL+GL-.6,-1.3],[XL+GL-.6,1.3]].forEach(([x,z])=>{const l=cyl(.06,Y0-BY,steel,12);l.position.set(x,(Y0-BY)/2,z);ST.add(l)});put(box(GL+.2,.06,2*BZ+.2,walnut),'shelf',ST).position.set(GX,Y0-BY-.03,0);
+  const ST=part('stand');[[XL+.6,-1.3],[XL+.6,1.3],[XL+GL-.6,-1.3],[XL+GL-.6,1.3]].forEach(([x,z])=>{const l=cyl(.06,Y0-BY,steel,12);l.position.set(x,(Y0-BY)/2,z);ST.add(l)});put(box(GL+.2,.06,2*BZ+.2,satin(walnut)),'shelf',ST).position.set(GX,Y0-BY-.03,0);
   // piston: the right wall of the gas, a brass plate on a rod through the end wall
   const PS=part('piston',W,true);put(box(.12,2*BY-.08,2*BZ-.08,brass),'piston plate',PS).position.set(0,0,0);{const rod=cyl(.06,XL+GL-XR+.9,steel,12);rod.rotation.z=Math.PI/2;rod.position.x=(XL+GL-XR+.9)/2;PS.add(rod);const kn=ball(.16,makeMaterial('rubber'));kn.position.x=XL+GL-XR+.9;PS.add(kn)}PS.position.set(XR+.06,Y0,0);
   // pressure gauge on a brass pipe from the lid
@@ -1015,7 +1016,8 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
    Chaos: the twins' separation grows ~e^(λt) (λ estimated as ln(|Δθ₂|/ε)/t). A flip = θ₂ passes an odd multiple of π. */
 const DPN={};
 DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower mass'],L1:[.5,3,1.5,'m','upper arm'],L2:[.5,3,1.5,'m','lower arm'],theta1:[-180,180,120,'°','upper angle'],theta2:[-180,180,-10,'°','lower angle'],g:[1,25,9.81,'m/s²','gravity'],eps:[0,.01,.001,'rad','twin offset']},
- build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'night',{moon:[-.62,.42,-.66]});const piv=V3(0,6.4,0),sc=4.6/(p.L1+p.L2),oak=D.mats.wood,brass=D.mats.brass,steel=makeMaterial('steel');
+ build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.2,-.81]});if(own){R.sun.intensity*=2.4;if(R.fill)R.fill.intensity=.9;if(R.rim)R.rim.intensity=1.4;R.hemi.intensity=.3;D.scene.environmentIntensity=.7} // moonlit key, the lantern side as warm fill
+ const piv=V3(0,6.4,0),sc=4.6/(p.L1+p.L2),oak=D.mats.wood,brass=D.mats.brass,steel=makeMaterial('steel');
   const orbit={target:V3(0,3.9,0),r:15,ph:1.22,th:.34};
   const FR=part('frame');[-3,3].forEach(x=>{const c=box(.35,6.9,.35,oak);c.position.set(x,3.45,-.7);FR.add(c);const f=box(.6,.12,1.4,oak);f.position.set(x,.06,-.7);FR.add(f)});put(box(6.6,.3,.34,oak),'cross bar',FR).position.set(0,6.75,-.7);put(box(.2,.16,.8,steel),'pivot bracket',FR).position.set(0,6.55,-.32);
   const r1=Math.cbrt(p.m1)*.22,r2=Math.cbrt(p.m2)*.22;
@@ -1033,7 +1035,7 @@ DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower
    const base=cyl(.32,.1,iron,6);base.position.y=.05;F.add(base);[0,1,2,3,4,5].forEach(i=>{const a=i/6*Math.PI*2,r=cyl(.018,.8,iron,6);r.position.set(Math.cos(a)*.28,.5,Math.sin(a)*.28);F.add(r)});
    const top=new T.Mesh(new T.ConeGeometry(.38,.3,6),iron);top.position.y=1.05;F.add(top);const gl=new T.Mesh(new T.CylinderGeometry(.27,.27,.8,6,1,true),thinGlass({absorb:.05,color:0x2a1a08}));gl.position.y=.5;F.add(gl);
    const fl=new T.Mesh(new T.SphereGeometry(.07,12,10),new T.MeshBasicMaterial({color:new T.Color(5,2.6,.9),toneMapped:false}));fl.scale.y=1.8;fl.position.y=.42;F.add(fl);fl.userData.noContact=true;
-   const L=new T.PointLight(0xffa860,6,9,2);L.position.y=.5;F.add(L);DPN.flame=fl}
+   const L=new T.PointLight(0xffa860,14,12,2);L.position.y=.5;F.add(L);DPN.flame=fl}
   const d2r=Math.PI/180,s=new Float64Array([p.theta1*d2r,p.theta2*d2r,0,0]),u=new Float64Array([p.theta1*d2r,p.theta2*d2r+p.eps,0,0]),k1=new Float64Array(4),k2=new Float64Array(4),k3=new Float64Array(4),k4=new Float64Array(4),tmpS=new Float64Array(4);
   const f=(y,o)=>{const t1=y[0],t2=y[1],w1=y[2],w2=y[3],m1=p.m1,m2=p.m2,L1=p.L1,L2=p.L2,g=p.g,dd=t1-t2,den=2*m1+m2-m2*Math.cos(2*t1-2*t2);
     o[0]=w1;o[1]=w2;o[2]=(-g*(2*m1+m2)*Math.sin(t1)-m2*g*Math.sin(t1-2*t2)-2*Math.sin(dd)*m2*(w2*w2*L2+w1*w1*L1*Math.cos(dd)))/(L1*den);o[3]=(2*Math.sin(dd)*(w1*w1*L1*(m1+m2)+g*(m1+m2)*Math.cos(t1)+w2*w2*L2*m2*Math.cos(dd)))/(L2*den)};
@@ -1063,7 +1065,7 @@ DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower
 const LEV={};
 DIO.lever={params:{m1:[.2,10,3,'kg','left mass'],x1:[-4,4,-2.5,'m','left position'],m2:[.2,10,2,'kg','right mass'],x2:[-4,4,3,'m','right position'],fulcrum:[-2,2,0,'m','fulcrum position'],beam:[0,5,1,'kg','beam mass']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'landscape',{time:16.3,felt:'#46552e'});const H=2.2,g=9.81,oak=D.mats.wood,iron=D.mats.iron;
-  const orbit={target:V3(0,1.9,0),r:12.5,ph:1.28,th:.28};countryside(W,9);
+  const orbit={target:V3(0,1.9,0),r:12.5,ph:1.28,th:.28};countryside(W,9,orbit.th);
   const FU=part('fulcrum',W,true);{const sh=new T.Shape();sh.moveTo(-.75,0);sh.lineTo(.75,0);sh.lineTo(.04,H);sh.lineTo(-.04,H);sh.lineTo(-.75,0);const gq=new T.ExtrudeGeometry(sh,{depth:1,bevelEnabled:true,bevelSize:.03,bevelThickness:.03,bevelSegments:2});gq.translate(0,0,-.5);const u=gq.attributes.uv;for(let i=0;i<u.count;i++)u.setXY(i,u.getX(i)/2,u.getY(i)/2);
    const m=put(new T.Mesh(gq,makeMaterial('stone')),'granite wedge',FU);m.castShadow=m.receiveShadow=true}FU.position.x=p.fulcrum;
   const BM=part('beam',W,true);BM.position.set(p.fulcrum,H+.1,0);const beam=put(box(9,.16,.7,oak),'oak beam',BM);beam.position.x=-p.fulcrum;
@@ -1204,7 +1206,7 @@ DIO.circuit={params:{V:[1,12,9,'V','battery emf'],R:[1,20,5,'kΩ','resistance'],
   const orbit={target:V3(-.3,.9,0),r:12,ph:1.0,th:.3},walnut=makeMaterial('walnut'),brass=D.mats.brass,copper=makeMaterial('copper');
   const A=[V3(-4.5,Y,-2.5),V3(4.5,Y,-2.5),V3(4.5,Y,2.5),V3(-4.5,Y,2.5),V3(-4.5,Y,-2.5)],Bp=[V3(-4.5,Y,-2.5),V3(-1.6,Y,-2.5),V3(-1.6,Y,-3.3),V3(1.6,Y,-3.3),V3(1.6,Y,-2.5),V3(4.5,Y,-2.5),V3(4.5,Y,2.5),V3(-4.5,Y,2.5),V3(-4.5,Y,-2.5)];
   const mkPath=pts=>{const c=new T.CurvePath();for(let i=0;i<pts.length-1;i++)c.add(new T.LineCurve3(pts[i],pts[i+1]));return c},pathA=mkPath(A),pathB=mkPath(Bp);
-  const BD=part('breadboard');put(box(10.6,.16,7.6,walnut),'walnut board',BD).position.set(0,.08,-.3);
+  const BD=part('breadboard');put(box(10.6,.16,7.6,satin(walnut)),'walnut board',BD).position.set(0,.08,-.3);
   [[-5,-3.7],[5,-3.7],[-5,3.1],[5,3.1]].forEach(([x,z])=>{const t=cyl(.12,.14,brass,16);t.position.set(x,.23,z);BD.add(t)});
   const WR=part('wires');const wire=(a,b)=>{const L=a.distanceTo(b);if(L<1e-3)return;const m=cyl(.05,L,copper,10);m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(V3(0,1,0),b.clone().sub(a).normalize());WR.add(m)};
   // loop A with gaps at the battery, the capacitor and the switch; the bypass branch under the battery
@@ -1280,7 +1282,7 @@ DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,
   // the image: a ghost of the candle scaled by m (inverted when real), and a white screen that catches a real image
   const IM=part('image',W,true);const ghostM=new T.MeshPhysicalMaterial({color:0x9fd0ff,transparent:true,opacity:.28,roughness:.3,depthWrite:false}),ghostF=new T.MeshBasicMaterial({color:new T.Color(2,1.3,.5),transparent:true,opacity:.6,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false});
   const ig=mkCandle(ghostM,ghostF);IM.add(ig.g);ig.g.children.forEach(o=>o.castShadow=false);
-  const SCR=part('screen',W,true);{const card=new T.Mesh(new T.PlaneGeometry(1.8,2.2),makeMaterial({preset:'card'}));card.rotation.y=-Math.PI/2;card.position.y=Y;SCR.add(card);card.material.side=T.DoubleSide;const fr=box(.06,2.3,.08,walnut);fr.position.set(.04,Y,-.95);SCR.add(fr);const fr2=fr.clone();fr2.position.z=.95;SCR.add(fr2);carrier(SCR,0,Y-RB-1.4)}
+  const SCR=part('screen',W,true);{const cardM=makeMaterial({preset:'card'});cardM.color.set(0xb8b2a6);const card=new T.Mesh(new T.PlaneGeometry(1.8,2.2),cardM);card.rotation.y=-Math.PI/2;card.position.y=Y;SCR.add(card);card.material.side=T.DoubleSide;const fr=box(.06,2.3,.08,walnut);fr.position.set(.04,Y,-.95);SCR.add(fr);const fr2=fr.clone();fr2.position.z=.95;SCR.add(fr2);carrier(SCR,0,Y-RB-1.4)}
   const spot=put(new T.Sprite(new T.SpriteMaterial({map:softDisc(),color:0xffc070,transparent:true,blending:T.AdditiveBlending,depthWrite:false})),'image on the screen',SCR);
   // rays: three principal rays (preallocated 3-point lines) and their dashed back-extensions
   const rayM=[0xffd27a,0xff9a7a,0x9fe0ff].map(c=>new T.LineBasicMaterial({color:c,transparent:true,opacity:.95,blending:T.AdditiveBlending,depthWrite:false}));
@@ -1547,7 +1549,7 @@ DIO.reaction.lessons=[
   text:'Red A and blue B molecules fly about and collide. Only some collisions join them into the A–B pair, C.',
   explain:'A pair reacts only if it hits hard enough: the energy of the collision must exceed the barrier Ea = 0.8. At T = 1 collision theory predicts that a fraction (1 + Ea/kT)e^(−Ea/kT) = 0.81 of encounters qualify; over a longer run this model measures about 0.75–0.79 (the fastest pairs react first, which slightly thins out the fast molecules).',
   opens:'What does one molecule live through?'},
- {title:'Ride a molecule',question:'What happens to a single molecule?',focus:'tracked molecule',set:{T:1},shot:'pov',pov:'tracked molecule',until:'event:the tracked molecule reacts',run:30,
+ {title:'Ride a molecule',question:'What happens to a single molecule?',focus:'tracked molecule',set:{T:1},shot:'pov',pov:'tracked molecule',until:'event:the tracked molecule reacts',run:45,
   text:'Travel with the molecule inside the gold halo until it reacts.',
   explain:'You bounced off walls and grazed past B molecules until one collision was energetic enough to cross the barrier, and you bonded into C. Every molecule\'s history is random, but the fraction that react each second is steady: that fraction is the reaction rate.',
   opens:'Does the reaction ever stop?'},

@@ -3,13 +3,33 @@
   "title": "Osmosis across a semi-permeable membrane",
   "technique": "sweep",
   "environment": {
-    "preset": "micro",
-    "base": true
+    "preset": "lab"
   },
   "bodies": [
     {
+      "id": "slab",
+      "name": "Tank base",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 6.4,
+        "h": 0.12,
+        "d": 1.9,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "plastic",
+        "color": "#2b3036"
+      },
+      "position": [
+        0,
+        0.06,
+        0
+      ]
+    },
+    {
       "id": "tank",
-      "name": "Tank",
+      "name": "Glass tank",
       "role": "decor",
       "shape": {
         "kind": "glasscase",
@@ -19,7 +39,7 @@
       },
       "position": [
         0,
-        0,
+        0.12,
         0
       ]
     },
@@ -28,21 +48,61 @@
       "name": "Membrane",
       "label": "Semi-permeable membrane",
       "role": "actor",
-      "describe": "Pores let water molecules through but not the larger solute molecules.",
+      "describe": "Its pores let water molecules through but not the larger solute molecules.",
       "shape": {
         "kind": "box",
-        "w": 0.05,
-        "h": 3.2,
-        "d": 1.55,
+        "w": 0.07,
+        "h": 3.3,
+        "d": 1.56,
         "round": 0
       },
       "material": {
         "preset": "membrane",
-        "color": "#ffb0c8"
+        "color": "#e0507a"
       },
       "position": [
         0,
-        1.6,
+        1.77,
+        0
+      ]
+    },
+    {
+      "id": "clampT",
+      "name": "Membrane clamp",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.16,
+        "h": 0.1,
+        "d": 1.66,
+        "round": 0.01
+      },
+      "material": {
+        "preset": "steel"
+      },
+      "position": [
+        0,
+        3.47,
+        0
+      ]
+    },
+    {
+      "id": "clampB",
+      "name": "Membrane clamp",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.16,
+        "h": 0.1,
+        "d": 1.66,
+        "round": 0.01
+      },
+      "material": {
+        "preset": "steel"
+      },
+      "position": [
+        0,
+        0.17,
         0
       ]
     },
@@ -55,16 +115,16 @@
       "shape": {
         "kind": "water",
         "w": 2.95,
-        "d": 1.55
+        "d": 1.55,
+        "depth": 1.3
       },
       "material": {
         "preset": "water",
-        "color": "#3a9ec0",
-        "opacity": 0.55
+        "color": "#58b4d0"
       },
       "position": [
         -1.5,
-        1.3,
+        1.42,
         0
       ]
     },
@@ -73,28 +133,184 @@
       "name": "Right level",
       "label": "Solution side · level",
       "role": "actor",
-      "describe": "Water plus solute.",
+      "describe": "Water plus dissolved solute.",
       "shape": {
         "kind": "water",
         "w": 2.95,
-        "d": 1.55
+        "d": 1.55,
+        "depth": 1.3
       },
       "material": {
         "preset": "water",
-        "color": "#c08a3a",
-        "opacity": 0.55
+        "color": "#d8b070"
       },
       "position": [
         1.5,
-        1.3,
+        1.42,
         0
+      ]
+    },
+    {
+      "id": "tracer",
+      "name": "Tagged water molecule",
+      "label": "Tagged water molecule",
+      "role": "actor",
+      "describe": "One water molecule marked so you can follow it, or ride it (POV).",
+      "shape": {
+        "kind": "sphere",
+        "r": 0.075
+      },
+      "material": {
+        "preset": "emissive",
+        "color": "#7fe0ff"
+      },
+      "position": [
+        -0.6,
+        0.9,
+        0.2
+      ]
+    },
+    {
+      "id": "piston",
+      "name": "Piston",
+      "label": "Piston · extra pressure on the solution",
+      "role": "actor",
+      "describe": "Pressing on the solution side pushes back against the osmotic flow.",
+      "shape": {
+        "kind": "group"
+      },
+      "position": [
+        1.5,
+        3.3,
+        0
+      ]
+    },
+    {
+      "id": "plate",
+      "name": "Piston plate",
+      "role": "decor",
+      "parent": "piston",
+      "shape": {
+        "kind": "box",
+        "w": 2.86,
+        "h": 0.08,
+        "d": 1.5,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "plastic",
+        "color": "#c9ced4"
+      },
+      "position": [
+        0,
+        0.04,
+        0
+      ]
+    },
+    {
+      "id": "rod",
+      "name": "Piston rod",
+      "role": "decor",
+      "parent": "piston",
+      "shape": {
+        "kind": "cylinder",
+        "r": 0.05,
+        "h": 1.6
+      },
+      "material": {
+        "preset": "chrome"
+      },
+      "position": [
+        0,
+        0.84,
+        0
+      ]
+    },
+    {
+      "id": "weight",
+      "name": "Weight",
+      "role": "decor",
+      "parent": "piston",
+      "shape": {
+        "kind": "cylinder",
+        "r": 0.32,
+        "h": 0.22
+      },
+      "material": {
+        "preset": "iron"
+      },
+      "position": [
+        0,
+        1.75,
+        0
+      ]
+    },
+    {
+      "id": "beaker",
+      "name": "Beaker",
+      "role": "decor",
+      "shape": {
+        "kind": "beaker",
+        "r": 0.42,
+        "h": 1,
+        "fill": 0.6,
+        "liquid": "#d8b070"
+      },
+      "position": [
+        -4.3,
+        0,
+        1.9
+      ]
+    },
+    {
+      "id": "flask",
+      "name": "Flask",
+      "role": "decor",
+      "shape": {
+        "kind": "flask",
+        "r": 0.5,
+        "h": 1.3,
+        "fill": 0.4,
+        "liquid": "#58b4d0"
+      },
+      "position": [
+        4.4,
+        0,
+        -1.4
+      ]
+    },
+    {
+      "id": "notebook",
+      "name": "Lab notebook",
+      "role": "decor",
+      "shape": {
+        "kind": "book",
+        "w": 1.2,
+        "h": 1.6,
+        "d": 0.12
+      },
+      "material": {
+        "preset": "leather",
+        "color": "#2c3e50"
+      },
+      "position": [
+        4,
+        0.06,
+        2.4
+      ],
+      "rotation": [
+        -90,
+        0,
+        -18
       ]
     }
   ],
   "tour": [
     "membrane",
     "left",
-    "right"
+    "right",
+    "tracer",
+    "piston"
   ],
   "params": [
     {
@@ -107,7 +323,7 @@
     },
     {
       "key": "T",
-      "label": "temperature",
+      "label": "temperature (thermal motion)",
       "min": 0.3,
       "max": 2,
       "value": 1
@@ -117,47 +333,184 @@
       "label": "membrane permeability",
       "min": 0.2,
       "max": 1,
-      "value": 0.6
+      "value": 0.7
+    },
+    {
+      "key": "press",
+      "label": "extra pressure on the solution",
+      "min": 0,
+      "max": 120,
+      "value": 0,
+      "unit": "mm water"
     }
   ],
-  "code": "const T=api.THREE, nW=200, nS=Math.round(api.param('solute')), rnd=api.rand;\nconst wm=new T.InstancedMesh(new T.SphereGeometry(0.05,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW);\nconst sm=new T.InstancedMesh(new T.SphereGeometry(0.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; api.world.add(wm,sm);\nconst L=api.body('left'), R=api.body('right'); const base=1.3; let hL=base, hR=base, phi=0, cLR=0, cRL=0, win=0, flowSaid=false, eqT=0, eqSaid=false, lastDh=0;\nconst P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-0.1-rnd()*2.7:0.1+rnd()*2.7,y:0.15+rnd()*(base-0.3),z:(rnd()-0.5)*1.3,w:true}); }\nfor(let i=0;i<nS;i++) P.push({x:0.2+rnd()*2.6,y:0.2+rnd()*(base-0.4),z:(rnd()-0.5)*1.2,w:false});\nP.forEach(q=>q.side=q.x<0?-1:1);\napi.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?new T.Vector3(q.x,q.y,q.z):null; },'Small enough to pass the pores.');\nif(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?new T.Vector3(q.x,q.y,q.z):null; },'Too large to pass; they stay on the right.');\napi.onStep((h)=>{ const s=Math.sqrt(api.param('T'))*0.9, k=1.8, dh=hR-hL, pass=api.param('pass');\n  for(const q of P){ q.x+=(rnd()-0.5)*s*h*14; q.y+=(rnd()-0.5)*s*h*14; q.z+=(rnd()-0.5)*s*h*14;\n    const top=(q.side<0?hL:hR)-0.06; if(q.y<0.12)q.y=0.12; if(q.y>top)q.y=top; if(q.z<-0.66)q.z=-0.66; if(q.z>0.66)q.z=0.66; if(q.x<-2.88)q.x=-2.88; if(q.x>2.88)q.x=2.88;\n    const side=q.x<0?-1:1;\n    if(side!==q.side){ let ok=false; if(q.w) ok = q.side<0 ? rnd()<pass*Math.exp(-k*dh) : rnd()<pass*(1-phi)*Math.exp(k*dh);\n      if(ok){ q.side=side; if(side>0) cLR++; else cRL++; } else q.x=q.side<0?-0.04:0.04; } } });\nconst m4=new T.Matrix4();\napi.onFrame((dt)=>{ let nL=0,nRw=0; P.forEach(q=>{ if(q.w){ if(q.side<0) nL++; else nRw++; } }); phi=nS?Math.min(0.85,1.25*nS/(nS+nRw)):0;\n  const tL=base+(nL-nW/2)*0.011, tR=base+(nRw-nW/2)*0.011; hL+=(tL-hL)*Math.min(1,dt*3); hR+=(tR-hR)*Math.min(1,dt*3);\n  L.position.y=hL; R.position.y=hR; let iw=0,is=0;\n  P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;\n  win+=dt; if(win>2){ if(!flowSaid&&cLR-cRL>4){ flowSaid=true; api.event('Net water flow into the solution side',new T.Vector3(0,1.2,0),{id:'flow'}); } cLR=0; cRL=0; win=0; }\n  const dh=hR-hL; if(Math.abs(dh-lastDh)<0.0015*Math.max(dt*60,1)) eqT+=dt; else eqT=0; lastDh=dh;\n  if(!eqSaid&&eqT>4&&api.time()>6){ eqSaid=true; api.event('Osmotic equilibrium: the extra height Δh = '+api.fmt(dh)+' balances the solute\\'s pull',new T.Vector3(1.5,hR,0),{id:'eq'}); } });\napi.readout('water left',()=>P.filter(q=>q.w&&q.side<0).length); api.readout('water right',()=>P.filter(q=>q.w&&q.side>0).length);\napi.readout('solute fraction φ',()=>phi); api.readout('Δh (right − left)',()=>hR-hL);\napi.plot('Δh',()=>hR-hL); api.camera({target:[0,1.5,0],r:9.5,ph:1.35,th:0.1});",
+  "shots": {
+    "net water flow": {
+      "target": [
+        0,
+        1,
+        0.1
+      ],
+      "dist": 6
+    },
+    "tagged water molecule": {
+      "dist": 4
+    },
+    "osmotic equilibrium": {
+      "target": [
+        0,
+        1.6,
+        0
+      ],
+      "dist": 9
+    },
+    "reverse osmosis": {
+      "target": [
+        0.6,
+        1.6,
+        0
+      ],
+      "dist": 8
+    }
+  },
+  "flows": {
+    "net water flow": [
+      {
+        "from": [
+          -1,
+          0.7,
+          0.9
+        ],
+        "to": [
+          1,
+          0.7,
+          0.9
+        ],
+        "label": "more water crosses into the solution"
+      }
+    ],
+    "osmotic equilibrium": [
+      {
+        "from": [
+          2.6,
+          2.3,
+          0.9
+        ],
+        "to": [
+          2.6,
+          1.4,
+          0.9
+        ],
+        "label": "the extra height presses back"
+      },
+      {
+        "from": [
+          -1,
+          0.7,
+          0.9
+        ],
+        "to": [
+          1,
+          0.7,
+          0.9
+        ],
+        "label": "the solute side draws water"
+      }
+    ],
+    "reverse osmosis": [
+      {
+        "from": [
+          1.5,
+          3,
+          0.9
+        ],
+        "to": [
+          1.5,
+          2,
+          0.9
+        ],
+        "label": "piston pressure"
+      },
+      {
+        "from": [
+          1,
+          0.7,
+          0.9
+        ],
+        "to": [
+          -1,
+          0.7,
+          0.9
+        ],
+        "label": "water squeezed back"
+      }
+    ]
+  },
+  "code": "const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), rnd=api.rand, f0=v=>String(Math.round(v)), f2=v=>v.toFixed(2);\n// scale: 1 unit = 10 cm. Each column's height is proportional to its number of water molecules (water does not compress).\nconst nW=400, nS=Math.round(api.param('solute')), Y0=.12, HV=1.3/(nW/2), K=.23, W=1.47, ZD=.7;\nconst wm=new T.InstancedMesh(new T.SphereGeometry(.045,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW); wm.name='water molecules';\nconst sm=new T.InstancedMesh(new T.SphereGeometry(.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; sm.name='solute molecules'; api.world.add(wm,sm);\nconst L=api.body('left'), R=api.body('right'), tr=api.body('tracer'), piston=api.body('piston');\nlet m=0, nL=nW/2, nR=nW/2, visL=nW/2, visR=nW/2, hL=nL*HV, hR=nR*HV, cLR=0, cRL=0, win=0, rate=[0,0], flowSaid=false, eqSaid=false, revSaid=false, ema=0, hist=[], netEma=0;\nconst P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-.08-rnd()*2.8:.08+rnd()*2.8,y:Y0+.05+rnd()*(hL-.1),z:(rnd()-.5)*1.3,w:true}); }\nfor(let i=0;i<nS;i++) P.push({x:.2+rnd()*2.6,y:Y0+.08+rnd()*(hR-.2),z:(rnd()-.5)*1.2,w:false});\nP.forEach(q=>q.side=q.x<0?-1:1);\napi.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?V(q.x,q.y,q.z):null; },'Small enough to pass the pores.');\nif(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?V(q.x,q.y,q.z):null; },'Too large for the pores: they stay on the right.');\nconst press=()=>api.param('press')/100;     // piston pressure as a water head, in scene units (1 unit = 100 mm)\nconst xw=()=>nR/(nR+nS);                    // mole fraction of water on the solution side\nconst dhEff=()=>(hR-hL)+press();          // hydrostatic head of the solution side plus the piston, in scene units\n// a water molecule tries a pore: into the solution with weight e^(−KΔ); back out with x_w·e^(+KΔ). At balance −ln x_w = 2KΔ: the ideal-solution law (van 't Hoff when dilute).\nconst KAP=12;   // pore traffic: water molecules per second crossing each way through the wetted membrane when Δ = 0 and x_w = 1\nconst rates=()=>{ const k=KAP*api.param('pass')*Math.sqrt(api.param('T')), d=dhEff(); return [k*Math.exp(-K*d), k*xw()*Math.exp(K*d)]; };\nconst hop=(from,top)=>{ let best=null,bd=9; for(const q of P){ if(q.w&&q.side===from&&q.y<top){ const d=Math.abs(q.x); if(d<bd){bd=d;best=q;} } } if(best){ best.side=-from; best.x=-best.x; if(from<0){visL--;visR++;cLR++;} else {visL++;visR--;cRL++;} } };   // the molecule nearest the pores goes through\n// the tagged molecule: Brownian motion with a little persistence (so a rider's view turns smoothly), plus the drift of the bulk flow\nconst tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0;\napi.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.min(hL,hR)+Y0-.05;\n  for(const q of P){ q.x+=(rnd()-.5)*st; q.y+=(rnd()-.5)*st; q.z+=(rnd()-.5)*st;\n    const lim=Y0+(q.side<0?hL:hR)-.05; if(q.y<Y0+.05)q.y=Y0+.05; if(q.y>lim)q.y=lim; if(q.z<-ZD)q.z=-ZD; if(q.z>ZD)q.z=ZD; if(q.x<-2.9)q.x=-2.9; if(q.x>2.9)q.x=2.9;\n    if((q.x<0?-1:1)!==q.side) q.x=-q.x; }                                // walking into the membrane: reflected (crossing happens only through the pores, below)\n  // the levels follow the net flow J = J_in − J_out (deterministic); the drawn molecules hop both ways at the gross rates, kept in step with the levels\n  const [jin,jout]=rates(); m+=(jin-jout)*h; nL=nW/2-m; nR=nW/2+m; hL=nL*HV; hR=nR*HV;\n  const dv=visR-nR; if(rnd()<h*jin*Math.exp(-.4*dv)) hop(-1,top); if(rnd()<h*jout*Math.exp(.4*dv)) hop(1,top);\n  // tagged molecule\n  const tau=.6, sg=.5*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();\n  tq.x+=tq.vx*h; tq.y+=tq.vy*h; tq.z+=tq.vz*h; const tl=Y0+(tq.side<0?hL:hR)-.08;\n  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>2.85){tq.x=Math.sign(tq.x)*2.85;tq.vx*=-1;}\n  tcool=Math.max(0,tcool-h);\n  if((tq.x<0?-1:1)!==tq.side){ const pr=Math.min(1,api.param('pass')*1.2)*(tq.side<0?Math.exp(-K*dhEff()):xw()*Math.exp(K*dhEff()));   // at the membrane: through a pore, or bounced back\n    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; api.event(ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } else { tq.x=-tq.x; tq.vx=-tq.vx; } }\n  win+=h; if(win>=3){ const net=cLR-cRL; rate=[cLR/3,cRL/3]; netEma+=(net/3-netEma)*.5;\n    if(!flowSaid&&net>=4&&nS>0){ flowSaid=true; api.event('Net water flow into the solution side: in 3 s, '+cLR+' molecules crossed into it and '+cRL+' came back',V(0,Y0+.6,.1),{id:'flow',sound:'pour'}); }\n    if(!revSaid&&press()>0&&net<=-4){ revSaid=true; api.event('Reverse osmosis: pressed harder than the osmotic pressure, water is squeezed back into the pure side ('+cRL+' out, '+cLR+' in, in 3 s)',V(.6,Y0+1.2,.1),{id:'reverse',sound:'pour'}); }\n    cLR=0; cRL=0; win=0; }\n  ema+=((hR-hL)-ema)*Math.min(1,h/2); hist.push([t,ema]); while(hist.length&&t-hist[0][0]>8) hist.shift();\n  if(!eqSaid&&nS>0&&t>8&&press()===0&&Math.abs((hR-hL)-bal())<.025){ eqSaid=true; api.event('Osmotic equilibrium: the solution stands Δh = '+f0((hR-hL)*100)+' mm higher, and water now crosses equally both ways (about '+f0((rate[0]+rate[1])/2)+' molecules per second each way)',V(1.5,Y0+hR,0),{id:'eq',sound:'chime'}); } });\nconst bal=()=>nS?-Math.log(xw())/(2*K)-press():0;   // head at which the two crossing rates balance (scene units)\nconst m4=new T.Matrix4();\napi.onFrame(()=>{ let iw=0,is=0; P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;\n  const D=1.3; L.position.y=Y0+hL; L.scale.y=hL/D; R.position.y=Y0+hR; R.scale.y=hR/D; tr.position.set(tq.x,tq.y,tq.z);\n  const py=press()>0?Y0+hR+.005:Math.max(Y0+hR+.5,2.75); piston.position.y+=(py-piston.position.y)*.15; });\napi.readout('water molecules left / right',()=>visL+' / '+visR);\napi.readout('water fraction x_w on the solution side',()=>nS?f2(xw()):'1 (no solute)');\napi.readout('Δh (solution − pure water)',()=>f0((hR-hL)*100)+' mm');\napi.readout('Δh where crossings balance',()=>nS?f0(bal()*100)+' mm':'0 mm');\napi.readout('crossings per second (in / out)',()=>rate[0].toFixed(1)+' / '+rate[1].toFixed(1));\napi.readout('piston pressure',()=>f0(api.param('press'))+' mm of water');\napi.plot('Δh (mm)',()=>(hR-hL)*100); api.camera({target:[0,1.55,0],r:9.6,ph:1.36,th:.14});",
   "lessons": [
     {
       "title": "Watch the water move",
-      "text": "Water molecules cross the pores in both directions; solute molecules bounce off the membrane on the right. Wait for the net-flow event.",
+      "question": "Which way does water move?",
+      "text": "The tank starts with both levels equal. Water molecules (blue) cross the membrane pores in both directions; the solute molecules (orange) bounce off it on the right. Wait for the net water flow.",
+      "set": {
+        "solute": 45
+      },
       "focus": "membrane",
-      "until": "event:flow",
-      "run": 20,
-      "explain": "Solute that cannot enter the pores lowers the water's chemical potential on its side, so the net flow runs into the solution. In real membranes this is mostly bulk flow through the pores, not water simply \"diffusing down its own gradient\" (Kramer & Myers 2013); the particle picture here shows the direction and the balance, not the molecular mechanism."
+      "shot": "push",
+      "until": "event:net water flow",
+      "run": 30,
+      "explain": "Solute that cannot enter the pores lowers the chemical potential of the water on its side, so more water enters the solution than leaves it. In real membranes this flow is mostly bulk flow through the pores, driven by a pressure difference set up inside them; it is not water simply \"diffusing down its own gradient\" (Kramer & Myers 2013). The particle picture here shows the direction and the balance, not the molecular mechanism.",
+      "opens": "How does one molecule get across?"
+    },
+    {
+      "title": "Ride one molecule",
+      "question": "How does one molecule get across?",
+      "text": "You are now riding a single tagged water molecule, jostled by thermal motion. Watch the pink membrane ahead and wait until the molecule slips through a pore.",
+      "focus": "tracer",
+      "shot": "pov",
+      "pov": "Tagged water molecule",
+      "until": "event:tagged water molecule slips",
+      "run": 40,
+      "explain": "No single molecule knows which way is \"downhill\". It wanders at random, and when it reaches a pore it may pass in either direction. The net flow is a small imbalance between two large, opposite streams. In living cells water crosses mainly through aquaporins, channels that pass water molecules in single file, discovered by Preston et al. (1992).",
+      "opens": "When does the flow stop?"
     },
     {
       "title": "Equilibrium",
-      "text": "The right level rises until its extra pressure pushes water back as fast as it arrives. Wait for equilibrium.",
+      "question": "When does the flow stop?",
+      "text": "Follow the solution level: it rises while the pure-water level falls. The extra height presses back on the membrane. Wait for equilibrium.",
       "focus": "right",
-      "until": "event:eq",
-      "run": 40,
-      "explain": "The height difference at equilibrium measures the osmotic pressure; it grows with solute concentration (van 't Hoff: π ≈ cRT)."
+      "shot": "medium",
+      "until": "event:osmotic equilibrium",
+      "run": 90,
+      "explain": "The higher column pushes water back, and the flow stops when its hydrostatic pressure ρgΔh balances the solute's effect: here near 40 mm, where −ln x_w = 2KΔh. For dilute solutions this is van 't Hoff's law, π = cRT (van 't Hoff 1887): the osmotic pressure grows with the number of dissolved particles, not with their kind. In the real world a 0.01 mol/L sugar solution at 25 °C has π ≈ 25 kPa, enough to hold up a column of water 2.5 m high.",
+      "opens": "Does more solute make the column taller?"
     },
     {
       "title": "More solute",
-      "text": "Double the solute. The tank refills from scratch and settles at a bigger height difference.",
+      "question": "Does more solute make the column taller?",
+      "text": "Double the solute to 90 molecules. The tank refills from equal levels. Watch the solution rise higher this time, and wait for equilibrium.",
       "set": {
         "solute": 90
       },
       "focus": "right",
-      "until": "event:eq",
-      "run": 45,
-      "explain": "Osmotic pressure rises with the number of dissolved particles."
+      "shot": "medium",
+      "until": "event:osmotic equilibrium",
+      "run": 100,
+      "explain": "With twice the solute the column settles near 65 mm instead of 40 mm. It is not exactly double, because −ln x_w grows a little faster than the solute fraction, and the incoming water dilutes the solution as it rises. In dilute solutions the osmotic pressure is proportional to the solute concentration (π = cRT).",
+      "opens": "Can pressure push the water back?"
     },
     {
-      "title": "Pure water both sides",
-      "text": "Remove all solute: nothing drives a net flow and the levels stay equal.",
+      "title": "Push back: reverse osmosis",
+      "question": "Can pressure push the water back?",
+      "text": "Lower the piston onto the solution with 120 mm of water pressure, more than the osmotic pressure. Watch which way the water now crosses.",
       "set": {
-        "solute": 0
+        "press": 120
       },
-      "focus": "left",
-      "run": 12,
-      "explain": "Osmosis needs a concentration difference across a membrane that blocks the solute."
+      "focus": "piston",
+      "shot": "medium",
+      "until": "event:reverse osmosis",
+      "run": 60,
+      "explain": "Pressure on the solution raises the water's chemical potential there. Once it exceeds the osmotic pressure, the net flow reverses and water is squeezed out of the solution through the membrane, leaving the solute behind. The flow follows J = Lp(ΔP − σΔπ) (Kedem & Katchalsky 1958). Desalination plants work this way: seawater has an osmotic pressure of about 27 bar, so they press it at 55–80 bar."
     }
   ],
   "sources": [

@@ -8,14 +8,14 @@ export const WATER_CYCLE = {
   environment: { preset: 'landscape', time: 11, azimuth: -45 },
   bodies: [
     { id: 'ground', name: 'Valley floor', role: 'decor', shape: { kind: 'terrain', w: 13, d: 13, h: .2, seed: 3, low: '#4f6a35', high: '#74794a', flat: [[.9, 1.7, 1.95, 1.0, -.15]] }, position: [0, .02, 0] },
-    { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'mountain', r: 2.3, h: 1.25, seed: 5, snowline: 2, low: '#5b5348', high: '#8b8273' }, position: [.2, 0, -2.75] },
-    { id: 'ridgeN', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: 1.0, seed: 11, snowline: 2, low: '#564f45', high: '#857d6f' }, position: [-1.9, 0, -2.9] },
-    { id: 'ridgeS', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 1.7, h: .75, seed: 6, snowline: 2, low: '#5b5348', high: '#8b8273' }, position: [2.3, 0, -2.6] },
-    { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 2, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
-    { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 2, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
-    { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 2, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
-    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#20383c' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
-    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#1f6a80' }, position: [.9, .05, 1.7] },
+    { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'mountain', r: 2.3, h: 1.25, seed: 5, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [.2, 0, -2.75] },
+    { id: 'ridgeN', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: 1.0, seed: 11, snowline: 9, low: '#564f45', high: '#857d6f' }, position: [-1.9, 0, -2.9] },
+    { id: 'ridgeS', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 1.7, h: .75, seed: 6, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [2.3, 0, -2.6] },
+    { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
+    { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
+    { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
+    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#2c5a60' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
+    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#4aa6c0' }, position: [.9, .05, 1.7] },
     { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint motes rising from the lake.', shape: { kind: 'particles', type: 'bubbles', count: 160, area: [2.2, 1.7, 2.6], size: .035 }, position: [.9, .05, 1.7] },
     { id: 'parcel', name: 'Air parcel', label: 'Air parcel · moist air from the lake', role: 'actor', describe: 'One rising bubble of lake air: you can ride it (POV).', shape: { kind: 'sphere', r: .07 }, material: { preset: 'cloud', color: '#eef6ff', emissive: '#4a6c86' }, position: [1.1, .1, 1.4] },
     { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Droplets condensed from the vapour; it greys as it fills with water.', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, 1.7], rotation: [0, 90, 0] },
@@ -117,17 +117,13 @@ function step(h){
 for(let i=0;i<60*120;i++) step(1/120); quiet=false;   // start from the steady state of the default sky
 api.onStep(h=>step(h));
 if(api.scene.fog){ api.scene.fog.near=13; api.scene.fog.far=40; }   // aerial perspective: the far hills sink into haze
-// ---- painted backdrop: sky and two distant ranges, lighter and bluer with distance (BackSide cylinders: from outside only the far half draws) ----
-const BR=6.75, skyG=new T.CylinderGeometry(BR,BR,6.4,96,10,true), sc=[], ca=new T.Color('#c9d3d6'), cb=new T.Color('#6f93b8'), cc=new T.Color();
-for(let i=0;i<skyG.attributes.position.count;i++){ const y=skyG.attributes.position.getY(i)/6.4+.5; cc.copy(ca).lerp(cb,Math.pow(Math.max(0,(y-.18)/.82),.8)); sc.push(cc.r,cc.g,cc.b); }
-skyG.setAttribute('color',new T.Float32BufferAttribute(sc,3));
-const skyM=new T.MeshBasicMaterial({vertexColors:true,side:T.BackSide,fog:false}), sky=new T.Mesh(skyG,skyM); sky.position.y=2.95; sky.name='painted sky';
-const range=(r,y0,hb,amp,f,seed,col,top)=>{ const n=192, pos=[], cols=[], idx=[], c0=new T.Color(col), c1=new T.Color(top);
-  for(let i=0;i<=n;i++){ const a=i/n*Math.PI*2, h=hb+amp*(.5+.5*api.noise.fbm(Math.cos(a)*f+seed,Math.sin(a)*f,seed,4)); pos.push(Math.sin(a)*r,y0,Math.cos(a)*r, Math.sin(a)*r,y0+h,Math.cos(a)*r); cols.push(c0.r,c0.g,c0.b, c1.r,c1.g,c1.b); if(i<n){ const k=i*2; idx.push(k,k+1,k+2, k+1,k+3,k+2); } }
-  const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('color',new T.Float32BufferAttribute(cols,3)); g.setIndex(idx);
-  const m=new T.Mesh(g,new T.MeshBasicMaterial({vertexColors:true,side:T.DoubleSide,fog:false})); m.name='painted range'; return m; };
-const far=range(BR-.06,-.2,1.0,1.7,1.3,3,'#9fb0bb','#aebdc6'), near=range(BR-.14,-.2,.5,1.2,2.1,7,'#6e7d73','#7f8d80');
-[sky,far,near].forEach(o=>{ o.userData.noInk=true; o.userData.noContact=true; o.castShadow=false; o.receiveShadow=false; o.raycast=()=>{}; api.world.add(o); });
+// ---- sky: the landscape's sky dome shows only grey haze below the horizon, so it gives way to a painted screen-space gradient (repainted with the hour) ----
+{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) dome.visible=false; }
+const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
+const hz=new T.Color(), zn=new T.Color(), cc=new T.Color();
+function paintSky(day){ const warm=1-Math.min(1,day*1.7); hz.setRGB(.66+.22*warm,.71+.02*warm,.76-.18*warm).multiplyScalar(.45+.55*Math.min(1,day*1.5+.2)); zn.setRGB(.33+.1*warm,.47,.66-.12*warm).multiplyScalar(.4+.6*Math.min(1,day*1.5+.2));
+  for(let i=0;i<GN;i++){ cc.copy(hz).lerp(zn,Math.pow(i/(GN-1),.75)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }
+api.scene.background=skyTex;
 const sunGlow=new T.Sprite(new T.SpriteMaterial({color:0xffd9a0,transparent:true,opacity:.35,blending:T.AdditiveBlending,depthWrite:false,fog:false})); sunGlow.scale.setScalar(1.6); sunGlow.userData.noInk=true; api.world.add(sunGlow);
 let lastHr=-1;
 // ---- visuals ----
@@ -159,7 +155,7 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
     for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(.12+.5*Math.min(1.5,heat())); let z=a.getZ(i)-dt*w*.03; if(y>top){y=0;z=(api.rand()-.5)*2.6;} if(z<-1.3) z+=2.6; a.setY(i,y); a.setZ(i,z); }
     a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
   const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z); sunGlow.position.copy(sun.position);
-  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; const day=Math.max(0,Math.sin((hr-6)/12*Math.PI)), warm=1-Math.min(1,day*1.6); skyM.color.setRGB(.55+.45*day+.25*warm,.5+.5*day,.55+.45*day-.15*warm); } }
+  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } }
   const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
 
@@ -183,54 +179,127 @@ api.camera({target:[.3,1.55,-.3],r:13.5,ph:1.27,th:1.2});`,
     { title: 'Evening', question: 'What sets the pace of the whole cycle?', text: 'Move the time of day to evening. With the sun low, watch the lake-air temperature, e_s and the evaporation rate fall.', set: { hour: 18.5 }, focus: 'sun', shot: 'wide', until: 'event:has cooled to', run: 45, explain: 'At 18:30 the sun gives almost no heat. The lake air cools to 10.2 °C, and e_s falls to 12.5 hPa, less than a third of its midday value. The air above the lake is now saturated, so evaporation stops and mist forms over the water. The sun powers the cycle: evaporating one kilogram of water takes about 2.45 MJ, and gravity brings the water back down.' }]
 };
 
-const people = (side, n, color, label) => Array.from({ length: n }, (_, i) => ({ id: side + i, name: label.replace(/s$/, '') + ' ' + (i + 1), label: i === 0 ? label : undefined, role: i === 0 ? 'actor' : 'decor', describe: i === 0 ? (side === 'b' ? 'Each buyer has a different willingness to pay; they step up to the stall when the price is below it.' : 'Each seller has a different cost; they step up to sell when the price is above it.') : '', shape: { kind: 'person', h: 1, color }, position: [(side === 'b' ? -1 : 1) * (1.4 + (i % 4) * .72), 0, .7 + Math.floor(i / 4) * .85], rotation: [0, side === 'b' ? 150 : -150, 0] }));
+const people = (side, n, color, label) => Array.from({ length: n }, (_, i) => ({ id: side + i, name: label.replace(/s$/, '') + ' ' + (i + 1), label: i === 0 ? label : undefined, role: i === 0 ? 'actor' : 'decor', describe: i === 0 ? (side === 'b' ? 'Each buyer holds a card with the most they would pay: 9, 8, … down to 2.' : 'Each seller holds a card with their cost: 1, 2, … up to 8.') : '', shape: { kind: 'person', h: 1, color }, position: [(side === 'b' ? -1 : 1) * (1.7 + (i % 4) * .62), 0, .55 + Math.floor(i / 4) * .8 + (i % 2) * .12], rotation: [0, side === 'b' ? 140 : -140, 0] }));
 export const MARKET = {
   type: 'scene', title: 'A market finds its price', technique: 'card',
-  environment: { preset: 'studio' },
+  environment: { preset: 'landscape', time: 16.5, azimuth: -8 },
   bodies: [
-    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.4 }, material: { preset: 'stone' }, position: [0, .01, 0] },
-    { id: 'board', name: 'Chart board', label: 'Demand and supply curves', role: 'actor', describe: 'Blue: how many would buy at each price. Red: how many would sell. The gold line is the current price.', shape: { kind: 'box', w: 6.8, h: 4.9, d: .1, round: .02 }, material: { preset: 'chalk', color: '#1f2a24' }, position: [0, 3.0, -3.45] },
-    { id: 'stall', name: 'Stall', label: 'The stall · where trades happen', role: 'actor', describe: 'Every buyer and seller who steps up here trades; the quantity traded is the smaller group.', shape: { kind: 'table', w: 2.6, d: 1, h: .9 }, position: [0, 0, -1.6] },
-    { id: 'awning', name: 'Awning', role: 'decor', shape: { kind: 'box', w: 2.9, h: .07, d: 1.5, round: .01 }, material: { preset: 'fabric', color: '#b8392b' }, position: [0, 1.95, -1.6], rotation: [-8, 0, 0] },
-    { id: 'post1', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -1.0] },
-    { id: 'post2', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -1.0] },
-    { id: 'pole', name: 'Price pole', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 3.6 }, material: { preset: 'brass' }, position: [0, 1.8, 1.9] },
-    { id: 'price', name: 'Price', label: 'Price', role: 'actor', describe: 'Rises while more want to buy than sell, falls while more want to sell than buy.', shape: { kind: 'coin', r: .26 }, position: [0, 1, 1.9], rotation: [90, 0, 0] },
+    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone' }, position: [0, .01, 0] },
+    { id: 'board', name: 'Chalkboard', label: 'Demand and supply curves', role: 'actor', describe: 'Left: the staircases of buyers willing to buy (blue) and sellers willing to sell (red) at each price. Right: the price of every trade, in order.', shape: { kind: 'box', w: 6.4, h: 3.6, d: .1, round: .02 }, material: { preset: 'chalk', color: '#26332c' }, position: [0, 3.35, -3.5] },
+    { id: 'boardframe', name: 'Board frame', role: 'decor', shape: { kind: 'box', w: 6.62, h: 3.82, d: .07, round: .02 }, material: { preset: 'darkwood' }, position: [0, 3.35, -3.56] },
+    { id: 'legL', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [-3.2, 2.6, -3.62] },
+    { id: 'legR', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [3.2, 2.6, -3.62] },
+    { id: 'tDemand', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'demand', w: .9, h: .25, color: '#9cc2ff' }, position: [-1.55, 4.7, -3.43] },
+    { id: 'tSupply', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'supply', w: .8, h: .25, color: '#ffab94' }, position: [-.75, 4.7, -3.43] },
+    { id: 'tTrades', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'price of each trade', w: 1.9, h: .25, color: '#ece4cf' }, position: [1.6, 4.85, -3.43] },
+    { id: 'stall', name: 'Stall', label: 'The stall · where trades happen', role: 'actor', describe: 'A buyer and a seller whose offers meet trade here, one unit each, at the price on the table.', shape: { kind: 'table', w: 2.6, d: 1, h: .9 }, position: [0, 0, -1.45] },
+    { id: 'awning', name: 'Awning', role: 'decor', shape: { kind: 'box', w: 2.9, h: .07, d: 1.5, round: .01 }, material: { preset: 'fabric', color: '#b8392b' }, position: [0, 1.95, -1.45], rotation: [-8, 0, 0] },
+    { id: 'post1', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -.85] },
+    { id: 'post2', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -.85] },
+    { id: 'post3', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -2.05] },
+    { id: 'post4', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -2.05] },
+    { id: 'crate1', name: 'Crate of apples', role: 'decor', shape: { kind: 'box', w: .6, h: .3, d: .4, round: .02 }, material: { preset: 'wood' }, position: [-.6, 1.09, -1.55] },
+    { id: 'crate2', name: 'Crate of apples', role: 'decor', shape: { kind: 'box', w: .6, h: .3, d: .4, round: .02 }, material: { preset: 'wood' }, position: [.55, 1.09, -1.6], rotation: [0, 12, 0] },
+    { id: 'pole', name: 'Price pole', role: 'decor', shape: { kind: 'cylinder', r: .035, h: 3.6 }, material: { preset: 'brass' }, position: [2.2, 1.8, -1.0] },
+    { id: 'polebase', name: 'Pole base', role: 'decor', shape: { kind: 'cylinder', r: .22, rt: .16, h: .1 }, material: { preset: 'darkwood' }, position: [2.2, .05, -1.0] },
+    { id: 'price', name: 'Price', label: 'Price · the last trade', role: 'actor', describe: 'Its height on the pole is the price of the latest trade (0 at the foot, 12 at the top). The blue ring is the best bid, the red ring the best ask.', shape: { kind: 'coin', r: .24 }, position: [2.2, 1, -1.0], rotation: [90, 0, 0] },
+    { id: 'bidring', name: 'Best bid', role: 'decor', shape: { kind: 'torus', R: .13, r: .025 }, material: { preset: 'plastic', color: '#4f8ad0' }, position: [2.2, .5, -1.0], rotation: [90, 0, 0] },
+    { id: 'askring', name: 'Best ask', role: 'decor', shape: { kind: 'torus', R: .13, r: .025 }, material: { preset: 'plastic', color: '#d0553c' }, position: [2.2, 3, -1.0], rotation: [90, 0, 0] },
     ...people('b', 8, '#4f8ad0', 'Buyers'), ...people('s', 8, '#d0553c', 'Sellers'),
-    { id: 'lampL', name: 'Lamp', role: 'decor', shape: { kind: 'lamp', h: 1.8 }, position: [-4.6, 0, -2.4] },
-    ...trees([[4.8, -2.2, 1.6], [-5.0, 1.8, 1.4], [5.2, 2.0, 1.3]])
+    { id: 'lampL', name: 'Street lamp', role: 'decor', shape: { kind: 'lamp', h: 2.4 }, position: [-4.6, 0, -2.4] },
+    { id: 'barrel', name: 'Barrel', role: 'decor', shape: { kind: 'cylinder', r: .32, rt: .28, rb: .28, h: .8 }, material: { preset: 'darkwood' }, position: [3.9, .4, 2.5] },
+    { id: 'crates', name: 'Crates', role: 'decor', shape: { kind: 'box', w: .9, h: .55, d: .7, round: .03 }, material: { preset: 'wood' }, position: [-4.5, .275, 3.4], rotation: [0, 20, 0] },
+    { id: 'crates2', name: 'Crates', role: 'decor', shape: { kind: 'box', w: .7, h: .45, d: .6, round: .03 }, material: { preset: 'wood' }, position: [-4.4, .775, 3.35], rotation: [0, 35, 0] },
+    ...trees([[4.9, -2.4, 1.7], [-5.2, .6, 1.5], [5.4, 1.4, 1.3]])
   ],
   tour: ['price', 'b0', 's0', 'stall', 'board'],
   params: [
-    { key: 'income', label: "buyers' income (shifts demand)", min: 0, max: 4, value: 0 },
-    { key: 'cost', label: "sellers' cost (shifts supply)", min: 0, max: 4, value: 0 },
-    { key: 'speed', label: 'price adjustment speed', min: .2, max: 2, value: .8 }],
-  code: `const T=api.THREE, nb=8, buyers=[], sellers=[];
-for(let i=0;i<nb;i++){ const b=api.body('b'+i), s=api.body('s'+i); buyers.push({o:b,z0:b.position.z}); sellers.push({o:s,z0:s.position.z}); }
-const coin=api.body('price'); let p=1.5, last=0;
-const sig=x=>1/(1+Math.exp(-x/0.25)), W=i=>api.param('income')+9-i, C=i=>api.param('cost')+1+i;
-const Dm=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(W(i)-q); return s;}, Sp=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(q-C(i)); return s;};
-const ox=-3.1, oy=0.75, sx=6.2/8.5, sy=4.2/12, z=-3.38;
-const line=c=>{ const g=new T.BufferGeometry().setFromPoints(Array.from({length:61},()=>new T.Vector3())); const l=new T.Line(g,new T.LineBasicMaterial({color:c})); l.frustumCulled=false; api.world.add(l); return l; };
-const dl=line(0x6fa8ff), sl=line(0xff7a5c), pl=line(0xffd27a), ax=line(0xd8d2c0);
-{ const a=ax.geometry.attributes.position; for(let i=0;i<=60;i++){ const t=i/60; if(t<0.5) a.setXYZ(i,ox,oy+4.2*(1-t*2),z); else a.setXYZ(i,ox+6.2*(t-0.5)*2,oy,z); } a.needsUpdate=true; }
-const dot=api.ball(0.1,api.material({preset:'emissive',color:'#ffd27a'})); api.world.add(dot);
-api.onStep((h)=>{ const ex=Dm(p)-Sp(p); p=api.clamp(p+api.param('speed')*0.5*ex*h,0,12);
-  const s=Math.abs(ex)<0.15?0:Math.sign(ex);
-  if(s!==last){ if(s>0) api.event('Excess demand: buyers outbid each other, the price rises',coin.position.clone(),{id:'up'}); else if(s<0) api.event('Excess supply: sellers undercut each other, the price falls',coin.position.clone(),{id:'down'}); else api.event('Market clears: demand equals supply at p ≈ '+api.fmt(p)+', q ≈ '+api.fmt(Dm(p)),coin.position.clone(),{id:'clear'}); last=s; } });
-api.onFrame((dt)=>{ coin.position.y=0.3+p*0.26; coin.rotation.z+=dt*1.5;
-  buyers.forEach((b,i)=>{ b.o.position.z=b.z0+(-0.95-b.z0)*sig(W(i)-p)*0.7; });
-  sellers.forEach((s,i)=>{ s.o.position.z=s.z0+(-0.95-s.z0)*sig(p-C(i))*0.7; });
-  const dA=dl.geometry.attributes.position, sA=sl.geometry.attributes.position, pA=pl.geometry.attributes.position;
-  for(let i=0;i<=60;i++){ const q=12*i/60; dA.setXYZ(i,ox+Dm(q)*sx,oy+q*sy,z); sA.setXYZ(i,ox+Sp(q)*sx,oy+q*sy,z); pA.setXYZ(i,ox+8.5*sx*i/60,oy+p*sy,z+0.005); }
-  dA.needsUpdate=sA.needsUpdate=pA.needsUpdate=true; dot.position.set(ox+Math.min(Dm(p),Sp(p))*sx,oy+p*sy,z+0.03); });
-api.readout('price p',()=>p); api.readout('quantity demanded',()=>Dm(p)); api.readout('quantity supplied',()=>Sp(p)); api.readout('excess demand',()=>Dm(p)-Sp(p)); api.readout('trades',()=>Math.min(Dm(p),Sp(p)));
-api.plot('price',()=>p); api.camera({target:[0,1.4,0],r:13.5,ph:1.12,th:0.25});`,
+    { key: 'open', label: 'market open (1) or closed (0)', min: 0, max: 1, value: 1 },
+    { key: 'income', label: "buyers' extra income (adds to every value)", min: 0, max: 3, value: 0 },
+    { key: 'cost', label: "sellers' extra cost (adds to every cost)", min: 0, max: 3, value: 0 },
+    { key: 'rule', label: 'budget rule: never trade at a loss (1 on, 0 off)', min: 0, max: 1, value: 1 },
+    { key: 'pace', label: 'offers per second', min: 1, max: 10, value: 3 }],
+  shots: {
+    'where the curves cross': { dist: 4.5 },
+    'closes': { target: [0, 3.3, -3.4], dist: 10 },
+    'market opens': { target: [0, 1.0, -.6], dist: 9 },
+    'new cards': { target: [0, 3.3, -3.4], dist: 10 }
+  },
+  flows: {
+    'random offers': [{ from: [-2.4, 1.2, .9], to: [-.5, 1.1, -.8], label: 'bids, never above the card' }, { from: [2.4, 1.2, .9], to: [.5, 1.1, -.8], label: 'asks, never below the cost' }],
+    'curves cross': [{ from: [1.5, 2.6, -3.38], to: [2.6, 3.1, -3.38], label: 'later trades close in on the crossing' }],
+    'at a loss': [{ from: [-2.4, 1.2, .9], to: [-.5, 1.1, -.8], label: 'bids above the card' }, { from: [2.4, 1.2, .9], to: [.5, 1.1, -.8], label: 'asks below the cost' }]
+  },
+  code: `const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), f2=v=>v.toFixed(2), PMAX=12, NB=8;
+// ---- traders: buyer i values the good at 9 − i (+ income), seller j's cost is 1 + j (+ cost) ----
+const B=[], S=[]; for(let i=0;i<NB;i++){ const b=api.body('b'+i), s=api.body('s'+i); B.push({o:b,home:b.position.clone(),r0:b.rotation.y,to:b.position.clone(),active:true}); S.push({o:s,home:s.position.clone(),r0:s.rotation.y,to:s.position.clone(),active:true}); }
+const val=i=>9-i+api.param('income'), cst=j=>1+j+api.param('cost');
+function equilibrium(){ const v=B.map((_,i)=>val(i)).sort((a,b)=>b-a), c=S.map((_,j)=>cst(j)).sort((a,b)=>a-b); let q=0, gain=0; while(q<NB&&v[q]>=c[q]){ gain+=v[q]-c[q]; q++; }
+  const lo=Math.max(q?c[q-1]:0,q<NB?v[q]:0), hi=Math.min(q?v[q-1]:PMAX,q<NB?c[q]:PMAX); return {q,p:(lo+hi)/2,lo,hi,gain}; }
+let EQ=equilibrium();
+// ---- the double auction (Smith 1962; zero-intelligence traders as in Gode & Sunder 1993) ----
+let period=0, bid=null, ask=null, trades=[], all=[], idle=0, acc=0, pause=0, crossSaid=false, lastOpen=api.param('open'), lastKey='', lastRule=api.param('rule');
+function startPeriod(){ period++; bid=ask=null; trades=[]; idle=0; crossSaid=false; B.forEach(t=>{t.active=true;t.to.copy(t.home);}); S.forEach(t=>{t.active=true;t.to.copy(t.home);}); }
+function closePeriod(){ const n=trades.length, gain=trades.reduce((s,t)=>s+t.v-t.c,0), mp=n?trades.reduce((s,t)=>s+t.p,0)/n:NaN;
+  api.event('Period '+period+' closes: '+n+' trades, mean price '+(n?f2(mp):'—')+' (the curves cross at '+f2(EQ.p)+'), '+(EQ.gain>0?Math.round(100*gain/EQ.gain):0)+' % of the possible gains from trade',V(0,3.3,-3.4),{id:'period',sound:'step-done'}); pause=2.5; }
+function trade(bi,sj,p){ const b=B[bi], s=S[sj], n=trades.length; b.active=s.active=false; b.to.set(-.3-.32*n,0,-.62); s.to.set(.3+.32*n,0,-.62);
+  const t={p,v:val(bi),c:cst(sj),period}; trades.push(t); all.push(t); if(all.length>30) all.shift(); bid=ask=null; idle=0; dotsDirty=true;
+  if(!crossSaid&&Math.abs(p-EQ.p)<=.25&&api.param('rule')>.5){ crossSaid=true; api.event('A trade at '+f2(p)+' lands within 0.25 of where the curves cross ('+f2(EQ.p)+')',dotPos(all.length-1),{id:'cross',sound:'chime'}); } }
+function offer(){ const rule=api.param('rule')>.5, bl=B.map((t,i)=>t.active?i:-1).filter(i=>i>=0), sl=S.map((t,j)=>t.active?j:-1).filter(j=>j>=0);
+  if(!bl.length||!sl.length||(rule&&!bl.some(i=>sl.some(j=>val(i)>=cst(j))))||idle>60){ closePeriod(); return; }
+  idle++;
+  if(api.rand()<.5){ const i=bl[Math.floor(api.rand()*bl.length)], b=rule?api.rand()*val(i):api.rand()*PMAX;     // a buyer bids at random, never above the card when the rule is on
+    if(ask&&b>=ask.p) trade(i,ask.j,ask.p); else if(!bid||b>bid.p) bid={p:b,i}; }
+  else { const j=sl[Math.floor(api.rand()*sl.length)], a=rule?cst(j)+api.rand()*(PMAX-cst(j)):api.rand()*PMAX;  // a seller asks at random, never below the cost when the rule is on
+    if(bid&&a<=bid.p) trade(bid.i,j,bid.p); else if(!ask||a<ask.p) ask={p:a,j}; } }
+api.onStep((h)=>{
+  const open=api.param('open')>.5, key=api.param('income').toFixed(2)+'/'+api.param('cost').toFixed(2), rule=api.param('rule')>.5;
+  if(key!==lastKey){ const first=lastKey===''; lastKey=key; EQ=equilibrium(); chartDirty=true; if(!first){ api.event('New cards: values and costs have changed; the curves now cross at p = '+f2(EQ.p)+', where '+EQ.q+' units can trade',V(-1.6,3.3,-3.4),{id:'cards',sound:'paper'}); if(open){ startPeriod(); } } }
+  if(rule!==(lastRule>.5)){ lastRule=rule?1:0; if(open){ api.event(rule?'Budget rule back on: nobody may trade at a loss':'Budget rule off: traders may now bid above their card or ask below their cost, and trade at a loss',V(0,1.2,-1),{id:'rule'}); startPeriod(); } }
+  if(open!==(lastOpen>.5)){ lastOpen=open?1:0; if(open){ period=0; all=[]; dotsDirty=true; startPeriod(); api.event('The bell rings: the market opens for period 1',V(0,1.2,-1),{id:'open',sound:'chime'}); } else { bid=ask=null; B.forEach(t=>t.to.copy(t.home)); S.forEach(t=>t.to.copy(t.home)); } }
+  if(!open) return;
+  if(pause>0){ pause-=h; if(pause<=0) startPeriod(); return; }
+  acc+=h*api.param('pace'); while(acc>=1&&pause<=0){ acc-=1; offer(); } });
+if(api.param('open')>.5) startPeriod();
+// ---- the chalkboard: staircases on the left, the price of each trade on the right ----
+const Z=-3.44, ox=-2.95, oy=1.8, sx=2.55/NB, sy=3.0/PMAX, rx0=.15, rx1=2.95;
+const strips=(segs,w,col)=>{ const pos=[], idx=[]; segs.forEach(([x0,y0,x1,y1])=>{ const dx=x1-x0, dy=y1-y0, L=Math.hypot(dx,dy)||1, nx=-dy/L*w, ny=dx/L*w, k=pos.length/3; pos.push(x0+nx,y0+ny,Z, x0-nx,y0-ny,Z, x1+nx,y1+ny,Z, x1-nx,y1-ny,Z); idx.push(k,k+1,k+2,k+1,k+3,k+2); });
+  const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeBoundingBox(); const m=new T.Mesh(g,new T.MeshBasicMaterial({color:col,transparent:true,opacity:.9,depthWrite:false})); m.renderOrder=5; m.name='chalk lines'; return m; };
+let chart=null, chartDirty=true, dotsDirty=true;
+function drawChart(){ if(chart){ chart.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); chart.removeFromParent(); } chart=new T.Group(); chart.name='chalk drawing';
+  const v=B.map((_,i)=>val(i)).sort((a,b)=>b-a), c=S.map((_,j)=>cst(j)).sort((a,b)=>a-b), X=q=>ox+q*sx, Y=p=>oy+Math.min(PMAX,p)*sy, d=[], s=[];
+  for(let q=0;q<NB;q++){ d.push([X(q),Y(v[q]),X(q+1),Y(v[q])]); if(q<NB-1) d.push([X(q+1),Y(v[q]),X(q+1),Y(v[q+1])]); s.push([X(q),Y(c[q]),X(q+1),Y(c[q])]); if(q<NB-1) s.push([X(q+1),Y(c[q]),X(q+1),Y(c[q+1])]); }
+  const ax=[[ox,oy,ox+NB*sx,oy],[ox,oy,ox,oy+PMAX*sy],[rx0,oy,rx1,oy],[rx0,oy,rx0,oy+PMAX*sy]]; for(let p=0;p<=PMAX;p+=2) ax.push([ox-.06,Y(p),ox,Y(p)],[rx0-.06,Y(p),rx0,Y(p)]);
+  const eq=[]; for(let x=ox;x<rx1;x+=.16) eq.push([x,Y(EQ.p),Math.min(rx1,x+.09),Y(EQ.p)]);
+  chart.add(strips(ax,.008,0xe8e2d0), strips(d,.016,0x8fb8ff), strips(s,.016,0xff9a80), strips(eq,.012,0xffd27a)); api.world.add(chart); chartDirty=false; }
+const dots=new T.InstancedMesh(new T.CircleGeometry(.055,16),new T.MeshBasicMaterial({color:0xffffff,transparent:true,depthWrite:false}),30); dots.count=0; dots.renderOrder=6; dots.frustumCulled=false; dots.name='trade prices'; api.world.add(dots);
+const dotPos=i=>V(rx0+.12+i*(rx1-rx0-.2)/29,oy+Math.min(PMAX,all[i]?all[i].p:0)*sy,Z+.002);
+const gold=new T.Color(0xffd27a), dim=new T.Color(0x8a7650), m4=new T.Matrix4();
+const coin=api.body('price'), bidR=api.body('bidring'), askR=api.body('askring'), PY=p=>.15+Math.min(PMAX,p)*.28;
+api.onFrame((dt)=>{ dt=Math.min(dt,.1);
+  if(chartDirty) drawChart();
+  if(dotsDirty){ all.forEach((t,i)=>{ m4.makeTranslation(...dotPos(i).toArray()); dots.setMatrixAt(i,m4); dots.setColorAt(i,t.period===period?gold:dim); }); dots.count=all.length; dots.instanceMatrix.needsUpdate=true; if(dots.instanceColor) dots.instanceColor.needsUpdate=true; dots.computeBoundingBox&&all.length&&dots.computeBoundingBox(); dotsDirty=false; }
+  const last=all.length?all[all.length-1].p:EQ.p; coin.position.y+=(PY(last)-coin.position.y)*Math.min(1,dt*4); coin.rotation.z+=dt*1.2;
+  bidR.visible=!!bid; askR.visible=!!ask; if(bid) bidR.position.y+=(PY(bid.p)-bidR.position.y)*Math.min(1,dt*6); if(ask) askR.position.y+=(PY(ask.p)-askR.position.y)*Math.min(1,dt*6);
+  [...B,...S].forEach(t=>{ const d=t.to.clone().sub(t.o.position); d.y=0; const L=d.length(); if(L>.01){ const st=Math.min(L,dt*1.6); t.o.position.addScaledVector(d.normalize(),st); t.o.rotation.y=Math.atan2(d.x,d.z); t.o.position.y=Math.abs(Math.sin(api.time()*9))*.04; } else { t.o.position.y=0; t.o.rotation.y+=((t.active?t.r0:Math.PI)-t.o.rotation.y)*Math.min(1,dt*3); } }); });
+const gains=()=>trades.reduce((s,t)=>s+t.v-t.c,0);
+api.readout('period',()=>api.param('open')>.5?String(period):'market closed');
+api.readout('trades this period',()=>trades.length+' (at the crossing: '+EQ.q+')');
+api.readout('last trade price',()=>all.length?f2(all[all.length-1].p):'—');
+api.readout('mean price this period',()=>trades.length?f2(trades.reduce((s,t)=>s+t.p,0)/trades.length):'—');
+api.readout('price where the curves cross',()=>f2(EQ.p));
+api.readout('share of the possible gains',()=>EQ.gain>0?Math.round(100*gains()/EQ.gain)+' % (max gain '+EQ.gain+')':'—');
+api.readout('best bid / best ask',()=>(bid?f2(bid.p):'—')+' / '+(ask?f2(ask.p):'—'));
+api.readout('budget rule',()=>api.param('rule')>.5?'on (no trade at a loss)':'off');
+api.plot('trade price',()=>all.length?all[all.length-1].p:NaN);
+api.camera({target:[0,2.0,-.7],r:12.4,ph:1.2,th:.3});`,
   lessons: [
-    { title: 'From a low price to the clearing price', text: 'The price starts low: many buyers step up, few sellers. Watch the price climb until the two groups at the stall match.', focus: 'price', until: 'event:clear', run: 30, explain: 'At the clearing price quantity demanded equals quantity supplied; any other price leaves a shortage or a surplus that pushes it back.' },
-    { title: 'Buyers get richer', text: 'Raise income. Every buyer will now pay more: the blue curve shifts right, and the price climbs to a new, higher clearing point.', set: { income: 3 }, focus: 'board', until: 'event:clear', run: 30, explain: 'A rise in demand raises both the equilibrium price and the quantity traded.' },
-    { title: 'Costs rise', text: 'Raise the sellers\' cost. The red curve shifts left: the price rises further but fewer units change hands.', set: { cost: 3 }, focus: 'board', until: 'event:clear', run: 30, explain: 'A fall in supply raises the price and lowers the quantity.' },
-    { title: 'A nervous market', text: 'Make the price adjust quickly and watch it overshoot and settle.', set: { speed: 2, income: 0, cost: 0 }, focus: 'price', run: 12, explain: 'The equilibrium is the same; only the path to it changes.' }]
+    { title: 'Cards before trading', question: 'At what price should trade happen?', text: 'The market is closed. Each buyer holds a card with the most they would pay: 9, 8, 7, down to 2. Each seller holds a card with their cost: 1, 2, 3, up to 8. On the board the blue staircase counts the buyers willing to buy at each price, and the red staircase counts the sellers willing to sell. Find where the curves cross.', set: { open: 0, income: 0, cost: 0, rule: 1 }, focus: 'board', shot: 'medium', run: 10, explain: 'The staircases cross at p = 5. At that price five buyers want to buy and five sellers want to sell; the fifth pair, value 5 and cost 5, gains nothing. Trading every unit whose value exceeds its cost gives the largest total gain possible: 8 + 6 + 4 + 2 = 20. At any lower price buyers outnumber sellers, and at any higher price sellers outnumber buyers.', opens: 'Can traders who know nothing find that price?' },
+    { title: 'Open the market', question: 'Can traders who know nothing find that price?', text: 'Open the market. Traders now shout random offers: a buyer bids any price up to their card, and a seller asks any price above their cost. When a bid meets an ask, the two trade at the price already on the table. Watch the price coin and the gold dots on the board until the period closes.', set: { open: 1 }, focus: 'stall', shot: 'push', until: 'event:period 1 closes', run: 60, explain: 'These are zero-intelligence traders: no memory, no strategy, and no knowledge of the curves (Gode & Sunder 1993). Even so, a period usually ends with 4–5 trades at an average price near 5, capturing most of the possible gain. Over thousands of simulated periods the median is 95 % of the gain and the middle 80 % of period averages lie between 4.4 and 5.9. The double-auction rules, together with the ban on trading at a loss, do most of the work.', opens: 'Do the prices settle at the crossing?' },
+    { title: 'Close to the crossing', question: 'Do the prices settle at the crossing?', text: 'Look closely at the board. Each gold dot is one trade, in order. Watch the next dots: early trades scatter, later ones close in on the dashed line where the curves cross.', focus: 'board', shot: 'close', until: 'event:where the curves cross', run: 60, explain: 'The first trade of a period typically lands about 0.7 away from 5 and the last about 0.05 away (medians over simulated periods). The traders with the highest values and lowest costs trade first, at scattered prices. As they leave, the remaining traders\' ranges overlap only near 5, so later prices are squeezed towards the crossing. Smith (1962) saw human traders in the first classroom double auctions converge on the predicted price within a few periods.', opens: 'What happens when buyers get richer?' },
+    { title: 'Buyers get richer', question: 'What happens when buyers get richer?', text: 'Give every buyer 2 more to spend. The blue staircase moves up, the crossing moves, and a new period starts. Watch the dots and the price coin until the period closes.', set: { income: 2 }, focus: 'board', shot: 'medium', until: 'event:closes', run: 60, explain: 'Every value rose by 2, so the blue staircase moved up. The curves now cross at p = 6, where 6 units can trade instead of 5. The period\'s mean price (in the log) moves up with it, near 6 on average. A rise in demand raises both the equilibrium price and the quantity traded.', opens: 'What happens when costs rise?' },
+    { title: 'Costs rise', question: 'What happens when costs rise?', text: 'Now raise every seller\'s cost by 2. The red staircase moves up, and a new period starts. Watch where the dots and the price coin settle, and how many trades happen.', set: { cost: 2 }, focus: 'board', shot: 'medium', until: 'event:closes', run: 60, explain: 'The curves now cross at p = 7, with only 5 units worth trading. Prices rise again, averaging about 6.9 per period in simulation, but fewer units change hands. A fall in supply raises the price and lowers the quantity.', opens: 'Is it the traders or the rules that make the market work?' },
+    { title: 'Drop the budget rule', question: 'Is it the traders or the rules that make the market work?', text: 'Switch the budget rule off. Traders may now bid above their card or ask below their cost, and so trade at a loss. Watch the dots and the price coin scatter, and read the share of the possible gains when the period closes.', set: { rule: 0 }, focus: 'stall', shot: 'medium', until: 'event:closes', run: 60, explain: 'Without the rule every trader eventually trades, including buyers whose cards lie below the crossing and sellers whose costs lie above it. Their losses cancel most of the gains: here exactly 40 % remains (gain 8 of a possible 20, with these cards), and prices scatter around 6, the middle of the 0–12 range. The same random traders reach about 95 % with the rule on. As Gode & Sunder (1993) found, the constraint, a rule of the market, not the traders\' intelligence, lifts efficiency close to 100 %.' }]
 };
 
 export const GALTON = {
@@ -284,7 +353,7 @@ const per=Math.max(1,Math.floor((dx-.03)/(2*R*1.02))), rowsMax=Math.floor(maxH/(
 const stack=new T.InstancedMesh(beadG,steel,(N+1)*cap); stack.castShadow=true; stack.receiveShadow=true; stack.count=0; stack.name='beads in the bins'; bins.add(stack);
 const fallN=96, fall=new T.InstancedMesh(beadG,steel,fallN); fall.castShadow=true; fall.frustumCulled=false; fall.count=0; fall.name='falling beads'; api.world.add(fall);
 const slot=(k,j)=>{ const row=Math.floor(j/per), col=j%per, off=(row%2)*R*.5; return [(k-N/2)*dx+(col-(per-1)/2)*2*R*1.02+off-(row%2?R*.25:0), binY+R+row*2*R*.9, Z]; };
-let counts=new Array(N+1).fill(0), landed=0, said=false, lastP=api.param('p'), acc=0, leadCool=0;
+let counts=new Array(N+1).fill(0), landed=0, said=false, lastP=api.param('p'), lastRate=api.param('rate'), acc=0, leadCool=0;
 const beads=[];
 const CY=.038+R;   // a bead resting on a peg: its centre sits one peg radius plus one bead radius above the peg's centre
 const newPath=()=>({row:-1,k:0,t:0,x0:0,x1:0,y0:top+.45,y1:top+CY});
@@ -300,7 +369,7 @@ const riding=()=>lead.children.some(o=>o.isMesh&&!o.visible);   // the engine hi
 function land(k){ counts[k]++; landed++;
   if(landed===150&&!said){ said=true; const m=mean(), sd=spread(); api.event('150 beads: the bins trace a bell. Mean bin '+f2(m)+' (theory N·p = '+f2(N*api.param('p'))+'), spread '+f2(sd)+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+') at p = '+f2(api.param('p'))+', N = '+N,new T.Vector3(0,binY+.9,Z),{id:'bell',sound:'chime'}); } }
 api.onStep((h)=>{
-  if(Math.abs(api.param('p')-lastP)>.005){ lastP=api.param('p'); counts.fill(0); landed=0; said=false; api.event('The bins are emptied for a new run with p = '+f2(lastP),new T.Vector3(0,binY+.5,Z),{id:'reset',sound:'pour'}); }
+  if(Math.abs(api.param('p')-lastP)>.005||Math.abs(api.param('rate')-lastRate)>.5){ lastP=api.param('p'); lastRate=api.param('rate'); counts.fill(0); landed=0; said=false; api.event('The bins are emptied for a new run: p = '+f2(lastP)+', '+Math.round(lastRate)+' beads per second',new T.Vector3(0,binY+.5,Z),{id:'reset',sound:'pour'}); }
   acc+=h*api.param('rate'); while(acc>=1){ acc-=1; if(beads.length<fallN) beads.push(newPath()); }
   for(let i=beads.length-1;i>=0;i--){ const b=beads[i]; if(advance(b,h)){ land(b.k); beads.splice(i,1); } }
   leadCool=Math.max(0,leadCool-h);
@@ -331,56 +400,108 @@ api.plot('beads in the centre bin',()=>counts[mode()]);
 api.camera({target:[.3,3.25,0],r:12.6,ph:1.47,th:.12});`,
   lessons: [
     { title: 'Ride one bead', question: 'Where will one bead land?', text: 'You ride the copper bead down the board. At every peg it bounces left or right, like a coin flip. Watch where it ends up.', focus: 'ball', shot: 'pov', pov: 'Copper bead', until: 'event:copper bead lands', run: 40, explain: 'Its path was a string of 10 independent left/right choices, so each particular path has probability (1/2)^10 = 1/1024. The bin number counts only the right-bounces, and many different paths share a bin: C(10,k) of them end in bin k. One path leads to bin 0, 10 to bin 1, and 252 to bin 5. Where one bead lands is unpredictable. Where most beads land is not.', opens: 'What shape do many beads make?' },
-    { title: 'Let the beads fall', question: 'What shape do many beads make?', text: 'Let the beads fall and watch the bins fill until 150 beads have landed. Compare the mean bin and the spread with the theory readouts.', focus: 'bins', shot: 'push', until: 'event:150 beads', run: 50, explain: 'The count of right-bounces in N independent flips follows the binomial distribution: mean N·p = 5 bins, spread √(Np(1−p)) = 1.58 bins. After 150 beads the measured mean should sit within about 0.13 of 5 (the standard error 1.58/√150). The pile is already close to the gold normal curve: de Moivre–Laplace, the first central limit theorem (Le Cam 1986).', opens: 'What happens if the pegs favour one side?' },
+    { title: 'Let the beads fall', question: 'What shape do many beads make?', text: 'Open the funnel wider (12 beads a second); the bins are emptied first. Watch them fill until 150 beads have landed, and compare the mean bin and the spread with the theory readouts.', set: { rate: 12 }, focus: 'bins', shot: 'push', until: 'event:150 beads', run: 50, explain: 'The count of right-bounces in N independent flips follows the binomial distribution: mean N·p = 5 bins, spread √(Np(1−p)) = 1.58 bins. After 150 beads the measured mean should sit within about 0.13 of 5 (the standard error 1.58/√150). The pile is already close to the gold normal curve: de Moivre–Laplace, the first central limit theorem (Le Cam 1986).', opens: 'What happens if the pegs favour one side?' },
     { title: 'Bias the pegs', question: 'What happens if the pegs favour one side?', text: 'Make right-bounces likelier (p = 0.75). The bins are emptied and refilled. Watch the pile build up to the right of centre until 150 beads have landed.', set: { p: .75 }, focus: 'bins', shot: 'medium', until: 'event:150 beads', run: 50, explain: 'With p = 0.75 the mean moves to N·p = 7.5 and the spread shrinks to √(10 × 0.75 × 0.25) = 1.37 bins. The pile is lopsided, with a longer tail towards the left: no bin above 10 exists to balance it. The normal curve fits less well when N·p(1−p) is small (here 1.9); a common rule of thumb asks for at least 5–10.', opens: 'What do more rows do?' },
     { title: 'More rows', question: 'What do more rows do?', text: 'Add rows (N = 14) and set p back to 0.5. The board rebuilds with narrower bins. Watch the new bell grow until 150 beads have landed.', set: { rows: 14, p: .5 }, focus: 'curve', shot: 'medium', until: 'event:150 beads', run: 60, explain: 'With 14 flips the mean is 7 and the spread √(14 × 0.25) = 1.87 bins: wider than with 10 rows. But relative to the 14-bin range it is narrower: 1.87/14 = 0.13 against 1.58/10 = 0.16. Sums of many independent nudges spread out like √N while their range grows like N, so the bell sharpens relative to the board. That is the central limit theorem at work.', opens: 'How good is the normal curve for the centre bin?' },
-    { title: 'Read the centre bin', question: 'How good is the normal curve for the centre bin?', text: 'Look closely at the bins near the middle and read the share of beads in bin N·p, with the binomial and normal predictions next to it.', focus: 'bins', shot: 'close', run: 15, explain: 'For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With only 150 beads the measured share wobbles by about 3 percentage points around them, and more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it).' }]
+    { title: 'Read the centre bin', question: 'How good is the normal curve for the centre bin?', text: 'Look closely at the bins near the middle and read the share of beads in bin N·p, with the binomial and normal predictions next to it.', focus: 'bins', shot: 'close', run: 15, explain: 'For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With a few hundred beads the measured share still wobbles by about 2 percentage points around them (the standard error √(0.21 × 0.79 / n)); more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it).' }]
 };
 
 export const OSMOSIS = {
   type: 'scene', title: 'Osmosis across a semi-permeable membrane', technique: 'sweep',
-  environment: { preset: 'micro', base: true },
+  environment: { preset: 'lab' },
   bodies: [
-    { id: 'tank', name: 'Tank', role: 'decor', shape: { kind: 'glasscase', w: 6, d: 1.6, h: 3.4 }, position: [0, 0, 0] },
-    { id: 'membrane', name: 'Membrane', label: 'Semi-permeable membrane', role: 'actor', describe: 'Pores let water molecules through but not the larger solute molecules.', shape: { kind: 'box', w: .05, h: 3.2, d: 1.55, round: 0 }, material: { preset: 'membrane', color: '#ffb0c8' }, position: [0, 1.6, 0] },
-    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 2.2 }, material: { preset: 'water', color: '#58b4d0' }, position: [-1.5, 1.3, 0] },
-    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus solute.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 2.2 }, material: { preset: 'water', color: '#d0a050' }, position: [1.5, 1.3, 0] }],
-  tour: ['membrane', 'left', 'right'],
+    { id: 'slab', name: 'Tank base', role: 'decor', shape: { kind: 'box', w: 6.4, h: .12, d: 1.9, round: .02 }, material: { preset: 'plastic', color: '#2b3036' }, position: [0, .06, 0] },
+    { id: 'tank', name: 'Glass tank', role: 'decor', shape: { kind: 'glasscase', w: 6, d: 1.6, h: 3.4 }, position: [0, .12, 0] },
+    { id: 'membrane', name: 'Membrane', label: 'Semi-permeable membrane', role: 'actor', describe: 'Its pores let water molecules through but not the larger solute molecules.', shape: { kind: 'box', w: .07, h: 3.3, d: 1.56, round: 0 }, material: { preset: 'membrane', color: '#e0507a' }, position: [0, 1.77, 0] },
+    { id: 'clampT', name: 'Membrane clamp', role: 'decor', shape: { kind: 'box', w: .16, h: .1, d: 1.66, round: .01 }, material: { preset: 'steel' }, position: [0, 3.47, 0] },
+    { id: 'clampB', name: 'Membrane clamp', role: 'decor', shape: { kind: 'box', w: .16, h: .1, d: 1.66, round: .01 }, material: { preset: 'steel' }, position: [0, .17, 0] },
+    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#58b4d0' }, position: [-1.5, 1.42, 0] },
+    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus dissolved solute.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#d8b070' }, position: [1.5, 1.42, 0] },
+    { id: 'tracer', name: 'Tagged water molecule', label: 'Tagged water molecule', role: 'actor', describe: 'One water molecule marked so you can follow it, or ride it (POV).', shape: { kind: 'sphere', r: .075 }, material: { preset: 'emissive', color: '#7fe0ff' }, position: [-.6, .9, .2] },
+    { id: 'piston', name: 'Piston', label: 'Piston · extra pressure on the solution', role: 'actor', describe: 'Pressing on the solution side pushes back against the osmotic flow.', shape: { kind: 'group' }, position: [1.5, 3.3, 0] },
+    { id: 'plate', name: 'Piston plate', role: 'decor', parent: 'piston', shape: { kind: 'box', w: 2.86, h: .08, d: 1.5, round: .02 }, material: { preset: 'plastic', color: '#c9ced4' }, position: [0, .04, 0] },
+    { id: 'rod', name: 'Piston rod', role: 'decor', parent: 'piston', shape: { kind: 'cylinder', r: .05, h: 1.6 }, material: { preset: 'chrome' }, position: [0, .84, 0] },
+    { id: 'weight', name: 'Weight', role: 'decor', parent: 'piston', shape: { kind: 'cylinder', r: .32, h: .22 }, material: { preset: 'iron' }, position: [0, 1.75, 0] },
+    { id: 'beaker', name: 'Beaker', role: 'decor', shape: { kind: 'beaker', r: .42, h: 1.0, fill: .6, liquid: '#d8b070' }, position: [-4.3, 0, 1.9] },
+    { id: 'flask', name: 'Flask', role: 'decor', shape: { kind: 'flask', r: .5, h: 1.3, fill: .4, liquid: '#58b4d0' }, position: [4.4, 0, -1.4] },
+    { id: 'notebook', name: 'Lab notebook', role: 'decor', shape: { kind: 'book', w: 1.2, h: 1.6, d: .12 }, material: { preset: 'leather', color: '#2c3e50' }, position: [4.0, .06, 2.4], rotation: [-90, 0, -18] }
+  ],
+  tour: ['membrane', 'left', 'right', 'tracer', 'piston'],
   params: [
     { key: 'solute', label: 'solute molecules', min: 0, max: 90, value: 45, rebuild: true },
-    { key: 'T', label: 'temperature', min: .3, max: 2, value: 1 },
-    { key: 'pass', label: 'membrane permeability', min: .2, max: 1, value: .6 }],
-  code: `const T=api.THREE, nW=200, nS=Math.round(api.param('solute')), rnd=api.rand;
-const wm=new T.InstancedMesh(new T.SphereGeometry(0.05,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW);
-const sm=new T.InstancedMesh(new T.SphereGeometry(0.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; api.world.add(wm,sm);
-const L=api.body('left'), R=api.body('right'); const base=1.3; let hL=base, hR=base, phi=0, cLR=0, cRL=0, win=0, flowSaid=false, eqT=0, eqSaid=false, lastDh=0;
-const P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-0.1-rnd()*2.7:0.1+rnd()*2.7,y:0.15+rnd()*(base-0.3),z:(rnd()-0.5)*1.3,w:true}); }
-for(let i=0;i<nS;i++) P.push({x:0.2+rnd()*2.6,y:0.2+rnd()*(base-0.4),z:(rnd()-0.5)*1.2,w:false});
+    { key: 'T', label: 'temperature (thermal motion)', min: .3, max: 2, value: 1 },
+    { key: 'pass', label: 'membrane permeability', min: .2, max: 1, value: .7 },
+    { key: 'press', label: 'extra pressure on the solution', min: 0, max: 120, value: 0, unit: 'mm water' }],
+  shots: {
+    'net water flow': { target: [0, 1.0, .1], dist: 6 },
+    'tagged water molecule': { dist: 4 },
+    'osmotic equilibrium': { target: [0, 1.6, 0], dist: 9 },
+    'reverse osmosis': { target: [.6, 1.6, 0], dist: 8 }
+  },
+  flows: {
+    'net water flow': [{ from: [-1.0, .7, .9], to: [1.0, .7, .9], label: 'more water crosses into the solution' }],
+    'osmotic equilibrium': [{ from: [2.6, 2.3, .9], to: [2.6, 1.4, .9], label: 'the extra height presses back' }, { from: [-1.0, .7, .9], to: [1.0, .7, .9], label: 'the solute side draws water' }],
+    'reverse osmosis': [{ from: [1.5, 3.0, .9], to: [1.5, 2.0, .9], label: 'piston pressure' }, { from: [1.0, .7, .9], to: [-1.0, .7, .9], label: 'water squeezed back' }]
+  },
+  code: `const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), rnd=api.rand, f0=v=>String(Math.round(v)), f2=v=>v.toFixed(2);
+// scale: 1 unit = 10 cm. Each column's height is proportional to its number of water molecules (water does not compress).
+const nW=400, nS=Math.round(api.param('solute')), Y0=.12, HV=1.3/(nW/2), K=.23, W=1.47, ZD=.7;
+const wm=new T.InstancedMesh(new T.SphereGeometry(.045,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW); wm.name='water molecules';
+const sm=new T.InstancedMesh(new T.SphereGeometry(.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; sm.name='solute molecules'; api.world.add(wm,sm);
+const L=api.body('left'), R=api.body('right'), tr=api.body('tracer'), piston=api.body('piston');
+let m=0, nL=nW/2, nR=nW/2, visL=nW/2, visR=nW/2, hL=nL*HV, hR=nR*HV, cLR=0, cRL=0, win=0, rate=[0,0], flowSaid=false, eqSaid=false, revSaid=false, ema=0, hist=[], netEma=0;
+const P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-.08-rnd()*2.8:.08+rnd()*2.8,y:Y0+.05+rnd()*(hL-.1),z:(rnd()-.5)*1.3,w:true}); }
+for(let i=0;i<nS;i++) P.push({x:.2+rnd()*2.6,y:Y0+.08+rnd()*(hR-.2),z:(rnd()-.5)*1.2,w:false});
 P.forEach(q=>q.side=q.x<0?-1:1);
-api.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?new T.Vector3(q.x,q.y,q.z):null; },'Small enough to pass the pores.');
-if(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?new T.Vector3(q.x,q.y,q.z):null; },'Too large to pass; they stay on the right.');
-api.onStep((h)=>{ const s=Math.sqrt(api.param('T'))*0.9, k=1.8, dh=hR-hL, pass=api.param('pass');
-  for(const q of P){ q.x+=(rnd()-0.5)*s*h*14; q.y+=(rnd()-0.5)*s*h*14; q.z+=(rnd()-0.5)*s*h*14;
-    const top=(q.side<0?hL:hR)-0.06; if(q.y<0.12)q.y=0.12; if(q.y>top)q.y=top; if(q.z<-0.66)q.z=-0.66; if(q.z>0.66)q.z=0.66; if(q.x<-2.88)q.x=-2.88; if(q.x>2.88)q.x=2.88;
-    const side=q.x<0?-1:1;
-    if(side!==q.side){ let ok=false; if(q.w) ok = q.side<0 ? rnd()<pass*Math.exp(-k*dh) : rnd()<pass*(1-phi)*Math.exp(k*dh);
-      if(ok){ q.side=side; if(side>0) cLR++; else cRL++; } else q.x=q.side<0?-0.04:0.04; } } });
+api.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?V(q.x,q.y,q.z):null; },'Small enough to pass the pores.');
+if(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?V(q.x,q.y,q.z):null; },'Too large for the pores: they stay on the right.');
+const press=()=>api.param('press')/100;     // piston pressure as a water head, in scene units (1 unit = 100 mm)
+const xw=()=>nR/(nR+nS);                    // mole fraction of water on the solution side
+const dhEff=()=>(hR-hL)+press();          // hydrostatic head of the solution side plus the piston, in scene units
+// a water molecule tries a pore: into the solution with weight e^(−KΔ); back out with x_w·e^(+KΔ). At balance −ln x_w = 2KΔ: the ideal-solution law (van 't Hoff when dilute).
+const KAP=12;   // pore traffic: water molecules per second crossing each way through the wetted membrane when Δ = 0 and x_w = 1
+const rates=()=>{ const k=KAP*api.param('pass')*Math.sqrt(api.param('T')), d=dhEff(); return [k*Math.exp(-K*d), k*xw()*Math.exp(K*d)]; };
+const hop=(from,top)=>{ let best=null,bd=9; for(const q of P){ if(q.w&&q.side===from&&q.y<top){ const d=Math.abs(q.x); if(d<bd){bd=d;best=q;} } } if(best){ best.side=-from; best.x=-best.x; if(from<0){visL--;visR++;cLR++;} else {visL++;visR--;cRL++;} } };   // the molecule nearest the pores goes through
+// the tagged molecule: Brownian motion with a little persistence (so a rider's view turns smoothly), plus the drift of the bulk flow
+const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0;
+api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.min(hL,hR)+Y0-.05;
+  for(const q of P){ q.x+=(rnd()-.5)*st; q.y+=(rnd()-.5)*st; q.z+=(rnd()-.5)*st;
+    const lim=Y0+(q.side<0?hL:hR)-.05; if(q.y<Y0+.05)q.y=Y0+.05; if(q.y>lim)q.y=lim; if(q.z<-ZD)q.z=-ZD; if(q.z>ZD)q.z=ZD; if(q.x<-2.9)q.x=-2.9; if(q.x>2.9)q.x=2.9;
+    if((q.x<0?-1:1)!==q.side) q.x=-q.x; }                                // walking into the membrane: reflected (crossing happens only through the pores, below)
+  // the levels follow the net flow J = J_in − J_out (deterministic); the drawn molecules hop both ways at the gross rates, kept in step with the levels
+  const [jin,jout]=rates(); m+=(jin-jout)*h; nL=nW/2-m; nR=nW/2+m; hL=nL*HV; hR=nR*HV;
+  const dv=visR-nR; if(rnd()<h*jin*Math.exp(-.4*dv)) hop(-1,top); if(rnd()<h*jout*Math.exp(.4*dv)) hop(1,top);
+  // tagged molecule
+  const tau=.6, sg=.5*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();
+  tq.x+=tq.vx*h; tq.y+=tq.vy*h; tq.z+=tq.vz*h; const tl=Y0+(tq.side<0?hL:hR)-.08;
+  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>2.85){tq.x=Math.sign(tq.x)*2.85;tq.vx*=-1;}
+  tcool=Math.max(0,tcool-h);
+  if((tq.x<0?-1:1)!==tq.side){ const pr=Math.min(1,api.param('pass')*1.2)*(tq.side<0?Math.exp(-K*dhEff()):xw()*Math.exp(K*dhEff()));   // at the membrane: through a pore, or bounced back
+    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; api.event(ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
+  win+=h; if(win>=3){ const net=cLR-cRL; rate=[cLR/3,cRL/3]; netEma+=(net/3-netEma)*.5;
+    if(!flowSaid&&net>=4&&nS>0){ flowSaid=true; api.event('Net water flow into the solution side: in 3 s, '+cLR+' molecules crossed into it and '+cRL+' came back',V(0,Y0+.6,.1),{id:'flow',sound:'pour'}); }
+    if(!revSaid&&press()>0&&net<=-4){ revSaid=true; api.event('Reverse osmosis: pressed harder than the osmotic pressure, water is squeezed back into the pure side ('+cRL+' out, '+cLR+' in, in 3 s)',V(.6,Y0+1.2,.1),{id:'reverse',sound:'pour'}); }
+    cLR=0; cRL=0; win=0; }
+  ema+=((hR-hL)-ema)*Math.min(1,h/2); hist.push([t,ema]); while(hist.length&&t-hist[0][0]>8) hist.shift();
+  if(!eqSaid&&nS>0&&t>8&&press()===0&&Math.abs((hR-hL)-bal())<.025){ eqSaid=true; api.event('Osmotic equilibrium: the solution stands Δh = '+f0((hR-hL)*100)+' mm higher, and water now crosses equally both ways (about '+f0((rate[0]+rate[1])/2)+' molecules per second each way)',V(1.5,Y0+hR,0),{id:'eq',sound:'chime'}); } });
+const bal=()=>nS?-Math.log(xw())/(2*K)-press():0;   // head at which the two crossing rates balance (scene units)
 const m4=new T.Matrix4();
-api.onFrame((dt)=>{ let nL=0,nRw=0; P.forEach(q=>{ if(q.w){ if(q.side<0) nL++; else nRw++; } }); phi=nS?Math.min(0.85,1.25*nS/(nS+nRw)):0;
-  const tL=base+(nL-nW/2)*0.011, tR=base+(nRw-nW/2)*0.011; hL+=(tL-hL)*Math.min(1,dt*3); hR+=(tR-hR)*Math.min(1,dt*3);
-  L.position.y=hL; R.position.y=hR; let iw=0,is=0;
-  P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;
-  win+=dt; if(win>2){ if(!flowSaid&&cLR-cRL>4){ flowSaid=true; api.event('Net water flow into the solution side',new T.Vector3(0,1.2,0),{id:'flow'}); } cLR=0; cRL=0; win=0; }
-  const dh=hR-hL; if(Math.abs(dh-lastDh)<0.0015*Math.max(dt*60,1)) eqT+=dt; else eqT=0; lastDh=dh;
-  if(!eqSaid&&eqT>4&&api.time()>6){ eqSaid=true; api.event('Osmotic equilibrium: the extra height Δh = '+api.fmt(dh)+' balances the solute\\'s pull',new T.Vector3(1.5,hR,0),{id:'eq'}); } });
-api.readout('water left',()=>P.filter(q=>q.w&&q.side<0).length); api.readout('water right',()=>P.filter(q=>q.w&&q.side>0).length);
-api.readout('solute fraction φ',()=>phi); api.readout('Δh (right − left)',()=>hR-hL);
-api.plot('Δh',()=>hR-hL); api.camera({target:[0,1.5,0],r:9.5,ph:1.35,th:0.1});`,
+api.onFrame(()=>{ let iw=0,is=0; P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;
+  const D=1.3; L.position.y=Y0+hL; L.scale.y=hL/D; R.position.y=Y0+hR; R.scale.y=hR/D; tr.position.set(tq.x,tq.y,tq.z);
+  const py=press()>0?Y0+hR+.005:Math.max(Y0+hR+.5,2.75); piston.position.y+=(py-piston.position.y)*.15; });
+api.readout('water molecules left / right',()=>visL+' / '+visR);
+api.readout('water fraction x_w on the solution side',()=>nS?f2(xw()):'1 (no solute)');
+api.readout('Δh (solution − pure water)',()=>f0((hR-hL)*100)+' mm');
+api.readout('Δh where crossings balance',()=>nS?f0(bal()*100)+' mm':'0 mm');
+api.readout('crossings per second (in / out)',()=>rate[0].toFixed(1)+' / '+rate[1].toFixed(1));
+api.readout('piston pressure',()=>f0(api.param('press'))+' mm of water');
+api.plot('Δh (mm)',()=>(hR-hL)*100); api.camera({target:[0,1.55,0],r:9.6,ph:1.36,th:.14});`,
   lessons: [
-    { title: 'Watch the water move', text: 'Water molecules cross the pores in both directions; solute molecules bounce off the membrane on the right. Wait for the net-flow event.', focus: 'membrane', until: 'event:flow', run: 20, explain: 'Solute that cannot enter the pores lowers the water\'s chemical potential on its side, so the net flow runs into the solution. In real membranes this is mostly bulk flow through the pores, not water simply "diffusing down its own gradient" (Kramer & Myers 2013); the particle picture here shows the direction and the balance, not the molecular mechanism.' },
-    { title: 'Equilibrium', text: 'The right level rises until its extra pressure pushes water back as fast as it arrives. Wait for equilibrium.', focus: 'right', until: 'event:eq', run: 40, explain: 'The height difference at equilibrium measures the osmotic pressure; it grows with solute concentration (van \'t Hoff: π ≈ cRT).' },
-    { title: 'More solute', text: 'Double the solute. The tank refills from scratch and settles at a bigger height difference.', set: { solute: 90 }, focus: 'right', until: 'event:eq', run: 45, explain: 'Osmotic pressure rises with the number of dissolved particles.' },
-    { title: 'Pure water both sides', text: 'Remove all solute: nothing drives a net flow and the levels stay equal.', set: { solute: 0 }, focus: 'left', run: 12, explain: 'Osmosis needs a concentration difference across a membrane that blocks the solute.' }]
+    { title: 'Watch the water move', question: 'Which way does water move?', text: 'The tank starts with both levels equal. Water molecules (blue) cross the membrane pores in both directions; the solute molecules (orange) bounce off it on the right. Wait for the net water flow.', set: { solute: 45 }, focus: 'membrane', shot: 'push', until: 'event:net water flow', run: 30, explain: 'Solute that cannot enter the pores lowers the chemical potential of the water on its side, so more water enters the solution than leaves it. In real membranes this flow is mostly bulk flow through the pores, driven by a pressure difference set up inside them; it is not water simply "diffusing down its own gradient" (Kramer & Myers 2013). The particle picture here shows the direction and the balance, not the molecular mechanism.', opens: 'How does one molecule get across?' },
+    { title: 'Ride one molecule', question: 'How does one molecule get across?', text: 'You are now riding a single tagged water molecule, jostled by thermal motion. Watch the pink membrane ahead and wait until the molecule slips through a pore.', focus: 'tracer', shot: 'pov', pov: 'Tagged water molecule', until: 'event:tagged water molecule slips', run: 40, explain: 'No single molecule knows which way is "downhill". It wanders at random, and when it reaches a pore it may pass in either direction. The net flow is a small imbalance between two large, opposite streams. In living cells water crosses mainly through aquaporins, channels that pass water molecules in single file, discovered by Preston et al. (1992).', opens: 'When does the flow stop?' },
+    { title: 'Equilibrium', question: 'When does the flow stop?', text: 'Follow the solution level: it rises while the pure-water level falls. The extra height presses back on the membrane. Wait for equilibrium.', focus: 'right', shot: 'medium', until: 'event:osmotic equilibrium', run: 90, explain: 'The higher column pushes water back, and the flow stops when its hydrostatic pressure ρgΔh balances the solute\'s effect: here near 40 mm, where −ln x_w = 2KΔh. For dilute solutions this is van \'t Hoff\'s law, π = cRT (van \'t Hoff 1887): the osmotic pressure grows with the number of dissolved particles, not with their kind. In the real world a 0.01 mol/L sugar solution at 25 °C has π ≈ 25 kPa, enough to hold up a column of water 2.5 m high.', opens: 'Does more solute make the column taller?' },
+    { title: 'More solute', question: 'Does more solute make the column taller?', text: 'Double the solute to 90 molecules. The tank refills from equal levels. Watch the solution rise higher this time, and wait for equilibrium.', set: { solute: 90 }, focus: 'right', shot: 'medium', until: 'event:osmotic equilibrium', run: 100, explain: 'With twice the solute the column settles near 65 mm instead of 40 mm. It is not exactly double, because −ln x_w grows a little faster than the solute fraction, and the incoming water dilutes the solution as it rises. In dilute solutions the osmotic pressure is proportional to the solute concentration (π = cRT).', opens: 'Can pressure push the water back?' },
+    { title: 'Push back: reverse osmosis', question: 'Can pressure push the water back?', text: 'Lower the piston onto the solution with 120 mm of water pressure, more than the osmotic pressure. Watch which way the water now crosses.', set: { press: 120 }, focus: 'piston', shot: 'medium', until: 'event:reverse osmosis', run: 60, explain: 'Pressure on the solution raises the water\'s chemical potential there. Once it exceeds the osmotic pressure, the net flow reverses and water is squeezed out of the solution through the membrane, leaving the solute behind. The flow follows J = Lp(ΔP − σΔπ) (Kedem & Katchalsky 1958). Desalination plants work this way: seawater has an osmotic pressure of about 27 bar, so they press it at 55–80 bar.' }]
 };
 import { REF } from './seeds-sources.js';
 WATER_CYCLE.sources = [REF.trenberth, REF.oki, REF.koutsoyiannis, REF.roe];

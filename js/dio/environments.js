@@ -14,7 +14,6 @@ import { VerticalBlurShader } from 'three/addons/shaders/VerticalBlurShader.js';
 import { canvasTex } from '../gfx/textures.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
 import { woodSet, feltSet, alignUV, softDisc } from '../gfx/proc.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mulberry } from '../util.js';
 
 export const ENV_PRESETS = ['studio', 'lab', 'landscape', 'cosmos', 'micro', 'abstract', 'ocean', 'night', 'desk'];
@@ -151,8 +150,9 @@ function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2
   const g = new THREE.Group(); g.name = 'desk'; g.userData.decorBase = true;
   const W = woodSet('walnut'), tile = 2.4, rep = (t, x, y) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
   const topM = new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .62, clearcoat: .7, clearcoatRoughness: .2, color: 0xffffff });
-  const top = new THREE.Mesh(alignUV(new RoundedBoxGeometry(w, .5, d, 3, .06), tile), topM); top.position.y = -.25; top.receiveShadow = true; top.name = 'walnut desk top'; g.add(top);
-  const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), makeMaterial({ preset: 'leather', color: '#3b2a1c' })); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);
+  const top = new THREE.Mesh(alignUV(new THREE.BoxGeometry(w, .5, d), tile), topM); top.position.y = -.25; top.receiveShadow = true; top.name = 'walnut desk top'; g.add(top);
+  const blotM = makeMaterial({ preset: 'leather', color: '#2c3a2a' }); blotM.roughness = .85; blotM.clearcoat = 0; blotM.normalScale.set(.25, .25);
+  const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), blotM); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);
   // brass desk lamp: weighted base, two arms, a cone shade with the bulb inside
   const L = new THREE.Group(); L.name = 'desk lamp'; const brass = makeMaterial('brass'), dark = makeMaterial({ preset: 'plastic', color: '#1c3a2c', roughness: .35 });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.55, .62, .14, 48), brass); base.position.y = .07; base.castShadow = true; L.add(base);
@@ -277,7 +277,10 @@ function buildEnvironment(R, scene, gfx, env) {
       const sd = new THREE.Vector3(...(env.sun || [.4, .25, -1])).normalize();
       const sk = new Sky(); sk.scale.setScalar(450); scene.add(sk); sk.material.uniforms.sunPosition.value.copy(sd); sk.userData.noInk = true; R.bgObjects.push(sk); R.sky = sk;
       R.sun = sunRig(scene, { intensity: 3, pos: sd.clone().multiplyScalar(15).toArray() }); scene.fog = new THREE.Fog(0xa8c4d8, 25, 120); hemi.intensity = .4;
-      const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 1, 1), makeMaterial({ preset: 'water', color: '#1d5a78' })); sea.rotation.x = -Math.PI / 2; sea.position.y = -.6; sea.userData.noInk = true; scene.add(sea); R.sea = sea;
+      // open sea: an opaque, glossy dielectric (no transmission: a 200 m transmissive plane re-renders the whole scene and
+      // shows displaced ghost copies of everything above it); ripples come from the normal map, depth from the dark colour
+      const seaM = makeMaterial({ preset: 'water', color: '#1d5a78' }); seaM.transmission = 0; seaM.thickness = 0; seaM.color.set(0x0f3448); seaM.roughness = .14; seaM.metalness = 0; seaM.envMapIntensity = 1.0; if (seaM.normalMap) { seaM.normalMap = seaM.normalMap.clone(); seaM.normalMap.repeat.set(40, 40); seaM.normalMap.needsUpdate = true; seaM.normalScale.set(.35, .35); }
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 1, 1), seaM); sea.rotation.x = -Math.PI / 2; sea.position.y = -.6; sea.userData.noInk = true; scene.add(sea); R.sea = sea;
       break;
     }
     case 'night': {

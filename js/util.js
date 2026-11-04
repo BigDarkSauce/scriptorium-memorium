@@ -129,9 +129,14 @@ export function gpuSet(roots, set = new Set()) {
 }
 // Frees what `roots` use (object trees, or a Set from gpuSet), except what `keep` (object trees still on screen, or a Set from gpuSet) uses and anything
 // marked userData.shared (module caches: textures.js originals, baroque.js materials, renderer environments).
+// texture.clone() copies userData, so a clone of a cached texture also says `shared`: only the first texture object seen
+// for an image (its Source) counts as the cached one; other clones are freed (the image's GPU copy stays while in use)
+const CANON = new WeakMap();
+const sharedRes = x => { if (!(x.userData && x.userData.shared)) return false; if (!x.isTexture || !x.source) return true; const c = CANON.get(x.source); if (!c) { CANON.set(x.source, x); return true; } return c === x; };
 export function disposeTree(roots, keep = null) {
   const K = keep instanceof Set ? keep : gpuSet(keep || []);
-  const shared = x => x.userData && x.userData.shared, S = roots instanceof Set ? roots : gpuSet(roots);
+  const S = roots instanceof Set ? roots : gpuSet(roots);
+  const shared = sharedRes;
   S.forEach(x => { if (x.isMaterial && shared(x)) gpuSet({ traverse: f => f({ material: x }) }, K); });   // a cached material keeps its textures
   S.forEach(x => { if (K.has(x) || shared(x) || typeof x.dispose !== 'function') return; try { x.dispose(); } catch (e) { } });
 }

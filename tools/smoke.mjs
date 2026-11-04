@@ -67,7 +67,7 @@ const HELPERS = `
     bad(root = document.body) { const m = (root.innerText || '').match(/.{0,30}(\\bNaN\\b|\\bundefined\\b|\\[object Object\\]).{0,30}/g); return m ? m.slice(0, 3) : null; },
     pump(v, secs, until) { let T = W.t; for (let k = 0; k < secs / .05; k++) { T += .05; v.update(.05, T); if (until && until()) { W.t = T; return k * .05; } } W.t = T; return null; },
     mem() { const r = W.gfx.renderer; return { geo: r.info.memory.geometries, tex: r.info.memory.textures, progs: r.info.programs.length, dom: document.getElementsByTagName('*').length }; },
-    capture(name) { const g = W.gfx; g._realRender(1 / 60, W.t); const c = g.canvas, url = c.toDataURL('image/png'); const s = document.createElement('canvas'); s.width = 64; s.height = 40; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 64, 40); const d = x.getImageData(0, 0, 64, 40).data; let mn = 255, mx = 0; for (let i = 0; i < d.length; i += 4) { const l = d[i] + d[i + 1] + d[i + 2]; mn = Math.min(mn, l); mx = Math.max(mx, l); } return { name, url, range: mx - mn }; }
+    capture(name) { const g = W.gfx; (g._realRender || g.render.bind(g))(1 / 60, W.t); const c = g.canvas, url = c.toDataURL('image/png'); const s = document.createElement('canvas'); s.width = 64; s.height = 40; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 64, 40); const d = x.getImageData(0, 0, 64, 40).data; let mn = 255, mx = 0; for (let i = 0; i < d.length; i += 4) { const l = d[i] + d[i + 1] + d[i + 2]; mn = Math.min(mn, l); mx = Math.max(mx, l); } return { name, url, range: mx - mn }; }
   };`;
 const run = async (fn, arg) => { try { return await page.evaluate(fn, arg); } catch (e) { return { __error: e.message.split('\n')[0] }; } };
 const failMsg = v => v && v.__error ? 'error: ' + v.__error : '';
@@ -105,7 +105,7 @@ const dios = await run(async (slow) => {
   const { DIO } = await import(new URL('js/dio/models.js', location.href).href); const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href);
   const specs = [];
   for (const b of W.lib.books) { const r = await W.loadRoom(b.id); for (const p of r.parts || []) { const ch = (p.analysis && p.analysis.chain) || []; const s = p.pedestal ? ch.find(x => x.id === p.pedestal.step) : ch.find(x => (x.demos || []).some(d => d.bodies || DIO[d.type])); const d = s && (s.demos || [])[p.pedestal ? p.pedestal.demo : 0]; if (d && (d.bodies || DIO[d.type])) specs.push(['pedestal: ' + p.title, d]); } }
-  FLAGSHIPS.forEach(f => specs.push(['flagship: ' + f.title, f])); Object.keys(DIO).forEach(t => specs.push(['model: ' + t, { type: t }]));
+  FLAGSHIPS.forEach(f => specs.push(['flagship: ' + f.title, f])); Object.keys(DIO).filter(t => t !== 'custom3d').forEach(t => specs.push(['model: ' + t, { type: t }]));   // custom3d needs AI-written code
   const bad = [];
   for (const [name, spec] of specs) {
     try {
@@ -147,7 +147,7 @@ report('intro', !intro.__error && intro.s0 === 'sketch' && intro.s1 === 'explore
 const edit = await run(async () => {
   const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href);
   await W.openDiorama(JSON.parse(JSON.stringify(FLAGSHIPS[1])), { skipIntro: true, onSave: () => { } }); const v = W.mode;
-  v.toggleEdit(true); const o = v.ds.world.children.find(c => c.isMesh || c.isGroup); v.select(o);
+  v.toggleEdit(true); const o = v.ds.world.children.find(c => !c.isLight && !c.userData.isInk); if (!o) return { noObject: false }; v.select(o);
   const p0 = o.position.clone(); v.pushUndo({ kind: 'transform', o, path: v.ds.pathOf(o), p: p0.clone(), r: o.rotation.clone(), s: o.scale.clone() }); o.position.x += 1; v.commitTransform();
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); const back = v.sel.position.distanceTo(p0) < 1e-6;
   v.editAction('hide'); const hidden = !v.sel.visible; v.editAction('hide');
@@ -179,8 +179,9 @@ report('import', !imp.__error && imp.ok && imp.added === 1, imp.__error ? failMs
 const ui = await run(() => S.bad());
 report('ui', !ui || !ui.__error && !ui.length, ui && !ui.__error ? ui.join(' | ') : failMsg(ui));
 
-// ---- leaks: three full cycles with drawing on (GPU resources are only created when drawn)
-await run(() => S.freeze(false));
+// ---- leaks: three full cycles with drawing on (GPU resources are only created when drawn); a small canvas keeps a
+// software GPU quick
+await page.setViewportSize({ width: 480, height: 320 }); await run(() => S.freeze(false));
 const leaks = await run(async () => {
   const b = S.book('Classical Mechanics'), m = [];
   for (let i = 0; i < 3; i++) {
@@ -203,6 +204,7 @@ const ctx = await run(async () => {
 report('context', !ctx.__error && (ctx.skipped || (ctx.paused && ctx.back && ctx.mode === 'Hub')), ctx.__error ? failMsg(ctx) : JSON.stringify(ctx));
 
 // ---- canvas captures
+await page.setViewportSize({ width: 960, height: 600 });
 const capDio = await run(async () => { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); await W.openDiorama(JSON.parse(JSON.stringify(FLAGSHIPS[0])), { skipIntro: true }); await S.frames(3); return S.capture('diorama'); });
 const caps = [capHub, capDio].filter(c => c && !c.__error);
 if (OUT) { mkdirSync(OUT, { recursive: true }); caps.forEach(c => writeFileSync(join(OUT, 'smoke-' + c.name + '.png'), Buffer.from(c.url.split(',')[1], 'base64'))); }

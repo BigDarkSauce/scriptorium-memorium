@@ -63,9 +63,29 @@ Every lesson settles one question and opens the next, in the authored format of 
 
 A chain demo also carries `purpose` (the question the whole demo answers); a diorama shown again in a later step needs a different purpose. Values that are not from the book go in a top-level `extra` (`[{what, source}]`) and are labelled as added from outside the PDF.
 
+- `shot` may also be `medium` (static, frames the focus and the actors the text names).
+- How the engine picks an event's subject: the first actor, in `tour` order, whose name (the part before ` · `) appears in the event text, else the step's `focus`. During a step, an event whose subject is neither the focus nor named in the step's `text` goes to the ticker and takes no shot, but it still completes an `until`. Word event texts so that the actor you want framed is the first one they name.
+
+## Presentation fields (optional, read by the engine)
+
+The four flagship examples use all of these.
+
+- `environment` extras:
+  - `"preset":"desk"`: a walnut desk whose brass lamp is the key light, so shadows fall away from a light you can see; `"lamp":[x,z]` places the lamp (put it at a frame edge as foreground).
+  - `"azimuth":deg` (landscape) turns the sun's path, so the key light, and a sun body placed by your code, come from where the composition needs them.
+- `shots`: `{"<lowercase substring of an event text>": {"target":[x,y,z], "dist":d}}`. When an event's text contains the key, the director frames `target` (or the event's own position, if `target` is left out) at distance `d`, given for the base 40° lens. Example: `"windward slope":{"target":[.5,2.8,-1.7],"dist":9}`, or `"copper bead lands":{"dist":6}` to aim at the event's position.
+- `flows`: `{"<lowercase substring>": [{"from":[x,y,z],"to":[x,y,z],"label":str}, …]}` (up to 4 arrows). These are process arrows drawn when Guides are on, for an event, lesson text or explanation that contains the key. Keep both ends inside the shot's frame.
+- `api.event(text, pos, {id, sound})`: `sound` names an effect from `js/audio.js` (`chime`, `pour`, `clack`, `bubble`, `tick`, `whoosh`, `step-done`, `paper`, `thud`, `thunder`, `drip`, `fizz`, `snap` …); without it a sound is guessed from the text. Give every event a `pos`, so it can be flashed, framed and panned.
+- Actors that are code-made (`api.label`) have no mesh, so the director can only aim at a point. If the camera should frame an actor or ride it (`shot:"pov"`), declare it as a body (`role:"actor"`, listed in `tour`) and move that body from your code (as the flagships do with the air parcel, the copper bead and the tagged molecule).
+- Code-made backdrops for the `sweep` and `topdown` techniques: the section-cut materialiser turns every opaque material double-sided. A `BackSide` sky cylinder (seen from outside, only its far half should draw) must therefore use a `transparent:true, opacity:1` material, which the materialiser leaves alone.
+
 ## Worked examples
 
-See `../examples/scene-*.json`: a water cycle (earth science, top-down), a Galton board (statistics, section sweep), a market (economics, card model) and osmosis (biology, section sweep).
+See `../examples/scene-*.json`:
+- **Water cycle** (earth science, top-down): Magnus saturation vapour pressure, Dalton evaporation, Espy cloud base, moist-adiabatic lift over a ridge; ride an air parcel to its dew point.
+- **Galton board** (statistics, section sweep): binomial counts against the normal curve; ride one bead.
+- **Market** (economics, card model): a double auction of zero-intelligence traders, as in Smith 1962 and Gode & Sunder 1993; close-up on the price crossing.
+- **Osmosis** (biology, section sweep): the ideal-solution balance −ln x_w = 2KΔh, reverse osmosis under a piston; ride a tagged molecule through a pore.
 
 ## Edits stored in a spec
 
