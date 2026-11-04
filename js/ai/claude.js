@@ -14,11 +14,30 @@ export function errCopy(err) {
   return ({ cancelled: 'Stopped.', not_granted: 'Claude access was declined for this page.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'Claude declined this request.', session_expired: 'Your session expired. Sign in again on claude.ai.', unavailable: 'Claude is not reachable from this view. Use "Copy prompt" to run it in any AI, then paste the answer back.', images_unavailable: 'This view cannot send images to Claude.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
 }
 export function parseJSONLoose(text) {
-  let s = String(text || '').trim(); const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (fence) s = fence[1];
+  let s = String(text || '').trim(); const fence = s.match(/```(?:json)?\s*([\s\S]*?)(```|$)/); if (fence && fence[1].trim()) s = fence[1];
   const a = Math.min(...['{', '['].map(c => { const i = s.indexOf(c); return i < 0 ? 1e9 : i; })); const b = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
-  if (a === 1e9 || b < a) throw { code: 'invalid_json', text };
-  s = s.slice(a, b + 1);
-  try { return JSON.parse(s); } catch (e) { try { return JSON.parse(s.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')); } catch (e2) { throw { code: 'invalid_json', text }; } }
+  if (a === 1e9) throw { code: 'invalid_json', text };
+  const tryParse = t => { try { return JSON.parse(t); } catch (e) { try { return JSON.parse(t.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')); } catch (e2) { return undefined; } } };
+  if (b > a) { const v = tryParse(s.slice(a, b + 1)); if (v !== undefined) return v; }
+  // an answer cut off by the output limit: keep every complete value and close the brackets (credits already spent are not wasted)
+  const r = repairTruncatedJSON(s.slice(a)); if (r) { const v = tryParse(r); if (v !== undefined) { if (v && typeof v === 'object') v._truncated = true; return v; } }
+  throw { code: 'invalid_json', text };
+}
+// Cut a truncated JSON text back to its last complete element and close the open brackets.
+export function repairTruncatedJSON(s) {
+  const stack = []; let inStr = false, esc = false, cut = -1, cutStack = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') { stack.pop(); if (!stack.length) return s.slice(0, i + 1); cut = i + 1; cutStack = stack.slice(); }
+    else if (c === ',' && stack.length) { cut = i; cutStack = stack.slice(); }
+  }
+  if (cut < 0 || !cutStack) return null;
+  let out = s.slice(0, cut).replace(/,\s*$/, '');
+  for (let k = cutStack.length - 1; k >= 0; k--) out += cutStack[k] === '{' ? '}' : ']';
+  return out;
 }
 // Ask for JSON. onText streams progress. Falls back to the manual relay dialog when Claude is unavailable.
 export async function askJSON(prompt, { onText, onTool, images, signal, tools, tier = 'complex', manualTitle = 'Run this request in any AI' } = {}) {

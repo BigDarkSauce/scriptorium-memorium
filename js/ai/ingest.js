@@ -71,9 +71,11 @@ export function linesFromItems(items, isBold = () => false) {
   }
   push();
   const out = lines.map(l => ({ text: l.text.replace(/\s+/g, ' ').trim(), size: +l.size.toFixed(2), x: +l.x.toFixed(1), x1: +l.x1.toFixed(1), y: +l.y.toFixed(1), bold: l.n > 0 && l.nb / l.n >= .8 })).filter(l => l.text);
-  out.forEach((l, k) => { const p = out[k - 1]; l.gap = p && p.y > l.y ? +((p.y - l.y) / Math.max(l.size, 1)).toFixed(2) : 9; });
+  out.forEach((l, k) => { l.gap = gapAbove(out[k - 1], l); });
   return out;
 }
+// space above a line in units of its size: 0 for a cell on the same baseline, 9 for a page or column start
+const gapAbove = (p, l) => !p ? 9 : Math.abs(p.y - l.y) < 2 ? 0 : p.y > l.y ? +((p.y - l.y) / Math.max(l.size, 1)).toFixed(2) : 9;
 async function readPages(doc, from, to, { fonts = false, onProgress } = {}) {
   const pages = [];
   for (let i = from; i <= to; i++) { pages.push(await pageLines(doc, i, { fonts })); if (onProgress && (i - from) % 20 === 19) onProgress((i - from + 1) / (to - from + 1)); }
@@ -163,9 +165,11 @@ export function detectHeadings(pages, { first = 1, body } = {}) {
   const out = []; let lastNum = null; const seen = new Set();
   for (const c of cands) {
     if (c.num && (c.kind === 'numbered' || c.kind === 'section-sign' || c.kind === 'chapter' || c.kind === 'roman' || c.kind === 'appendix')) {
-      const key = c.kind === 'appendix' ? 'A:' + c.num : c.kind === 'chapter' ? c.num : c.num;
+      // parts ("Part I") and appendices number on their own; they never block or reorder chapters and sections
+      if (c.level === 0 || c.kind === 'appendix') { const key = (c.kind === 'appendix' ? 'A:' : 'P:') + c.num; if (seen.has(key)) continue; seen.add(key); out.push(c); continue; }
+      const key = c.num;
       if (seen.has(key)) continue;
-      if (lastNum && c.kind !== 'appendix' && !/^[A-Z]/.test(c.num) && !/^[A-Z]/.test(lastNum) && cmpNum(c.num, lastNum) <= 0) continue;
+      if (lastNum && !/^[A-Z]/.test(c.num) && !/^[A-Z]/.test(lastNum) && cmpNum(c.num, lastNum) <= 0) continue;
       seen.add(key); lastNum = c.num;
     }
     out.push(c);
@@ -247,7 +251,7 @@ export function stripFurniture(pages) {
   const lim = Math.max(3, pages.length * .5);
   return pages.map(L => {
     const kept = L.filter((l, i) => { const atEdge = i < 2 || i >= L.length - 2; if (atEdge && (edge.get(norm(l.text)) || 0) > lim) return false; if (/^(\d{1,4}|[ivxlcdm]{1,7})$/i.test(l.text) && atEdge) return false; return true; });
-    kept.forEach((l, k) => { const p = kept[k - 1]; l.gap = p && p.y > l.y ? +((p.y - l.y) / Math.max(l.size, 1)).toFixed(2) : 9; });
+    kept.forEach((l, k) => { l.gap = gapAbove(kept[k - 1], l); });
     return kept;
   });
 }
@@ -290,7 +294,8 @@ export function inventory(text) {
   const uniq = a => [...new Set(a)];
   const figs = uniq((t.match(/\b(?:Figure|Fig\.)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}[a-z]?/g) || []).map(s => s.replace(/^Fig\.\s*/, 'Figure ').replace(/\s+/, ' ')));
   const tabs = uniq((t.match(/\bTable\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}/g) || []).map(s => s.replace(/\s+/, ' ')));
-  const examples = uniq((t.match(/\b(?:Example|Worked example|Exercise|Problem|Sample problem|Case study|Beispiel|Exemple|Пример)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}/gi) || []).map(s => s.replace(/\s+/g, ' ')));
+  // worked examples are counted where they start (line start or after a sentence), not where they are mentioned
+  const examples = uniq((t.match(/(?:^|\n|[.!?]\s+)(?:Example|Worked example|Exercise|Problem|Sample problem|Case study|Beispiel|Exemple|Пример)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}(?=[.:\s—–-])/gi) || []).map(s => s.replace(/^[\s\S]*?(?=[A-ZП])/, '').replace(/\s+/g, ' ').replace(/[.:]$/, '')));
   const defs = (t.match(/\b(?:Definition|Theorem|Lemma|Corollary|Proposition|Axiom|Postulate|Law of|Principle of|is defined as|we define|is called)\b/gi) || []).length;
   const eqs = lines.filter(l => l.length < 140 && /[=≈≤≥∝]/.test(l) && (/[∑∫√∂∆Δπθλμσωαβγ²³^]|\b[a-zA-Z]\s*\(/.test(l) || l.replace(/[^=]/g, '').length >= 1 && l.split(/\s+/).length <= 14)).length;
   const qty = (t.match(QTY_RE) || []).length;
@@ -345,7 +350,7 @@ export async function splitBook(blob, { onProgress, maxPartPages = MAX_PART_PAGE
     nodes.forEach(nd => { if (nd.from === 'outline') { const h = heads.find(x => x.page === nd.page && normT(x.title).startsWith(normT(nd.title).slice(0, 30))); nd.line = h ? h.line : 0; } });
     nodes.sort((a, b) => a.page - b.page || a.line - b.line || a.level - b.level);
   } else if (heads.filter(h => h.level >= 1).length >= 2) {
-    result.method = 'headings'; nodes = heads.filter(h => h.level >= 1);
+    result.method = 'headings'; nodes = heads.filter(h => h.level >= 1 || h.kind === 'chapter');
   } else {
     let labels = null; try { labels = await doc.getPageLabels(); } catch (e) { }
     const toc = contentsNodes(clean, n, labels);

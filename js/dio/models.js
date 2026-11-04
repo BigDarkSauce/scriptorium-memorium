@@ -368,7 +368,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const A_fl=Math.PI*rIn(WY)**2,RB=.05,a_sp=Math.PI*RB*RB;
   const wprof=[[.001,.33]];for(let y=.34;y<WY-.01;y+=.03)wprof.push([rIn(y)*.995,y]);wprof.push([rIn(WY)*.995,WY]);
   const fw=put(lathe(wprof,water,96),'water in the body',GW);fw.position.set(GX,0,GZ);fw.castShadow=false;
-  const wsM=mkWater();wsM.envMapIntensity=.45;wsM.specularIntensity=.6;const wSurf=new THREE.Mesh(new THREE.CircleGeometry(rIn(WY)*.995,96).rotateX(-Math.PI/2),wsM);wSurf.position.y=WY;wSurf.name='water surface';wSurf.castShadow=false;fw.add(wSurf);
+  const wsM=new THREE.MeshPhysicalMaterial({color:0x2f69a3,roughness:.06,metalness:0,envMapIntensity:.55,specularIntensity:.55}); /* the free surface seen from above: deep blue, glossy, never a pale lid */const wSurf=new THREE.Mesh(new THREE.CircleGeometry(rIn(WY)*.995,96).rotateX(-Math.PI/2),wsM);wSurf.position.y=WY;wSurf.name='water surface';wSurf.castShadow=false;fw.add(wSurf);
   // spout: a short stub out of the foot of the belly, a tight quarter bend, then straight up beside the body to an open lip;
   // a small glass weld at the belly ties it to the body
   const SPG=part('spout (open to the air)',GW);
@@ -603,15 +603,15 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
 // Targets may be functions (evaluated when the event fires). The spout shots aim at the live water column, a little
 // toward the body, at a distance that keeps the whole spout (bend to open top) and the flask in frame.
 {const L=()=>DIO.weatherglass._live||{spoutY:()=>WGL.WY,hgY:()=>4.3,bedY:()=>.57},{GX,GZ,SX,SZ,BZ,WY,TOP,YB,RBD}=WGL,SXp=GX+WGL.SPX,SB=YB+RBD,TZ=BZ+.19,tubeX=0;
- const spoutShot=dist=>({target:()=>[SXp,Math.min(2.75,Math.max(2.2,(SB+L().spoutY())/2+.9)),GZ],dist});
+ const spoutShot=dist=>({target:()=>[SXp,Math.min(2.8,Math.max(2.5,(SB+L().spoutY())/2+1)),GZ],dist}); // checked: bend, open top and flask tip stay inside ±0.8 of the frame for the director's ±18° swing
  DIO.weatherglass.shots={
  'glass sealed at':{target:[GX+.45,2.45,GZ],dist:8.2},
  're-sealed at':{target:[GX+.45,2.45,GZ],dist:8.2},
  'auto weather (re)started':{target:[0,3.2,-1.2],dist:12},
- 'pushes water up the spout':spoutShot(8.4),
- 'pushes the water back down':spoutShot(8.4),
- 'spout settles':spoutShot(8.2),
- 'pushes water out of the spout':{target:[SXp,2.9,GZ],dist:8.4},
+ 'pushes water up the spout':spoutShot(8.6),
+ 'pushes the water back down':spoutShot(8.6),
+ 'spout settles':spoutShot(8.6),
+ 'pushes water out of the spout':{target:[SXp,2.9,GZ],dist:8.6},
  'air bubbles into the flask':{target:[SXp-.3,.95,GZ],dist:4},
  'camphor crystals nucleate':{target:[SX,1.7,SZ],dist:4.2},
  'crystals redissolve':{target:[SX,1.9,SZ],dist:4.4},

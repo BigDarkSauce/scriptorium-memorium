@@ -38,3 +38,8 @@ export function saveLater(key, getVal, ms = 500) { clearTimeout(timers[key]); ti
 export function structuredCloneSafe(v) { try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } }
 export function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
 export function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+// Per-part caches, so nothing is re-derived from the PDF or re-asked of an AI once stored:
+//   sections:<bookId>:<partId>  the part's text split per subsection, with inventories (ingest.partSections)
+//   figs:<bookId>:<partId>      the PDF's own figures cut from the pages: JPEG data URLs + label, caption, page
+export const partKey = (kind, bookId, partId) => `${kind}:${bookId}:${partId}`;
+export async function cached(key, make) { const v = await get(key); if (v != null) return v; const n = await make(); if (n != null) await set(key, n); return n; }

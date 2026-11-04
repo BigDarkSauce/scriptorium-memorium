@@ -516,7 +516,9 @@ export class DioramaView {
     g.fillStyle = 'rgba(244,239,230,.55)'; g.font = '20px IBM Plex Mono, monospace'; g.fillText(ds.seriesName || '', 8, 22);
     const H = ds.sim && ds.sim.hist ? ds.sim.hist() : null;
     if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 34), bw - 2, v / mx * (c.height - 34)); }); return; }
-    const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d); if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+    const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d);
+    if (ds.sim && ds.sim.seriesRange) { try { const r = ds.sim.seriesRange(lo, hi); if (r && isFinite(r[0]) && isFinite(r[1]) && r[1] > r[0]) [lo, hi] = r; } catch (e) { } }
+    if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
     g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 40); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
   }
   dispose() {

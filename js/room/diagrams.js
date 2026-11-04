@@ -1,4 +1,4 @@
-// Interactive 2D diagrams (plot, tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
+// Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
 import { el, compile, fmt, clamp, uid, mod, MATHNAMES } from '../util.js';
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg'];
@@ -36,7 +36,10 @@ export function SVGDEMO(spec,host,fail){
   const clear=()=>{[...svg.childNodes].forEach(n=>{if(n!==dfs)n.remove()})};
   if(t==='plot'){
     const exprs=(spec.exprs||[spec.expr||'sin(x)']).slice(0,5);const fs=exprs.map(e=>compile(e,['x',...pn]));let hx=null;
+    // "points": measured data drawn as dots over the curves ([[x,y],…] or [{x,y,label}]); its origin is cited in the demo's source/extra
+    const pts=(Array.isArray(spec.points)?spec.points:[]).map(p=>Array.isArray(p)?{x:+p[0],y:+p[1],label:p[2]}:{x:+p.x,y:+p.y,label:p.label}).filter(p=>isFinite(p.x)&&isFinite(p.y));
     draw=()=>{clear();axes();fs.forEach((f,i)=>curve(x=>f(x,...pn.map(k=>pv[k])),COLORS[i]));
+      pts.forEach(p=>{mk('circle',{cx:X(p.x),cy:Y(p.y),r:3.6,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.6});if(p.label)mk('text',{x:X(p.x)+6,y:Y(p.y)-6,'font-size':10,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=p.label});
       exprs.forEach((e,i)=>{mk('rect',{x:P+8,y:P+6+i*16,width:12,height:3,fill:COLORS[i]});mk('text',{x:P+26,y:P+11+i*16,'font-size':11,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=e});
       reads.innerHTML='';if(hx!=null){mk('line',{x1:X(hx),x2:X(hx),y1:P,y2:H-P,stroke:'#9c3a28','stroke-dasharray':'3 3'});reads.append(el('span',{html:'<i>x</i> '+fmt(hx)}));fs.forEach((f,i)=>{const y=f(hx,...pn.map(k=>pv[k]));if(isFinite(y))mk('circle',{cx:X(hx),cy:Y(y),r:4,fill:COLORS[i]});reads.append(el('span',{html:`<i>f${i+1}</i> ${fmt(y)}`}))})}else reads.append(el('span',{html:'<i>Move the pointer over the plot to read values</i>'}))};
     svg.addEventListener('pointermove',ev=>{const[x]=svgPt(ev);hx=clamp(IX(x),xr[0],xr[1]);draw()});

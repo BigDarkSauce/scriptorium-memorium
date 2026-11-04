@@ -49,7 +49,7 @@ ${LESSON_FORMAT}`;
 
 export const BUILTIN_TYPES = `Built-in physical models (use {"type":<name>,"title":str,"params":{...},"lessons":[...]}): pendulum{L,g,theta0,damping} doublependulum{m1,m2,L1,L2,theta1,theta2,g,eps} spring{k,m,c,x0} projectile{v0,angle,g,drag} orbit{GM,r0,vfactor} collision{m1,m2,v1,v2,e} incline{angle,mu,m,g} lever{m1,x1,m2,x2,fulcrum,beam} wave{A,lambda,f,standing} gas{N,T} reaction{NA,NB,Ea,Eb,T} efield{q1,q2,d,qt,m} circuit{V,R,C,closed} lens{f,do,ho,sweep} surface{gravity,friction; "expr":"f(x,y)"} weatherglass{T,P,P0,auto,conc}. Any of them also accepts "technique":"card|sweep|topdown" and "lessons".`;
 
-export const DIAGRAM_TYPES = `2D interactive diagrams: plot{exprs,x,y,params,xlabel,ylabel,points} tangent{expr,x,y} riemann{expr,a,b,y} vectors{a,b} matrix{m} complex{z,w} unitcircle fourier{wave,n} distribution{mode:normal|clt,mu,sigma} parametric{xt,yt,t,x,y} phase{dx,dy,range,yrange,params} table{columns,rows,caption} customsvg{svg}. "params" is {"key":[min,max,value]}. "points":[[x,y],...] marks measured data on a plot (cite it in "source", or in "extra" when it is from outside the PDF).`;
+export const DIAGRAM_TYPES = `2D interactive diagrams: plot{exprs,x,y,params,xlabel,ylabel,points} tangent{expr,x,y} riemann{expr,a,b,y} vectors{a,b} matrix{m} complex{z,w} unitcircle fourier{wave,n} distribution{mode:normal|clt,mu,sigma} parametric{xt,yt,t,x,y} phase{dx,dy,range,yrange,params} customsvg{svg}. "params" is {"key":[min,max,value]}. "points":[[x,y],...] marks measured data on a plot (cite it in "source", or in "extra" when it is from outside the PDF).`;
 
 export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","section":"the id of the ONE subsection this step covers, e.g. 1.2","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
@@ -98,7 +98,7 @@ const SHAPE_EXAMPLE = `EXAMPLE (shape only — your content comes from the PART 
    "ref":"Example 1.1, p. 3","pages":[3],"statement":"A cart starts at $x_1 = 2.0$ m and after 4.0 s is at $x_2 = 14.4$ m.","derivation":[{"expr":"\\\\Delta x = 14.4\\\\,\\\\text{m} - 2.0\\\\,\\\\text{m} = 12.4\\\\,\\\\text{m}","why":"definition of displacement (S1)"}],
    "figures":["fig-1-1"],"basis":"source-text","from":["S1"],"bodies":["cart"],
    "demos":[{"type":"plot","title":"x(t) of the cart","purpose":"Where is the cart at each time?","exprs":["2+1.5*x+0.4*x^2"],"x":[0,6],"y":[0,30],"xlabel":"t (s)","ylabel":"x (m)","params":{}}],
-   "extra":[{"what":"a measured sprint (Bolt, Berlin 2009) as a second real example of displacement over time","source":{"title":"…exact title of the paper you found…","authors":"…","year":2013,"doi":"…"}}]}],
+   "extra":[{"what":"split times of a real 100 m sprint (Bolt, Berlin 2009) as a second example of position against time","source":{"title":"A Kinematics Analysis Of Three Best 100 M Performances Ever","authors":"Maćkała K; Mero A A","year":2013,"doi":"10.2478/hukin-2013-0015"}}]}],
  "coverage":[{"subsection":"1.1","steps":["S1"]},{"subsection":"1.1.2","steps":["S2"]}]}`;
 
 const SELF_CHECK = `SELF-CHECK — run this list before answering and fix every "no":
@@ -121,27 +121,31 @@ const fmtInv = inv => {
   if (inv.tables && inv.tables.length) bits.push(inv.tables.join(', '));
   if (inv.figures && inv.figures.length) bits.push(inv.figures.join(', '));
   if (inv.quantities) bits.push(inv.quantities + ' quantities with units');
-  return bits.join(' · ') + (inv.expectSteps ? ` · aim for ≥ ${inv.expectSteps} step${inv.expectSteps > 1 ? 's' : ''}` : '');
+  return (bits.length ? bits.join(' · ') : 'text only') + (inv.expectSteps ? ` · aim for ≥ ${inv.expectSteps} step${inv.expectSteps > 1 ? 's' : ''}` : '');
 };
 export function sectionList(sections) {
-  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory) || 'text only'}` : '')).join('\n');
+  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory)}` : '')).join('\n');
 }
 export function figureList(figures, attached = []) {
   return figures.map(f => `${f.id} · ${f.label} · p. ${f.page} · "${String(f.caption || '').slice(0, 220)}"` + (attached.includes(f.id) ? ` [image ${attached.indexOf(f.id) + 1} attached]` : '')).join('\n');
 }
 
 // The analysis prompt: one call per part. sections = partSections(...).sections, figures = figure metadata.
-export function chapterPrompt({ book, chapter, text, depth = 'complete', n, images = 0, sections = null, figures = null, attached = [], pageImages = 0 }) {
+export function chapterPrompt({ book, chapter, text, depth = 'complete', n, images = 0, sections = null, figures = null, attached = [], pageImages = 0, budget = 170000 }) {
   const S = sections && sections.length ? sections : null, F = figures && figures.length ? figures : null;
   const min = S ? S.length : 0;
   const steps = depth === 'exact' ? `exactly ${Math.max(n || 0, min)} steps${min > (n || 0) ? ` (raised to ${min}: one per subsection is the minimum)` : ''}` : depth === 'essential' ? 'the essential spine: at least one step per subsection, merging nothing across subsections' : 'a COMPLETE chain: as many steps as the content needs to reach the source\'s resolution or finer (no cap; never merge across subsections)';
-  const body = S ? S.map(s => `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}`).join('\n') : String(text || '');
+  // text budget: whole subsections only; the ones that do not fit are written by follow-up calls with their own text
+  let used = 0; const deferred = new Set();
+  if (S) S.forEach(s => { const n = (s.text || '').length + 80; if (used + n > budget && used > 0) deferred.add(s.id); else used += n; });
+  const body = S ? S.filter(s => !deferred.has(s.id)).map(s => `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}`).join('\n') : String(text || '');
+  const listed = S ? sectionList(S).split('\n').map((l, k) => deferred.has(S[k].id) ? l + '  ← DEFERRED: its text comes in a second call; write NO steps for it now and leave it out of "coverage"' : l).join('\n') : '';
   return `You are building one scroll of a study room from ONE PART of a book. Judge your answer as the winning entry of a world competition: complete to the last subsection, exact to the last digit, concrete, and teachable. Vague or synthesised-sounding text loses.
 BOOK: ${book}
 PART: ${chapter}
 ${pageImages ? `Attached: ${pageImages} page image(s) of this part (its text layer is thin; read the pages).\n` : images ? `Attached: ${images} image(s): the PDF's own figures marked [image k attached] below.\n` : ''}
 SUBSECTIONS OF THIS PART (cover every one; the ids in brackets go into "section" and "coverage"):
-${S ? sectionList(S) : '(not provided) Before writing, list the part\'s subsections yourself from its numbered headings (1.2, 1.2.3, §4 …) or, if it has none, one per two pages ("p3-4"); use those ids.'}
+${S ? listed : '(not provided) Before writing, list the part\'s subsections yourself from its numbered headings (1.2, 1.2.3, §4 …) or, if it has none, one per two pages ("p3-4"); use those ids.'}
 
 FIGURES AND TABLES FROM THE PDF (cite them by id in "figures"; every one must be cited by a step or listed in "figuresSkipped"):
 ${F ? figureList(F, attached) : '(not provided) Cite the PDF\'s own figures by id: "Figure 3.2" → fig-3-2, "Table 1.1" → tab-1-1, an unnumbered figure on page 12 → fig-p12-1.'}
@@ -174,7 +178,7 @@ ${CHAIN_FORMAT}
 Escape LaTeX backslashes in JSON strings (\\\\frac).
 PART TEXT (subsections marked "=== [id] title (pages) ==="):
 """
-${body.slice(0, 180000)}
+${body.slice(0, budget + 10000)}
 """`;
 }
 
@@ -243,15 +247,20 @@ export function gapsOf(report, sections, figures = []) {
 // A cheap, targeted second call: only the gap subsections' text, only the missing steps back.
 export function followUpPrompt({ book, chapter, A, gaps, sections, figures = [] }) {
   const chain = A.chain || [], order = sections.map(s => s.id);
-  const ctx = gaps.map(g => {
-    const s = sections.find(x => x.id === g.id), idx = order.indexOf(g.id);
-    const before = chain.filter(st => order.indexOf(st.section) <= idx && order.indexOf(st.section) >= 0).pop() || null;
-    const after = chain.find(st => order.indexOf(st.section) > idx) || null;
+  // where each gap's new steps go: after the last existing step of the same or an earlier subsection (the anchor);
+  // consecutive gaps with nothing between them chain to each other instead of to existing steps
+  const pos = id => order.indexOf(id);
+  const anchor = g => chain.filter(st => pos(st.section) >= 0 && pos(st.section) <= pos(g.id)).pop() || null;
+  const adjacent = (g1, g2) => { const a2 = anchor(g2); return a2 === anchor(g1) || (a2 && a2.section === g1.id); };
+  const ctx = gaps.map((g, k) => {
+    const s = sections.find(x => x.id === g.id), before = anchor(g);
+    const after = chain.find(st => pos(st.section) > pos(g.id)) || null;
+    const prevAdj = k > 0 && adjacent(gaps[k - 1], g), nextAdj = k + 1 < gaps.length && adjacent(g, gaps[k + 1]);
     const mine = chain.filter(st => st.section === g.id);
     return `- [${g.id}] ${s ? s.title : ''} — ${g.reason}.` +
       (mine.length ? `\n  Existing steps for it (do not repeat them; add what they leave out): ${mine.map(st => st.id + ' "' + st.title + '"').join('; ')}` : '') +
-      `\n  Your first new step for it must answer: "${before ? before.opens || before.title : A.question || chapter}"` +
-      `\n  Your last new step for it must open: "${after ? after.answers || after.title : 'the question the next part takes up'}"` +
+      `\n  Your first new step for it must answer: ` + (prevAdj ? `the question your last new step for [${gaps[k - 1].id}] opens` : `"${before ? before.opens || before.title : A.question || chapter}"`) +
+      `\n  Your last new step for it must open: ` + (nextAdj ? `the question your first new step for [${gaps[k + 1].id}] answers` : `"${after ? after.answers || after.title : 'the question the next part takes up'}"`) +
       (g.figures && g.figures.length ? `\n  Cite: ${g.figures.join(', ')}` : '');
   }).join('\n');
   const text = gaps.map(g => { const s = sections.find(x => x.id === g.id); return s ? `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}` : ''; }).join('\n');

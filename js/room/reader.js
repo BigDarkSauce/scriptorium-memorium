@@ -4,8 +4,9 @@ import { el, esc, typeset, toast, uid, $, clamp } from '../util.js';
 import { SVGDEMO, SVG_TYPES } from './diagrams.js';
 import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
-import { askJSON, errCopy, imageLimit } from '../ai/claude.js';
-import { chapterPrompt, authorPrompt, detailPrompt } from '../ai/prompts.js';
+import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
+import { chapterPrompt, authorPrompt, detailPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp } from '../ai/prompts.js';
+import { partKey, cached } from '../store.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
 const TOOLNAME = { search_literature: 'OpenAlex', search_evidence: 'Consensus', search_biomedical: 'PubMed' };
 const toolStatus = st => (name, input) => { st.textContent = `Looking it up in ${TOOLNAME[name] || name}: “${String((input && input.query) || '').slice(0, 70)}”…`; };
@@ -50,31 +51,116 @@ export class Reader {
     const pasted = el('button', { class: 'btn small', text: 'Paste JSON from another AI', onclick: () => this.pasteJSON() });
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
+  // ---------- the analysis pipeline (docs/PROTOCOL.md, "Recipe for any AI") ----------
+  // 1 subsections (cached) → 2 PDF figures (cached) → 3 one structured call → 4 verify coverage →
+  // 5 targeted follow-ups for the gaps only → 6 save. Nothing stored is ever recomputed or re-asked.
+  async material(st) {
+    const P = this.part, book = this.room.book, src = P.subOf ? (this.room.data.parts.find(x => x.id === P.subOf) || P) : P;
+    if (!book.hasPdf) return { sections: null, figures: [] };
+    const blob = await this.app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [] };
+    if (st) st.textContent = 'Reading the subsections…';
+    const sec = await cached(partKey('sections', book.id, src.id), () => this.app.ingest.partSections(blob, src));
+    let figures = [];
+    try { if (st) st.textContent = 'Cutting the figures out of the pages…'; figures = await cached(partKey('figs', book.id, src.id), () => this.app.ingest.extractFigures(blob, src.startPage || 1, src.endPage || src.startPage || 1, { onProgress: k => { if (st) st.textContent = 'Cutting the figures out of the pages… ' + Math.round(k * 100) + '%'; } })); } catch (e) { figures = []; }
+    if (!src.figureIndex || src.figureIndex.length !== figures.length) { src.figureIndex = this.app.ingest.figureMeta(figures); this.save(); }
+    return { sections: sec.sections, figures, blob, src };
+  }
   async analyse(depth, n, st, go) {
-    const P = this.part, book = this.room.book; go.disabled = true; st.textContent = 'Reading the pages…';
+    const P = this.part, book = this.room.book; go.disabled = true;
     try {
-      let text = P.text || '', images = [];
-      if (!text && book.hasPdf) { const blob = await this.app.store.get('pdf:' + book.id); if (blob) { text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || (P.startPage || 1) + 20); if (text.replace(/\s|\[page \d+\]/g, '').length < 400 && imageLimit()) images = await this.app.ingest.pageImages(blob, P.startPage || 1, P.endPage || 1, imageLimit()); } }
-      const prompt = chapterPrompt({ book: book.title, chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth, n, images: images.length });
+      const M = await this.material(st); let images = [], attached = [], pageImgs = 0, text = P.text || '';
+      if (!M.sections && !text && book.hasPdf) st.textContent = 'The PDF for this book is not stored in this browser.';
+      const thinText = M.sections && M.sections.reduce((a, s) => a + s.inventory.chars, 0) < 400;
+      if (thinText && imageLimit() && M.blob) { images = await this.app.ingest.pageImages(M.blob, P.startPage || 1, P.endPage || 1, imageLimit()); pageImgs = images.length; }
+      else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
+      const meta = this.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
+      const prompt = chapterPrompt({ book: book.title, chapter, text, depth, n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
       st.textContent = 'Claude is reading and planning. Long parts can take a minute or two.';
       const A = await askJSON(prompt, { images, tools: evidenceTools(), onTool: toolStatus(st), onText: t => { st.textContent = 'Writing the chain… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Analyse "' + P.title + '" in any AI' });
       if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
-      P.analysis = normalizeChain(A); this.save(); this.room.refreshStation(P); toast('Chain written'); this.render();
+      if (A._truncated && A.chain.length > 1) A.chain.pop();            // the last step of a cut-off answer is incomplete; follow-ups refill it
+      P.analysis = normalizeChain(A); delete P.analysis._truncated;
+      await this.checkAndFill(st, M, { auto: aiAvailable() });
+      this.save(); this.room.refreshStation(P); toast('Chain written'); this.render();
       if (evidenceAvailable() && collectSources(P.analysis).length) this.verify();
     } catch (e) { go.disabled = false; st.textContent = errCopy(e); }
+  }
+  // verify coverage; with auto, write what is missing in as few calls as possible (≤ 100k characters of text each)
+  async checkAndFill(st, M, { auto = true, rounds = 2 } = {}) {
+    const P = this.part, A = P.analysis; M = M || await this.material(st);
+    if (!M.sections) { A.coverageReport = null; return; }
+    const meta = this.app.ingest.figureMeta(M.figures);
+    const secMeta = M.sections.map(x => ({ id: x.id, title: x.title, level: x.level, startPage: x.startPage, endPage: x.endPage }));
+    let rep = verifyChain(A, M.sections, meta); A.coverageReport = { ...rep, sections: secMeta, followUps: (A.coverageReport && A.coverageReport.followUps) || 0 };
+    for (let r = 0; auto && r < rounds; r++) {
+      const gaps = gapsOf(rep, M.sections, meta); if (!gaps.length) break;
+      const batches = []; let cur = [], size = 0;
+      gaps.forEach(g => { const s = M.sections.find(x => x.id === g.id), k = s ? s.text.length : 0; if (cur.length && size + k > 100000) { batches.push(cur); cur = []; size = 0; } cur.push(g); size += k; }); if (cur.length) batches.push(cur);
+      for (const b of batches) {
+        if (st) st.textContent = `Filling ${b.length} gap${b.length > 1 ? 's' : ''}: ${b.map(g => g.id).join(', ')}…`;
+        const add = await askJSON(followUpPrompt({ book: this.room.book.title, chapter: P.title, A, gaps: b, sections: M.sections, figures: meta }), { tools: evidenceTools(), onTool: st ? toolStatus(st) : null, onText: t => { if (st) st.textContent = 'Writing the missing steps… ' + t.length.toLocaleString() + ' characters'; }, manualTitle: 'Write the missing steps in any AI' });
+        if (add && (Array.isArray(add.steps) || Array.isArray(add.chain))) { mergeFollowUp(A, { ...add, steps: normalizeChain({ chain: add.steps || add.chain }).chain }, M.sections); A.coverageReport.followUps = (A.coverageReport.followUps || 0) + 1; }
+      }
+      rep = verifyChain(A, M.sections, meta); A.coverageReport = { ...rep, sections: secMeta, followUps: A.coverageReport.followUps };
+    }
+  }
+  async fillGaps(btn) {
+    btn.disabled = true; const st = btn.nextSibling || null;
+    try { await this.checkAndFill(st, null, { auto: true, rounds: 1 }); this.save(); this.room.refreshStation(this.part); this.render(); toast('Coverage updated'); }
+    catch (e) { btn.disabled = false; if (st) st.textContent = errCopy(e); else toast(errCopy(e)); }
   }
   async pasteJSON() {
     const { manualRelay } = await import('../ai/claude.js');
     const P = this.part, book = this.room.book;
-    let text = ''; if (book.hasPdf) { try { const blob = await this.app.store.get('pdf:' + book.id); if (blob) text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || 1, 60000); } catch (e) { } }
-    try { const A = await manualRelay(chapterPrompt({ book: book.title, chapter: P.title, text, depth: 'complete' }), 'Analyse "' + P.title + '" in any AI'); if (!A || !Array.isArray(A.chain)) throw 0; P.analysis = normalizeChain(A); this.save(); this.room.refreshStation(P); this.render(); toast('Chain imported'); } catch (e) { if (e && e.code !== 'cancelled') toast('That JSON has no "chain"'); }
+    let M = { sections: null, figures: [] }; try { M = await this.material(null); } catch (e) { }
+    let text = ''; if (!M.sections && book.hasPdf) { try { const blob = await this.app.store.get('pdf:' + book.id); if (blob) text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || 1, 60000); } catch (e) { } }
+    try {
+      const A = await manualRelay(chapterPrompt({ book: book.title, chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth: 'complete', sections: M.sections, figures: this.app.ingest.figureMeta(M.figures) }), 'Analyse "' + P.title + '" in any AI');
+      if (!A || !Array.isArray(A.chain)) throw 0;
+      P.analysis = normalizeChain(A); await this.checkAndFill(null, M, { auto: false }); this.save(); this.room.refreshStation(P); this.render(); toast('Chain imported');
+    } catch (e) { if (e && e.code !== 'cancelled') toast('That JSON has no "chain"'); }
   }
+  // the PDF's own figures for this part (from IndexedDB); metadata only when the images are not stored here
+  async figureStore() {
+    if (this._figs) return this._figs;
+    const P = this.part, book = this.room.book, src = P.subOf ? (this.room.data.parts.find(x => x.id === P.subOf) || P) : P;
+    let figs = null; try { figs = await this.app.store.get(partKey('figs', book.id, src.id)); } catch (e) { }
+    this._figs = new Map((figs || src.figureIndex || []).map(f => [f.id, f])); return this._figs;
+  }
+  renderCoverage(A) {
+    const R = A.coverageReport; if (!R || !R.subsections) return null;
+    const bad = R.missing.length + R.thin.length, figTxt = R.figures ? ` · ${R.figuresCited} of ${R.figures} PDF figures cited` : '';
+    const thread = R.threadBreaks.length || R.threadMissing.length ? ` · question thread: ${R.threadBreaks.length + R.threadMissing.length} gap${R.threadBreaks.length + R.threadMissing.length > 1 ? 's' : ''}` : ' · question thread intact';
+    const box = el('details', { class: 'coverage' + (bad || R.figuresUncited.length ? ' warn' : ' ok') }, [el('summary', {}, [el('span', { class: 'cov-ic', text: bad ? '◔' : '●' }), el('span', { text: `Coverage: ${R.covered} of ${R.subsections} subsections` + (R.thin.length ? ` (${R.thin.length} coarser than the source)` : '') + figTxt + thread + (R.followUps ? ` · ${R.followUps} follow-up call${R.followUps > 1 ? 's' : ''}` : '') })])]);
+    const tb = el('table', { class: 'cov-table' }, [el('thead', {}, [el('tr', {}, ['Subsection', 'Pages', 'Steps'].map(t => el('th', { text: t })))])]);
+    const body = el('tbody'); const map = {}; (A.coverage || []).forEach(c => { map[c.subsection] = c.steps; });
+    const secs = (R.sections || []).length ? R.sections : (A.coverage || []).map(c => ({ id: c.subsection, title: '' }));
+    secs.forEach(s => {
+      const steps = map[s.id] || [], miss = R.missing.some(m => m.id === s.id), thin = R.thin.find(t => t.id === s.id);
+      const cell = el('td'); steps.forEach((id, i) => { if (i) cell.append(' '); cell.append(el('a', { text: id, tabindex: 0, onclick: () => this.jump(id) })); });
+      if (miss) cell.append(el('span', { class: 'cov-miss', text: 'not covered' })); if (thin) cell.append(el('span', { class: 'cov-thin', text: ` coarser than the source (${thin.steps} for ~${thin.expect})` }));
+      body.append(el('tr', { class: miss ? 'miss' : thin ? 'thin' : '' }, [el('td', { html: `<b>${esc(s.id)}</b> ${esc(String(s.title || '').replace(new RegExp('^' + String(s.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+'), ''))}` }), el('td', { text: s.startPage ? s.startPage + (s.endPage > s.startPage ? '–' + s.endPage : '') : '' }), cell]));
+    });
+    tb.append(body); box.append(tb);
+    const notes = [];
+    if (R.figuresUncited.length) notes.push('PDF figures not yet explained: ' + R.figuresUncited.map(f => f.label).join(', ') + '.');
+    if (R.threadBreaks.length) notes.push('The question thread breaks before ' + R.threadBreaks.join(', ') + '.');
+    if (R.extrasUnsourced.length) notes.push('Outside additions without a source in ' + R.extrasUnsourced.join(', ') + '.');
+    if (R.numbers && R.numbers.unmatched.length) notes.push(`Numbers not found in the PDF text: ${R.numbers.unmatched.map(u => u.step + ' (' + u.values.join(', ') + ')').join('; ')}. Check them against the page.`);
+    if (R.unknownFigures && R.unknownFigures.length) notes.push('Figure ids that are not in this part: ' + R.unknownFigures.map(u => u.step + '→' + u.id).join(', ') + '.');
+    notes.forEach(t => box.append(el('p', { class: 'cov-note', text: t })));
+    if (bad || R.figuresUncited.length) { const st2 = el('span', { class: 'status' }); box.append(el('div', { class: 'row' }, [el('button', { class: 'btn small primary', text: 'Write the missing steps', onclick: e => this.fillGaps(e.target) }), st2])); }
+    return box;
+  }
+  jump(id) { const t = this.el.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } }
   // ---------- chain ----------
   renderChain(A) {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
-    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: esc(A.title || this.part.title) }), A.summary ? el('p', { html: esc(A.summary) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
-    wrap.append(this.evidenceBar(A)); this.seen3D = new Map();
+    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: esc(A.title || this.part.title) }), A.summary ? el('p', { html: esc(A.summary) }) : null, A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + esc(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    wrap.append(this.evidenceBar(A)); const cov = this.renderCoverage(A); if (cov) wrap.append(cov); this.seen3D = new Map();
+    this._breaks = new Set(A.coverageReport ? A.coverageReport.threadBreaks || [] : []); this._numbers = new Map(((A.coverageReport && A.coverageReport.numbers && A.coverageReport.numbers.unmatched) || []).map(u => [u.step, u.values]));
+    this._secTitle = new Map(((A.coverageReport && A.coverageReport.sections) || []).map(x => [x.id, x.title]));
     (A.chain || []).forEach(st => wrap.append(this.renderStep(st, wrap, A)));
     if (A.references && A.references.length) wrap.append(el('section', { class: 'refs' }, [el('h3', { text: 'References' }), el('ol', {}, A.references.map(r => el('li', {}, [renderSource(r)])))]));
     // typeset only once the scroll has finished unrolling (MathJax measures sizes; a scaled container gives NaN)
@@ -85,11 +171,18 @@ export class Reader {
     const kind = String(st.kind || 'result').toLowerCase();
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
     art.append(el('div', { class: 'badge', text: KIND_ABBR[kind] || st.id }));
-    art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: esc(st.title) })]));
+    if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: esc(st.answers) })]));
+    art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: esc(st.title) }),
+      st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
+      st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => { const t = wrap.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } } })); }); art.append(f); }
     if (st.statement) art.append(el('p', { class: 'stmt', html: esc(st.statement) }));
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
+    if (st.table && st.table.rows && st.table.rows.length) art.append(renderTable(st.table));
+    if (st.figures && st.figures.length) art.append(this.renderFigures(st));
+    if (st.extra && st.extra.length) art.append(el('div', { class: 'extras' }, st.extra.map(x => el('div', { class: 'extra' }, [el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }), el('span', { html: ' ' + esc(x.what || '') }), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))));
+    if (this._numbers && this._numbers.has(st.id)) art.append(el('div', { class: 'num-warn', text: 'Not found in the PDF text of this subsection: ' + this._numbers.get(st.id).join(', ') + '. Check these numbers against the page.' }));
     if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: esc(t.term) }), el('dd', { html: esc(t.meaning) })])));
     if (st.intuition) art.append(el('p', { class: 'intuition', html: '<b>Picture it.</b> ' + esc(st.intuition) }));
     if (st.misconception) art.append(el('p', { class: 'miscon', html: '<b>Common mistake.</b> ' + esc(st.misconception) }));
@@ -103,9 +196,29 @@ export class Reader {
       el('button', { class: 'linkbtn', text: 'More detail → sub-scroll', onclick: () => this.moreDetail(st, A) }),
       evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null]));
     art.append(demos);
+    if (st.opens) art.append(el('div', { class: 'q-out', title: 'The question this step opens (the next step settles it)' }, [el('span', { class: 'q-mark', text: '→' }), el('span', { html: esc(st.opens) })]));
     return art;
   }
+  // the PDF's own figures, captioned with their page; distinct from our drawings
+  renderFigures(st) {
+    const box = el('div', { class: 'pdf-figs' });
+    this.figureStore().then(F => {
+      st.figures.forEach(id => {
+        const f = F.get(id); if (!f) return;
+        const cap = el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), el('b', { text: ' ' + (f.label || id) + (f.caption ? ' ' : '') }), el('span', { text: String(f.caption || '').replace(/^(Figure|Fig\.?|Table)\s*[A-Z]?[\d.\-–]+[a-z]?\s*[.:\-–—|]?\s*/i, '') })]);
+        const fig = el('figure', { class: 'pdf-fig' + (f.dataUrl ? '' : ' noimg'), 'data-fig': id });
+        if (f.dataUrl) { const img = el('img', { src: f.dataUrl, alt: (f.label || 'Figure') + ' from the PDF, page ' + f.page, loading: 'lazy' }); img.onclick = () => lightbox(f); fig.append(img); }
+        else fig.append(el('div', { class: 'pdf-fig-missing', text: 'The figure image is not stored in this browser (the PDF is needed to cut it out).' }));
+        fig.append(cap); box.append(fig);
+      });
+    });
+    return box;
+  }
   renderDemo(d, st, i, demos) {
+    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = d.extra && (Array.isArray(d.extra) ? d.extra.length : true) || d.source && !d.source.fromPdf ? el('div', { class: 'demo-prov' }, [el('span', { class: 'extra-badge', text: 'Data added from outside the PDF' }), ' ', d.source ? renderSource(d.source) : el('span', { text: [].concat(d.extra).map(x => x && (x.what || '')).join('; ') })]) : el('div', { class: 'demo-prov own', text: 'Our drawing' + (d.purpose ? '' : '') }); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + esc(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: esc(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + esc(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
+    return wrapDemo(this.renderDemoInner(d, st, i, demos));
+  }
+  renderDemoInner(d, st, i, demos) {
     const t = String(d.type || '').toLowerCase();
     if (SVG_TYPES.includes(t)) {
       const slot = el('div', { class: 'svg-slot', hidden: true }); let cleanup = null;
@@ -125,7 +238,7 @@ export class Reader {
       if (needsAuthoring(d)) {
         const st2 = el('div', { class: 'status' });
         card.append(el('div', { class: 'sketch-empty' }, [el('div', { class: 'kicker', text: (d.technique || 'card') + ' diorama · not built yet' }), el('b', { text: d.title || 'Scene' }), el('p', { class: 'dim small', text: d.request || '' }),
-          el('button', { class: 'btn primary small', text: 'Build this diorama with AI', onclick: async ev => { ev.target.disabled = true; try { const spec = await askJSON(authorPrompt(d, `${st.title}: ${st.statement || ''}`), { tools: evidenceTools(), onTool: toolStatus(st2), onText: t => st2.textContent = 'Authoring… ' + t.length.toLocaleString() + ' characters', manualTitle: 'Author this diorama in any AI' }); const s = spec.spec || spec; if (!Array.isArray(s.bodies)) throw { code: 'invalid_json' }; s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); this.save(); this.room.refreshStation(this.part); fill(); } catch (e) { ev.target.disabled = false; st2.textContent = errCopy(e); } } }), st2]));
+          el('button', { class: 'btn primary small', text: 'Build this diorama with AI', onclick: async ev => { ev.target.disabled = true; try { const spec = await askJSON(authorPrompt(d, `${st.title}: ${st.statement || ''}${st.answers ? ' | the step answers: ' + st.answers : ''}${st.opens ? ' | and opens: ' + st.opens : ''}`), { tools: evidenceTools(), onTool: toolStatus(st2), onText: t => st2.textContent = 'Authoring… ' + t.length.toLocaleString() + ' characters', manualTitle: 'Author this diorama in any AI' }); const s = spec.spec || spec; if (!Array.isArray(s.bodies)) throw { code: 'invalid_json' }; s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); this.save(); this.room.refreshStation(this.part); fill(); } catch (e) { ev.target.disabled = false; st2.textContent = errCopy(e); } } }), st2]));
         return;
       }
       const img = el('img', { class: 'sketch', alt: 'Drawing of ' + (d.title || d.type) });
@@ -157,7 +270,9 @@ export class Reader {
   }
   async verify(st) {
     const A = this.part.analysis; st = st || (this.evBar && this.evBar.lastChild); if (st) st.textContent = ' Checking references…';
-    try { const r = await verifySources(A, (i, n) => { if (st) st.textContent = ` Checked ${i} of ${n}…`; }); this.save(); toast(`${r.ok} of ${r.checked} references found in OpenAlex`); this.render(); }
+    // outside additions ("extra") are verified too: the objects are shared, so marks land on the steps
+    const V = { references: A.references || [], chain: (A.chain || []).map(x => ({ sources: [...(x.sources || []), ...(x.extra || []).map(e => e.source).filter(Boolean)], demos: x.demos || [] })) };
+    try { const r = await verifySources(V, (i, n) => { if (st) st.textContent = ` Checked ${i} of ${n}…`; }); this.save(); toast(`${r.ok} of ${r.checked} references found in OpenAlex`); this.render(); }
     catch (e) { if (st) st.textContent = ' ' + evidenceErr(e, 'OpenAlex'); }
   }
   fillSources(st, box) {
@@ -198,11 +313,36 @@ export class Reader {
   }
 }
 export function normalizeChain(A) {
-  A.chain = (A.chain || []).filter(x => x && typeof x === 'object').map((x, i) => ({ id: String(x.id || 'S' + (i + 1)), kind: String(x.kind || 'result'), title: String(x.title || ''), statement: String(x.statement || ''), math: x.math ? String(x.math) : '', derivation: Array.isArray(x.derivation) ? x.derivation : [], from: Array.isArray(x.from) ? x.from.map(String) : [], bodies: Array.isArray(x.bodies) ? x.bodies.map(String).slice(0, 8) : [], demos: Array.isArray(x.demos) ? x.demos.filter(d => d && d.type || (d && d.bodies)).slice(0, 4) : [],
-    terms: Array.isArray(x.terms) ? x.terms.filter(t => t && t.term).slice(0, 12) : [], intuition: x.intuition ? String(x.intuition) : '', misconception: x.misconception ? String(x.misconception) : '',
-    check: x.check && x.check.q ? { q: String(x.check.q), a: String(x.check.a || '') } : null, basis: x.basis ? String(x.basis) : '', sources: normSources(x.sources) }));
+  const strs = a => Array.isArray(a) ? a.map(String) : a != null && a !== '' ? [String(a)] : [];
+  A.chain = (A.chain || []).filter(x => x && typeof x === 'object').map((x, i) => ({ id: String(x.id || 'S' + (i + 1)), kind: String(x.kind || 'result'), title: String(x.title || ''), statement: String(x.statement || ''), math: x.math ? String(x.math) : '', derivation: Array.isArray(x.derivation) ? x.derivation : [], from: Array.isArray(x.from) ? x.from.map(String) : [], bodies: Array.isArray(x.bodies) ? x.bodies.map(String).slice(0, 8) : [], demos: Array.isArray(x.demos) ? x.demos.filter(d => d && d.type || (d && d.bodies)).slice(0, 8) : [],
+    terms: Array.isArray(x.terms) ? x.terms.filter(t => t && t.term).slice(0, 16) : [], intuition: x.intuition ? String(x.intuition) : '', misconception: x.misconception ? String(x.misconception) : '',
+    check: x.check && x.check.q ? { q: String(x.check.q), a: String(x.check.a || '') } : null, basis: x.basis ? String(x.basis) : '', sources: normSources(x.sources),
+    // subchapter coverage, the question thread, provenance (docs/PROTOCOL.md)
+    section: x.section != null ? String(x.section) : '', answers: x.answers ? String(x.answers) : '', opens: x.opens ? String(x.opens) : '',
+    ref: x.ref ? String(x.ref) : '', pages: (Array.isArray(x.pages) ? x.pages : x.pages != null ? [x.pages] : []).map(Number).filter(n => isFinite(n)).slice(0, 12),
+    figures: strs(x.figures).slice(0, 12), extra: normExtra(x.extra),
+    table: x.table && Array.isArray(x.table.rows) ? { caption: String(x.table.caption || ''), columns: strs(x.table.columns), rows: x.table.rows.filter(Array.isArray).slice(0, 80).map(r => r.map(c => String(c ?? ''))) } : null }));
   A.references = normSources(A.references);
+  if (A.question) A.question = String(A.question);
+  if (!Array.isArray(A.coverage)) A.coverage = []; else A.coverage = A.coverage.filter(c => c && c.subsection != null).map(c => ({ subsection: String(c.subsection), steps: strs(c.steps) }));
+  if (!Array.isArray(A.figuresSkipped)) delete A.figuresSkipped;
   return A;
+}
+function normExtra(e) {
+  const arr = Array.isArray(e) ? e : e && typeof e === 'object' ? [e] : e ? [{ what: String(e) }] : [];
+  return arr.filter(x => x && (x.what || x.source)).slice(0, 8).map(x => ({ what: String(x.what || ''), source: x.source ? (typeof x.source === 'string' ? { title: x.source } : normSources([x.source])[0] || null) : null }));
+}
+function renderTable(T) {
+  const t = el('table', { class: 'src-table' });
+  if (T.caption) t.append(el('caption', { html: esc(T.caption) }));
+  if (T.columns && T.columns.length) t.append(el('thead', {}, [el('tr', {}, T.columns.map(c => el('th', { html: esc(c) })))]));
+  t.append(el('tbody', {}, T.rows.map(r => el('tr', {}, r.map(c => el('td', { html: esc(c) }))))));
+  return el('div', { class: 'src-table-wrap' }, [t]);
+}
+function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(b || ''); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: (h.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' }); }
+function lightbox(f) {
+  const box = el('div', { class: 'modal-veil fig-lightbox', onclick: e => { if (e.target === box || e.target.tagName === 'BUTTON') box.remove(); } }, [el('figure', {}, [el('img', { src: f.dataUrl, alt: f.label || 'Figure' }), el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), ' ', el('span', { text: f.caption || f.label || '' })]), el('button', { class: 'btn small', text: 'Close' })])]);
+  document.body.append(box);
 }
 export function drawArcs(wrap) {
   const svg = wrap.querySelector('.arcs'); if (!svg) return; svg.innerHTML = ''; svg.setAttribute('height', wrap.scrollHeight);
