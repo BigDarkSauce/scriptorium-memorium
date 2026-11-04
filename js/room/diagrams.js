@@ -1,4 +1,4 @@
-// Interactive 2D diagrams (plot, tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
+// Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
 import { el, compile, fmt, clamp, uid, mod, MATHNAMES } from '../util.js';
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg'];
@@ -10,7 +10,9 @@ export function SVGDEMO(spec,host,fail){
   const ctrls=el('div',{class:'ctrls'}),reads=el('div',{class:'readouts'});wrap.append(ctrls,reads);
   const mk=(n,a,parent=svg)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);parent.append(e);return e};
   const P_=t==='customsvg'?{}:normParams(spec.params);const pv={};for(const k in P_)pv[k]=P_[k][2];
-  let anim=0,alive=true;
+  let anim=0,alive=true,shown=false;
+  // animation loops end by themselves once the diagram leaves the page (scroll closed or re-rendered without cleanup)
+  const gone=()=>{if(wrap.isConnected){shown=true;return false}return shown};
   const slider=(name,min,max,val,step,on,label)=>{const out=el('b',{text:fmt(val)});const inp=el('input',{type:'range',min,max,step:step||(max-min)/200,value:val,id:'r'+uid(),'aria-label':label||name});inp.oninput=()=>{out.textContent=fmt(+inp.value);on(+inp.value)};ctrls.append(el('label',{class:'ctrl'},[el('span',{},[label||name,out]),inp]));return inp};
   if(t!=='customsvg')for(const k in P_)if(!(spec.hidden||[]).includes(k))slider(k,P_[k][0],P_[k][1],P_[k][2],null,v=>{pv[k]=v;draw()});
   const pn=Object.keys(P_);
@@ -36,8 +38,18 @@ export function SVGDEMO(spec,host,fail){
   const clear=()=>{[...svg.childNodes].forEach(n=>{if(n!==dfs)n.remove()})};
   if(t==='plot'){
     const exprs=(spec.exprs||[spec.expr||'sin(x)']).slice(0,5);const fs=exprs.map(e=>compile(e,['x',...pn]));let hx=null;
+    // "points": measured data drawn as dots over the curves ([[x,y],…] or [{x,y,label}]); its origin is cited in the demo's source/extra
+    const pts=(Array.isArray(spec.points)?spec.points:[]).map(p=>Array.isArray(p)?{x:+p[0],y:+p[1],label:p[2]}:{x:+p.x,y:+p.y,label:p.label}).filter(p=>isFinite(p.x)&&isFinite(p.y));
+    // legend: each curve's name ("labels", else the ylabel, else the demo title; the raw expression only as a tooltip),
+    // top right inside the frame, so it never meets the y-axis label (top left) or the x-axis label (bottom right)
+    const names=exprs.map((e,i)=>{const L=Array.isArray(spec.labels)?spec.labels[i]:null;if(L)return String(L);const base=String(spec.ylabel||spec.title||'f');return exprs.length>1?base+' · '+(i+1):base});
+    const legend=()=>{const rows=names.map((n,i)=>({n:n.length>34?n.slice(0,33)+'…':n,c:COLORS[i],e:exprs[i]}));if(pts.length)rows.push({n:spec.pointsLabel||'data points',dot:true});if(!rows.length)return;
+      const g=mk('g',{'font-size':11,'font-family':'IBM Plex Mono, monospace'}),wid=Math.min(W/2-P,Math.max(...rows.map(r=>r.n.length))*6.6+30),x0=W-P-8-wid,y0=P+(spec.ylabel?20:6);
+      mk('rect',{x:x0,y:y0,width:wid,height:rows.length*16+6,rx:3,fill:'rgba(251,246,234,.86)',stroke:'rgba(90,60,30,.25)'},g);
+      rows.forEach((r,i)=>{const y=y0+13+i*16;if(r.dot)mk('circle',{cx:x0+14,cy:y-3,r:3.4,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.5},g);else mk('rect',{x:x0+8,y:y-4.5,width:12,height:3,fill:r.c},g);const tx=mk('text',{x:x0+26,y,fill:'#2a1e15'},g);tx.textContent=r.n;if(r.e){const ti=document.createElementNS(NS,'title');ti.textContent=r.e;tx.append(ti)}})};
     draw=()=>{clear();axes();fs.forEach((f,i)=>curve(x=>f(x,...pn.map(k=>pv[k])),COLORS[i]));
-      exprs.forEach((e,i)=>{mk('rect',{x:P+8,y:P+6+i*16,width:12,height:3,fill:COLORS[i]});mk('text',{x:P+26,y:P+11+i*16,'font-size':11,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=e});
+      pts.forEach(p=>{mk('circle',{cx:X(p.x),cy:Y(p.y),r:3.6,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.6});if(p.label)mk('text',{x:X(p.x)+6,y:Y(p.y)-6,'font-size':10,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=p.label});
+      legend();
       reads.innerHTML='';if(hx!=null){mk('line',{x1:X(hx),x2:X(hx),y1:P,y2:H-P,stroke:'#9c3a28','stroke-dasharray':'3 3'});reads.append(el('span',{html:'<i>x</i> '+fmt(hx)}));fs.forEach((f,i)=>{const y=f(hx,...pn.map(k=>pv[k]));if(isFinite(y))mk('circle',{cx:X(hx),cy:Y(y),r:4,fill:COLORS[i]});reads.append(el('span',{html:`<i>f${i+1}</i> ${fmt(y)}`}))})}else reads.append(el('span',{html:'<i>Move the pointer over the plot to read values</i>'}))};
     svg.addEventListener('pointermove',ev=>{const[x]=svgPt(ev);hx=clamp(IX(x),xr[0],xr[1]);draw()});
   }else if(t==='tangent'){
@@ -82,14 +94,14 @@ export function SVGDEMO(spec,host,fail){
       mk('text',{x:ox,y:P+10,'font-size':11,fill:'#9c3a28','font-family':'IBM Plex Mono, monospace'}).textContent='sin θ';mk('text',{x:ox+60,y:P+10,'font-size':11,fill:'#2d5b8e','font-family':'IBM Plex Mono, monospace'}).textContent='cos θ';
       reads.innerHTML=`<span><i>θ</i> ${fmt(tm)} rad = ${fmt(tm*180/Math.PI,1)}°</span><span><i>sin θ</i> ${fmt(Math.sin(th))}</span><span><i>cos θ</i> ${fmt(Math.cos(th))}</span><span><i>tan θ</i> ${fmt(Math.tan(th))}</span><span><i>sin²+cos²</i> 1</span>`};
     let drag=false;const setTh=ev=>{const[x,y]=svgPt(ev);th=mod(Math.atan2(Y(0)-y,x-X(0)),2*Math.PI);draw()};svg.addEventListener('pointerdown',ev=>{drag=true;svg.setPointerCapture(ev.pointerId);setTh(ev)});svg.addEventListener('pointermove',ev=>{if(drag)setTh(ev)});svg.addEventListener('pointerup',()=>drag=false);
-    const loop=()=>{if(!alive)return;if(play){th+=.02;draw()}anim=requestAnimationFrame(loop)};loop();
+    const loop=()=>{if(!alive||gone())return;if(play){th+=.02;draw()}anim=requestAnimationFrame(loop)};loop();
   }else if(t==='parametric'){
     const fx=compile(spec.xt||spec.xexpr||'cos(t)',['t',...pn]),fy=compile(spec.yt||spec.yexpr||'sin(2*t)',['t',...pn]);const tr=spec.t||[0,2*Math.PI];let tt=tr[0],play=true;
     const pb=el('button',{class:'btn',text:'Pause'});pb.onclick=()=>{play=!play;pb.textContent=play?'Pause':'Play'};ctrls.append(pb);
     draw=()=>{clear();axes();const A_=pn.map(k=>pv[k]);let d='';for(let i=0;i<=600;i++){const s=tr[0]+(tr[1]-tr[0])*i/600;const x=fx(s,...A_),y=fy(s,...A_);if(isFinite(x)&&isFinite(y))d+=(d?'L':'M')+X(x)+' '+Y(y)}mk('path',{d,fill:'none',stroke:'#2d5b8e','stroke-width':2,'clip-path':'url(#clp'+cid+')'});
       const x=fx(tt,...A_),y=fy(tt,...A_),e=1e-4,vx=(fx(tt+e,...A_)-x)/e,vy=(fy(tt+e,...A_)-y)/e,sc=.25;mk('line',{x1:X(x),y1:Y(y),x2:X(x+vx*sc),y2:Y(y+vy*sc),stroke:'#9c3a28','stroke-width':2.5});mk('circle',{cx:X(x),cy:Y(y),r:7,fill:'#2a1e15',stroke:'#cfa84f','stroke-width':2});
       reads.innerHTML=`<span><i>t</i> ${fmt(tt)}</span><span><i>(x,y)</i> (${fmt(x)}, ${fmt(y)})</span><span><i>|v|</i> ${fmt(Math.hypot(vx,vy))}</span>`};
-    const loop=()=>{if(!alive)return;if(play){tt+=(tr[1]-tr[0])/600;if(tt>tr[1])tt=tr[0];draw()}anim=requestAnimationFrame(loop)};loop();
+    const loop=()=>{if(!alive||gone())return;if(play){tt+=(tr[1]-tr[0])/600;if(tt>tr[1])tt=tr[0];draw()}anim=requestAnimationFrame(loop)};loop();
   }else if(t==='phase'){
     const fdx=compile(spec.dx||'y',['x','y',...pn]),fdy=compile(spec.dy||'-x',['x','y',...pn]);let trajs=[];
     const cb=el('button',{class:'btn',text:'Clear paths'});cb.onclick=()=>{trajs=[];draw()};ctrls.append(cb);
@@ -99,7 +111,7 @@ export function SVGDEMO(spec,host,fail){
       trajs.forEach((tr,i)=>{let d='';tr.pts.forEach((p,k)=>d+=(k?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1));mk('path',{d,fill:'none',stroke:COLORS[(i+1)%5],'stroke-width':2,'clip-path':'url(#clp'+cid+')'});const p=tr.pts[tr.pts.length-1];mk('circle',{cx:X(p[0]),cy:Y(p[1]),r:5,fill:COLORS[(i+1)%5]})});
       const last=trajs[trajs.length-1];reads.innerHTML=last?`<span><i>start</i> (${fmt(last.pts[0][0])}, ${fmt(last.pts[0][1])})</span><span><i>now</i> (${fmt(last.pts.at(-1)[0])}, ${fmt(last.pts.at(-1)[1])})</span><span><i>paths</i> ${trajs.length}</span>`:'<span><i>Click anywhere in the field to release a state and watch it flow</i></span>'};
     svg.addEventListener('pointerdown',ev=>{const[x,y]=svgPt(ev);trajs.push({pts:[[IX(x),IY(y)]],n:0});if(trajs.length>6)trajs.shift();draw()});
-    const loop=()=>{if(!alive)return;let any=false;trajs.forEach(tr=>{if(tr.n>1400)return;any=true;let [x,y]=tr.pts[tr.pts.length-1];const h=.01;for(let s=0;s<3;s++){const k1=F(x,y),k2=F(x+h/2*k1[0],y+h/2*k1[1]),k3=F(x+h/2*k2[0],y+h/2*k2[1]),k4=F(x+h*k3[0],y+h*k3[1]);x+=h/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]);y+=h/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1])}if(!isFinite(x)||!isFinite(y)){tr.n=9999;return}tr.pts.push([x,y]);tr.n++});if(any)draw();anim=requestAnimationFrame(loop)};loop();
+    const loop=()=>{if(!alive||gone())return;let any=false;trajs.forEach(tr=>{if(tr.n>1400)return;any=true;let [x,y]=tr.pts[tr.pts.length-1];const h=.01;for(let s=0;s<3;s++){const k1=F(x,y),k2=F(x+h/2*k1[0],y+h/2*k1[1]),k3=F(x+h/2*k2[0],y+h/2*k2[1]),k4=F(x+h*k3[0],y+h*k3[1]);x+=h/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]);y+=h/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1])}if(!isFinite(x)||!isFinite(y)){tr.n=9999;return}tr.pts.push([x,y]);tr.n++});if(any)draw();anim=requestAnimationFrame(loop)};loop();
   }
   else if(t==='matrix'){
     xr=[-5.5,5.5];yr=[-3.2,3.2];const m=spec.m||[[1.2,.6],[.3,1]];let I_=[m[0][0],m[1][0]],J_=[m[0][1],m[1][1]],which=null;
@@ -155,7 +167,7 @@ export function SVGDEMO(spec,host,fail){
       onPointer:f=>{ptr=safe(f)},readout:h=>{reads.innerHTML=String(h)}};
     ['pointerdown','pointermove','pointerup'].forEach(n=>svg.addEventListener(n,ev=>{if(!ptr)return;if(n==='pointerdown')svg.setPointerCapture(ev.pointerId);const[x,y]=svgPt(ev);ptr(n.slice(7),x,y,ev)}));
     new Function('api','"use strict";\n'+spec.code)(api);
-    draw=()=>api.redraw();let last=performance.now();const loop=()=>{if(!alive)return;const now=performance.now();if(userAnim)userAnim(Math.min(.05,(now-last)/1000),now/1000);last=now;anim=requestAnimationFrame(loop)};loop();
+    draw=()=>api.redraw();let last=performance.now();const loop=()=>{if(!alive||gone())return;const now=performance.now();if(userAnim)userAnim(Math.min(.05,(now-last)/1000),now/1000);last=now;anim=requestAnimationFrame(loop)};loop();
   }
   draw();
   return()=>{alive=false;cancelAnimationFrame(anim)};

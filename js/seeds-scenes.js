@@ -5,207 +5,506 @@ const trees = (pts, kind = 'tree') => pts.map(([x, z, h], i) => ({ id: kind + i,
 
 export const WATER_CYCLE = {
   type: 'scene', title: 'The water cycle in a glass valley', technique: 'topdown',
-  environment: { preset: 'landscape', glassCase: true, time: 11 },
+  environment: { preset: 'landscape', time: 11, azimuth: -45 },
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', shape: { kind: 'terrain', w: 13, d: 13, h: .3, seed: 3, low: '#5f7f3e', high: '#8a8a5a', flat: [[2.6, 1.2, 2.0, .9, .18], [1.0, -2.7, .7, .6, .2]] }, position: [0, .02, 0] },
-    { id: 'mountain', name: 'Mountains', label: 'Mountains', role: 'actor', describe: 'Air forced up their slopes expands and cools.', shape: { kind: 'mountain', r: 1.8, h: 2.7, seed: 5, snowline: .7 }, position: [-3.1, 0, -1.4] },
-    { id: 'mountain2', name: 'Mountain', role: 'decor', shape: { kind: 'mountain', r: 1.5, h: 2.1, seed: 9, snowline: .72 }, position: [-3.3, 0, 1.7] },
-    { id: 'mountain3', name: 'Hill', role: 'decor', shape: { kind: 'mountain', r: 1.1, h: 1.2, seed: 2, snowline: 2 }, position: [-1.7, 0, -3.1] },
-    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunlight gives water molecules the energy to escape as vapour.', shape: { kind: 'water', w: 3.4, d: 2.6 }, position: [2.6, .38, 1.2] },
-    { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'Invisible gas in reality; drawn here as rising motes.', shape: { kind: 'particles', type: 'bubbles', count: 220, area: [3.4, 3, 2.4], size: .05 }, position: [2.6, .4, 1.2] },
-    { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Vapour condenses on dust into droplets; the cloud darkens as it fills.', shape: { kind: 'cloud', r: .9, puffs: 8 }, position: [2.6, 4.3, 1.2] },
-    { id: 'wind', name: 'Wind', label: 'Wind', role: 'actor', describe: 'Carries the cloud west, towards the mountains.', shape: { kind: 'arrow', length: 1.3, r: .05 }, material: { preset: 'neon', color: '#9fd0ff' }, position: [-.4, 5.6, 3.4], rotation: [0, 0, 90] },
-    { id: 'rain', name: 'Rain', label: 'Rain', role: 'actor', describe: 'Falls when the cloud holds more water than its air can keep suspended.', shape: { kind: 'particles', type: 'rain', count: 600, area: [2.2, 4, 1.4], size: .035 }, position: [2.6, .3, 1.2] },
-    { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated.', shape: { kind: 'star', r: .42, color: '#ffd27a', intensity: 2 }, position: [4.5, 6.4, -3.5] },
-    { id: 'house', name: 'Cottage', role: 'decor', shape: { kind: 'house', w: 1, d: .8, h: .65 }, position: [1.0, .22, -2.7], rotation: [0, 18, 0] },
-    ...trees([[0, -1.2, 1.1], [.6, -2.0, .9], [3.2, -1.6, 1.2], [-.4, 2.6, 1], [4.0, 3.2, .9], [1.0, 3.4, 1.1]]),
-    ...trees([[-2.0, .2, 1.3], [-1.6, -1.2, 1.1], [-2.2, 3.0, 1.2]], 'pine')
+    { id: 'ground', name: 'Valley floor', role: 'decor', shape: { kind: 'terrain', w: 13, d: 13, h: .2, seed: 3, low: '#4f6a35', high: '#74794a', flat: [[.9, 1.7, 1.95, 1.0, -.15]] }, position: [0, .02, 0] },
+    { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'mountain', r: 2.3, h: 1.25, seed: 5, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [.2, 0, -2.75] },
+    { id: 'ridgeN', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: 1.0, seed: 11, snowline: 9, low: '#564f45', high: '#857d6f' }, position: [-1.9, 0, -2.9] },
+    { id: 'ridgeS', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 1.7, h: .75, seed: 6, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [2.3, 0, -2.6] },
+    { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
+    { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
+    { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
+    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'soil', color: '#3f7f88' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
+    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#4aa6c0' }, position: [.9, .05, 1.7] },
+    { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint motes rising from the lake.', shape: { kind: 'particles', type: 'bubbles', count: 160, area: [2.2, 1.7, 2.6], size: .035 }, position: [.9, .05, 1.7] },
+    { id: 'parcel', name: 'Air parcel', label: 'Air parcel · moist air from the lake', role: 'actor', describe: 'One rising bubble of lake air: you can ride it (POV).', shape: { kind: 'sphere', r: .07 }, material: { preset: 'cloud', color: '#eef6ff', emissive: '#4a6c86' }, position: [1.1, .1, 1.4] },
+    { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Droplets condensed from the vapour; it greys as it fills with water.', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, 1.7], rotation: [0, 90, 0] },
+    { id: 'cloud2', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, 3.5], rotation: [0, 90, 0] },
+    { id: 'cloud3', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, -4.5], rotation: [0, 90, 0] },
+    { id: 'windsock', name: 'Windsock', label: 'Wind · carries the cloud to the ridge', role: 'actor', describe: 'It blows from the lake towards the ridge; the sock lifts as the wind strengthens.', shape: { kind: 'group' }, position: [2.9, 0, .2] },
+    { id: 'sockpole', name: 'Windsock pole', role: 'decor', parent: 'windsock', shape: { kind: 'cylinder', r: .016, h: 1.0 }, material: { preset: 'steel' }, position: [0, .5, 0] },
+    { id: 'sockpivot', name: 'Windsock', role: 'decor', parent: 'windsock', shape: { kind: 'group' }, position: [0, .98, 0] },
+    { id: 'sockcone', name: 'Windsock', role: 'decor', parent: 'sockpivot', shape: { kind: 'cone', r: .075, h: .48 }, material: { preset: 'fabric', color: '#d8642a' }, position: [0, .24, 0] },
+    { id: 'rain', name: 'Rain', label: 'Rain', role: 'actor', describe: 'Falls once the cloud holds more water than its droplets can keep aloft.', shape: { kind: 'group' }, position: [0, 0, 0] },
+    { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated; the light and the shadows come from it.', shape: { kind: 'star', r: .34, color: '#ffe2b0', intensity: 2 }, position: [-4.2, 5, 3] },
+    { id: 'house', name: 'Cottage', role: 'decor', shape: { kind: 'house', w: .9, d: .75, h: .6 }, position: [3.5, .1, 3.7], rotation: [0, 70, 0] },
+    { id: 'rock1', name: 'Boulder', role: 'decor', shape: { kind: 'rock', r: .32, h: .3 }, position: [4.4, .05, -1.2] },
+    { id: 'rock2', name: 'Boulder', role: 'decor', shape: { kind: 'rock', r: .22, h: .2 }, position: [2.6, .05, -.9] },
+    ...trees([[5.0, -3.4, 1.5], [4.5, -4.5, 1.2], [4.7, 4.4, 1.4], [5.5, 3.0, 1.0], [2.6, -.2, .9], [-1.6, .6, .9], [2.1, 4.5, 1.1], [-.6, -5.0, .8]]),
+    ...trees([[-1.0, -.9, 1.1], [1.8, -1.3, 1.0], [-1.4, -5.2, .9], [-.6, 3.1, 1.1], [3.6, -2.3, 1.3], [-3.0, -1.0, 1.0]], 'pine')
   ],
-  tour: ['sun', 'lake', 'vapour', 'cloud', 'wind', 'mountain', 'rain'],
+  tour: ['sun', 'lake', 'vapour', 'parcel', 'cloud', 'windsock', 'mountain', 'rain'],
   params: [
-    { key: 'sun', label: 'solar heating', min: 0, max: 1.5, value: .9, unit: '' },
-    { key: 'wind', label: 'wind speed', min: 0, max: 3, value: 1.2, unit: '' },
-    { key: 'hour', label: 'time of day', min: 6, max: 19.5, value: 11, unit: 'h' }],
-  behaviors: [{ target: 'tree*', type: 'sway', amount: 'wind', speed: '1' }, { target: 'pine*', type: 'sway', amount: 'wind*0.7', speed: '0.8' }],
-  code: `const T=api.THREE, lake=api.body('lake'), cloud=api.body('cloud'), rain=api.body('rain'), vap=api.body('vapour'), sun=api.body('sun'), wind=api.body('wind');
-let H=0.2, W=0.1, level=0, raining=false, rained=0, evap=0, lifted=false;
-const home=cloud.position.clone(), white=new T.Color('#ffffff'), slate=new T.Color('#59626c'), cm=[]; cloud.traverse(o=>{ if(o.isMesh) cm.push(o); });
-const rainPts=rain.children[0]||rain; const vapPts=vap.children[0]||vap;
-function sunDir(h){ const elev=Math.sin((h-6)/12*Math.PI)*62, az=(h-12)/12*140; return new T.Vector3().setFromSphericalCoords(1,(90-elev)*Math.PI/180,az*Math.PI/180); }
-const heat=()=>api.param('sun')*Math.max(0,Math.sin((api.param('hour')-6)/12*Math.PI));
-api.onStep((h)=>{
-  const E=0.09*heat()*(1+0.3*api.param('wind'))*Math.max(0,1-H);
-  H+=E*h; evap+=E*h; level-=E*h*0.12;
-  if(Math.abs(cloud.position.x-home.x)<1.6){ const c=Math.min(H,0.14*h*(0.5+H)); H-=c; W+=c; }
-  cloud.position.x-=api.param('wind')*0.32*h;
-  const lift=Math.max(0,(-1.2-cloud.position.x))/2.5, sat=Math.max(0.35,1.0-0.6*Math.min(1,lift));
-  const was=raining; raining=W>sat;
-  if(raining){ const r=(W-sat)*0.6*h+0.02*h; W=Math.max(0,W-r); rained+=r; if(Math.abs(cloud.position.x-home.x)<2) level+=r*0.12; }
-  H=Math.max(0,H-0.01*h);
-  if(raining&&!was) api.event('Cloud saturated: rain begins',cloud.position.clone(),{id:'rain'});
-  if(!raining&&was) api.event('Rain stops: the cloud has given up its excess water',cloud.position.clone(),{id:'dry'});
-  if(lift>0.05&&!lifted){ lifted=true; api.event('Orographic lift: rising over the mountains, the air cools and holds less water',cloud.position.clone(),{id:'lift'}); }
-  if(cloud.position.x<-5.2){ cloud.position.x=home.x; W=0.05; lifted=false; api.event('A new cloud forms over the lake',cloud.position.clone(),{id:'newcloud'}); }
-  level=api.clamp(level,-0.22,0.22);
+    { key: 'sun', label: 'sunshine (0 = overcast)', min: 0, max: 1.5, value: .9, unit: '' },
+    { key: 'wind', label: 'wind speed', min: 0, max: 10, value: 4, unit: 'm/s' },
+    { key: 'hour', label: 'time of day (sun held)', min: 6, max: 19.5, value: 11, unit: 'h' }],
+  behaviors: [{ target: 'tree*', type: 'sway', amount: 'wind*0.3', speed: '1' }, { target: 'pine*', type: 'sway', amount: 'wind*0.2', speed: '0.8' }],
+  shots: {
+    'has warmed to': { target: [.9, .7, 1.7], dist: 7 },
+    'has cooled to': { target: [.9, .9, 1.7], dist: 9 },
+    'parcel reaches its dew point': { target: [.8, 1.4, 1.6], dist: 6 },
+    'windward slope': { target: [.5, 2.8, -1.7], dist: 9 },
+    'rain shadow': { target: [.4, 2.2, -4.2], dist: 9 },
+    'falls back on the lake': { target: [.8, 1.6, 1.6], dist: 8 }
+  },
+  flows: {
+    'vapour rises': [{ from: [.9, .15, 1.7], to: [.9, 1.5, 1.6], label: 'vapour leaves the warm surface' }],
+    'dew point': [{ from: [1.25, .2, 1.4], to: [1.25, 1.55, 1.4], label: 'rising air cools 9.8 K per km' }],
+    'windward slope': [{ from: [.7, 2.3, 1.5], to: [.7, 2.6, -.3], label: 'wind carries the moist air' }, { from: [.7, 2.4, -.6], to: [.7, 4.4, -2.3], label: 'forced up the slope, it cools' }],
+    'rain shadow': [{ from: [.7, 4.6, -2.9], to: [.7, 2.5, -4.8], label: 'sinking air warms; the cloud evaporates' }],
+    'falls back on the lake': [{ from: [.9, .1, 2.2], to: [.9, 1.6, 2.2], label: 'evaporation' }, { from: [.6, 1.6, 1.2], to: [.6, .2, 1.2], label: 'rain' }]
+  },
+  code: `const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), f0=v=>String(Math.round(v)), f1=v=>(Math.round(v*10)/10).toFixed(1);
+const lake=api.body('lake'), cloud=api.body('cloud'), rainB=api.body('rain'), vap=api.body('vapour'), sun=api.body('sun'), pivot=api.body('sockpivot'), parcel=api.body('parcel'), ground=api.body('ground'), ridge=api.body('mountain');
+// ---- thermodynamics: °C, hPa, g of water per kg of air, metres ----
+const es=t=>6.112*Math.exp(17.62*t/(243.12+t));                       // saturation vapour pressure over water (Magnus, WMO coefficients): +6–7 % per K
+const qsat=(t,p)=>{const e=es(t);return 622*e/(p-0.378*e);};          // saturation specific humidity
+const pAt=z=>1013.25*Math.exp(-z/8400);                                 // pressure at height z (scale height 8.4 km)
+const dewOf=(q,p)=>{const e=q*p/(622+0.378*q),a=Math.log(e/6.112);return 243.12*a/(17.62-a);};
+const gm=(t,p)=>{const K=t+273.15,r=qsat(t,p)/1000;return 1000*9.81*(1+2.501e6*r/(287*K))/(1005+2.501e6*2.501e6*r*0.622/(287*K*K));}; // moist-adiabatic lapse rate, K/km
+const growth=t=>100*17.62*243.12/((243.12+t)*(243.12+t));               // d ln e_s / dT in % per K
+// ---- layout: heights in the air are drawn at 1 unit = 250 m; the wind blows towards -z ----
+const VS=250, PX=.7, HOME=1.7, LX=.9, LZ=1.7, AZ=-45;   // AZ: the landscape's sun azimuth offset (environment.azimuth)
+api.world.updateMatrixWorld(true);
+const ray=new T.Raycaster(), DOWN=V(0,-1,0), land=['ground','mountain','ridgeN','ridgeS','farhill1','farhill2','farhill3'].map(api.body).filter(Boolean);
+const hAt=(x,z,objs)=>{ray.set(V(x,40,z),DOWN);const h=ray.intersectObjects(objs||land,true)[0];return h?h.point.y:0;};
+api.bodies().forEach(o=>{const id=o.userData.bodyId||'';if(/^(tree|pine|house|windsock|rock)/.test(id)) o.position.y=hAt(o.position.x,o.position.z)-(/^rock/.test(id)?.08:.03);});  // decor stands on the ground
+let lakeY;{const b=[];for(let i=0;i<=24;i++){const u=i/24-.5;b.push(hAt(LX+u*2.5,LZ-1.45,[ground]),hAt(LX+u*2.5,LZ+1.45,[ground]),hAt(LX-1.25,LZ+u*2.9,[ground]),hAt(LX+1.25,LZ+u*2.9,[ground]));}b.sort((a,c)=>a-c);lakeY=Math.max(hAt(LX,LZ,[ground])+.05,b[Math.floor(b.length*.12)]-.015);}
+lake.position.y=lakeY; vap.position.y=lakeY; api.body('lakebed').position.y=hAt(LX,LZ,[ground])+.004;   // the shoreline is where the terrain rises through the water plane
+// the air's path over the land: terrain height under the cloud, smoothed (air flows over, not through, the ridge)
+const base0=hAt(PX,HOME,[ground]), raw=[];for(let i=0;i<=210;i++){const z=4-i*.05;raw.push(Math.max(0,hAt(PX,z)-base0));}
+const lift=raw.map((_,i)=>{let s=0,n=0;for(let j=-14;j<=14;j++){const k=i+j;if(k<0||k>=raw.length)continue;const w=1-Math.abs(j)/15;s+=w*raw[k];n+=w;}return s/n;});
+const liftU=z=>{const i=Math.max(0,Math.min(lift.length-1,Math.round((4-z)/.05)));return lift[i];};
+let zCrest=HOME,top=0;lift.forEach((v,i)=>{if(v>top){top=v;zCrest=4-i*.05;}});
+const heat=()=>api.param('sun')*Math.max(0,Math.sin((api.param('hour')-6)/12*Math.PI)), target=()=>10+14*heat();
+let Ts=target(), q=12, E=0, Emm=0, zb=300, Tb=15, rainSlope=0, rainLake=0, Tset=target(), settled=true, quiet=true, warming=true;
+// clouds: convection over the warm lake makes a new cloud whenever the last one has drifted away (two at most)
+const meshes=[cloud,api.body('cloud2'),api.body('cloud3')], C=[null,null,null]; let since=99;
+const newCloud=()=>({z:HOME,d:200,qt:q,qt0:q,zb:zb,Tb:Tb,Ts0:Ts,L:0,Tm:Tb,qc:0,raining:false,over:true,shadow:false,gone:0,rk:0,rained:0});
+// the parcel: one bubble of lake air rising into the newest cloud, then riding it
+let pp=V(LX+.35,lakeY+.05,LZ-.3), phase='rise', pc=0, poff=V(.15,0,.25);
+function step(h){
+  const u=api.param('wind'), Tt=target();
+  if(Math.abs(Tt-Tset)>1.5){warming=Tt>Ts;Tset=Tt;settled=false;}
+  Ts+=(Tt-Ts)*Math.min(1,h/4);
+  const qs0=qsat(Ts,1013);
+  E=.05*(1+.3*u)*(qs0-q);                          // Dalton: evaporation grows with the saturation deficit q_s(T) − q, faster in wind
+  q+=(E-(.02+.004*u)*(q-6))*h; if(q>qs0) q=qs0;   // mixing with drier air; above saturation the excess condenses as dew or mist
+  Emm=Math.max(0,.1348*Math.max(1,u)*(qs0-q));    // bulk formula ρ·C_E·U·(q_s − q) with C_E = 1.3e-3, in mm of water per day
+  zb=Math.max(60,125*(Ts-dewOf(q,1013)));         // cloud base: lifting condensation level ≈ 125 m per K of dew-point spread (Espy)
+  Tb=Ts-9.8*zb/1000;                               // a rising parcel cools at the dry adiabatic rate up to the base
+  if(!quiet&&!settled&&Math.abs(Ts-Tt)<.25){ settled=true; api.event((warming?'The lake air has warmed to ':'The lake air has cooled to ')+f1(Ts)+' °C: e_s is now '+f1(es(Ts))+' hPa and evaporation '+f1(Emm)+' mm/day',V(LX,lakeY+.3,LZ),{id:'temp',sound:'tick'}); }
+  since+=h; if(since>12&&!C.some(c=>c&&Math.abs(c.z-HOME)<1)){ const k=C.indexOf(null); if(k>=0){ C[k]=newCloud(); since=0; phase='rise'; pc=k; pp.set(LX+.35,lakeY+.05,LZ-.3); } }   // convection over the warm lake starts a new cloud once the last one has moved on
+  C.forEach((c,k)=>{ if(!c) return;
+    c.over=Math.abs(c.z-HOME)<1.6;
+    if(c.over){ c.qt+=(q-c.qt)*Math.min(1,h*.8); c.qt0=c.qt; c.zb=zb; c.Tb=Tb; c.Ts0=Ts; c.d=Math.min(2400,c.d+h*16*heat()*q/12); } else c.d=Math.max(150,c.d-h*6);   // over the lake convection feeds and deepens it; once it leaves, it keeps its own air
+    c.z-=u*.08*h; c.L=liftU(c.z)*VS;
+    const zm=c.zb+c.d/2+c.L, Tg=c.Tb-gm(c.Tb,pAt(c.zb))*(zm-c.zb)/2000; c.Tm=c.Tb-gm(Tg,pAt((c.zb+zm)/2))*(zm-c.zb)/1000;   // above the base: the moist adiabat
+    c.qc=Math.max(0,c.qt-qsat(c.Tm,pAt(zm)));        // condensed water at mid-cloud
+    const was=c.raining; c.raining=c.qc>(was?.8:1);
+    if(c.raining){ const r=.3*(c.qc-.8)*h; c.qt-=r; const mm=r*c.d/1000; c.rained+=mm; if(c.over) rainLake+=mm; else rainSlope+=mm; }
+    if(!quiet&&c.raining&&!was){ if(c.over) api.event('Rain falls back on the lake: the cloud, '+f0(c.d)+' m deep, now holds '+f1(c.qc)+' g of droplets per kg of air',V(PX,lakeY+1.2,c.z),{id:'rainlake',sound:'pour'});
+      else api.event('Rain on the windward slope: lifted '+f0(c.L)+' m, the cloud has cooled to '+f1(c.Tm)+' °C and holds '+f1(c.qc)+' g/kg of droplets',V(PX,base0+(c.zb+c.L)/VS,c.z),{id:'rain',sound:'pour'}); }
+    const past=c.z<zCrest-.2;
+    if(past&&c.qc<.02){ if(!c.shadow&&!quiet&&c.rained>0){ const fw=2.49*Math.max(0,c.qt0-c.qt); api.event('Rain shadow: sinking down the lee side, the air warms and the cloud evaporates; back at valley level it would be '+f1(c.Ts0+fw)+' °C, '+f1(fw)+' K warmer than when it set out',V(PX,base0+(c.zb+c.L)/VS,c.z),{id:'shadow',sound:'whoosh'}); } c.shadow=true; c.gone+=h; }
+    if((past&&c.gone>1.5)||c.z<-5.3) C[k]=null;    // dissolved
+  });
+  // the parcel
+  const c=C[pc];
+  if(phase==='rise'){ pp.y+=h*(.25+.4*Math.min(1.5,heat())); pp.z-=h*u*.02; if(pp.y>=lakeY+zb/VS){ phase='ride'; poff.set(pp.x-PX,0,c?pp.z-c.z:0); if(!quiet) api.event('The parcel reaches its dew point at '+f0(zb)+' m: at '+f1(Tb)+' °C its vapour condenses into cloud droplets',pp.clone(),{id:'dew',sound:'chime'}); } }
+  else if(c) pp.set(PX+poff.x*.5,base0+(c.zb+c.d*.3+c.L)/VS,c.z+poff.z*.5);   // it rides its cloud until the cloud dissolves
+}
+for(let i=0;i<60*120;i++) step(1/120); quiet=false;   // start from the steady state of the default sky
+api.onStep(h=>step(h));
+if(api.scene.fog){ api.scene.fog.near=13; api.scene.fog.far=40; }   // aerial perspective: the far hills sink into haze
+// ---- sky: the landscape's sky dome shows only grey haze below the horizon, so it gives way to a painted screen-space gradient (repainted with the hour) ----
+const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity);   // hidden every frame (the materialiser restores the background objects when it finishes)
+const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
+const hz=new T.Color(), zn=new T.Color(), cc=new T.Color();
+function paintSky(day){ const warm=1-Math.min(1,day*1.7); hz.setRGB(.66+.22*warm,.71+.02*warm,.76-.18*warm).multiplyScalar(.45+.55*Math.min(1,day*1.5+.2)); zn.setRGB(.33+.1*warm,.47,.66-.12*warm).multiplyScalar(.4+.6*Math.min(1,day*1.5+.2));
+  for(let i=0;i<GN;i++){ cc.copy(hz).lerp(zn,Math.pow(i/(GN-1),.75)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }
+api.scene.background=skyTex;
+let lastHr=-1;
+// ---- visuals ----
+const white=new T.Color('#ffffff'), slate=new T.Color('#5e6670'), cms=meshes.map(m=>{const a=[];m&&m.traverse(o=>{if(o.isMesh)a.push(o);});return a;});
+const vapPts=vap.children[0];
+const NR=420, RD=[], rg=new T.BufferGeometry(); rg.setAttribute('position',new T.BufferAttribute(new Float32Array(NR*6),3));
+const rl=new T.LineSegments(rg,new T.LineBasicMaterial({color:0xb8cfe0,transparent:true,opacity:.6,depthWrite:false})); rl.frustumCulled=false; rl.name='rain streaks'; rainB.add(rl);
+for(let i=0;i<NR;i++) RD.push({x:0,y:-1,z:0,v:4.5+api.rand()*1.5,c:i%2});
+let fr=0;
+function sunDir(hr){ const el=Math.sin((hr-6)/12*Math.PI)*62, az=(hr-12)/12*140+AZ; return new T.Vector3().setFromSphericalCoords(1,(90-el)*Math.PI/180,az*Math.PI/180); }   // same sun path as the landscape light
+api.onFrame((dt)=>{ dt=Math.min(dt,.1);
+  meshes.forEach((m,k)=>{ const c=C[k]; if(!m) return; if(!c){ m.visible=false; m.position.set(PX,base0+2,HOME); return; } m.visible=true;
+    const vis=Math.min(1,c.qc/.12+(c.over?.15:0)), sxz=.75+.22*Math.min(3,c.d/400), sy=Math.max(.35,Math.min(2.6,c.d/VS/.8));
+    m.position.set(PX,base0+(c.zb+c.d/2+c.L)/VS,c.z); m.scale.set(sxz,sy,sxz);
+    const kk=api.clamp(c.qc/2.2,0,1); cms[k].forEach(o=>{ o.material.color.copy(white).lerp(slate,kk*.85); o.material.transparent=true; o.material.opacity=.94*vis; o.visible=vis>.02; });
+    c.rk+=((c.raining?Math.min(1,.35+(c.qc-.8)):0)-c.rk)*Math.min(1,dt*3); });
+  parcel.position.copy(pp);
+  // rain: streaks from each raining cloud's base to the ground under it
+  const rk=Math.max(...C.map(c=>c?c.rk:0)); rl.visible=rk>.02; rl.material.opacity=.6*Math.min(1,rk+.2);
+  { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; rainB.position.set(PX,0,c?c.z:HOME); rl.position.set(-PX,0,-(c?c.z:HOME)); if(!rl.visible) rg.boundingBox=new T.Box3(); }
+  if(rl.visible){ const a=rg.attributes.position.array;
+    for(let i=0;i<NR;i++){ const s=RD[i], c=C[s.c]; if(!c||c.rk<.02){ a[i*6+1]=a[i*6+4]=-5; continue; }
+      const yTop=base0+(c.zb+c.L)/VS-.1; s.y-=dt*s.v; const g=base0+liftU(s.z);
+      if(s.y<g||s.y>yTop||Math.abs(s.z-c.z)>1){ s.x=PX+(api.rand()-.5)*.9; s.z=c.z+(api.rand()-.5)*1.6; s.y=g+api.rand()*(yTop-g); }
+      a[i*6]=s.x;a[i*6+1]=s.y+.16;a[i*6+2]=s.z+.02;a[i*6+3]=s.x;a[i*6+4]=s.y;a[i*6+5]=s.z; }
+    rg.attributes.position.needsUpdate=true; if((fr++)%10===0) rg.computeBoundingBox(); }
+  // vapour motes: rise from the lake to the cloud base, drift with the wind; fainter as evaporation falls
+  if(vapPts&&vapPts.geometry){ const a=vapPts.geometry.attributes.position, top=zb/VS, w=api.param('wind');
+    for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(.12+.5*Math.min(1.5,heat())); let z=a.getZ(i)-dt*w*.03; if(y>top){y=0;z=(api.rand()-.5)*2.6;} if(z<-1.3) z+=2.6; a.setY(i,y); a.setZ(i,z); }
+    a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
+  const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);
+  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } if(dome) dome.visible=false; }
+  const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
-api.onFrame((dt)=>{
-  cloud.scale.setScalar(0.6+W*0.9); const k=api.clamp(W,0,1); cm.forEach(m=>m.material.color.copy(white).lerp(slate,k*0.8));
-  lake.position.y=0.38+level; rain.visible=raining; rain.position.x=cloud.position.x; rain.position.z=cloud.position.z;
-  if(raining&&rainPts.geometry){ const a=rainPts.geometry.attributes.position; for(let i=0;i<a.count;i++){ let y=a.getY(i)-dt*7; if(y<0) y+=4; a.setY(i,y);} a.needsUpdate=true; }
-  if(vapPts.geometry){ const a=vapPts.geometry.attributes.position, e=heat(); for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(0.12+e*0.8); if(y>3) y=0; a.setY(i,y); let x=a.getX(i)-dt*api.param('wind')*0.15; if(x<-1.7) x=1.7; a.setX(i,x);} a.needsUpdate=true; vapPts.material.opacity=0.12+0.6*Math.min(1,e); }
-  const d=sunDir(api.param('hour')).multiplyScalar(7.2); sun.position.set(d.x,Math.max(0.6,d.y),d.z);
-  wind.scale.setScalar(0.35+api.param('wind')*0.35);
-});
-api.readout('heating',()=>heat()); api.readout('humidity over lake',()=>H); api.readout('cloud water',()=>W);
-api.readout('lake level',()=>(level*1000).toFixed(0)+' mm'); api.readout('total rain',()=>rained); api.readout('total evaporation',()=>evap);
-api.plot('cloud water',()=>W);`,
+
+const atLake=()=>C.find(c=>c&&c.over), onRidge=()=>C.filter(c=>c&&!c.over).sort((a,b)=>b.L-a.L)[0];
+api.readout('lake-air temperature',()=>f1(Ts)+' °C'); api.readout('saturation vapour pressure e_s',()=>f1(es(Ts))+' hPa');
+api.readout('e_s growth per kelvin',()=>f1(growth(Ts))+' %/K'); api.readout('relative humidity',()=>f0(100*q/qsat(Ts,1013))+' %');
+api.readout('dew point',()=>f1(dewOf(q,1013))+' °C'); api.readout('evaporation',()=>f1(Emm)+' mm/day'); api.readout('cloud base',()=>f0(zb)+' m');
+api.readout('cloud water over the lake',()=>{const c=atLake();return c?f1(c.qc)+' g/kg (rain above 1.0)':'no cloud';});
+api.readout('cloud over the ridge: lift',()=>{const c=onRidge();return c?f0(c.L)+' m, '+f1(c.Tm)+' °C':'—';});
+api.readout('cloud water over the ridge',()=>{const c=onRidge();return c?f1(c.qc)+' g/kg (rain above 1.0)':'—';});
+api.readout('rain on the slope',()=>f1(rainSlope)+' mm'); api.readout('rain on the lake',()=>f1(rainLake)+' mm');
+api.readout('föhn warming in the lee',()=>{const c=onRidge();return c&&c.z<zCrest?f1(2.49*Math.max(0,c.qt0-c.qt))+' K (2.5 K per g/kg rained out)':'—';});
+api.plot('cloud water (g/kg)',()=>{const c=C[0]||C[1];return c?c.qc:0;});
+api.camera({target:[.3,1.55,-.3],r:13.5,ph:1.27,th:1.2});`,
   lessons: [
-    { title: 'Heat the lake', text: 'Turn the sun up. Watch the vapour rise faster above the lake and the humidity readout climb: evaporation needs energy.', set: { sun: 1.4 }, focus: 'lake', run: 8, explain: 'Each molecule that leaves takes its latent heat with it; more heating means a higher evaporation rate.' },
-    { title: 'Let the wind carry the cloud', text: 'With a steady wind the cloud drifts west. Follow it to the mountains and wait for the rain event.', set: { wind: 2 }, focus: 'cloud', until: 'event:rain', run: 25, explain: 'Rising over the slopes the air expands and cools; the saturation vapour pressure falls below the vapour actually present, so the excess condenses onto droplets, which grow until they fall as rain.' },
-    { title: 'Calm air', text: 'Drop the wind almost to zero. The cloud now stays over the lake and keeps filling until it rains back where it came from.', set: { wind: 0.2 }, focus: 'cloud', run: 14, explain: 'Without transport the cycle closes locally: evaporation, condensation and rain over the same water.' },
-    { title: 'Evening', text: 'Move the time of day to evening. With the sun low, heating falls and so does evaporation.', set: { hour: 18.5 }, focus: 'sun', run: 10, explain: 'The energy input sets the pace of the whole cycle.' }]
+    { title: 'Heat the lake', question: 'What lifts water out of the lake?', text: 'Turn the sunshine up. Watch how the vapour rises faster from the lake, and watch three readouts: the lake-air temperature, the saturation vapour pressure e_s, and the evaporation rate.', set: { sun: 1.4 }, focus: 'lake', shot: 'push', until: 'event:has warmed to', run: 30, explain: 'Stronger sunshine warms the lake air from 22.2 to 28.7 °C. The saturation vapour pressure e_s rises from 26.6 to 39.2 hPa, about 6 % per kelvin: the Clausius–Clapeyron rate (Koutsoyiannis 2012). Evaporation is driven by the gap between e_s and the vapour already in the air, so it more than doubles, from 1.4 to 3.4 mm a day. Saturation is a property of water at a given temperature. It is not a capacity of the air.', opens: 'Where does the vapour go?' },
+    { title: 'Ride a parcel of air', question: 'Where does the vapour go?', text: 'You are now inside one parcel of moist lake air as it rises. Look up: the cloud base is above you. Wait until the parcel reaches its dew point.', focus: 'parcel', shot: 'pov', pov: 'Air parcel', until: 'event:parcel reaches its dew point', run: 40, explain: 'Rising air expands and cools by 9.8 K per kilometre while it is unsaturated. Its dew point falls only about 1.8 K per kilometre, so the gap between them closes by about 8 K per kilometre. The parcel therefore saturates about 125 m higher for every kelvin of gap at the ground (Espy). Here the lake air is at 28.9 °C with a dew point of 25.4 °C, a gap of 3.5 K, so condensation starts near 436 m, at 24.7 °C. There the vapour condenses on tiny aerosol particles into cloud droplets.', opens: 'Why does the rain fall on the ridge and not on the lake?' },
+    { title: 'Wind to the ridge', question: 'Why does the rain fall on the ridge and not on the lake?', text: 'Raise the wind. The cloud drifts from the lake to the ridge and climbs its windward slope. Watch the cloud water readouts and wait for rain.', set: { wind: 6 }, focus: 'cloud', shot: 'medium', until: 'event:windward slope', run: 35, explain: 'Over the lake the cloud held only about 0.2–0.3 g of droplets per kg of air, too little to rain. Forced 329 m up the slope, it cooled from about 24.1 to 22.7 °C, along the moist adiabat: about 4 K per km in warm, wet air, because condensing vapour releases latent heat. Each kelvin of cooling lowers e_s by about 6 %, so more vapour condenses. Once the droplets pass 1 g per kg, this model lets them grow into falling drops: orographic rain (Roe 2005).', opens: 'What happens to the air beyond the crest?' },
+    { title: 'Over the crest', question: 'What happens to the air beyond the crest?', text: 'Follow the cloud over the crest of the ridge and down its far side, then wait for the rain shadow.', focus: 'cloud', shot: 'wide', until: 'event:rain shadow', run: 30, explain: 'Sinking air is compressed and warms. Once its droplets have evaporated it warms at the dry rate of 9.8 K per km, faster than it cooled on the way up while it was condensing. It also left water on the windward slope as rain. Brought back to valley level it is 30.6 °C, 1.7 K warmer than when it set out: each gram of water rained out per kg of air leaves 2.5 K of latent heat behind. The far valley gets dry, warm air: a rain shadow, and in strong cases a föhn wind.', opens: 'Can a cloud rain without a ridge?' },
+    { title: 'Calm air', question: 'Can a cloud rain without a ridge?', text: 'Drop the wind almost to zero. The next cloud stays over the warm lake, keeps being fed by rising vapour, and grows deeper. Watch the cloud water over the lake and wait until rain falls back on the lake.', set: { wind: .3 }, focus: 'lake', shot: 'medium', until: 'event:falls back on the lake', run: 50, explain: 'Without wind, convection keeps feeding the same cloud, and it deepens to almost 1 km. Its upper part climbs further along the moist adiabat and holds more condensed water. Past 1 g per kg it rains back onto the lake, so the cycle closes locally. Across the planet the cycle does not close locally: each year about 40 000 km³ of water evaporated from the oceans is carried by the wind to fall on land, and rivers return it to the sea (Trenberth et al. 2007).', opens: 'What sets the pace of the whole cycle?' },
+    { title: 'Evening', question: 'What sets the pace of the whole cycle?', text: 'Move the time of day to evening. With the sun low, watch the lake-air temperature, e_s and the evaporation rate fall.', set: { hour: 18.5 }, focus: 'sun', shot: 'wide', until: 'event:has cooled to', run: 45, explain: 'At 18:30 the sun gives almost no heat. The lake air cools to 10.2 °C, and e_s falls to 12.5 hPa, less than a third of its midday value. The air above the lake is now saturated, so evaporation stops and mist forms over the water. The sun powers the cycle: evaporating one kilogram of water takes about 2.45 MJ, and gravity brings the water back down.', opens: 'How will the cycle change as the climate warms, now that e_s rises about 6–7 % per kelvin?' }]
 };
 
-const people = (side, n, color, label) => Array.from({ length: n }, (_, i) => ({ id: side + i, name: label.replace(/s$/, '') + ' ' + (i + 1), label: i === 0 ? label : undefined, role: i === 0 ? 'actor' : 'decor', describe: i === 0 ? (side === 'b' ? 'Each buyer has a different willingness to pay; they step up to the stall when the price is below it.' : 'Each seller has a different cost; they step up to sell when the price is above it.') : '', shape: { kind: 'person', h: 1, color }, position: [(side === 'b' ? -1 : 1) * (1.4 + (i % 4) * .72), 0, .7 + Math.floor(i / 4) * .85], rotation: [0, side === 'b' ? 150 : -150, 0] }));
+const people = (side, n, color, label) => Array.from({ length: n }, (_, i) => ({ id: side + i, name: label.replace(/s$/, '') + ' ' + (i + 1), label: i === 0 ? label : undefined, role: i === 0 ? 'actor' : 'decor', describe: i === 0 ? (side === 'b' ? 'Each buyer holds a card with the most they would pay: 9, 8, … down to 2.' : 'Each seller holds a card with their cost: 1, 2, … up to 8.') : '', shape: { kind: 'person', h: 1, color }, position: [(side === 'b' ? -1 : 1) * (1.7 + (i % 4) * .62), 0, .55 + Math.floor(i / 4) * .8 + (i % 2) * .12], rotation: [0, side === 'b' ? 140 : -140, 0] }));
 export const MARKET = {
   type: 'scene', title: 'A market finds its price', technique: 'card',
-  environment: { preset: 'studio' },
+  environment: { preset: 'landscape', time: 16.5, azimuth: -8 },
   bodies: [
-    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.4 }, material: { preset: 'stone' }, position: [0, .01, 0] },
-    { id: 'board', name: 'Chart board', label: 'Demand and supply curves', role: 'actor', describe: 'Blue: how many would buy at each price. Red: how many would sell. The gold line is the current price.', shape: { kind: 'box', w: 6.8, h: 4.9, d: .1, round: .02 }, material: { preset: 'chalk', color: '#1f2a24' }, position: [0, 3.0, -3.45] },
-    { id: 'stall', name: 'Stall', label: 'The stall · where trades happen', role: 'actor', describe: 'Every buyer and seller who steps up here trades; the quantity traded is the smaller group.', shape: { kind: 'table', w: 2.6, d: 1, h: .9 }, position: [0, 0, -1.6] },
-    { id: 'awning', name: 'Awning', role: 'decor', shape: { kind: 'box', w: 2.9, h: .07, d: 1.5, round: .01 }, material: { preset: 'fabric', color: '#b8392b' }, position: [0, 1.95, -1.6], rotation: [-8, 0, 0] },
-    { id: 'post1', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -1.0] },
-    { id: 'post2', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -1.0] },
-    { id: 'pole', name: 'Price pole', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 3.6 }, material: { preset: 'brass' }, position: [0, 1.8, 1.9] },
-    { id: 'price', name: 'Price', label: 'Price', role: 'actor', describe: 'Rises while more want to buy than sell, falls while more want to sell than buy.', shape: { kind: 'coin', r: .26 }, position: [0, 1, 1.9], rotation: [90, 0, 0] },
+    { id: 'square', name: 'Market square', role: 'decor', shape: { kind: 'disc', r: 6.5 }, material: { preset: 'stone', color: '#c4bbab' }, position: [0, .01, 0] },
+    { id: 'board', name: 'Chalkboard', label: 'Demand and supply curves', role: 'actor', describe: 'Left: the staircases of buyers willing to buy (blue) and sellers willing to sell (red) at each price. Right: the price of every trade, in order.', shape: { kind: 'box', w: 6.4, h: 3.6, d: .1, round: .02 }, material: { preset: 'chalk', color: '#26332c' }, position: [0, 3.35, -3.5] },
+    { id: 'boardframe', name: 'Board frame', role: 'decor', shape: { kind: 'box', w: 6.62, h: 3.82, d: .07, round: .02 }, material: { preset: 'darkwood' }, position: [0, 3.35, -3.56] },
+    { id: 'legL', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [-3.2, 2.6, -3.62] },
+    { id: 'legR', name: 'Board leg', role: 'decor', shape: { kind: 'box', w: .14, h: 5.2, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [3.2, 2.6, -3.62] },
+    { id: 'tDemand', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'demand', w: .9, h: .25, color: '#9cc2ff' }, position: [-1.55, 4.7, -3.43] },
+    { id: 'tSupply', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'supply', w: .8, h: .25, color: '#ffab94' }, position: [-.75, 4.7, -3.43] },
+    { id: 'tTrades', name: 'Chalk label', role: 'decor', shape: { kind: 'text', text: 'price of each trade', w: 1.9, h: .25, color: '#ece4cf' }, position: [1.6, 4.85, -3.43] },
+    { id: 'stall', name: 'Stall', label: 'The stall · where trades happen', role: 'actor', describe: 'A buyer and a seller whose offers meet trade here, one unit each, at the price on the table.', shape: { kind: 'table', w: 2.6, d: 1, h: .9 }, position: [0, 0, -1.45] },
+    { id: 'awning', name: 'Awning', role: 'decor', shape: { kind: 'box', w: 2.9, h: .07, d: 1.5, round: .01 }, material: { preset: 'fabric', color: '#b8392b' }, position: [0, 1.95, -1.45], rotation: [-8, 0, 0] },
+    { id: 'post1', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -.85] },
+    { id: 'post2', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -.85] },
+    { id: 'post3', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [-1.35, .97, -2.05] },
+    { id: 'post4', name: 'Post', role: 'decor', shape: { kind: 'cylinder', r: .03, h: 1.95 }, material: { preset: 'darkwood' }, position: [1.35, .97, -2.05] },
+    { id: 'crate1', name: 'Crate of apples', role: 'decor', shape: { kind: 'box', w: .6, h: .3, d: .4, round: .02 }, material: { preset: 'wood' }, position: [-.6, 1.09, -1.55] },
+    { id: 'crate2', name: 'Crate of apples', role: 'decor', shape: { kind: 'box', w: .6, h: .3, d: .4, round: .02 }, material: { preset: 'wood' }, position: [.55, 1.09, -1.6], rotation: [0, 12, 0] },
+    { id: 'pole', name: 'Price pole', role: 'decor', shape: { kind: 'cylinder', r: .035, h: 3.6 }, material: { preset: 'brass' }, position: [2.2, 1.8, -1.0] },
+    { id: 'polebase', name: 'Pole base', role: 'decor', shape: { kind: 'cylinder', r: .22, rt: .16, h: .1 }, material: { preset: 'darkwood' }, position: [2.2, .05, -1.0] },
+    { id: 'price', name: 'Price', label: 'Price · the last trade', role: 'actor', describe: 'Its height on the pole is the price of the latest trade (0 at the foot, 12 at the top). The blue ring is the best bid, the red ring the best ask.', shape: { kind: 'coin', r: .24 }, position: [2.2, 1, -1.0], rotation: [90, 0, 0] },
+    { id: 'bidring', name: 'Best bid', role: 'decor', shape: { kind: 'torus', R: .13, r: .025 }, material: { preset: 'plastic', color: '#4f8ad0' }, position: [2.2, .5, -1.0], rotation: [90, 0, 0] },
+    { id: 'askring', name: 'Best ask', role: 'decor', shape: { kind: 'torus', R: .13, r: .025 }, material: { preset: 'plastic', color: '#d0553c' }, position: [2.2, 3, -1.0], rotation: [90, 0, 0] },
     ...people('b', 8, '#4f8ad0', 'Buyers'), ...people('s', 8, '#d0553c', 'Sellers'),
-    { id: 'lampL', name: 'Lamp', role: 'decor', shape: { kind: 'lamp', h: 1.8 }, position: [-4.6, 0, -2.4] },
-    ...trees([[4.8, -2.2, 1.6], [-5.0, 1.8, 1.4], [5.2, 2.0, 1.3]])
+    { id: 'lampL', name: 'Street lamp', role: 'decor', shape: { kind: 'lamp', h: 2.4 }, position: [-4.6, 0, -2.4] },
+    { id: 'barrel', name: 'Barrel', role: 'decor', shape: { kind: 'cylinder', r: .32, rt: .28, rb: .28, h: .8 }, material: { preset: 'darkwood' }, position: [3.9, .4, 2.5] },
+    { id: 'crates', name: 'Crates', role: 'decor', shape: { kind: 'box', w: .9, h: .55, d: .7, round: .03 }, material: { preset: 'wood' }, position: [-4.5, .275, 3.4], rotation: [0, 20, 0] },
+    { id: 'crates2', name: 'Crates', role: 'decor', shape: { kind: 'box', w: .7, h: .45, d: .6, round: .03 }, material: { preset: 'wood' }, position: [-4.4, .775, 3.35], rotation: [0, 35, 0] },
+    ...trees([[4.9, -2.4, 1.7], [-5.2, .6, 1.5], [5.4, 1.4, 1.3]])
   ],
   tour: ['price', 'b0', 's0', 'stall', 'board'],
   params: [
-    { key: 'income', label: "buyers' income (shifts demand)", min: 0, max: 4, value: 0 },
-    { key: 'cost', label: "sellers' cost (shifts supply)", min: 0, max: 4, value: 0 },
-    { key: 'speed', label: 'price adjustment speed', min: .2, max: 2, value: .8 }],
-  code: `const T=api.THREE, nb=8, buyers=[], sellers=[];
-for(let i=0;i<nb;i++){ const b=api.body('b'+i), s=api.body('s'+i); buyers.push({o:b,z0:b.position.z}); sellers.push({o:s,z0:s.position.z}); }
-const coin=api.body('price'); let p=1.5, last=0;
-const sig=x=>1/(1+Math.exp(-x/0.25)), W=i=>api.param('income')+9-i, C=i=>api.param('cost')+1+i;
-const Dm=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(W(i)-q); return s;}, Sp=q=>{let s=0; for(let i=0;i<nb;i++) s+=sig(q-C(i)); return s;};
-const ox=-3.1, oy=0.75, sx=6.2/8.5, sy=4.2/12, z=-3.38;
-const line=c=>{ const g=new T.BufferGeometry().setFromPoints(Array.from({length:61},()=>new T.Vector3())); const l=new T.Line(g,new T.LineBasicMaterial({color:c})); l.frustumCulled=false; api.world.add(l); return l; };
-const dl=line(0x6fa8ff), sl=line(0xff7a5c), pl=line(0xffd27a), ax=line(0xd8d2c0);
-{ const a=ax.geometry.attributes.position; for(let i=0;i<=60;i++){ const t=i/60; if(t<0.5) a.setXYZ(i,ox,oy+4.2*(1-t*2),z); else a.setXYZ(i,ox+6.2*(t-0.5)*2,oy,z); } a.needsUpdate=true; }
-const dot=api.ball(0.1,api.material({preset:'emissive',color:'#ffd27a'})); api.world.add(dot);
-api.onStep((h)=>{ const ex=Dm(p)-Sp(p); p=api.clamp(p+api.param('speed')*0.5*ex*h,0,12);
-  const s=Math.abs(ex)<0.15?0:Math.sign(ex);
-  if(s!==last){ if(s>0) api.event('Excess demand: buyers outbid each other, the price rises',coin.position.clone(),{id:'up'}); else if(s<0) api.event('Excess supply: sellers undercut each other, the price falls',coin.position.clone(),{id:'down'}); else api.event('Market clears: demand equals supply at p ≈ '+api.fmt(p)+', q ≈ '+api.fmt(Dm(p)),coin.position.clone(),{id:'clear'}); last=s; } });
-api.onFrame((dt)=>{ coin.position.y=0.3+p*0.26; coin.rotation.z+=dt*1.5;
-  buyers.forEach((b,i)=>{ b.o.position.z=b.z0+(-0.95-b.z0)*sig(W(i)-p)*0.7; });
-  sellers.forEach((s,i)=>{ s.o.position.z=s.z0+(-0.95-s.z0)*sig(p-C(i))*0.7; });
-  const dA=dl.geometry.attributes.position, sA=sl.geometry.attributes.position, pA=pl.geometry.attributes.position;
-  for(let i=0;i<=60;i++){ const q=12*i/60; dA.setXYZ(i,ox+Dm(q)*sx,oy+q*sy,z); sA.setXYZ(i,ox+Sp(q)*sx,oy+q*sy,z); pA.setXYZ(i,ox+8.5*sx*i/60,oy+p*sy,z+0.005); }
-  dA.needsUpdate=sA.needsUpdate=pA.needsUpdate=true; dot.position.set(ox+Math.min(Dm(p),Sp(p))*sx,oy+p*sy,z+0.03); });
-api.readout('price p',()=>p); api.readout('quantity demanded',()=>Dm(p)); api.readout('quantity supplied',()=>Sp(p)); api.readout('excess demand',()=>Dm(p)-Sp(p)); api.readout('trades',()=>Math.min(Dm(p),Sp(p)));
-api.plot('price',()=>p); api.camera({target:[0,1.4,0],r:13.5,ph:1.12,th:0.25});`,
+    { key: 'open', label: 'market open (1) or closed (0)', min: 0, max: 1, value: 1 },
+    { key: 'income', label: "buyers' extra income (adds to every value)", min: 0, max: 3, value: 0 },
+    { key: 'cost', label: "sellers' extra cost (adds to every cost)", min: 0, max: 3, value: 0 },
+    { key: 'rule', label: 'budget rule: never trade at a loss (1 on, 0 off)', min: 0, max: 1, value: 1 },
+    { key: 'pace', label: 'offers per second', min: 1, max: 10, value: 3 }],
+  shots: {
+    'where the curves cross': { dist: 4.5 },
+    'closes': { target: [0, 3.3, -3.4], dist: 10 },
+    'market opens': { target: [0, 1.0, -.6], dist: 9 },
+    'new cards': { target: [0, 3.3, -3.4], dist: 10 }
+  },
+  flows: {
+    'random offers': [{ from: [-2.4, 1.2, .9], to: [-.5, 1.1, -.8], label: 'bids, never above the card' }, { from: [2.4, 1.2, .9], to: [.5, 1.1, -.8], label: 'asks, never below the cost' }],
+    'curves cross': [{ from: [1.5, 2.6, -3.38], to: [2.6, 3.1, -3.38], label: 'later trades close in on the crossing' }],
+    'at a loss': [{ from: [-2.4, 1.2, .9], to: [-.5, 1.1, -.8], label: 'bids above the card' }, { from: [2.4, 1.2, .9], to: [.5, 1.1, -.8], label: 'asks below the cost' }]
+  },
+  code: `const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), f2=v=>v.toFixed(2), PMAX=12, NB=8;
+// ---- traders: buyer i values the good at 9 − i (+ income), seller j's cost is 1 + j (+ cost) ----
+const B=[], S=[]; for(let i=0;i<NB;i++){ const b=api.body('b'+i), s=api.body('s'+i); B.push({o:b,home:b.position.clone(),r0:b.rotation.y,to:b.position.clone(),active:true}); S.push({o:s,home:s.position.clone(),r0:s.rotation.y,to:s.position.clone(),active:true}); }
+const val=i=>9-i+api.param('income'), cst=j=>1+j+api.param('cost');
+function equilibrium(){ const v=B.map((_,i)=>val(i)).sort((a,b)=>b-a), c=S.map((_,j)=>cst(j)).sort((a,b)=>a-b); let q=0, gain=0; while(q<NB&&v[q]>=c[q]){ gain+=v[q]-c[q]; q++; }
+  const lo=Math.max(q?c[q-1]:0,q<NB?v[q]:0), hi=Math.min(q?v[q-1]:PMAX,q<NB?c[q]:PMAX); return {q,p:(lo+hi)/2,lo,hi,gain}; }
+let EQ=equilibrium();
+// ---- the double auction (Smith 1962; zero-intelligence traders as in Gode & Sunder 1993) ----
+let period=0, bid=null, ask=null, trades=[], all=[], idle=0, acc=0, pause=0, crossSaid=false, lastOpen=api.param('open'), lastKey='', lastRule=api.param('rule');
+function startPeriod(){ period++; bid=ask=null; trades=[]; idle=0; crossSaid=false; B.forEach(t=>{t.active=true;t.to.copy(t.home);}); S.forEach(t=>{t.active=true;t.to.copy(t.home);}); }
+function closePeriod(){ const n=trades.length, gain=trades.reduce((s,t)=>s+t.v-t.c,0), mp=n?trades.reduce((s,t)=>s+t.p,0)/n:NaN;
+  api.event('Period '+period+' closes: '+n+' trades, mean price '+(n?f2(mp):'—')+' (the curves cross at '+f2(EQ.p)+'), '+(EQ.gain>0?Math.round(100*gain/EQ.gain):0)+' % of the possible gains from trade',V(0,3.3,-3.4),{id:'period',sound:'step-done'}); pause=2.5; }
+function trade(bi,sj,p){ const b=B[bi], s=S[sj], n=trades.length; b.active=s.active=false; b.to.set(-.3-.32*n,0,-.62); s.to.set(.3+.32*n,0,-.62);
+  const t={p,v:val(bi),c:cst(sj),period}; trades.push(t); all.push(t); if(all.length>30) all.shift(); bid=ask=null; idle=0; dotsDirty=true;
+  if(!crossSaid&&Math.abs(p-EQ.p)<=.25&&api.param('rule')>.5){ crossSaid=true; api.event('A trade at '+f2(p)+' lands within 0.25 of where the curves cross ('+f2(EQ.p)+')',dotPos(all.length-1),{id:'cross',sound:'chime'}); } }
+function offer(){ const rule=api.param('rule')>.5, bl=B.map((t,i)=>t.active?i:-1).filter(i=>i>=0), sl=S.map((t,j)=>t.active?j:-1).filter(j=>j>=0);
+  if(!bl.length||!sl.length||(rule&&!bl.some(i=>sl.some(j=>val(i)>=cst(j))))||idle>60){ closePeriod(); return; }
+  idle++;
+  if(api.rand()<.5){ const i=bl[Math.floor(api.rand()*bl.length)], b=rule?api.rand()*val(i):api.rand()*PMAX;     // a buyer bids at random, never above the card when the rule is on
+    if(ask&&b>=ask.p) trade(i,ask.j,ask.p); else if(!bid||b>bid.p) bid={p:b,i}; }
+  else { const j=sl[Math.floor(api.rand()*sl.length)], a=rule?cst(j)+api.rand()*(PMAX-cst(j)):api.rand()*PMAX;  // a seller asks at random, never below the cost when the rule is on
+    if(bid&&a<=bid.p) trade(bid.i,j,bid.p); else if(!ask||a<ask.p) ask={p:a,j}; } }
+api.onStep((h)=>{
+  const open=api.param('open')>.5, key=api.param('income').toFixed(2)+'/'+api.param('cost').toFixed(2), rule=api.param('rule')>.5;
+  if(key!==lastKey){ const first=lastKey===''; lastKey=key; EQ=equilibrium(); chartDirty=true; if(!first){ api.event('New cards: values and costs have changed; the curves now cross at p = '+f2(EQ.p)+', where '+EQ.q+' units can trade',V(-1.6,3.3,-3.4),{id:'cards',sound:'paper'}); if(open){ startPeriod(); } } }
+  if(rule!==(lastRule>.5)){ lastRule=rule?1:0; if(open){ api.event(rule?'Budget rule back on: nobody may trade at a loss':'Budget rule off: traders may now bid above their card or ask below their cost, and trade at a loss',V(0,1.2,-1),{id:'rule'}); startPeriod(); } }
+  if(open!==(lastOpen>.5)){ lastOpen=open?1:0; if(open){ period=0; all=[]; dotsDirty=true; startPeriod(); api.event('The bell rings: the market opens for period 1',V(0,1.2,-1),{id:'open',sound:'chime'}); } else { bid=ask=null; B.forEach(t=>t.to.copy(t.home)); S.forEach(t=>t.to.copy(t.home)); } }
+  if(!open) return;
+  if(pause>0){ pause-=h; if(pause<=0) startPeriod(); return; }
+  acc+=h*api.param('pace'); while(acc>=1&&pause<=0){ acc-=1; offer(); } });
+if(api.param('open')>.5) startPeriod();
+// ---- the chalkboard: staircases on the left, the price of each trade on the right ----
+const Z=-3.44, ox=-2.95, oy=1.8, sx=2.55/NB, sy=3.0/PMAX, rx0=.15, rx1=2.95;
+const strips=(segs,w,col)=>{ const pos=[], idx=[]; segs.forEach(([x0,y0,x1,y1])=>{ const dx=x1-x0, dy=y1-y0, L=Math.hypot(dx,dy)||1, nx=-dy/L*w, ny=dx/L*w, k=pos.length/3; pos.push(x0+nx,y0+ny,Z, x0-nx,y0-ny,Z, x1+nx,y1+ny,Z, x1-nx,y1-ny,Z); idx.push(k,k+1,k+2,k+1,k+3,k+2); });
+  const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeBoundingBox(); const m=new T.Mesh(g,new T.MeshBasicMaterial({color:col,transparent:true,opacity:.9,depthWrite:false})); m.renderOrder=5; m.name='chalk lines'; return m; };
+let chart=null, chartDirty=true, dotsDirty=true;
+function drawChart(){ if(chart){ chart.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); chart.removeFromParent(); } chart=new T.Group(); chart.name='chalk drawing';
+  const v=B.map((_,i)=>val(i)).sort((a,b)=>b-a), c=S.map((_,j)=>cst(j)).sort((a,b)=>a-b), X=q=>ox+q*sx, Y=p=>oy+Math.min(PMAX,p)*sy, d=[], s=[];
+  for(let q=0;q<NB;q++){ d.push([X(q),Y(v[q]),X(q+1),Y(v[q])]); if(q<NB-1) d.push([X(q+1),Y(v[q]),X(q+1),Y(v[q+1])]); s.push([X(q),Y(c[q]),X(q+1),Y(c[q])]); if(q<NB-1) s.push([X(q+1),Y(c[q]),X(q+1),Y(c[q+1])]); }
+  const ax=[[ox,oy,ox+NB*sx,oy],[ox,oy,ox,oy+PMAX*sy],[rx0,oy,rx1,oy],[rx0,oy,rx0,oy+PMAX*sy]]; for(let p=0;p<=PMAX;p+=2) ax.push([ox-.06,Y(p),ox,Y(p)],[rx0-.06,Y(p),rx0,Y(p)]);
+  const eq=[]; for(let x=ox;x<rx1;x+=.16) eq.push([x,Y(EQ.p),Math.min(rx1,x+.09),Y(EQ.p)]);
+  chart.add(strips(ax,.008,0xe8e2d0), strips(d,.016,0x8fb8ff), strips(s,.016,0xff9a80), strips(eq,.012,0xffd27a)); api.world.add(chart); chartDirty=false; }
+const dots=new T.InstancedMesh(new T.CircleGeometry(.055,16),new T.MeshBasicMaterial({color:0xffffff,transparent:true,depthWrite:false}),30); dots.count=0; dots.renderOrder=6; dots.frustumCulled=false; dots.name='trade prices'; api.world.add(dots);
+const dotPos=i=>V(rx0+.12+i*(rx1-rx0-.2)/29,oy+Math.min(PMAX,all[i]?all[i].p:0)*sy,Z+.002);
+const gold=new T.Color(0xffd27a), dim=new T.Color(0x8a7650), m4=new T.Matrix4();
+const coin=api.body('price'), bidR=api.body('bidring'), askR=api.body('askring'), PY=p=>.15+Math.min(PMAX,p)*.28;
+api.onFrame((dt)=>{ dt=Math.min(dt,.1);
+  if(chartDirty) drawChart();
+  if(dotsDirty){ all.forEach((t,i)=>{ m4.makeTranslation(...dotPos(i).toArray()); dots.setMatrixAt(i,m4); dots.setColorAt(i,t.period===period?gold:dim); }); dots.count=all.length; dots.instanceMatrix.needsUpdate=true; if(dots.instanceColor) dots.instanceColor.needsUpdate=true; dots.computeBoundingBox&&all.length&&dots.computeBoundingBox(); dotsDirty=false; }
+  const last=all.length?all[all.length-1].p:EQ.p; coin.position.y+=(PY(last)-coin.position.y)*Math.min(1,dt*4); coin.rotation.z+=dt*1.2;
+  bidR.visible=!!bid; askR.visible=!!ask; if(bid) bidR.position.y+=(PY(bid.p)-bidR.position.y)*Math.min(1,dt*6); if(ask) askR.position.y+=(PY(ask.p)-askR.position.y)*Math.min(1,dt*6);
+  [...B,...S].forEach(t=>{ const d=t.to.clone().sub(t.o.position); d.y=0; const L=d.length(); if(L>.01){ const st=Math.min(L,dt*1.6); t.o.position.addScaledVector(d.normalize(),st); t.o.rotation.y=Math.atan2(d.x,d.z); t.o.position.y=Math.abs(Math.sin(api.time()*9))*.04; } else { t.o.position.y=0; t.o.rotation.y+=((t.active?t.r0:Math.PI)-t.o.rotation.y)*Math.min(1,dt*3); } }); });
+const gains=()=>trades.reduce((s,t)=>s+t.v-t.c,0);
+api.readout('period',()=>api.param('open')>.5?String(period):'market closed');
+api.readout('trades this period',()=>trades.length+' (at the crossing: '+EQ.q+')');
+api.readout('last trade price',()=>all.length?f2(all[all.length-1].p):'—');
+api.readout('mean price this period',()=>trades.length?f2(trades.reduce((s,t)=>s+t.p,0)/trades.length):'—');
+api.readout('price where the curves cross',()=>f2(EQ.p));
+api.readout('share of the possible gains',()=>EQ.gain>0?Math.round(100*gains()/EQ.gain)+' % (max gain '+EQ.gain+')':'—');
+api.readout('best bid / best ask',()=>(bid?f2(bid.p):'—')+' / '+(ask?f2(ask.p):'—'));
+api.readout('budget rule',()=>api.param('rule')>.5?'on (no trade at a loss)':'off');
+api.plot('trade price',()=>all.length?all[all.length-1].p:NaN);
+// late-afternoon sky: the landscape dome shows only haze below the horizon, so a painted gradient replaces it behind the square
+{ const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) api.onFrame(()=>{ dome.visible=false; });   // every frame: the materialiser restores the background objects when it finishes
+  const n=64, d=new Uint8Array(n*4), a=new T.Color('#f0dcb4'), b=new T.Color('#9cbbe0'), c=new T.Color(); for(let i=0;i<n;i++){ c.copy(a).lerp(b,Math.pow(i/(n-1),.7)); d[i*4]=c.r*255; d[i*4+1]=c.g*255; d[i*4+2]=c.b*255; d[i*4+3]=255; }
+  const tx=new T.DataTexture(d,1,n); tx.colorSpace=T.SRGBColorSpace; tx.magFilter=tx.minFilter=T.LinearFilter; tx.needsUpdate=true; api.scene.background=tx; }
+api.camera({target:[0,2.0,-.7],r:12.4,ph:1.2,th:.3});`,
   lessons: [
-    { title: 'From a low price to the clearing price', text: 'The price starts low: many buyers step up, few sellers. Watch the price climb until the two groups at the stall match.', focus: 'price', until: 'event:clear', run: 30, explain: 'At the clearing price quantity demanded equals quantity supplied; any other price leaves a shortage or a surplus that pushes it back.' },
-    { title: 'Buyers get richer', text: 'Raise income. Every buyer will now pay more: the blue curve shifts right, and the price climbs to a new, higher clearing point.', set: { income: 3 }, focus: 'board', until: 'event:clear', run: 30, explain: 'A rise in demand raises both the equilibrium price and the quantity traded.' },
-    { title: 'Costs rise', text: 'Raise the sellers\' cost. The red curve shifts left: the price rises further but fewer units change hands.', set: { cost: 3 }, focus: 'board', until: 'event:clear', run: 30, explain: 'A fall in supply raises the price and lowers the quantity.' },
-    { title: 'A nervous market', text: 'Make the price adjust quickly and watch it overshoot and settle.', set: { speed: 2, income: 0, cost: 0 }, focus: 'price', run: 12, explain: 'The equilibrium is the same; only the path to it changes.' }]
+    { title: 'Cards before trading', question: 'At what price should trade happen?', text: 'The market is closed. Each buyer holds a card with the most they would pay: 9, 8, 7, down to 2. Each seller holds a card with their cost: 1, 2, 3, up to 8. On the board the blue staircase counts the buyers willing to buy at each price, and the red staircase counts the sellers willing to sell. Find where the curves cross.', set: { open: 0, income: 0, cost: 0, rule: 1 }, focus: 'board', shot: 'medium', run: 10, explain: 'The staircases cross at p = 5. At that price five buyers want to buy and five sellers want to sell; the fifth pair, value 5 and cost 5, gains nothing. Trading every unit whose value exceeds its cost gives the largest total gain possible: 8 + 6 + 4 + 2 = 20. At any lower price buyers outnumber sellers, and at any higher price sellers outnumber buyers.', opens: 'Can traders who know nothing find that price?' },
+    { title: 'Open the market', question: 'Can traders who know nothing find that price?', text: 'Open the market. Traders now shout random offers: a buyer bids any price up to their card, and a seller asks any price above their cost. When a bid meets an ask, the two trade at the price already on the table. Watch the price coin and the gold dots on the board until the period closes.', set: { open: 1 }, focus: 'stall', shot: 'push', until: 'event:period 1 closes', run: 60, explain: 'These are zero-intelligence traders: no memory, no strategy, and no knowledge of the curves (Gode & Sunder 1993). Even so, a period usually ends with 4–5 trades at an average price near 5, capturing most of the possible gain. Over thousands of simulated periods the median is 95 % of the gain and the middle 80 % of period averages lie between 4.4 and 5.9. The double-auction rules, together with the ban on trading at a loss, do most of the work.', opens: 'Do the prices settle at the crossing?' },
+    { title: 'Close to the crossing', question: 'Do the prices settle at the crossing?', text: 'Look closely at the board. Each gold dot is one trade, in order. Watch the next dots: early trades scatter, later ones close in on the dashed line where the curves cross.', focus: 'board', shot: 'close', until: 'event:where the curves cross', run: 60, explain: 'The first trade of a period typically lands about 0.7 away from 5 and the last about 0.05 away (medians over simulated periods). The traders with the highest values and lowest costs trade first, at scattered prices. As they leave, the remaining traders\' ranges overlap only near 5, so later prices are squeezed towards the crossing. Smith (1962) saw human traders in the first classroom double auctions converge on the predicted price within a few periods.', opens: 'What happens when buyers get richer?' },
+    { title: 'Buyers get richer', question: 'What happens when buyers get richer?', text: 'Give every buyer 2 more to spend. The blue staircase moves up, the crossing moves, and a new period starts. Watch the dots and the price coin until the period closes.', set: { income: 2 }, focus: 'board', shot: 'medium', until: 'event:closes', run: 60, explain: 'Every value rose by 2, so the blue staircase moved up. The curves now cross at p = 6, where 6 units can trade instead of 5. The period\'s mean price (in the log) moves up with it, near 6 on average. A rise in demand raises both the equilibrium price and the quantity traded.', opens: 'What happens when costs rise?' },
+    { title: 'Costs rise', question: 'What happens when costs rise?', text: 'Now raise every seller\'s cost by 2. The red staircase moves up, and a new period starts. Watch where the dots and the price coin settle, and how many trades happen.', set: { cost: 2 }, focus: 'board', shot: 'medium', until: 'event:closes', run: 60, explain: 'The curves now cross at p = 7, with only 5 units worth trading. Prices rise again, averaging about 6.9 per period in simulation, but fewer units change hands. A fall in supply raises the price and lowers the quantity.', opens: 'Is it the traders or the rules that make the market work?' },
+    { title: 'Drop the budget rule', question: 'Is it the traders or the rules that make the market work?', text: 'Switch the budget rule off. Traders may now bid above their card or ask below their cost, and so trade at a loss. Watch the dots and the price coin scatter, and read the share of the possible gains when the period closes.', set: { rule: 0 }, focus: 'stall', shot: 'medium', until: 'event:closes', run: 60, explain: 'Without the rule every trader eventually trades, including buyers whose cards lie below the crossing and sellers whose costs lie above it. Their losses cancel most of the gains: here exactly 40 % remains (gain 8 of a possible 20, with these cards), and prices scatter around 6, the middle of the 0–12 range. The same random traders reach about 95 % with the rule on. As Gode & Sunder (1993) found, the constraint, a rule of the market, not the traders\' intelligence, lifts efficiency close to 100 %.', opens: 'Would human traders, who learn and remember, reach the equilibrium faster or more reliably than these random ones?' }]
 };
 
 export const GALTON = {
   type: 'scene', title: 'Galton board: many coin flips make a bell', technique: 'sweep',
-  environment: { preset: 'abstract' },
+  environment: { preset: 'desk', lamp: [-5.8, 3.6] },
   bodies: [
-    { id: 'back', name: 'Board', role: 'decor', shape: { kind: 'box', w: 7.2, h: 6.6, d: .16, round: .03 }, material: { preset: 'darkwood' }, position: [0, 3.3, -.3] },
-    { id: 'funnel', name: 'Funnel', label: 'Funnel · releases balls', role: 'actor', describe: 'Every ball starts in the same place.', shape: { kind: 'cone', r: .55, h: .7 }, material: { preset: 'brass' }, position: [0, 6.2, 0], rotation: [180, 0, 0] },
-    { id: 'ball', name: 'Ball', label: 'A ball · one random path', role: 'actor', describe: 'Its final bin is the number of times it bounced right.', shape: { kind: 'sphere', r: .09 }, material: { preset: 'chrome' }, position: [0, 5.85, 0] },
-    { id: 'pegs', name: 'Pegs', label: 'Pegs · each one a coin flip', role: 'actor', describe: 'At every peg the ball goes right with probability p.', shape: { kind: 'group' }, position: [0, 0, 0] },
-    { id: 'bins', name: 'Bins', label: 'Bins · the histogram', role: 'actor', describe: 'Bin k collects the paths with k right-bounces.', shape: { kind: 'group' }, position: [0, 0, 0] },
-    { id: 'curve', name: 'Curve', label: 'Binomial ≈ normal curve', role: 'actor', describe: 'Theory: mean Np, spread √(Np(1−p)).', shape: { kind: 'group' }, position: [0, 0, 0] }],
+    { id: 'back', name: 'Backboard', role: 'decor', shape: { kind: 'box', w: 6.6, h: 6.9, d: .14, round: .02 }, material: { preset: 'darkwood' }, position: [0, 3.72, -.12] },
+    { id: 'railL', name: 'Side rail', role: 'decor', shape: { kind: 'box', w: .16, h: 6.9, d: .42, round: .02 }, material: { preset: 'wood' }, position: [-3.38, 3.72, .03] },
+    { id: 'railR', name: 'Side rail', role: 'decor', shape: { kind: 'box', w: .16, h: 6.9, d: .42, round: .02 }, material: { preset: 'wood' }, position: [3.38, 3.72, .03] },
+    { id: 'cap', name: 'Top rail', role: 'decor', shape: { kind: 'box', w: 6.92, h: .16, d: .42, round: .02 }, material: { preset: 'wood' }, position: [0, 7.2, .03] },
+    { id: 'sill', name: 'Base rail', role: 'decor', shape: { kind: 'box', w: 6.92, h: .3, d: .5, round: .02 }, material: { preset: 'wood' }, position: [0, .4, .05] },
+    { id: 'footL', name: 'Foot', role: 'decor', shape: { kind: 'box', w: .5, h: .26, d: 1.5, round: .03 }, material: { preset: 'darkwood' }, position: [-2.9, .13, .05] },
+    { id: 'footR', name: 'Foot', role: 'decor', shape: { kind: 'box', w: .5, h: .26, d: 1.5, round: .03 }, material: { preset: 'darkwood' }, position: [2.9, .13, .05] },
+    { id: 'glass', name: 'Front glass', role: 'decor', shape: { kind: 'box', w: 6.6, h: 6.6, d: .02, round: 0 }, material: { preset: 'glass' }, position: [0, 3.85, .22], castShadow: false },
+    { id: 'funnel', name: 'Funnel', label: 'Funnel · releases the beads', role: 'actor', describe: 'Every bead starts in the same place, above the first peg.', shape: { kind: 'cone', r: .5, h: .62 }, material: { preset: 'brass' }, position: [0, 6.72, .05], rotation: [180, 0, 0] },
+    { id: 'ball', name: 'Copper bead', label: 'Copper bead · one random path', role: 'actor', describe: 'Its bin is the number of times it bounced right. You can ride it (POV).', shape: { kind: 'sphere', r: .075 }, material: { preset: 'copper' }, position: [0, 6.4, .05] },
+    { id: 'pegs', name: 'Pegs', label: 'Pegs · each one a coin flip', role: 'actor', describe: 'At every peg a bead goes right with probability p, left otherwise.', shape: { kind: 'group' }, position: [0, 0, 0] },
+    { id: 'bins', name: 'Bins', label: 'Bins · the histogram', role: 'actor', describe: 'Bin k collects the beads that bounced right k times.', shape: { kind: 'group' }, position: [0, 0, 0] },
+    { id: 'curve', name: 'Bell curve', label: 'Bell curve · binomial ≈ normal', role: 'actor', describe: 'Printed on the glass: the normal curve with mean Np and spread √(Np(1−p)), scaled to the beads landed.', shape: { kind: 'group' }, position: [0, 0, 0] },
+    { id: 'jar', name: 'Bead jar', role: 'decor', shape: { kind: 'beaker', r: .42, h: .8, fill: .45, liquid: '#c8ccd2' }, material: { preset: 'chrome' }, position: [4.6, 0, 1.6] },
+    { id: 'notebook', name: 'Notebook', role: 'decor', shape: { kind: 'book', w: 1.3, h: 1.8, d: .14 }, material: { preset: 'leather', color: '#5a2a20' }, position: [4.2, .07, 3.4], rotation: [-90, 0, 24] }
+  ],
   tour: ['funnel', 'ball', 'pegs', 'bins', 'curve'],
   params: [
-    { key: 'rows', label: 'rows of pegs', min: 4, max: 14, value: 10, rebuild: true },
-    { key: 'p', label: 'probability of bouncing right', min: .1, max: .9, value: .5 },
-    { key: 'rate', label: 'balls per second', min: 1, max: 25, value: 7 }],
+    { key: 'rows', label: 'rows of pegs (N)', min: 4, max: 14, value: 10, rebuild: true },
+    { key: 'p', label: 'probability of bouncing right (p)', min: .1, max: .9, value: .5 },
+    { key: 'rate', label: 'beads per second', min: 1, max: 25, value: 8 }],
+  shots: {
+    'copper bead lands': { dist: 6 },
+    '150 beads': { target: [0, 1.6, .1], dist: 9 },
+    'bins are emptied': { target: [0, 1.4, .1], dist: 9 }
+  },
+  flows: {
+    'like a coin flip': [{ from: [0, 6.25, .3], to: [.25, 5.8, .3], label: 'right with probability p' }, { from: [0, 6.25, .3], to: [-.25, 5.8, .3], label: 'left with 1 − p' }],
+    '150 beads': [{ from: [-2.4, 3.3, .3], to: [-.6, 2.0, .3], label: 'few paths reach the edges' }, { from: [0, 3.6, .3], to: [0, 2.3, .3], label: 'most paths end near N·p' }],
+    'pile build up': [{ from: [0, 5.2, .3], to: [1.6, 2.6, .3], label: 'the pile drifts towards N·p' }]
+  },
   code: `const T=api.THREE, N=Math.round(api.param('rows')), pegs=api.body('pegs'), bins=api.body('bins'), cg=api.body('curve'), lead=api.body('ball');
-const top=5.5, dy=4.3/N, dx=Math.min(0.5,6.2/(N+2)), pegM=api.material({preset:'brass'}), ballM=api.material({preset:'chrome'});
-for(let r=0;r<N;r++) for(let k=0;k<=r;k++){ const m=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.26,12),pegM); m.rotation.x=Math.PI/2; m.position.set((k-r/2)*dx,top-r*dy,0); m.castShadow=true; pegs.add(m); }
-const counts=new Array(N+1).fill(0), bars=[], binY=0.12, maxH=2.3;
-for(let k=0;k<=N;k++){ const x=(k-N/2)*dx; const w=new T.Mesh(new T.BoxGeometry(0.025,maxH,0.26),api.material({preset:'steel'})); w.position.set(x+dx/2,binY+maxH/2,0); bins.add(w);
-  const b=new T.Mesh(new T.BoxGeometry(dx*0.8,1,0.2),api.material({preset:'plastic',color:'#2d5b8e'})); b.position.set(x,binY,0); b.scale.y=0.001; b.castShadow=true; bins.add(b); bars.push(b); }
-const balls=[]; let acc=0, landed=0, said=false;
-const curve=new T.Line(new T.BufferGeometry().setFromPoints(Array.from({length:81},()=>new T.Vector3())),new T.LineBasicMaterial({color:0xffd27a})); curve.frustumCulled=false; cg.add(curve);
-function spawn(){ let m; if(lead&&!lead.userData.used){ lead.userData.used=true; m=lead; } else { m=new T.Mesh(new T.SphereGeometry(0.085,16,12),ballM); m.castShadow=true; api.world.add(m); } m.visible=true; m.position.set(0,top+0.4,0); balls.push({m,row:-1,k:0,t:0,x0:0,x1:0,y0:top+0.4,y1:top}); }
-api.onStep((h)=>{ acc+=h*api.param('rate'); while(acc>=1){ acc-=1; spawn(); }
-  for(let i=balls.length-1;i>=0;i--){ const b=balls[i]; b.t+=h/0.11;
-    if(b.t>=1){ b.t=0; b.row++;
-      if(b.row<N){ const right=api.rand()<api.param('p'); b.x0=b.m.position.x; b.k+=right?1:0; b.x1=(b.k-(b.row+1)/2)*dx; b.y0=top-b.row*dy; b.y1=top-(b.row+1)*dy; }
-      else { counts[b.k]++; landed++; if(b.m===lead) b.m.visible=false; else b.m.removeFromParent(); balls.splice(i,1);
-        if(landed<=3) api.event('A ball lands in bin '+b.k+' after '+N+' coin flips',new T.Vector3((b.k-N/2)*dx,0.5,0),{id:'land'});
-        if(landed===150&&!said){ said=true; api.event('150 balls: the bins now trace a bell (binomial ≈ normal)',null,{id:'bell'}); } continue; } }
-    const s=b.t; b.m.position.x=b.x0+(b.x1-b.x0)*s; b.m.position.y=b.y0+(b.y1-b.y0)*s+Math.sin(Math.PI*s)*dy*0.35; } });
-api.onFrame(()=>{ bars.forEach((b,k)=>{ const H=Math.max(0.001,Math.min(maxH,counts[k]*0.045)); b.scale.y=H; b.position.y=binY+H/2; });
-  const p=api.param('p'), mu=N*p, sd=Math.sqrt(N*p*(1-p))||1e-3, a=curve.geometry.attributes.position;
-  for(let i=0;i<=80;i++){ const kk=-0.5+(N+1)*i/80, x=(kk-N/2)*dx, d=Math.exp(-((kk-mu)**2)/(2*sd*sd))/(sd*Math.sqrt(2*Math.PI)); a.setXYZ(i,x,binY+Math.min(maxH+0.6,d*landed*0.045),0.16); } a.needsUpdate=true; });
+const top=6.2, dy=3.7/N, dx=Math.min(.5,6.0/(N+2)), Z=.05, binY=.56, maxH=1.95, R=Math.min(.06,(dx-.03)/6.3), ROW=.22;   // ROW: seconds per row of pegs
+const f2=v=>v.toFixed(2), C=(n,k)=>{let c=1;for(let i=1;i<=k;i++)c=c*(n-k+i)/i;return c;}, pmf=(k,p)=>C(N,k)*Math.pow(p,k)*Math.pow(1-p,N-k);
+// pegs: brass pins driven into the backboard
+const pg=new T.CylinderGeometry(.038,.038,.3,12); pg.rotateX(Math.PI/2);
+const pi=new T.InstancedMesh(pg,api.material({preset:'brass'}),N*(N+1)/2), m4=new T.Matrix4(); let n=0;
+for(let r=0;r<N;r++) for(let k=0;k<=r;k++){ m4.makeTranslation((k-r/2)*dx,top-r*dy,Z); pi.setMatrixAt(n++,m4); }
+pi.castShadow=true; pi.receiveShadow=true; pi.computeBoundingBox(); pi.name='pegs'; pegs.add(pi);
+// bins: brass dividers standing on the base rail
+const dv=new T.InstancedMesh(new T.BoxGeometry(.03,maxH,.34),api.material({preset:'brass'}),N+2);
+for(let k=0;k<=N+1;k++){ m4.makeTranslation((k-.5-N/2)*dx,binY+maxH/2,Z); dv.setMatrixAt(k,m4); } dv.castShadow=true; dv.receiveShadow=true; dv.computeBoundingBox(); dv.name='bin dividers'; bins.add(dv);
+// beads: the ones in the bins (stacked three abreast) and the ones falling
+const per=Math.max(1,Math.floor((dx-.03)/(2*R*1.02))), rowsMax=Math.floor(maxH/(2*R*.9)), cap=per*rowsMax, beadG=new T.SphereGeometry(R,14,10), steel=api.material({preset:'chrome'});
+const stack=new T.InstancedMesh(beadG,steel,(N+1)*cap); stack.castShadow=true; stack.receiveShadow=true; stack.count=0; stack.name='beads in the bins'; bins.add(stack);
+const fallN=96, fall=new T.InstancedMesh(beadG,steel,fallN); fall.castShadow=true; fall.frustumCulled=false; fall.count=0; fall.name='falling beads'; api.world.add(fall);
+const slot=(k,j)=>{ const row=Math.floor(j/per), col=j%per, off=(row%2)*R*.5; return [(k-N/2)*dx+(col-(per-1)/2)*2*R*1.02+off-(row%2?R*.25:0), binY+R+row*2*R*.9, Z]; };
+let counts=new Array(N+1).fill(0), landed=0, said=false, lastP=api.param('p'), lastRate=api.param('rate'), acc=0, leadCool=0;
+const beads=[];
+const CY=.038+R;   // a bead resting on a peg: its centre sits one peg radius plus one bead radius above the peg's centre
+const newPath=()=>({row:-1,k:0,t:0,x0:0,x1:0,y0:top+.45,y1:top+CY});
+function advance(b,h){ b.t+=h/ROW; if(b.t<1) return false; b.t=0; b.row++;
+  if(b.row>=N) return true;   // it has dropped into its bin
+  const right=api.rand()<api.param('p'); b.x0=b.x1; b.y0=b.y1; b.k+=right?1:0; b.x1=(b.k-(b.row+1)/2)*dx;
+  b.y1=b.row+1<N?top-(b.row+1)*dy+CY:binY+R+Math.floor(Math.min(counts[b.k],cap-1)/per)*2*R*.9;   // onto the next peg, or onto the top of the bin's stack
+  return false; }
+const posOf=b=>{ const s=b.t, x=b.x0+(b.x1-b.x0)*s, y=b.y0+(b.y1-b.y0)*s+Math.sin(Math.PI*s)*dy*.35; return [x,y]; };
+// the copper bead: always one of the falling beads, relaunched after it lands
+let L=Object.assign(newPath(),{wait:0,landedAt:null});
+const riding=()=>lead.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it (POV)
+function land(k){ counts[k]++; landed++;
+  if(landed===150&&!said){ said=true; const m=mean(), sd=spread(); api.event('150 beads: the bins trace a bell. Mean bin '+f2(m)+' (theory N·p = '+f2(N*api.param('p'))+'), spread '+f2(sd)+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+') at p = '+f2(api.param('p'))+', N = '+N,new T.Vector3(0,binY+.9,Z),{id:'bell',sound:'chime'}); } }
+api.onStep((h)=>{
+  if(Math.abs(api.param('p')-lastP)>.005||Math.abs(api.param('rate')-lastRate)>.5){ lastP=api.param('p'); lastRate=api.param('rate'); counts.fill(0); landed=0; said=false; api.event('The bins are emptied for a new run: p = '+f2(lastP)+', '+Math.round(lastRate)+' beads per second',new T.Vector3(0,binY+.5,Z),{id:'reset',sound:'pour'}); }
+  acc+=h*api.param('rate'); while(acc>=1){ acc-=1; if(beads.length<fallN) beads.push(newPath()); }
+  for(let i=beads.length-1;i>=0;i--){ const b=beads[i]; if(advance(b,h)){ land(b.k); beads.splice(i,1); } }
+  leadCool=Math.max(0,leadCool-h);
+  if(L.wait>0){ L.wait-=h; if(L.wait<=0) L=Object.assign(newPath(),{wait:0,landedAt:null}); }
+  else if(advance(L,h)){ land(L.k); L.wait=riding()?.8:1.6; L.landedAt=L.k;
+    if(riding()||leadCool<=0){ leadCool=25; const r=L.k; api.event('The copper bead lands in bin '+r+': '+r+' bounces right, '+(N-r)+' left. '+Math.round(C(N,r))+' of the '+Math.pow(2,N)+' possible paths end there',new T.Vector3((r-N/2)*dx,binY+.5,Z),{id:'lead',sound:'clack'}); } }
+});
+// the bell curve, printed on the glass: a gold ribbon of the normal density, scaled to the beads landed
+const NS=90, rib=new T.BufferGeometry(); rib.setAttribute('position',new T.BufferAttribute(new Float32Array((NS+1)*6),3)); const idx=[]; for(let i=0;i<NS;i++){ const a=i*2; idx.push(a,a+1,a+2,a+1,a+3,a+2); } rib.setIndex(idx);
+const ribM=new T.Mesh(rib,new T.MeshBasicMaterial({color:0xffcf6a,transparent:true,opacity:.85,side:T.DoubleSide,depthWrite:false})); ribM.frustumCulled=false; ribM.renderOrder=30; ribM.name='printed curve'; cg.add(ribM);
+const perBead=2*R*.9/per;   // stack height per bead
+api.onFrame(()=>{
+  let j=0; for(let k=0;k<=N;k++){ const c=Math.min(counts[k],cap); for(let q=0;q<c;q++){ const s=slot(k,q); m4.makeTranslation(s[0],s[1],s[2]); stack.setMatrixAt(j++,m4); } } stack.count=j; stack.instanceMatrix.needsUpdate=true; if(j) stack.computeBoundingBox();
+  let f=0; for(const b of beads){ if(b.row<0&&b.t<.01) continue; const [x,y]=posOf(b); m4.makeTranslation(x,y,Z); fall.setMatrixAt(f++,m4); } fall.count=f; fall.instanceMatrix.needsUpdate=true;
+  if(L.wait>0){ const s=slot(L.landedAt,Math.min(counts[L.landedAt],cap)); lead.position.set(s[0],s[1]+.02,Z+.01); } else { const [x,y]=posOf(L); lead.position.set(x,y,Z+.01); }
+  const p=api.param('p'), mu=N*p, sd=Math.sqrt(N*p*(1-p))||1e-3, a=rib.attributes.position;
+  for(let i=0;i<=NS;i++){ const kk=-.5+(N+1)*i/NS, x=(kk-N/2)*dx, d=Math.exp(-((kk-mu)**2)/(2*sd*sd))/(sd*Math.sqrt(2*Math.PI)), y=binY+Math.min(maxH+.25,d*landed*perBead); a.setXYZ(i*2,x,y+.012,.205); a.setXYZ(i*2+1,x,y-.012,.205); }
+  a.needsUpdate=true; rib.computeBoundingBox(); });
 const mean=()=>{ let s=0; counts.forEach((c,k)=>s+=c*k); return landed?s/landed:NaN; };
-api.readout('balls landed',()=>landed); api.readout('mean bin',()=>mean()); api.readout('theory N·p',()=>N*api.param('p'));
-api.readout('spread measured',()=>{ if(landed<2) return NaN; const m=mean(); let v=0; counts.forEach((c,k)=>v+=c*(k-m)**2); return Math.sqrt(v/(landed-1)); });
-api.readout('theory √(Np(1−p))',()=>Math.sqrt(N*api.param('p')*(1-api.param('p'))));
-api.plot('balls in the centre bin',()=>counts[Math.round(N/2)]); api.camera({target:[0,3.1,0],r:13,ph:1.4,th:0});`,
+const spread=()=>{ if(landed<2) return NaN; const m=mean(); let v=0; counts.forEach((c,k)=>v+=c*(k-m)**2); return Math.sqrt(v/(landed-1)); };
+const mode=()=>Math.round(N*api.param('p'));
+api.readout('beads landed',()=>String(landed));
+api.readout('mean bin',()=>(landed?f2(mean()):'—')+' (theory N·p = '+f2(N*api.param('p'))+')');
+api.readout('spread of the bins (sd)',()=>(landed>1?f2(spread()):'—')+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+')');
+api.readout('standard error of the mean',()=>landed?f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))/landed)):'—');
+api.readout('share in bin '+'N·p',()=>(landed?(100*counts[mode()]/landed).toFixed(1):'—')+' % (binomial '+(100*pmf(mode(),api.param('p'))).toFixed(1)+' %, normal '+(100/(Math.sqrt(2*Math.PI*N*api.param('p')*(1-api.param('p')))||1)).toFixed(1)+' %)');
+api.plot('beads in the centre bin',()=>counts[mode()]);
+api.camera({target:[.3,3.25,0],r:12.6,ph:1.47,th:.12});`,
   lessons: [
-    { title: 'Let the balls fall', text: 'Each ball meets one peg per row and goes left or right at random. Watch the bins fill until the bell event.', focus: 'funnel', until: 'event:bell', run: 40, explain: 'A bin count is the number of right-bounces in N independent flips: a binomial distribution, which for many rows is close to a normal curve.' },
-    { title: 'Bias the coin', text: 'Make right-bounces likelier. The pile slides right; its centre moves to N·p.', set: { p: .75 }, focus: 'bins', run: 14, explain: 'The mean of a binomial is Np; the spread √(Np(1−p)) also changes.' },
-    { title: 'More rows', text: 'Add rows. The board rebuilds; with more flips per ball the bell becomes smoother and wider in bins but narrower relative to N.', set: { rows: 14, p: .5 }, focus: 'curve', run: 20, explain: 'Spread grows like √N while the range grows like N: averages concentrate (the central limit theorem).' }]
+    { title: 'Ride one bead', question: 'Where will one bead land?', text: 'You ride the copper bead down the board. At every peg it bounces left or right, like a coin flip. Watch where it ends up.', focus: 'ball', shot: 'pov', pov: 'Copper bead', until: 'event:copper bead lands', run: 40, explain: 'Its path was a string of 10 independent left/right choices, so each particular path has probability (1/2)^10 = 1/1024. The bin number counts only the right-bounces, and many different paths share a bin: C(10,k) of them end in bin k. One path leads to bin 0, 10 to bin 1, and 252 to bin 5. Where one bead lands is unpredictable. Where most beads land is not.', opens: 'What shape do many beads make?' },
+    { title: 'Let the beads fall', question: 'What shape do many beads make?', text: 'Open the funnel wider (12 beads a second); the bins are emptied first. Watch them fill until 150 beads have landed, and compare the mean bin and the spread with the theory readouts.', set: { rate: 12 }, focus: 'bins', shot: 'push', until: 'event:150 beads', run: 50, explain: 'The count of right-bounces in N independent flips follows the binomial distribution: mean N·p = 5 bins, spread √(Np(1−p)) = 1.58 bins. After 150 beads the measured mean should sit within about 0.13 of 5 (the standard error 1.58/√150). The pile is already close to the gold normal curve: de Moivre–Laplace, the first central limit theorem (Le Cam 1986).', opens: 'What happens if the pegs favour one side?' },
+    { title: 'Bias the pegs', question: 'What happens if the pegs favour one side?', text: 'Make right-bounces likelier (p = 0.75). The bins are emptied and refilled. Watch the pile build up to the right of centre until 150 beads have landed.', set: { p: .75 }, focus: 'bins', shot: 'medium', until: 'event:150 beads', run: 50, explain: 'With p = 0.75 the mean moves to N·p = 7.5 and the spread shrinks to √(10 × 0.75 × 0.25) = 1.37 bins. The pile is lopsided, with a longer tail towards the left: no bin above 10 exists to balance it. The normal curve fits less well when N·p(1−p) is small (here 1.9); a common rule of thumb asks for at least 5–10.', opens: 'What do more rows do?' },
+    { title: 'More rows', question: 'What do more rows do?', text: 'Add rows (N = 14) and set p back to 0.5. The board rebuilds with narrower bins. Watch the new bell grow until 150 beads have landed.', set: { rows: 14, p: .5 }, focus: 'curve', shot: 'medium', until: 'event:150 beads', run: 60, explain: 'With 14 flips the mean is 7 and the spread √(14 × 0.25) = 1.87 bins: wider than with 10 rows. But relative to the 14-bin range it is narrower: 1.87/14 = 0.13 against 1.58/10 = 0.16. Sums of many independent nudges spread out like √N while their range grows like N, so the bell sharpens relative to the board. That is the central limit theorem at work.', opens: 'How good is the normal curve for the centre bin?' },
+    { title: 'Read the centre bin', question: 'How good is the normal curve for the centre bin?', text: 'Look closely at the bins near the middle and read the share of beads in bin N·p, with the binomial and normal predictions next to it.', focus: 'bins', shot: 'close', run: 15, explain: 'For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With a few hundred beads the measured share still wobbles by about 2 percentage points around them (the standard error √(0.21 × 0.79 / n)); more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it).', opens: 'Why do sums of other independent random steps, not only coin flips, also make a bell?' }]
 };
 
 export const OSMOSIS = {
   type: 'scene', title: 'Osmosis across a semi-permeable membrane', technique: 'sweep',
-  environment: { preset: 'micro', base: true },
+  environment: { preset: 'lab' },
   bodies: [
-    { id: 'tank', name: 'Tank', role: 'decor', shape: { kind: 'glasscase', w: 6, d: 1.6, h: 3.4 }, position: [0, 0, 0] },
-    { id: 'membrane', name: 'Membrane', label: 'Semi-permeable membrane', role: 'actor', describe: 'Pores let water molecules through but not the larger solute molecules.', shape: { kind: 'box', w: .05, h: 3.2, d: 1.55, round: 0 }, material: { preset: 'membrane', color: '#ffb0c8' }, position: [0, 1.6, 0] },
-    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55 }, material: { preset: 'water', color: '#3a9ec0', opacity: .55 }, position: [-1.5, 1.3, 0] },
-    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus solute.', shape: { kind: 'water', w: 2.95, d: 1.55 }, material: { preset: 'water', color: '#c08a3a', opacity: .55 }, position: [1.5, 1.3, 0] }],
-  tour: ['membrane', 'left', 'right'],
+    { id: 'slab', name: 'Tank base', role: 'decor', shape: { kind: 'box', w: 6.4, h: .12, d: 1.9, round: .02 }, material: { preset: 'plastic', color: '#2b3036' }, position: [0, .06, 0] },
+    { id: 'tank', name: 'Glass tank', role: 'decor', shape: { kind: 'glasscase', w: 6, d: 1.6, h: 3.4 }, position: [0, .12, 0] },
+    { id: 'membrane', name: 'Membrane', label: 'Semi-permeable membrane', role: 'actor', describe: 'Its pores let water molecules through but not the larger solute molecules.', shape: { kind: 'box', w: .07, h: 3.3, d: 1.56, round: 0 }, material: { preset: 'membrane', color: '#e0507a' }, position: [0, 1.77, 0] },
+    { id: 'clampT', name: 'Membrane clamp', role: 'decor', shape: { kind: 'box', w: .16, h: .1, d: 1.66, round: .01 }, material: { preset: 'steel' }, position: [0, 3.47, 0] },
+    { id: 'clampB', name: 'Membrane clamp', role: 'decor', shape: { kind: 'box', w: .16, h: .1, d: 1.66, round: .01 }, material: { preset: 'steel' }, position: [0, .17, 0] },
+    { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#58b4d0' }, position: [-1.5, 1.42, 0] },
+    { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus dissolved solute.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#d8b070' }, position: [1.5, 1.42, 0] },
+    { id: 'tracer', name: 'Tagged water molecule', label: 'Tagged water molecule', role: 'actor', describe: 'One water molecule marked so you can follow it, or ride it (POV).', shape: { kind: 'sphere', r: .075 }, material: { preset: 'emissive', color: '#7fe0ff' }, position: [-.6, .9, .2] },
+    { id: 'piston', name: 'Piston', label: 'Piston · extra pressure on the solution', role: 'actor', describe: 'Pressing on the solution side pushes back against the osmotic flow.', shape: { kind: 'group' }, position: [1.5, 3.3, 0] },
+    { id: 'plate', name: 'Piston plate', role: 'decor', parent: 'piston', shape: { kind: 'box', w: 2.86, h: .08, d: 1.5, round: .02 }, material: { preset: 'plastic', color: '#c9ced4' }, position: [0, .04, 0] },
+    { id: 'rod', name: 'Piston rod', role: 'decor', parent: 'piston', shape: { kind: 'cylinder', r: .05, h: 1.6 }, material: { preset: 'chrome' }, position: [0, .84, 0] },
+    { id: 'weight', name: 'Weight', role: 'decor', parent: 'piston', shape: { kind: 'cylinder', r: .32, h: .22 }, material: { preset: 'iron' }, position: [0, 1.75, 0] },
+    { id: 'beaker', name: 'Beaker', role: 'decor', shape: { kind: 'beaker', r: .42, h: 1.0, fill: .6, liquid: '#d8b070' }, position: [-4.3, 0, 1.9] },
+    { id: 'flask', name: 'Flask', role: 'decor', shape: { kind: 'flask', r: .5, h: 1.3, fill: .4, liquid: '#58b4d0' }, position: [4.4, 0, -1.4] },
+    { id: 'notebook', name: 'Lab notebook', role: 'decor', shape: { kind: 'book', w: 1.2, h: 1.6, d: .12 }, material: { preset: 'leather', color: '#2c3e50' }, position: [4.0, .06, 2.4], rotation: [-90, 0, -18] }
+  ],
+  tour: ['membrane', 'left', 'right', 'tracer', 'piston'],
   params: [
     { key: 'solute', label: 'solute molecules', min: 0, max: 90, value: 45, rebuild: true },
-    { key: 'T', label: 'temperature', min: .3, max: 2, value: 1 },
-    { key: 'pass', label: 'membrane permeability', min: .2, max: 1, value: .6 }],
-  code: `const T=api.THREE, nW=200, nS=Math.round(api.param('solute')), rnd=api.rand;
-const wm=new T.InstancedMesh(new T.SphereGeometry(0.05,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW);
-const sm=new T.InstancedMesh(new T.SphereGeometry(0.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; api.world.add(wm,sm);
-const L=api.body('left'), R=api.body('right'); const base=1.3; let hL=base, hR=base, phi=0, cLR=0, cRL=0, win=0, flowSaid=false, eqT=0, eqSaid=false, lastDh=0;
-const P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-0.1-rnd()*2.7:0.1+rnd()*2.7,y:0.15+rnd()*(base-0.3),z:(rnd()-0.5)*1.3,w:true}); }
-for(let i=0;i<nS;i++) P.push({x:0.2+rnd()*2.6,y:0.2+rnd()*(base-0.4),z:(rnd()-0.5)*1.2,w:false});
+    { key: 'T', label: 'temperature (thermal motion)', min: .3, max: 2, value: 1 },
+    { key: 'pass', label: 'membrane permeability', min: .2, max: 1, value: .7 },
+    { key: 'press', label: 'extra pressure on the solution', min: 0, max: 120, value: 0, unit: 'mm water' }],
+  shots: {
+    'net water flow': { target: [0, 1.0, .1], dist: 6 },
+    'tagged water molecule': { dist: 4 },
+    'osmotic equilibrium': { target: [0, 1.6, 0], dist: 9 },
+    'reverse osmosis': { target: [.6, 1.6, 0], dist: 8 }
+  },
+  flows: {
+    'net water flow': [{ from: [-1.0, .7, .9], to: [1.0, .7, .9], label: 'more water crosses into the solution' }],
+    'osmotic equilibrium': [{ from: [2.6, 2.3, .9], to: [2.6, 1.4, .9], label: 'the extra height presses back' }, { from: [-1.0, .7, .9], to: [1.0, .7, .9], label: 'the solute side draws water' }],
+    'reverse osmosis': [{ from: [1.5, 3.0, .9], to: [1.5, 2.0, .9], label: 'piston pressure' }, { from: [1.0, .7, .9], to: [-1.0, .7, .9], label: 'water squeezed back' }]
+  },
+  code: `const T=api.THREE, V=(x,y,z)=>new T.Vector3(x,y,z), rnd=api.rand, f0=v=>String(Math.round(v)), f2=v=>v.toFixed(2);
+// scale: 1 unit = 10 cm. Each column's height is proportional to its number of water molecules (water does not compress).
+const nW=400, nS=Math.round(api.param('solute')), Y0=.12, HV=1.3/(nW/2), K=.23, W=1.47, ZD=.7;
+const wm=new T.InstancedMesh(new T.SphereGeometry(.045,10,8),api.material({preset:'plastic',color:'#4aa3ff'}),nW); wm.name='water molecules';
+const sm=new T.InstancedMesh(new T.SphereGeometry(.11,14,10),api.material({preset:'plastic',color:'#ff9a3c'}),Math.max(1,nS)); sm.visible=nS>0; sm.name='solute molecules'; api.world.add(wm,sm);
+const L=api.body('left'), R=api.body('right'), tr=api.body('tracer'), piston=api.body('piston');
+let m=0, nL=nW/2, nR=nW/2, visL=nW/2, visR=nW/2, hL=nL*HV, hR=nR*HV, cLR=0, cRL=0, win=0, rate=[0,0], flowSaid=false, eqSaid=false, revSaid=false, ema=0, hist=[], netEma=0;
+const P=[]; for(let i=0;i<nW;i++){ const l=i<nW/2; P.push({x:l?-.08-rnd()*2.8:.08+rnd()*2.8,y:Y0+.05+rnd()*(hL-.1),z:(rnd()-.5)*1.3,w:true}); }
+for(let i=0;i<nS;i++) P.push({x:.2+rnd()*2.6,y:Y0+.08+rnd()*(hR-.2),z:(rnd()-.5)*1.2,w:false});
 P.forEach(q=>q.side=q.x<0?-1:1);
-api.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?new T.Vector3(q.x,q.y,q.z):null; },'Small enough to pass the pores.');
-if(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?new T.Vector3(q.x,q.y,q.z):null; },'Too large to pass; they stay on the right.');
-api.onStep((h)=>{ const s=Math.sqrt(api.param('T'))*0.9, k=1.8, dh=hR-hL, pass=api.param('pass');
-  for(const q of P){ q.x+=(rnd()-0.5)*s*h*14; q.y+=(rnd()-0.5)*s*h*14; q.z+=(rnd()-0.5)*s*h*14;
-    const top=(q.side<0?hL:hR)-0.06; if(q.y<0.12)q.y=0.12; if(q.y>top)q.y=top; if(q.z<-0.66)q.z=-0.66; if(q.z>0.66)q.z=0.66; if(q.x<-2.88)q.x=-2.88; if(q.x>2.88)q.x=2.88;
-    const side=q.x<0?-1:1;
-    if(side!==q.side){ let ok=false; if(q.w) ok = q.side<0 ? rnd()<pass*Math.exp(-k*dh) : rnd()<pass*(1-phi)*Math.exp(k*dh);
-      if(ok){ q.side=side; if(side>0) cLR++; else cRL++; } else q.x=q.side<0?-0.04:0.04; } } });
+api.label('Water molecules',()=>{ const q=P.find(q=>q.w&&q.side<0); return q?V(q.x,q.y,q.z):null; },'Small enough to pass the pores.');
+if(nS) api.label('Solute molecules',()=>{ const q=P.find(q=>!q.w); return q?V(q.x,q.y,q.z):null; },'Too large for the pores: they stay on the right.');
+const press=()=>api.param('press')/100;     // piston pressure as a water head, in scene units (1 unit = 100 mm)
+const xw=()=>nR/(nR+nS);                    // mole fraction of water on the solution side
+const dhEff=()=>(hR-hL)+press();          // hydrostatic head of the solution side plus the piston, in scene units
+// a water molecule tries a pore: into the solution with weight e^(−KΔ); back out with x_w·e^(+KΔ). At balance −ln x_w = 2KΔ: the ideal-solution law (van 't Hoff when dilute).
+const KAP=12;   // pore traffic: water molecules per second crossing each way through the wetted membrane when Δ = 0 and x_w = 1
+const rates=()=>{ const k=KAP*api.param('pass')*Math.sqrt(api.param('T')), d=dhEff(); return [k*Math.exp(-K*d), k*xw()*Math.exp(K*d)]; };
+const hop=(from,top)=>{ let best=null,bd=9; for(const q of P){ if(q.w&&q.side===from&&q.y<top){ const d=Math.abs(q.x); if(d<bd){bd=d;best=q;} } } if(best){ best.side=-from; best.x=-best.x; if(from<0){visL--;visR++;cLR++;} else {visL++;visR--;cRL++;} } };   // the molecule nearest the pores goes through
+// the tagged molecule: Brownian motion with a little persistence (so a rider's view turns smoothly), plus the drift of the bulk flow
+const tq={x:-.3,y:Y0+.6,z:.25,vx:.2,vy:0,vz:0,side:-1}; let tcool=0, tsay=0, tn=0; const riding=()=>tr.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it
+api.onStep((h,t)=>{ const s=Math.sqrt(api.param('T'))*.9, st=s*h*20, top=Math.min(hL,hR)+Y0-.05;
+  for(const q of P){ q.x+=(rnd()-.5)*st; q.y+=(rnd()-.5)*st; q.z+=(rnd()-.5)*st;
+    const lim=Y0+(q.side<0?hL:hR)-.05; if(q.y<Y0+.05)q.y=Y0+.05; if(q.y>lim)q.y=lim; if(q.z<-ZD)q.z=-ZD; if(q.z>ZD)q.z=ZD; if(q.x<-2.9)q.x=-2.9; if(q.x>2.9)q.x=2.9;
+    if((q.x<0?-1:1)!==q.side) q.x=-q.x; }                                // walking into the membrane: reflected (crossing happens only through the pores, below)
+  // the levels follow the net flow J = J_in − J_out (deterministic); the drawn molecules hop both ways at the gross rates, kept in step with the levels
+  const [jin,jout]=rates(); m+=(jin-jout)*h; nL=nW/2-m; nR=nW/2+m; hL=nL*HV; hR=nR*HV;
+  const dv=visR-nR; if(rnd()<h*jin*Math.exp(-.4*dv)) hop(-1,top); if(rnd()<h*jout*Math.exp(.4*dv)) hop(1,top);
+  // tagged molecule
+  const tau=.6, sg=.9*Math.sqrt(api.param('T')), g=()=>(rnd()+rnd()+rnd()-1.5)*2; tq.vx+=(-tq.vx/tau)*h+sg*Math.sqrt(h)*g()+netEma*.02*h; tq.vy+=(-tq.vy/tau)*h+sg*Math.sqrt(h)*g(); tq.vz+=(-tq.vz/tau)*h+sg*Math.sqrt(h)*g();
+  tq.x+=tq.vx*h; tq.y+=tq.vy*h; tq.z+=tq.vz*h; const tl=Y0+(tq.side<0?hL:hR)-.08;
+  if(tq.y<Y0+.08){tq.y=Y0+.08;tq.vy=Math.abs(tq.vy);} if(tq.y>tl){tq.y=tl;tq.vy=-Math.abs(tq.vy);} if(Math.abs(tq.z)>ZD-.05){tq.z=Math.sign(tq.z)*(ZD-.05);tq.vz*=-1;} if(Math.abs(tq.x)>.8){tq.x=Math.sign(tq.x)*.8;tq.vx*=-1;}   // we follow it in the region next to the membrane
+  tcool=Math.max(0,tcool-h); tsay=Math.max(0,tsay-h);
+  if((tq.x<0?-1:1)!==tq.side){ const pr=Math.min(1,api.param('pass')*1.2)*(tq.side<0?Math.exp(-K*dhEff()):xw()*Math.exp(K*dhEff()));   // at the membrane: through a pore, or bounced back
+    if(tcool<=0&&tq.y<top&&rnd()<pr){ tq.side=-tq.side; tcool=1.5; const ts=tq.side; if(riding()||tsay<=0){ tsay=20; tn++; api.event((ts>0?'The tagged water molecule slips through a pore into the solution side':'The tagged water molecule slips back through a pore into the pure water')+' (crossing '+tn+')',V(0,tq.y,tq.z),{id:'cross',sound:'bubble'}); } } else { tq.x=-tq.x; tq.vx=-tq.vx; } }
+  win+=h; if(win>=3){ const net=cLR-cRL; rate=[cLR/3,cRL/3]; netEma+=(net/3-netEma)*.5;
+    if(!flowSaid&&net>=4&&nS>0){ flowSaid=true; api.event('Net water flow into the solution side: in 3 s, '+cLR+' molecules crossed into it and '+cRL+' came back',V(0,Y0+.6,.1),{id:'flow',sound:'pour'}); }
+    if(!revSaid&&press()>0&&net<=-4){ revSaid=true; api.event('Reverse osmosis: pressed harder than the osmotic pressure, water is squeezed back into the pure side ('+cRL+' out, '+cLR+' in, in 3 s)',V(.6,Y0+1.2,.1),{id:'reverse',sound:'pour'}); }
+    cLR=0; cRL=0; win=0; }
+  ema+=((hR-hL)-ema)*Math.min(1,h/2); hist.push([t,ema]); while(hist.length&&t-hist[0][0]>8) hist.shift();
+  if(!eqSaid&&nS>0&&t>8&&press()===0&&Math.abs((hR-hL)-bal())<.025){ eqSaid=true; api.event('Osmotic equilibrium: the solution stands Δh = '+f0((hR-hL)*100)+' mm higher, and water now crosses equally both ways (about '+f0((rate[0]+rate[1])/2)+' molecules per second each way)',V(1.5,Y0+hR,0),{id:'eq',sound:'chime'}); } });
+const bal=()=>nS?-Math.log(xw())/(2*K)-press():0;   // head at which the two crossing rates balance (scene units)
 const m4=new T.Matrix4();
-api.onFrame((dt)=>{ let nL=0,nRw=0; P.forEach(q=>{ if(q.w){ if(q.side<0) nL++; else nRw++; } }); phi=nS?Math.min(0.85,1.25*nS/(nS+nRw)):0;
-  const tL=base+(nL-nW/2)*0.011, tR=base+(nRw-nW/2)*0.011; hL+=(tL-hL)*Math.min(1,dt*3); hR+=(tR-hR)*Math.min(1,dt*3);
-  L.position.y=hL; R.position.y=hR; let iw=0,is=0;
-  P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;
-  win+=dt; if(win>2){ if(!flowSaid&&cLR-cRL>4){ flowSaid=true; api.event('Net water flow into the solution side',new T.Vector3(0,1.2,0),{id:'flow'}); } cLR=0; cRL=0; win=0; }
-  const dh=hR-hL; if(Math.abs(dh-lastDh)<0.0015*Math.max(dt*60,1)) eqT+=dt; else eqT=0; lastDh=dh;
-  if(!eqSaid&&eqT>4&&api.time()>6){ eqSaid=true; api.event('Osmotic equilibrium: the extra height Δh = '+api.fmt(dh)+' balances the solute\\'s pull',new T.Vector3(1.5,hR,0),{id:'eq'}); } });
-api.readout('water left',()=>P.filter(q=>q.w&&q.side<0).length); api.readout('water right',()=>P.filter(q=>q.w&&q.side>0).length);
-api.readout('solute fraction φ',()=>phi); api.readout('Δh (right − left)',()=>hR-hL);
-api.plot('Δh',()=>hR-hL); api.camera({target:[0,1.5,0],r:9.5,ph:1.35,th:0.1});`,
+api.onFrame(()=>{ let iw=0,is=0; P.forEach(q=>{ m4.makeTranslation(q.x,q.y,q.z); if(q.w) wm.setMatrixAt(iw++,m4); else sm.setMatrixAt(is++,m4); }); wm.instanceMatrix.needsUpdate=true; sm.instanceMatrix.needsUpdate=true;
+  const D=1.3; L.position.y=Y0+hL; L.scale.y=hL/D; R.position.y=Y0+hR; R.scale.y=hR/D; tr.position.set(tq.x,tq.y,tq.z);
+  const py=press()>0?Y0+hR+.005:Math.max(Y0+hR+.5,2.75); piston.position.y+=(py-piston.position.y)*.15; });
+api.readout('water molecules left / right',()=>visL+' / '+visR);
+api.readout('water fraction x_w on the solution side',()=>nS?f2(xw()):'1 (no solute)');
+api.readout('Δh (solution − pure water)',()=>f0((hR-hL)*100)+' mm');
+api.readout('Δh where crossings balance',()=>nS?f0(bal()*100)+' mm':'0 mm');
+api.readout('crossings per second (in / out)',()=>rate[0].toFixed(1)+' / '+rate[1].toFixed(1));
+api.readout('piston pressure',()=>f0(api.param('press'))+' mm of water');
+api.plot('Δh (mm)',()=>(hR-hL)*100); api.camera({target:[0,1.55,0],r:9.6,ph:1.36,th:.14});`,
   lessons: [
-    { title: 'Watch the water move', text: 'Water molecules cross the pores in both directions; solute molecules bounce off the membrane on the right. Wait for the net-flow event.', focus: 'membrane', until: 'event:flow', run: 20, explain: 'Solute that cannot enter the pores lowers the water\'s chemical potential on its side, so the net flow runs into the solution. In real membranes this is mostly bulk flow through the pores, not water simply "diffusing down its own gradient" (Kramer & Myers 2013); the particle picture here shows the direction and the balance, not the molecular mechanism.' },
-    { title: 'Equilibrium', text: 'The right level rises until its extra pressure pushes water back as fast as it arrives. Wait for equilibrium.', focus: 'right', until: 'event:eq', run: 40, explain: 'The height difference at equilibrium measures the osmotic pressure; it grows with solute concentration (van \'t Hoff: π ≈ cRT).' },
-    { title: 'More solute', text: 'Double the solute. The tank refills from scratch and settles at a bigger height difference.', set: { solute: 90 }, focus: 'right', until: 'event:eq', run: 45, explain: 'Osmotic pressure rises with the number of dissolved particles.' },
-    { title: 'Pure water both sides', text: 'Remove all solute: nothing drives a net flow and the levels stay equal.', set: { solute: 0 }, focus: 'left', run: 12, explain: 'Osmosis needs a concentration difference across a membrane that blocks the solute.' }]
+    { title: 'Watch the water move', question: 'Which way does water move?', text: 'The tank starts with both levels equal. Water molecules (blue) cross the membrane pores in both directions; the solute molecules (orange) bounce off it on the right. Wait for the net water flow.', set: { solute: 45 }, focus: 'membrane', shot: 'push', until: 'event:net water flow', run: 30, explain: 'Solute that cannot enter the pores lowers the chemical potential of the water on its side, so more water enters the solution than leaves it. In real membranes this flow is mostly bulk flow through the pores, driven by a pressure difference set up inside them; it is not water simply "diffusing down its own gradient" (Kramer & Myers 2013). The particle picture here shows the direction and the balance, not the molecular mechanism.', opens: 'How does one molecule get across?' },
+    { title: 'Ride one molecule', question: 'How does one molecule get across?', text: 'You are now riding a single tagged water molecule, jostled by thermal motion. Watch the pink membrane ahead and wait until the molecule slips through a pore.', focus: 'tracer', shot: 'pov', pov: 'Tagged water molecule', until: 'event:tagged water molecule slips', run: 40, explain: 'No single molecule knows which way is "downhill". It wanders at random, and when it reaches a pore it may pass in either direction. The net flow is a small imbalance between two large, opposite streams. In living cells water crosses mainly through aquaporins, channels that pass water molecules in single file, discovered by Preston et al. (1992).', opens: 'When does the flow stop?' },
+    { title: 'Equilibrium', question: 'When does the flow stop?', text: 'Follow the solution level: it rises while the pure-water level falls. The extra height presses back on the membrane. Wait for equilibrium.', focus: 'right', shot: 'medium', until: 'event:osmotic equilibrium', run: 90, explain: 'The higher column pushes water back, and the flow stops when its hydrostatic pressure ρgΔh balances the solute\'s effect: here near 40 mm, where −ln x_w = 2KΔh. For dilute solutions this is van \'t Hoff\'s law, π = cRT (van \'t Hoff 1887): the osmotic pressure grows with the number of dissolved particles, not with their kind. In the real world a 0.01 mol/L sugar solution at 25 °C has π ≈ 25 kPa, enough to hold up a column of water 2.5 m high.', opens: 'Does more solute make the column taller?' },
+    { title: 'More solute', question: 'Does more solute make the column taller?', text: 'Double the solute to 90 molecules. The tank refills from equal levels. Watch the solution rise higher this time, and wait for equilibrium.', set: { solute: 90 }, focus: 'right', shot: 'medium', until: 'event:osmotic equilibrium', run: 100, explain: 'With twice the solute the column settles near 65 mm instead of 40 mm. It is not exactly double, because −ln x_w grows a little faster than the solute fraction, and the incoming water dilutes the solution as it rises. In dilute solutions the osmotic pressure is proportional to the solute concentration (π = cRT).', opens: 'Can pressure push the water back?' },
+    { title: 'Push back: reverse osmosis', question: 'Can pressure push the water back?', text: 'Lower the piston onto the solution with 120 mm of water pressure, more than the osmotic pressure. Watch which way the water now crosses.', set: { press: 120 }, focus: 'piston', shot: 'medium', until: 'event:reverse osmosis', run: 60, explain: 'Pressure on the solution raises the water\'s chemical potential there. Once it exceeds the osmotic pressure, the net flow reverses and water is squeezed out of the solution through the membrane, leaving the solute behind. The flow follows J = Lp(ΔP − σΔπ) (Kedem & Katchalsky 1958). Desalination plants work this way: seawater has an osmotic pressure of about 27 bar, so they press it at 55–80 bar.', opens: 'What happens to a living cell placed in water that is saltier or fresher than its inside?' }]
 };
 import { REF } from './seeds-sources.js';
 WATER_CYCLE.sources = [REF.trenberth, REF.oki, REF.koutsoyiannis, REF.roe];

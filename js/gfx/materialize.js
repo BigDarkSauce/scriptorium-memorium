@@ -168,7 +168,7 @@ export class Materializer {
     // build order for the card technique: actors and decor drop in, shortest/lowest first
     this.parts = world.children.filter(o => !o.userData.isInk).map((o, i) => ({ o, y0: o.position.y, s0: o.scale.clone(), i, h: new THREE.Box3().setFromObject(o).max.y }));
     this.parts.sort((a, b) => a.h - b.h);
-    if (this.T.cut) world.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { if (m.userData.hull) m.clippingPlanes = [this.cut]; else if (!m.isShaderMaterial) { m.clippingPlanes = [this.cut]; if (!m.transparent) m.side = THREE.DoubleSide; } }); });
+    if (this.T.cut) world.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { if (m.userData.hull) m.clippingPlanes = [this.cut]; else if (!m.isShaderMaterial) { m.clippingPlanes = [this.cut]; if (!m.transparent && m.side !== THREE.BackSide) m.side = THREE.DoubleSide; } }); });
     this.pose = {}; this.buildIn = false;
   }
   setProgress(t) {

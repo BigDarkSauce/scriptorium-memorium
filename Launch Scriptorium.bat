@@ -4,9 +4,30 @@ cd /d "%~dp0"
 title Scriptorium Memorium
 if not exist "%~dp0Scriptorium Memorium.lnk" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\make-shortcuts.ps1" >nul 2>&1
 set PORT=8000
-echo Scriptorium Memorium  -  http://localhost:%PORT%
+set "URL=http://localhost:%PORT%/"
+
+rem Pick the server: a Python that really runs (the Microsoft Store placeholder "python" fails this probe),
+rem else the py launcher, else the PowerShell server in launcher\serve.ps1.
+set "SERVER=powershell"
+python -c "import http.server" >nul 2>&1 && set "SERVER=python"
+if "%SERVER%"=="powershell" py -3 -c "import http.server" >nul 2>&1 && set "SERVER=py"
+
+echo Scriptorium Memorium  -  %URL%   (server: %SERVER%)
 echo Keep this window open while you use the app. Close it to stop.
-start "" "http://localhost:%PORT%"
-where python >nul 2>&1 && (python -m http.server %PORT% & goto :eof)
-where py >nul 2>&1 && (py -m http.server %PORT% & goto :eof)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\serve.ps1" -Port %PORT%
+echo.
+
+rem The browser opens only once the server answers (launcher\open-when-ready.ps1 probes the address for up to 10 s).
+start "" /b powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\open-when-ready.ps1" -Url "%URL%" -Seconds 10
+
+if "%SERVER%"=="python" (
+  python -m http.server %PORT%
+) else if "%SERVER%"=="py" (
+  py -3 -m http.server %PORT%
+) else (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\serve.ps1" -Port %PORT%
+)
+if errorlevel 1 (
+  echo.
+  echo The server stopped with an error. If port %PORT% is already in use, close the other window or program using it.
+  pause
+)

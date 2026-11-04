@@ -3,10 +3,12 @@
 ```text
 Author a high-fidelity interactive 3D diorama that embodies an idea through bodies, events and processes.
 WHAT IT MUST SHOW: <what the diorama must show: actors, decor, variables, events, lessons>
-CONTEXT (the study step it illustrates): <the study step it illustrates>
+THE QUESTION IT MUST ANSWER: <the question the demo answers>
+CONTEXT (the study step it illustrates): <the study step it illustrates | the step answers: … | and opens: …>
 Preferred technique: <card | sweep | topdown>.
-Make it beautiful and alive like a living miniature under glass: a composed scene with 2–7 actors (the bodies the idea is about, each with a clear label and one-line "describe"), scenic decor that gives place and scale and reacts to the simulation through behaviors, scene-appropriate environment and lighting, correct dynamics in code, events at the meaningful moments, readouts and a live plot of the telling quantity, and 3–7 lessons that each change something and say what to watch.
-Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI.
+Make it beautiful and alive like a living miniature under glass: a composed scene with 2–7 actors (the bodies the idea is about, each with a clear label and one-line "describe"), scenic decor that gives place and scale and reacts to the simulation through behaviors, scene-appropriate environment and lighting, correct dynamics in code, events at the meaningful moments, readouts and a live plot of the telling quantity, and 3–6 lessons that each change something and say what to watch.
+Use the numbers of the study step (the book's own values) for params and readouts. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
+Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI. Values that are not in the study step are additions from outside the book: list them in a top-level "extra" array ({what, source}).
 SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (radius 7, top at y=0, units ≈ metres; keep content within |x|,|z| < 6.5, 0 < y < 8).
 {
  "type":"scene", "title":str, "technique":"card"|"sweep"|"topdown",      // how the drawing materialises (see below)
@@ -18,7 +20,7 @@ SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (
  "params":[{"key":"L","label":"string length","min":0.5,"max":4,"value":2,"unit":"m","rebuild":false}],
  "behaviors":[{"target":"id"|"prefix*"|"kind:tree","type":"sway|spin|bob|orbit|pulse|scale|move|glow|visible|opacity","axis":"x|y|z","amount":"expr","speed":"expr","center":[x,y,z]}],
  "code":"JS function body run once per build (dynamics; see API)",
- "lessons":[{"title":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes"}],
+ "lessons":[{"title":str,"question":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes","opens":str,"shot":"wide|push|close|pov","pov":"actor"}],
  "camera":{"target":[x,y,z]}
 }
 Shape kinds: box{w,h,d,round} sphere{r} cylinder{r,rt,rb,h} cone{r,h} torus{R,r} capsule{r,h} plane{w,h} disc{r} ring{ri,ro}
@@ -41,6 +43,7 @@ CODE API (spec.code is the body of function(api), no imports/DOM/network):
  api.spawn(bodySpec, parent?) -> Object3D at runtime; api.remove(obj); api.shape(shapeSpec, materialSpec) -> Object3D (not added); api.material(spec)
  api.onClick(raycaster=>{}); api.camera({target:[x,y,z], r:distance, ph:polar, th:azimuth}); api.time(); api.THREE (three.js r170); api.V3(x,y,z); api.noise(x,y,z); api.rand(); api.fmt(n); api.clamp; api.lerp
  api.trail(maxPoints, hex) -> line with .add(vec3) (add it to api.world); api.world (Group)
-RULES: physics/maths must be correct; every definition must be attached to visible bodies and to events; actors are the bodies the explanation is about (2–7 of them), decor gives place and scale and may react through behaviors (trees sway with wind, windows glow at night); lessons are 3–7 short steps, each changing something and pointing at what to watch; keep code under ~200 lines.
+RULES: physics/maths must be correct; every definition must be attached to visible bodies and to events; actors are the bodies the explanation is about (2–7 of them), decor gives place and scale and may react through behaviors (trees sway with wind, windows glow at night); lessons are 3–6 short steps, each changing something and pointing at what to watch, each settling one question and opening the next; keep code under ~200 lines.
+LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".
 Return ONLY the JSON scene spec.
 ```

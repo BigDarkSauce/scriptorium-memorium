@@ -21,7 +21,8 @@
 - Parts are found automatically and hang from the **left wall** onward, then around the room.
 - **Click a hanging scroll** to read it.
   - **Analyse this part** writes the logical chain. Choose *Complete* or *Essential* (the length comes from the content) or an *Exact number of steps*.
-  - Without Claude, use **Paste JSON from another AI**.
+  - Without Claude, use **Paste JSON from another AI**. Before pasting, `node tools/verify-chain.mjs answer.json` checks the answer on your computer and lists anything missing.
+- **Where each demo's data comes from** is written under it: *From the PDF* with the table or page it comes from, *Data added from outside the PDF* with its source, or *Our drawing* when the demo shows no data of its own. The PDF's own figures appear in the step that explains them, captioned *From the PDF, p. N*.
 - **Each step** shows its terms with units, a plain picture (*Picture it*), the commonest mistake, a *Check yourself* question with a hidden answer, and where the claim comes from.
 - **Sources.** Inside claude.ai, Claude searches OpenAlex, Consensus and PubMed while it writes, if you have those connectors. The bar above the chain counts the sources:
   - **Verify against OpenAlex** checks each one: ✓ found, ? partial match, ✗ not found (treat these with suspicion).
@@ -36,14 +37,18 @@
 1. **The drawing.** You see the scene as a drawing, either on the scroll or full screen. Press **Transition** (or scroll down) to materialise it while the camera dives in.
 2. **The tour.** Scroll, press ↓ or press › to visit each significant body in turn. Its name appears beside it and stays there. Decor isn't toured, but it reacts to the simulation (trees sway with wind, windows glow at night…).
 3. **Explore.** A panel slides in on the left (described below). While a step plays, the **cinematic** presentation takes over:
-   - The camera moves to what the step is about and drifts slowly around it.
+   - Each moment gets one camera shot that suits it, and then the camera holds still: the **wide** view of the whole model; a slow **push** in towards the object an instruction is about; a still **medium** view framing the subject and the objects an explanation names; a **close** cut to a small part where an event happens; or a **point of view** riding along with an actor, when a step asks for it. Two moving shots never follow each other.
    - Each explanation appears beside the thing it describes, joined to it by a line.
    - Explanations come one at a time, and each stays as long as it takes to read. A thin bar shows the time left.
-   - While you read an event, simulated time slows to about a third, so you can still see the process the text describes.
+   - While you read an event, simulated time slows to about a third (more while notes are waiting), so you can still see the process the text describes.
    - When a step ends, its *Why* explanation appears next to the object.
    - Grab the camera at any time; the director gives it back to you for a few seconds.
    - The bar at the bottom left switches **Cinematic** on or off and sets the **reading pace** (slow, normal, fast).
    - **Guides** (optional) adds animated arrows that show which way the subject is moving, and links to the other objects the explanation names.
+   - Read first, then watch: when a step starts, the model waits while you read its instruction (hover over a note to keep it; › skips it), then the step plays. Each note shows the step's **question**, and the explanation ends with the question it opens next.
+   - During a step the instruction panel folds away and the readouts shrink to the quantities the step mentions; both come back when the step ends. *All readouts ▾* shows every value.
+   - **Point of view**: press **P** (or ◉ next to an object in *Objects*) to see from inside any object — ride the pendulum bob, travel with a gas molecule, sit inside a flask. Drag to look around, ‹ › switch object, **Esc** leaves. Some steps take you there by themselves.
+   - **Sound**: the speaker button (top right) switches sound on or off. Each place has its own background (library hall, reading room, workshop, meadow with live rain and wind, sea, space, the micro world), and events, clicks, scrolls, bookcases and footsteps have their own sounds.
 
    The panel itself has three parts:
    - **Instructions** appear one at a time. Press *Play this step*: it sets the variables, focuses the camera, and runs until the step's event or time is reached. The next step then appears; finished steps stay readable, with an explanation.

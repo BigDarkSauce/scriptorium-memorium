@@ -6,7 +6,7 @@ import { buildBody, buildShape } from './builder.js';
 import { setupEnvironment } from './environments.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { makeFrontUniforms, patchTree } from '../gfx/materialize.js';
-import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise } from '../util.js';
+import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 export const isSceneSpec = s => s && (s.type === 'scene' || Array.isArray(s.bodies));
@@ -38,12 +38,13 @@ export class DioramaScene {
     } else {
       const def = DIO[spec.type]; if (!def) throw new Error('Unknown diorama type "' + spec.type + '"');
       for (const k in def.params) { const r = ro[k]; const d = def.params[k]; this.ranges[k] = r && +r[1] > +r[0] ? [+r[0], +r[1], d[2], d[3], d[4]] : d; this.p[k] = clamp(d[2], this.ranges[k][0], this.ranges[k][1]); }
+      if (def.extraParams) for (const k in (spec.params || {})) { const v = spec.params[k]; if (this.ranges[k] || !/^[A-Za-z_]\w*$/.test(k) || !Array.isArray(v) || v.length < 2) continue; const lo = +v[0], hi = +v[1], c = v.length > 2 ? +v[2] : (lo + hi) / 2; if (isFinite(lo) && isFinite(hi) && hi > lo) { this.ranges[k] = [lo, hi, c, v[3] || '', v[4] || k]; this.p[k] = clamp(c, lo, hi); } }
       const sp = spec.params || {}; for (const k in sp) { if (this.ranges[k]) { const v = Array.isArray(sp[k]) ? +sp[k][2] : +sp[k]; if (isFinite(v)) this.p[k] = clamp(v, this.ranges[k][0], this.ranges[k][1]); } }
     }
   }
   // ---------- building ----------
   build() {
-    this.world.clear(); this.extras.clear(); this.actors = []; this.series = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
+    this.world.clear(); this.extras.clear(); this.actors = []; this.symbols = []; this.series = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
     const spec = this.spec;
     if (isSceneSpec(spec)) this.buildScene(); else this.buildModel();
     (spec.additions || []).forEach(b => { try { const o = buildBody(b, this.bodyCtx()); o.userData.added = true; this.extras.add(o); if (b.role === 'actor') this.addActor(o.userData.label, () => this.centerOf(o), o, b.describe); } catch (e) { console.warn(e); } });
@@ -62,8 +63,8 @@ export class DioramaScene {
     const D = {
       get world() { return self.world; }, get scene() { return self.scene; }, mats: this.mats, spec, p: this.p, ranges: this.ranges,
       get t() { return self.t; }, get playing() { return self.playing; }, get speed() { return self.speed; }, orb: this.orb, cam: this.camera,
-      label: (text, getPos, sym) => { if (!sym) self.addActor(text, () => { try { return getPos(); } catch (e) { return null; } }); else self.symbols = (self.symbols || []).concat([{ text, getPos }]); return {}; },
-      event: (text, pos, color) => self.fire(text, pos, color),
+      label: (text, getPos, sym, obj) => { if (sym && sym.isObject3D) { obj = sym; sym = false; } if (!sym) self.addActor(text, () => { try { return getPos(); } catch (e) { return null; } }, obj); else self.symbols = (self.symbols || []).concat([{ text, getPos }]); return {}; },
+      event: (text, pos, color, o) => { if (color && typeof color === 'object' && !color.isColor) { o = color; color = o.color; } return self.fire(text, pos, color, o && o.id, o && o.sound); },
       push: v => self.push(v), set seriesName(v) { self.seriesName = v; }, get seriesName() { return self.seriesName; }
     };
     this.D = D; this.sim = def.build(D, this.p);
@@ -115,7 +116,7 @@ export class DioramaScene {
       spawn: (b, parent) => { const o = buildBody(Object.assign({ id: 'spawn' + Math.random().toString(36).slice(2, 7) }, b), ctx); patchTree(o, self.U); (parent || self.world).add(o); return o; },
       remove: o => { if (o) o.removeFromParent(); },
       label: (text, f, describe) => self.addActor(text, () => { try { return f(); } catch (e) { return null; } }, null, describe),
-      event: (text, pos, opts = {}) => self.fire(text, pos, opts.color, opts.id),
+      event: (text, pos, opts = {}) => self.fire(text, pos, opts.color, opts.id, opts.sound),
       onStep: f => self.hooks.step.push(f), onFrame: f => self.hooks.frame.push(f),
       readout: (n, f) => self.hooks.reads.push([n, f]), plot: (n, f) => { self.seriesName = n; self.hooks.series = f; },
       onClick: f => { self.hooks.click = f; }, camera: o => (self._camSet = true, Object.assign(self.orb, o.target ? { ...o, target: Array.isArray(o.target) ? V3(...o.target) : o.target } : o)),
@@ -136,7 +137,7 @@ export class DioramaScene {
     return this.world.children[+v];
   }
   applyOverrides() {
-    const ov = this.spec.overrides || {}; this.ovList = [];
+    const ov = (!isSceneSpec(this.spec) && this.spec.ovV !== 2 ? null : this.spec.overrides) || {}; this.ovList = [];   // edits saved for the pre-v4 model graphs are ignored
     for (const path in ov) {
       const o = this.objectByPath(path), e = ov[path]; if (!o) continue;
       if (e.removed) { o.removeFromParent(); continue; }
@@ -157,8 +158,8 @@ export class DioramaScene {
     }
   }
   // ---------- running ----------
-  fire(text, pos, color = 0xffd27a, id) {
-    const ev = { t: this.t, text: String(text), pos: pos ? pos.clone() : null, color, id: id || null };
+  fire(text, pos, color = 0xffd27a, id, sound) {
+    const ev = { t: this.t, text: String(text), pos: pos ? pos.clone() : null, color, id: id || null, sound: sound || null };   // sound: a name for sfx.play (the engine plays it)
     this.events.push(ev); if (this.events.length > 200) this.events.shift();
     this.listeners.event.forEach(f => f(ev));
   }
@@ -217,6 +218,6 @@ export class DioramaScene {
   }
   rebuildKeepView() { const keep = this.p; this.build(); }
   dispose() {
-    this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { for (const k in m) if (m[k] && m[k].isTexture && !m[k].userData?.shared) { } m.dispose(); }); });
+    disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
   }
 }

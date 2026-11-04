@@ -3,47 +3,192 @@
   "title": "Galton board: many coin flips make a bell",
   "technique": "sweep",
   "environment": {
-    "preset": "abstract"
+    "preset": "desk",
+    "lamp": [
+      -5.8,
+      3.6
+    ]
   },
   "bodies": [
     {
       "id": "back",
-      "name": "Board",
+      "name": "Backboard",
       "role": "decor",
       "shape": {
         "kind": "box",
-        "w": 7.2,
-        "h": 6.6,
-        "d": 0.16,
-        "round": 0.03
+        "w": 6.6,
+        "h": 6.9,
+        "d": 0.14,
+        "round": 0.02
       },
       "material": {
         "preset": "darkwood"
       },
       "position": [
         0,
-        3.3,
-        -0.3
+        3.72,
+        -0.12
       ]
+    },
+    {
+      "id": "railL",
+      "name": "Side rail",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.16,
+        "h": 6.9,
+        "d": 0.42,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "wood"
+      },
+      "position": [
+        -3.38,
+        3.72,
+        0.03
+      ]
+    },
+    {
+      "id": "railR",
+      "name": "Side rail",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.16,
+        "h": 6.9,
+        "d": 0.42,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "wood"
+      },
+      "position": [
+        3.38,
+        3.72,
+        0.03
+      ]
+    },
+    {
+      "id": "cap",
+      "name": "Top rail",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 6.92,
+        "h": 0.16,
+        "d": 0.42,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "wood"
+      },
+      "position": [
+        0,
+        7.2,
+        0.03
+      ]
+    },
+    {
+      "id": "sill",
+      "name": "Base rail",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 6.92,
+        "h": 0.3,
+        "d": 0.5,
+        "round": 0.02
+      },
+      "material": {
+        "preset": "wood"
+      },
+      "position": [
+        0,
+        0.4,
+        0.05
+      ]
+    },
+    {
+      "id": "footL",
+      "name": "Foot",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.5,
+        "h": 0.26,
+        "d": 1.5,
+        "round": 0.03
+      },
+      "material": {
+        "preset": "darkwood"
+      },
+      "position": [
+        -2.9,
+        0.13,
+        0.05
+      ]
+    },
+    {
+      "id": "footR",
+      "name": "Foot",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 0.5,
+        "h": 0.26,
+        "d": 1.5,
+        "round": 0.03
+      },
+      "material": {
+        "preset": "darkwood"
+      },
+      "position": [
+        2.9,
+        0.13,
+        0.05
+      ]
+    },
+    {
+      "id": "glass",
+      "name": "Front glass",
+      "role": "decor",
+      "shape": {
+        "kind": "box",
+        "w": 6.6,
+        "h": 6.6,
+        "d": 0.02,
+        "round": 0
+      },
+      "material": {
+        "preset": "glass"
+      },
+      "position": [
+        0,
+        3.85,
+        0.22
+      ],
+      "castShadow": false
     },
     {
       "id": "funnel",
       "name": "Funnel",
-      "label": "Funnel · releases balls",
+      "label": "Funnel · releases the beads",
       "role": "actor",
-      "describe": "Every ball starts in the same place.",
+      "describe": "Every bead starts in the same place, above the first peg.",
       "shape": {
         "kind": "cone",
-        "r": 0.55,
-        "h": 0.7
+        "r": 0.5,
+        "h": 0.62
       },
       "material": {
         "preset": "brass"
       },
       "position": [
         0,
-        6.2,
-        0
+        6.72,
+        0.05
       ],
       "rotation": [
         180,
@@ -53,21 +198,21 @@
     },
     {
       "id": "ball",
-      "name": "Ball",
-      "label": "A ball · one random path",
+      "name": "Copper bead",
+      "label": "Copper bead · one random path",
       "role": "actor",
-      "describe": "Its final bin is the number of times it bounced right.",
+      "describe": "Its bin is the number of times it bounced right. You can ride it (POV).",
       "shape": {
         "kind": "sphere",
-        "r": 0.09
+        "r": 0.075
       },
       "material": {
-        "preset": "chrome"
+        "preset": "copper"
       },
       "position": [
         0,
-        5.85,
-        0
+        6.4,
+        0.05
       ]
     },
     {
@@ -75,7 +220,7 @@
       "name": "Pegs",
       "label": "Pegs · each one a coin flip",
       "role": "actor",
-      "describe": "At every peg the ball goes right with probability p.",
+      "describe": "At every peg a bead goes right with probability p, left otherwise.",
       "shape": {
         "kind": "group"
       },
@@ -90,7 +235,7 @@
       "name": "Bins",
       "label": "Bins · the histogram",
       "role": "actor",
-      "describe": "Bin k collects the paths with k right-bounces.",
+      "describe": "Bin k collects the beads that bounced right k times.",
       "shape": {
         "kind": "group"
       },
@@ -102,10 +247,10 @@
     },
     {
       "id": "curve",
-      "name": "Curve",
-      "label": "Binomial ≈ normal curve",
+      "name": "Bell curve",
+      "label": "Bell curve · binomial ≈ normal",
       "role": "actor",
-      "describe": "Theory: mean Np, spread √(Np(1−p)).",
+      "describe": "Printed on the glass: the normal curve with mean Np and spread √(Np(1−p)), scaled to the beads landed.",
       "shape": {
         "kind": "group"
       },
@@ -113,6 +258,51 @@
         0,
         0,
         0
+      ]
+    },
+    {
+      "id": "jar",
+      "name": "Bead jar",
+      "role": "decor",
+      "shape": {
+        "kind": "beaker",
+        "r": 0.42,
+        "h": 0.8,
+        "fill": 0.45,
+        "liquid": "#c8ccd2"
+      },
+      "material": {
+        "preset": "chrome"
+      },
+      "position": [
+        4.6,
+        0,
+        1.6
+      ]
+    },
+    {
+      "id": "notebook",
+      "name": "Notebook",
+      "role": "decor",
+      "shape": {
+        "kind": "book",
+        "w": 1.3,
+        "h": 1.8,
+        "d": 0.14
+      },
+      "material": {
+        "preset": "leather",
+        "color": "#5a2a20"
+      },
+      "position": [
+        4.2,
+        0.07,
+        3.4
+      ],
+      "rotation": [
+        -90,
+        0,
+        24
       ]
     }
   ],
@@ -126,7 +316,7 @@
   "params": [
     {
       "key": "rows",
-      "label": "rows of pegs",
+      "label": "rows of pegs (N)",
       "min": 4,
       "max": 14,
       "value": 10,
@@ -134,49 +324,179 @@
     },
     {
       "key": "p",
-      "label": "probability of bouncing right",
+      "label": "probability of bouncing right (p)",
       "min": 0.1,
       "max": 0.9,
       "value": 0.5
     },
     {
       "key": "rate",
-      "label": "balls per second",
+      "label": "beads per second",
       "min": 1,
       "max": 25,
-      "value": 7
+      "value": 8
     }
   ],
-  "code": "const T=api.THREE, N=Math.round(api.param('rows')), pegs=api.body('pegs'), bins=api.body('bins'), cg=api.body('curve'), lead=api.body('ball');\nconst top=5.5, dy=4.3/N, dx=Math.min(0.5,6.2/(N+2)), pegM=api.material({preset:'brass'}), ballM=api.material({preset:'chrome'});\nfor(let r=0;r<N;r++) for(let k=0;k<=r;k++){ const m=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.26,12),pegM); m.rotation.x=Math.PI/2; m.position.set((k-r/2)*dx,top-r*dy,0); m.castShadow=true; pegs.add(m); }\nconst counts=new Array(N+1).fill(0), bars=[], binY=0.12, maxH=2.3;\nfor(let k=0;k<=N;k++){ const x=(k-N/2)*dx; const w=new T.Mesh(new T.BoxGeometry(0.025,maxH,0.26),api.material({preset:'steel'})); w.position.set(x+dx/2,binY+maxH/2,0); bins.add(w);\n  const b=new T.Mesh(new T.BoxGeometry(dx*0.8,1,0.2),api.material({preset:'plastic',color:'#2d5b8e'})); b.position.set(x,binY,0); b.scale.y=0.001; b.castShadow=true; bins.add(b); bars.push(b); }\nconst balls=[]; let acc=0, landed=0, said=false;\nconst curve=new T.Line(new T.BufferGeometry().setFromPoints(Array.from({length:81},()=>new T.Vector3())),new T.LineBasicMaterial({color:0xffd27a})); curve.frustumCulled=false; cg.add(curve);\nfunction spawn(){ let m; if(lead&&!lead.userData.used){ lead.userData.used=true; m=lead; } else { m=new T.Mesh(new T.SphereGeometry(0.085,16,12),ballM); m.castShadow=true; api.world.add(m); } m.visible=true; m.position.set(0,top+0.4,0); balls.push({m,row:-1,k:0,t:0,x0:0,x1:0,y0:top+0.4,y1:top}); }\napi.onStep((h)=>{ acc+=h*api.param('rate'); while(acc>=1){ acc-=1; spawn(); }\n  for(let i=balls.length-1;i>=0;i--){ const b=balls[i]; b.t+=h/0.11;\n    if(b.t>=1){ b.t=0; b.row++;\n      if(b.row<N){ const right=api.rand()<api.param('p'); b.x0=b.m.position.x; b.k+=right?1:0; b.x1=(b.k-(b.row+1)/2)*dx; b.y0=top-b.row*dy; b.y1=top-(b.row+1)*dy; }\n      else { counts[b.k]++; landed++; if(b.m===lead) b.m.visible=false; else b.m.removeFromParent(); balls.splice(i,1);\n        if(landed<=3) api.event('A ball lands in bin '+b.k+' after '+N+' coin flips',new T.Vector3((b.k-N/2)*dx,0.5,0),{id:'land'});\n        if(landed===150&&!said){ said=true; api.event('150 balls: the bins now trace a bell (binomial ≈ normal)',null,{id:'bell'}); } continue; } }\n    const s=b.t; b.m.position.x=b.x0+(b.x1-b.x0)*s; b.m.position.y=b.y0+(b.y1-b.y0)*s+Math.sin(Math.PI*s)*dy*0.35; } });\napi.onFrame(()=>{ bars.forEach((b,k)=>{ const H=Math.max(0.001,Math.min(maxH,counts[k]*0.045)); b.scale.y=H; b.position.y=binY+H/2; });\n  const p=api.param('p'), mu=N*p, sd=Math.sqrt(N*p*(1-p))||1e-3, a=curve.geometry.attributes.position;\n  for(let i=0;i<=80;i++){ const kk=-0.5+(N+1)*i/80, x=(kk-N/2)*dx, d=Math.exp(-((kk-mu)**2)/(2*sd*sd))/(sd*Math.sqrt(2*Math.PI)); a.setXYZ(i,x,binY+Math.min(maxH+0.6,d*landed*0.045),0.16); } a.needsUpdate=true; });\nconst mean=()=>{ let s=0; counts.forEach((c,k)=>s+=c*k); return landed?s/landed:NaN; };\napi.readout('balls landed',()=>landed); api.readout('mean bin',()=>mean()); api.readout('theory N·p',()=>N*api.param('p'));\napi.readout('spread measured',()=>{ if(landed<2) return NaN; const m=mean(); let v=0; counts.forEach((c,k)=>v+=c*(k-m)**2); return Math.sqrt(v/(landed-1)); });\napi.readout('theory √(Np(1−p))',()=>Math.sqrt(N*api.param('p')*(1-api.param('p'))));\napi.plot('balls in the centre bin',()=>counts[Math.round(N/2)]); api.camera({target:[0,3.1,0],r:13,ph:1.4,th:0});",
+  "shots": {
+    "copper bead lands": {
+      "dist": 6
+    },
+    "150 beads": {
+      "target": [
+        0,
+        1.6,
+        0.1
+      ],
+      "dist": 9
+    },
+    "bins are emptied": {
+      "target": [
+        0,
+        1.4,
+        0.1
+      ],
+      "dist": 9
+    }
+  },
+  "flows": {
+    "like a coin flip": [
+      {
+        "from": [
+          0,
+          6.25,
+          0.3
+        ],
+        "to": [
+          0.25,
+          5.8,
+          0.3
+        ],
+        "label": "right with probability p"
+      },
+      {
+        "from": [
+          0,
+          6.25,
+          0.3
+        ],
+        "to": [
+          -0.25,
+          5.8,
+          0.3
+        ],
+        "label": "left with 1 − p"
+      }
+    ],
+    "150 beads": [
+      {
+        "from": [
+          -2.4,
+          3.3,
+          0.3
+        ],
+        "to": [
+          -0.6,
+          2,
+          0.3
+        ],
+        "label": "few paths reach the edges"
+      },
+      {
+        "from": [
+          0,
+          3.6,
+          0.3
+        ],
+        "to": [
+          0,
+          2.3,
+          0.3
+        ],
+        "label": "most paths end near N·p"
+      }
+    ],
+    "pile build up": [
+      {
+        "from": [
+          0,
+          5.2,
+          0.3
+        ],
+        "to": [
+          1.6,
+          2.6,
+          0.3
+        ],
+        "label": "the pile drifts towards N·p"
+      }
+    ]
+  },
+  "code": "const T=api.THREE, N=Math.round(api.param('rows')), pegs=api.body('pegs'), bins=api.body('bins'), cg=api.body('curve'), lead=api.body('ball');\nconst top=6.2, dy=3.7/N, dx=Math.min(.5,6.0/(N+2)), Z=.05, binY=.56, maxH=1.95, R=Math.min(.06,(dx-.03)/6.3), ROW=.22;   // ROW: seconds per row of pegs\nconst f2=v=>v.toFixed(2), C=(n,k)=>{let c=1;for(let i=1;i<=k;i++)c=c*(n-k+i)/i;return c;}, pmf=(k,p)=>C(N,k)*Math.pow(p,k)*Math.pow(1-p,N-k);\n// pegs: brass pins driven into the backboard\nconst pg=new T.CylinderGeometry(.038,.038,.3,12); pg.rotateX(Math.PI/2);\nconst pi=new T.InstancedMesh(pg,api.material({preset:'brass'}),N*(N+1)/2), m4=new T.Matrix4(); let n=0;\nfor(let r=0;r<N;r++) for(let k=0;k<=r;k++){ m4.makeTranslation((k-r/2)*dx,top-r*dy,Z); pi.setMatrixAt(n++,m4); }\npi.castShadow=true; pi.receiveShadow=true; pi.computeBoundingBox(); pi.name='pegs'; pegs.add(pi);\n// bins: brass dividers standing on the base rail\nconst dv=new T.InstancedMesh(new T.BoxGeometry(.03,maxH,.34),api.material({preset:'brass'}),N+2);\nfor(let k=0;k<=N+1;k++){ m4.makeTranslation((k-.5-N/2)*dx,binY+maxH/2,Z); dv.setMatrixAt(k,m4); } dv.castShadow=true; dv.receiveShadow=true; dv.computeBoundingBox(); dv.name='bin dividers'; bins.add(dv);\n// beads: the ones in the bins (stacked three abreast) and the ones falling\nconst per=Math.max(1,Math.floor((dx-.03)/(2*R*1.02))), rowsMax=Math.floor(maxH/(2*R*.9)), cap=per*rowsMax, beadG=new T.SphereGeometry(R,14,10), steel=api.material({preset:'chrome'});\nconst stack=new T.InstancedMesh(beadG,steel,(N+1)*cap); stack.castShadow=true; stack.receiveShadow=true; stack.count=0; stack.name='beads in the bins'; bins.add(stack);\nconst fallN=96, fall=new T.InstancedMesh(beadG,steel,fallN); fall.castShadow=true; fall.frustumCulled=false; fall.count=0; fall.name='falling beads'; api.world.add(fall);\nconst slot=(k,j)=>{ const row=Math.floor(j/per), col=j%per, off=(row%2)*R*.5; return [(k-N/2)*dx+(col-(per-1)/2)*2*R*1.02+off-(row%2?R*.25:0), binY+R+row*2*R*.9, Z]; };\nlet counts=new Array(N+1).fill(0), landed=0, said=false, lastP=api.param('p'), lastRate=api.param('rate'), acc=0, leadCool=0;\nconst beads=[];\nconst CY=.038+R;   // a bead resting on a peg: its centre sits one peg radius plus one bead radius above the peg's centre\nconst newPath=()=>({row:-1,k:0,t:0,x0:0,x1:0,y0:top+.45,y1:top+CY});\nfunction advance(b,h){ b.t+=h/ROW; if(b.t<1) return false; b.t=0; b.row++;\n  if(b.row>=N) return true;   // it has dropped into its bin\n  const right=api.rand()<api.param('p'); b.x0=b.x1; b.y0=b.y1; b.k+=right?1:0; b.x1=(b.k-(b.row+1)/2)*dx;\n  b.y1=b.row+1<N?top-(b.row+1)*dy+CY:binY+R+Math.floor(Math.min(counts[b.k],cap-1)/per)*2*R*.9;   // onto the next peg, or onto the top of the bin's stack\n  return false; }\nconst posOf=b=>{ const s=b.t, x=b.x0+(b.x1-b.x0)*s, y=b.y0+(b.y1-b.y0)*s+Math.sin(Math.PI*s)*dy*.35; return [x,y]; };\n// the copper bead: always one of the falling beads, relaunched after it lands\nlet L=Object.assign(newPath(),{wait:0,landedAt:null});\nconst riding=()=>lead.children.some(o=>o.isMesh&&!o.visible);   // the engine hides a small actor while the learner rides it (POV)\nfunction land(k){ counts[k]++; landed++;\n  if(landed===150&&!said){ said=true; const m=mean(), sd=spread(); api.event('150 beads: the bins trace a bell. Mean bin '+f2(m)+' (theory N·p = '+f2(N*api.param('p'))+'), spread '+f2(sd)+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+') at p = '+f2(api.param('p'))+', N = '+N,new T.Vector3(0,binY+.9,Z),{id:'bell',sound:'chime'}); } }\napi.onStep((h)=>{\n  if(Math.abs(api.param('p')-lastP)>.005||Math.abs(api.param('rate')-lastRate)>.5){ lastP=api.param('p'); lastRate=api.param('rate'); counts.fill(0); landed=0; said=false; api.event('The bins are emptied for a new run: p = '+f2(lastP)+', '+Math.round(lastRate)+' beads per second',new T.Vector3(0,binY+.5,Z),{id:'reset',sound:'pour'}); }\n  acc+=h*api.param('rate'); while(acc>=1){ acc-=1; if(beads.length<fallN) beads.push(newPath()); }\n  for(let i=beads.length-1;i>=0;i--){ const b=beads[i]; if(advance(b,h)){ land(b.k); beads.splice(i,1); } }\n  leadCool=Math.max(0,leadCool-h);\n  if(L.wait>0){ L.wait-=h; if(L.wait<=0) L=Object.assign(newPath(),{wait:0,landedAt:null}); }\n  else if(advance(L,h)){ land(L.k); L.wait=riding()?.8:1.6; L.landedAt=L.k;\n    if(riding()||leadCool<=0){ leadCool=25; const r=L.k; api.event('The copper bead lands in bin '+r+': '+r+' bounces right, '+(N-r)+' left. '+Math.round(C(N,r))+' of the '+Math.pow(2,N)+' possible paths end there',new T.Vector3((r-N/2)*dx,binY+.5,Z),{id:'lead',sound:'clack'}); } }\n});\n// the bell curve, printed on the glass: a gold ribbon of the normal density, scaled to the beads landed\nconst NS=90, rib=new T.BufferGeometry(); rib.setAttribute('position',new T.BufferAttribute(new Float32Array((NS+1)*6),3)); const idx=[]; for(let i=0;i<NS;i++){ const a=i*2; idx.push(a,a+1,a+2,a+1,a+3,a+2); } rib.setIndex(idx);\nconst ribM=new T.Mesh(rib,new T.MeshBasicMaterial({color:0xffcf6a,transparent:true,opacity:.85,side:T.DoubleSide,depthWrite:false})); ribM.frustumCulled=false; ribM.renderOrder=30; ribM.name='printed curve'; cg.add(ribM);\nconst perBead=2*R*.9/per;   // stack height per bead\napi.onFrame(()=>{\n  let j=0; for(let k=0;k<=N;k++){ const c=Math.min(counts[k],cap); for(let q=0;q<c;q++){ const s=slot(k,q); m4.makeTranslation(s[0],s[1],s[2]); stack.setMatrixAt(j++,m4); } } stack.count=j; stack.instanceMatrix.needsUpdate=true; if(j) stack.computeBoundingBox();\n  let f=0; for(const b of beads){ if(b.row<0&&b.t<.01) continue; const [x,y]=posOf(b); m4.makeTranslation(x,y,Z); fall.setMatrixAt(f++,m4); } fall.count=f; fall.instanceMatrix.needsUpdate=true;\n  if(L.wait>0){ const s=slot(L.landedAt,Math.min(counts[L.landedAt],cap)); lead.position.set(s[0],s[1]+.02,Z+.01); } else { const [x,y]=posOf(L); lead.position.set(x,y,Z+.01); }\n  const p=api.param('p'), mu=N*p, sd=Math.sqrt(N*p*(1-p))||1e-3, a=rib.attributes.position;\n  for(let i=0;i<=NS;i++){ const kk=-.5+(N+1)*i/NS, x=(kk-N/2)*dx, d=Math.exp(-((kk-mu)**2)/(2*sd*sd))/(sd*Math.sqrt(2*Math.PI)), y=binY+Math.min(maxH+.25,d*landed*perBead); a.setXYZ(i*2,x,y+.012,.205); a.setXYZ(i*2+1,x,y-.012,.205); }\n  a.needsUpdate=true; rib.computeBoundingBox(); });\nconst mean=()=>{ let s=0; counts.forEach((c,k)=>s+=c*k); return landed?s/landed:NaN; };\nconst spread=()=>{ if(landed<2) return NaN; const m=mean(); let v=0; counts.forEach((c,k)=>v+=c*(k-m)**2); return Math.sqrt(v/(landed-1)); };\nconst mode=()=>Math.round(N*api.param('p'));\napi.readout('beads landed',()=>String(landed));\napi.readout('mean bin',()=>(landed?f2(mean()):'—')+' (theory N·p = '+f2(N*api.param('p'))+')');\napi.readout('spread of the bins (sd)',()=>(landed>1?f2(spread()):'—')+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+')');\napi.readout('standard error of the mean',()=>landed?f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))/landed)):'—');\napi.readout('share in bin '+'N·p',()=>(landed?(100*counts[mode()]/landed).toFixed(1):'—')+' % (binomial '+(100*pmf(mode(),api.param('p'))).toFixed(1)+' %, normal '+(100/(Math.sqrt(2*Math.PI*N*api.param('p')*(1-api.param('p')))||1)).toFixed(1)+' %)');\napi.plot('beads in the centre bin',()=>counts[mode()]);\napi.camera({target:[.3,3.25,0],r:12.6,ph:1.47,th:.12});",
   "lessons": [
     {
-      "title": "Let the balls fall",
-      "text": "Each ball meets one peg per row and goes left or right at random. Watch the bins fill until the bell event.",
-      "focus": "funnel",
-      "until": "event:bell",
+      "title": "Ride one bead",
+      "question": "Where will one bead land?",
+      "text": "You ride the copper bead down the board. At every peg it bounces left or right, like a coin flip. Watch where it ends up.",
+      "focus": "ball",
+      "shot": "pov",
+      "pov": "Copper bead",
+      "until": "event:copper bead lands",
       "run": 40,
-      "explain": "A bin count is the number of right-bounces in N independent flips: a binomial distribution, which for many rows is close to a normal curve."
+      "explain": "Its path was a string of 10 independent left/right choices, so each particular path has probability (1/2)^10 = 1/1024. The bin number counts only the right-bounces, and many different paths share a bin: C(10,k) of them end in bin k. One path leads to bin 0, 10 to bin 1, and 252 to bin 5. Where one bead lands is unpredictable. Where most beads land is not.",
+      "opens": "What shape do many beads make?"
     },
     {
-      "title": "Bias the coin",
-      "text": "Make right-bounces likelier. The pile slides right; its centre moves to N·p.",
+      "title": "Let the beads fall",
+      "question": "What shape do many beads make?",
+      "text": "Open the funnel wider (12 beads a second); the bins are emptied first. Watch them fill until 150 beads have landed, and compare the mean bin and the spread with the theory readouts.",
+      "set": {
+        "rate": 12
+      },
+      "focus": "bins",
+      "shot": "push",
+      "until": "event:150 beads",
+      "run": 50,
+      "explain": "The count of right-bounces in N independent flips follows the binomial distribution: mean N·p = 5 bins, spread √(Np(1−p)) = 1.58 bins. After 150 beads the measured mean should sit within about 0.13 of 5 (the standard error 1.58/√150). The pile is already close to the gold normal curve: de Moivre–Laplace, the first central limit theorem (Le Cam 1986).",
+      "opens": "What happens if the pegs favour one side?"
+    },
+    {
+      "title": "Bias the pegs",
+      "question": "What happens if the pegs favour one side?",
+      "text": "Make right-bounces likelier (p = 0.75). The bins are emptied and refilled. Watch the pile build up to the right of centre until 150 beads have landed.",
       "set": {
         "p": 0.75
       },
       "focus": "bins",
-      "run": 14,
-      "explain": "The mean of a binomial is Np; the spread √(Np(1−p)) also changes."
+      "shot": "medium",
+      "until": "event:150 beads",
+      "run": 50,
+      "explain": "With p = 0.75 the mean moves to N·p = 7.5 and the spread shrinks to √(10 × 0.75 × 0.25) = 1.37 bins. The pile is lopsided, with a longer tail towards the left: no bin above 10 exists to balance it. The normal curve fits less well when N·p(1−p) is small (here 1.9); a common rule of thumb asks for at least 5–10.",
+      "opens": "What do more rows do?"
     },
     {
       "title": "More rows",
-      "text": "Add rows. The board rebuilds; with more flips per ball the bell becomes smoother and wider in bins but narrower relative to N.",
+      "question": "What do more rows do?",
+      "text": "Add rows (N = 14) and set p back to 0.5. The board rebuilds with narrower bins. Watch the new bell grow until 150 beads have landed.",
       "set": {
         "rows": 14,
         "p": 0.5
       },
       "focus": "curve",
-      "run": 20,
-      "explain": "Spread grows like √N while the range grows like N: averages concentrate (the central limit theorem)."
+      "shot": "medium",
+      "until": "event:150 beads",
+      "run": 60,
+      "explain": "With 14 flips the mean is 7 and the spread √(14 × 0.25) = 1.87 bins: wider than with 10 rows. But relative to the 14-bin range it is narrower: 1.87/14 = 0.13 against 1.58/10 = 0.16. Sums of many independent nudges spread out like √N while their range grows like N, so the bell sharpens relative to the board. That is the central limit theorem at work.",
+      "opens": "How good is the normal curve for the centre bin?"
+    },
+    {
+      "title": "Read the centre bin",
+      "question": "How good is the normal curve for the centre bin?",
+      "text": "Look closely at the bins near the middle and read the share of beads in bin N·p, with the binomial and normal predictions next to it.",
+      "focus": "bins",
+      "shot": "close",
+      "run": 15,
+      "explain": "For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With a few hundred beads the measured share still wobbles by about 2 percentage points around them (the standard error √(0.21 × 0.79 / n)); more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it).",
+      "opens": "Why do sums of other independent random steps, not only coin flips, also make a bell?"
     }
   ],
   "sources": [

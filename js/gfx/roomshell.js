@@ -4,8 +4,16 @@ import * as THREE from 'three';
 import { woodPlanks, plaster, woodGrain, rug, radialGlow, stone } from './textures.js';
 import { makeMaterial } from './materials.js';
 import { buildShape } from '../dio/builder.js';
+import { makeBaroqueShell } from './baroque.js';
 
-export function makeRoomShell({ w = 14, d = 12, h = 4.6, style = 'library', windowWall = 'back', door = true } = {}) {
+// style: 'library' | 'gallery' | 'baroque'. The baroque style (js/gfx/baroque.js) takes extra options:
+// palette 'rose'|'teal', floor 'diagonal'|'checker'|'cubes', gallery 'auto'|true|false, atlantes 'auto'|true|false,
+// bay (target pilaster pitch, m), avoid ([{x,z}] wall positions that pilasters should fall between), chandeliers, frescoSeed.
+export function makeRoomShell(opts = {}) {
+  if (opts.style === 'baroque') return makeBaroqueShell({ w: 14, d: 12, h: 4.6, ...opts });
+  return makeClassicShell(opts);
+}
+function makeClassicShell({ w = 14, d = 12, h = 4.6, style = 'library', windowWall = 'back', door = true } = {}) {
   const g = new THREE.Group(); g.name = 'room-shell';
   const pl = woodPlanks([96, 60, 34]); const fm = new THREE.MeshStandardMaterial({ map: pl.map, bumpMap: pl.bump, bumpScale: .6, roughness: .45, metalness: .02 });
   fm.map.repeat.set(w / 4, d / 4); fm.bumpMap.repeat.set(w / 4, d / 4);

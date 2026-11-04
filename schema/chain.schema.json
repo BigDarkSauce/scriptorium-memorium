@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "scriptorium-chain/1",
+  "$id": "https://scriptorium.invalid/schema/chain.schema.json",
   "title": "Logical chain of one part",
   "type": "object",
   "required": [
@@ -99,7 +99,7 @@
             "type": "string"
           },
           "check": {
-            "type": "object",
+            "type": ["object", "null"],
             "properties": {
               "q": {
                 "type": "string"
@@ -164,6 +164,299 @@
                 },
                 "title": {
                   "type": "string"
+                },
+                "purpose": {
+                  "type": "string",
+                  "description": "the question this demo answers (distinct for every repeat of a diorama)"
+                },
+                "lessons": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "text"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "question": {
+                        "type": "string",
+                        "description": "the one question this lesson settles"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "set": {
+                        "type": "object"
+                      },
+                      "focus": {
+                        "type": "string"
+                      },
+                      "run": {
+                        "type": "number"
+                      },
+                      "until": {
+                        "type": "string",
+                        "description": "event:<substring of an api.event text>"
+                      },
+                      "explain": {
+                        "type": "string"
+                      },
+                      "opens": {
+                        "type": "string",
+                        "description": "the question it raises next = the next lesson's question"
+                      },
+                      "shot": {
+                        "enum": [
+                          "wide",
+                          "push",
+                          "close",
+                          "pov",
+                          "medium"
+                        ]
+                      },
+                      "pov": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "authors": {
+                      "type": "string"
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "doi": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "set by the app after checking OpenAlex"
+                    },
+                    "outside": {
+                      "type": "boolean",
+                      "description": "true: the data is from outside the PDF"
+                    }
+                  },
+                  "description": "where the demo's data comes from. Data is the PDF's own by default (labelled 'From the PDF'); set outside:true for data from outside the PDF (labelled 'Data added from outside the PDF')."
+                },
+                "extra": {
+                  "type": "array",
+                  "description": "material added from outside the PDF; shown with an 'Added from outside the PDF' badge",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "what"
+                    ],
+                    "properties": {
+                      "what": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "authors": {
+                            "type": "string"
+                          },
+                          "year": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "doi": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "note": {
+                            "type": "string"
+                          },
+                          "verified": {
+                            "type": "boolean",
+                            "description": "set by the app after checking OpenAlex"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "points": {
+                  "type": "array",
+                  "description": "plot only: data drawn as dots, [[x,y],…] or [[x,y,\"label\"],…] (the label is printed beside the dot). From the PDF unless the demo has 'extra' or source.outside:true.",
+                  "items": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 3,
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "ref": {
+                  "type": "string",
+                  "description": "where the demo's data is in the PDF, e.g. 'Table 1.1, p. 4' (shown as 'From the PDF · Table 1.1, p. 4')"
+                },
+                "pages": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "description": "PDF pages the demo's data comes from"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "plot only: legend names of the curves (default: ylabel, else title)"
+                },
+                "params": {
+                  "type": [
+                    "object",
+                    "array"
+                  ],
+                  "description": "built-in model / 2D diagram: {key: value or [min,max,value]}; authored scene: its params array"
+                },
+                "request": {
+                  "type": "string",
+                  "description": "scene to be authored later: actors, decor, variables, events, and 3–6 lessons with question/opens"
+                },
+                "technique": {
+                  "enum": [
+                    "card",
+                    "sweep",
+                    "topdown"
+                  ]
+                }
+              },
+              "description": "a 2D diagram, a built-in 3D model, or a scene (full spec or {type:'scene',request} to be authored later)"
+            }
+          },
+          "section": {
+            "type": "string",
+            "description": "id of the ONE subsection this step covers: the heading number (1.2.3), <chapter>.0 for a chapter's opening text (p<page>.0 if unnumbered), p<page>-<k> for an unnumbered heading, <part num>-w<k> for a 2-page window of a part without headings"
+          },
+          "answers": {
+            "type": "string",
+            "description": "the question this step settles (= the previous step's 'opens')"
+          },
+          "opens": {
+            "type": "string",
+            "description": "the question this step raises next"
+          },
+          "ref": {
+            "type": "string",
+            "description": "where it is in the PDF: Eq. (1.3), Example 1.2, Table 1.1, p. 4"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "table": {
+            "type": ["object", "null"],
+            "description": "a table of the source, rows copied exactly",
+            "properties": {
+              "caption": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "figures": {
+            "type": "array",
+            "description": "ids of the PDF's own figures/tables: 'Figure 3.2' → fig-3-2, 'Figure 3.2a' → fig-3-2a, 'Table 1.1' → tab-1-1, unnumbered figure on p. 12 → fig-p12-1, unnumbered table on p. 12 → tab-p12-1 (verifyChain also accepts 'Figure 3.2', 'fig-3.2', 'Fig. 3-2' and rewrites them)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extra": {
+            "type": "array",
+            "description": "material added from outside the PDF; shown with an 'Added from outside the PDF' badge",
+            "items": {
+              "type": "object",
+              "required": [
+                "what"
+              ],
+              "properties": {
+                "what": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "authors": {
+                      "type": "string"
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "doi": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "set by the app after checking OpenAlex"
+                    }
+                  }
                 }
               }
             }
@@ -203,6 +496,55 @@
           }
         }
       }
+    },
+    "question": {
+      "type": "string",
+      "description": "the question the whole part answers; step 1 answers it"
+    },
+    "coverage": {
+      "type": "array",
+      "description": "one entry per subsection id of the part (rebuilt by the app from each step's 'section')",
+      "items": {
+        "type": "object",
+        "required": [
+          "subsection",
+          "steps"
+        ],
+        "properties": {
+          "subsection": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "figuresSkipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverageReport": {
+      "type": "object",
+      "description": "written by the app (verifyChain in js/ai/prompts.js): subsections, covered, missing, thin, figures, figuresCited, figuresUncited, unknownFigures, threadBreaks, threadMissing, extrasUnsourced, numbers{checked,unmatched}, sections, followUps, ok"
+    },
+    "renumbered": {
+      "type": "object",
+      "description": "written by the app after a follow-up merge: old step id → new step id"
     }
-  }
+  },
+  "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md. Validate with any draft 2020-12 validator (load chain.schema.json, room.schema.json and scene.schema.json together; their $ids share one base so the relative $refs resolve). The strict profile used by tools/verify-chain.mjs is chain.strict.schema.json."
 }

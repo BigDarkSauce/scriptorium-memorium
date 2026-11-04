@@ -11,21 +11,28 @@ import { normalizeChain } from './room/reader.js';
 import { legacyScrolls } from './seeds-legacy.js';
 import { FLAGSHIPS } from './seeds-scenes.js';
 import { groundChain } from './seeds-sources.js';
+import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
-import { el, $, uid, toast, sleep, clamp } from './util.js';
+import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
 
 const LIB_KEY = 'library.v3';
 class App {
   constructor() {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
-    this.mode = null; this.last = performance.now(); this.t = 0;
+    this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0;
+    this.gfx.onRestore = () => { toast('Graphics restored'); this.restoreMode(); };
     initAI(); initEvidence();
+    // sound: one speaker button, a soft click for every button, ambience per place
+    this.sfx = sfx; document.body.append(sfx.button());
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button, .btn, [role=button], summary'); if (b && !b.classList.contains('sound-btn')) sfx.play('click', { gain: .6 }); }, true);
   }
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {
+    try { performance.mark('sm:boot'); } catch (e) { }
     this.lib = await store.get(LIB_KEY);
-    if (!this.lib || !this.lib.shelves) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
+    if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
+    if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
     this.openHub();
     requestAnimationFrame(() => document.body.classList.add('ready'));
@@ -37,51 +44,95 @@ class App {
     this.lib.migratedV2 = true; this.saveLib(); if (!old || !Array.isArray(old.layers)) return;
     const parts = []; old.layers.forEach(L => (L.scrolls || []).forEach(sc => { if (sc.analysis && Array.isArray(sc.analysis.chain)) parts.push({ id: 'p-' + uid(), title: sc.title || sc.analysis.title || 'Scroll', summary: sc.analysis.summary || '', analysis: normalizeChain(sc.analysis), layer: L.name }); }));
     const mine = parts.filter(p => !/^Example scroll/.test(p.analysis.sourceNote || '')); if (!mine.length) return;
-    const shelf = this.lib.shelves[0]; const n = this.lib.books.filter(b => b.shelf === shelf.id).length;
+    const shelf = this.firstShelf(); const n = this.lib.books.filter(b => b.shelf === shelf.id).length;
     const b = { id: 'bk-' + uid(), title: 'My earlier scrolls', shelf: shelf.id, tier: 2 - Math.floor(n / 17), slot: n % 17, color: '#9c3a28', icon: 'V2', hasPdf: false };
-    this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 4.4 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
+    this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
   }
+  // a library whose bookcases were all removed still gets a place for imported books
+  firstShelf() { if (!this.lib.shelves.length) { const R = this.lib.hub; this.lib.shelves.push({ id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .28, z: 0, rot: Math.PI / 2, color: '#8a2a1e' }); } return this.lib.shelves[0]; }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
   saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); }
   async loadRoom(id) {
-    const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 4.4 }, parts: [] };
+    const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 5.5 }, parts: [] };
     // example rooms saved before grounding existed get their verified sources and teaching fields once
     const b = this.lib && this.lib.books.find(x => x.id === id);
+    // example rooms saved before the authored diorama lessons existed get them once (matched by demo type + title)
+    if (b && b.example && r.lessonsV !== 4) {
+      const L = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
+      walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) L.set(d.type + '|' + d.title, d.lessons); });
+      walk(r.parts, d => { const l = L.get(d.type + '|' + d.title); if (l && !(d.lessons && d.lessons.length)) d.lessons = JSON.parse(JSON.stringify(l)); });
+      r.lessonsV = 4; store.set('room:' + id, r);
+    }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
+    // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
+    // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
+    if (b && b.example && r.threadV !== 1) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 1; store.set('room:' + id, r); }
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
-  async switchMode(make) {
-    const g = this.gfx.grade.uniforms.uFade;
-    if (g.value < .99) { for (let k = g.value; k < 1; k += .08) { g.value = k; await sleep(16); } }
-    g.value = 1;
-    if (this.mode) { try { this.mode.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
-    this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32;
-    try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); this.mode = new Hub(this); }
-    await sleep(60); for (let k = 1; k > 0; k -= .05) { g.value = k; await sleep(16); } g.value = 0;
+  // Switches run one at a time (a second request while one is fading waits, and only the latest waiting one runs),
+  // so a double click or an exit pressed during a fade never leaves two modes alive.
+  switchMode(make) {
+    const tok = ++this._swTok;
+    const run = () => tok === this._swTok ? this._switch(make) : null;
+    return (this._sw = (this._sw || Promise.resolve()).then(run, run));
   }
-  openHub(opts = {}) { this.history = []; return this.switchMode(() => new Hub(this, opts)); }
+  async _switch(make) {
+    const g = this.gfx.grade.uniforms.uFade;
+    // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
+    const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
+    if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
+    g.value = 1;
+    const old = this.mode;
+    if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
+    this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32;
+    this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true;
+    try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
+    // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
+    if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
+    // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
+    if (this.mode && this.mode.scene && this.mode.camera) { const r = this.gfx.renderer; try { if (r.extensions.has('KHR_parallel_shader_compile')) await Promise.race([r.compileAsync(this.mode.scene, this.mode.camera), sleep(4000)]); else r.compile(this.mode.scene, this.mode.camera); } catch (e) { } }
+    this.gfx.resetAdapt();
+    await sleep(60); await fade(1, 0, 330); g.value = 0;
+  }
+  // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
+  retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
+  flushTrash() { if (!this.trash.length) return; const due = this.trash.filter(x => --x.frames <= 0); this.trash = this.trash.filter(x => x.frames > 0); due.forEach(x => { try { x.fn(); } catch (e) { console.warn(e); } }); }
+  openHub(opts = {}) { this.history = []; sfx.ambience('library'); return this.switchMode(() => new Hub(this, opts)); }
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
     const data = await this.loadRoom(bookId); this.currentRoom = bookId;
+    sfx.ambience('room'); sfx.play('door', { gain: .6 });
     return this.switchMode(() => new BookRoom(this, book, data, opts));
   }
   openDiorama(spec, opts = {}) {
     const back = opts.returnTo;
     const o = Object.assign({}, opts, { onExit: () => { if (back && back.room) this.openRoom(back.room, { openPart: back.part }); else this.openHub(); } });
     // keep the scroll image visible during the fade: the flight starts after the switch
+    const pre = (spec.environment && spec.environment.preset) || 'studio';
+    sfx.ambience({ landscape: 'outdoor', ocean: 'ocean', cosmos: 'space', night: 'outdoor', micro: 'micro', lab: 'lab', abstract: 'studio', desk: 'studio' }[pre] || (spec.type === 'weatherglass' ? 'outdoor' : 'studio')); sfx.play('whoosh', { gain: .5 });
     return this.switchMode(() => new DioramaView(this, spec, o));
   }
   loop() {
     requestAnimationFrame(() => this.loop());
-    const now = performance.now(), dt = Math.min(.05, (now - this.last) / 1000); this.last = now; this.t += dt;
-    if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { console.error(e); } }
-    this.gfx.adapt(dt * 1000); this.gfx.render(dt, this.t);
+    const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
+    if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)
+    if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
+    this.gfx.adapt(raw); this.gfx.render(dt, this.t);
+    this.flushTrash();
+    if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
+  }
+  // the context came back: environments are rebuilt by the renderer; reopen the current place so every render target is fresh
+  async restoreMode() {
+    const m = this.mode; if (!m) return;
+    if (m instanceof DioramaView) return this.openDiorama(m.spec, Object.assign({}, m.opts, { skipIntro: true, fromRect: null, autoTransition: false }));
+    if (m instanceof BookRoom) return this.openRoom(m.book.id);
+    return this.openHub();
   }
   // ---------- seed library: subject bookcases with example books and flagship dioramas ----------
   seedLibrary() {
-    const L = legacyScrolls(); this.seedRooms = new Map();
-    const lib = { v: 3, hub: { w: 15, d: 12, h: 4.8 }, shelves: [], books: [] };
+    this.seedRooms = new Map();
+    const lib = { v: 3, hub: { w: 18, d: 12, h: 7 }, shelves: [], books: [] };
     const W = lib.hub.w, D = lib.hub.d;
     const sh = (name, kind, x, z, rot, color) => { const s = { id: 'sh-' + uid(), name, kind, x, z, rot, color }; lib.shelves.push(s); return s; };
     const physics = sh('Physics', 'horizontal', -4.6, -D / 2 + .28, 0, '#8a2a1e');
@@ -90,37 +141,91 @@ class App {
     const bio = sh('Biology', 'vertical', -W / 2 + .28, .2, Math.PI / 2, '#6a8a3a');
     const econ = sh('Economics & Statistics', 'vertical', W / 2 - .28, -2.2, -Math.PI / 2, '#8f733a');
     const earth = sh('Earth Science', 'vertical', W / 2 - .28, .2, -Math.PI / 2, '#2f6f8f');
-    const slots = new Map();
+    const slots = new Map(), shelves = { physics, maths, chem, bio, econ, earth };
     const book = (shelf, title, parts, icon = 'EX') => {
       const n = slots.get(shelf.id) || 0; slots.set(shelf.id, n + 1);
       const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
-      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: tiers - 1 - Math.floor(n / per), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
-      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 4.4 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
+      const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
+      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
+      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
-    const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(groundChain(JSON.parse(JSON.stringify(s.analysis)))) });
-    const scenePart = (spec, title, summary, steps) => ({ title, summary, analysis: normalizeChain(groundChain({ title, summary, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s[0], title: s[1], statement: s[2], math: s[3] || '', from: i ? ['S' + i] : [], bodies: s[4] || [], demos: i === steps.length - 1 || s[5] ? [JSON.parse(JSON.stringify(spec))] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
-    book(physics, 'Classical Mechanics', L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart), 'PHY');
-    book(earth, 'The Weather Glass', L[0].filter(s => /Weather/.test(s.title)).map(asPart), 'ATM');
-    book(maths, 'Calculus & Linear Maps', L[1].map(asPart), 'MATH');
-    book(chem, 'Collision Theory', L[2].map(asPart), 'CHEM');
-    const [water, galton, market, osmo] = FLAGSHIPS;
-    book(earth, 'The Water Cycle', [scenePart(water, 'The water cycle', 'Energy from the sun moves water from lake to cloud to mountain and back.', [
-      ['definition', 'Evaporation', 'Molecules at the surface of liquid water that gain enough energy escape as vapour; the rate grows with heating.', '', ['lake', 'sun']],
-      ['definition', 'Saturation', 'Air at a given temperature can hold at most a certain amount of water vapour; cooler air holds less.', '', ['air parcel']],
-      ['result', 'Orographic rain', 'Wind forces moist air up a mountain slope; it expands, cools below saturation, and the excess condenses and falls as rain.', '', ['cloud', 'wind', 'mountains', 'rain']]])], 'H2O');
-    book(econ, 'Probability & the Bell Curve', [scenePart(galton, 'Galton board', 'A bell curve made of coin flips.', [
-      ['definition', 'Bernoulli trial', 'One random event with two outcomes: "right" with probability $p$, "left" with probability $1-p$.', '', ['peg', 'ball']],
-      ['theorem', 'Binomial distribution', 'The number $K$ of right-bounces in $N$ independent trials satisfies $P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}$, with mean $Np$ and variance $Np(1-p)$.', 'P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}', ['bins']],
-      ['result', 'Normal approximation', 'For large $N$ the binomial is close to a normal curve with the same mean and spread (de Moivre–Laplace, a case of the central limit theorem).', '', ['curve', 'bins']]])], 'STAT');
-    book(econ, 'Markets', [scenePart(market, 'Supply and demand', 'How a market finds the price where buyers and sellers agree.', [
-      ['definition', 'Demand', 'At each price $p$, the quantity $D(p)$ buyers want; it falls as $p$ rises because fewer buyers value the good above the price.', '', ['buyers']],
-      ['definition', 'Supply', 'At each price $p$, the quantity $S(p)$ sellers offer; it rises with $p$ because more sellers cover their cost.', '', ['sellers']],
-      ['result', 'Equilibrium', 'Price adjusts with excess demand, $\\dot p \\propto D(p)-S(p)$, and comes to rest where $D(p^*)=S(p^*)$.', '\\dot p = k\\,(D(p)-S(p))', ['price', 'stall', 'curves']]])], 'ECON');
-    book(bio, 'Cell Membranes', [scenePart(osmo, 'Osmosis', 'Why water flows towards dissolved particles across a membrane.', [
-      ['definition', 'Semi-permeable membrane', 'A barrier with pores that pass small solvent molecules (water) but not larger solute molecules.', '', ['membrane']],
-      ['result', 'Osmosis', 'Water moves by diffusion across the membrane towards the side with more solute until the extra pressure there balances the flow.', '', ['water molecules', 'solute molecules']],
-      ['theorem', 'Osmotic pressure', 'For dilute solutions the balancing pressure is $\\pi = cRT$ (van \'t Hoff), proportional to the solute concentration.', '\\pi = cRT', ['water levels']]])], 'BIO');
+    this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
     return lib;
+  }
+  // The example books' content (parts without ids), in the chain format of docs/PROTOCOL.md: every part has its question
+  // and subsections, every step its section and its place in the question thread (answers = the previous step's opens),
+  // every demo its purpose. Also the source the saved example rooms are brought up to date from (threadFromSeeds).
+  seedBooks() {
+    const L = legacyScrolls(), C = o => JSON.parse(JSON.stringify(o));
+    // the coverage map, from each step's section
+    const covered = P => { P.analysis.coverage = (P.subsections || []).map(x => ({ subsection: x.id, steps: P.analysis.chain.filter(st => st.section === x.id).map(st => st.id) })); return P; };
+    const asPart = s => covered({ title: s.title, summary: s.analysis.summary, subsections: C(s.subsections || []), analysis: normalizeChain(groundChain(C(s.analysis))) });
+    const subs = list => list.map(([id, title]) => ({ id, num: id, title, level: 2 }));
+    // a part built around one flagship scene; steps: {kind, title, statement, math?, bodies?, section, opens, demo?}.
+    // The thread is unbroken by construction: step 1 answers the part's question, step k+1 answers step k's "opens".
+    const scenePart = (spec, title, summary, { question, subsections, purpose }, steps) => covered({ title, summary, subsections: subs(subsections), analysis: normalizeChain(groundChain({ title, summary, question, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s.kind, title: s.title, section: s.section, answers: i ? steps[i - 1].opens : question, opens: s.opens, statement: s.statement, math: s.math || '', from: i ? ['S' + i] : [], bodies: s.bodies || [], demos: i === steps.length - 1 || s.demo ? [{ ...C(spec), purpose }] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
+    const [water, galton, market, osmo] = FLAGSHIPS;
+    return [
+      { shelf: 'physics', title: 'Classical Mechanics', icon: 'PHY', parts: L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart) },
+      { shelf: 'earth', title: 'The Weather Glass', icon: 'ATM', parts: L[0].filter(s => /Weather/.test(s.title)).map(asPart) },
+      { shelf: 'maths', title: 'Calculus & Linear Maps', icon: 'MATH', parts: L[1].map(asPart) },
+      { shelf: 'chem', title: 'Collision Theory', icon: 'CHEM', parts: L[2].map(asPart) },
+      { shelf: 'earth', title: 'The Water Cycle', icon: 'H2O', parts: [scenePart(water, 'The water cycle', 'Energy from the sun moves water from lake to cloud to mountain and back.', {
+        question: 'How does energy from the sun move water from a lake into a cloud, onto a mountainside and back?',
+        subsections: [['1.1', 'Evaporation'], ['1.2', 'Saturation'], ['1.3', 'Orographic rain']],
+        purpose: 'Can you follow the water through the whole cycle: evaporation from the sunlit lake, a parcel rising to its dew point, orographic rain on the windward slope, and the dry, warm rain shadow beyond the crest?' }, [
+        { kind: 'definition', title: 'Evaporation', section: '1.1', statement: 'Molecules at the surface of liquid water that gain enough energy escape as vapour; the rate grows with heating.', bodies: ['lake', 'sun'], opens: 'How much water vapour can collect above water at a given temperature?' },
+        { kind: 'definition', title: 'Saturation', section: '1.2', statement: 'Air at a given temperature can hold at most a certain amount of water vapour; cooler air holds less.', bodies: ['air parcel'], opens: 'How does moist air carried over a mountain reach saturation and rain?' },
+        { kind: 'result', title: 'Orographic rain', section: '1.3', statement: 'Wind forces moist air up a mountain slope; it expands, cools below saturation, and the excess condenses and falls as rain.', bodies: ['cloud', 'wind', 'mountains', 'rain'], opens: 'How will the cycle change as the climate warms, now that e_s rises about 6–7 % per kelvin?' }])] },
+      { shelf: 'econ', title: 'Probability & the Bell Curve', icon: 'STAT', parts: [scenePart(galton, 'Galton board', 'A bell curve made of coin flips.', {
+        question: 'Why do many independent left-or-right bounces pile up into a bell curve?',
+        subsections: [['1.1', 'Bernoulli trials'], ['1.2', 'The binomial distribution'], ['1.3', 'The normal approximation']],
+        purpose: 'Can you watch single random paths add up, bead by bead, into the binomial histogram and its normal curve, and see the pile shift and widen as p and N change?' }, [
+        { kind: 'definition', title: 'Bernoulli trial', section: '1.1', statement: 'One random event with two outcomes: "right" with probability $p$, "left" with probability $1-p$.', bodies: ['peg', 'ball'], opens: 'How many right-bounces does a bead make in N independent trials?' },
+        { kind: 'theorem', title: 'Binomial distribution', section: '1.2', statement: 'The number $K$ of right-bounces in $N$ independent trials satisfies $P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}$, with mean $Np$ and variance $Np(1-p)$.', math: 'P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}', bodies: ['bins'], opens: 'What curve does the binomial distribution approach when N is large?' },
+        { kind: 'result', title: 'Normal approximation', section: '1.3', statement: 'For large $N$ the binomial is close to a normal curve with the same mean and spread (de Moivre–Laplace, a case of the central limit theorem).', bodies: ['curve', 'bins'], opens: 'Why do sums of other independent random steps, not only coin flips, also make a bell?' }])] },
+      { shelf: 'econ', title: 'Markets', icon: 'ECON', parts: [scenePart(market, 'Supply and demand', 'How a market finds the price where buyers and sellers agree.', {
+        question: 'How does a market find the price at which buyers and sellers agree?',
+        subsections: [['1.1', 'Demand'], ['1.2', 'Supply'], ['1.3', 'Equilibrium']],
+        purpose: 'Do random traders bound only by a no-loss rule really converge on the price where the staircases cross, and how do the price and the quantity move when demand, costs or the rules change?' }, [
+        { kind: 'definition', title: 'Demand', section: '1.1', statement: 'At each price $p$, the quantity $D(p)$ buyers want; it falls as $p$ rises because fewer buyers value the good above the price.', bodies: ['buyers'], opens: 'How much do sellers offer at each price?' },
+        { kind: 'definition', title: 'Supply', section: '1.2', statement: 'At each price $p$, the quantity $S(p)$ sellers offer; it rises with $p$ because more sellers cover their cost.', bodies: ['sellers'], opens: 'At what price do the quantities demanded and supplied match, and does trading actually reach it?' },
+        { kind: 'result', title: 'Equilibrium', section: '1.3', statement: 'In a double auction, bids and asks meet at the stall; trade prices converge towards $p^*$ where $D(p^*)=S(p^*)$, even with random traders bound only by a no-loss rule (Smith 1962; Gode & Sunder 1993).', math: 'D(p^*)=S(p^*)', bodies: ['price', 'stall', 'curves'], opens: 'Would human traders, who learn and remember, reach the equilibrium faster or more reliably than these random ones?' }])] },
+      { shelf: 'bio', title: 'Cell Membranes', icon: 'BIO', parts: [scenePart(osmo, 'Osmosis', 'Why water flows towards dissolved particles across a membrane.', {
+        question: 'Why does water flow across a membrane towards dissolved particles, and what stops the flow?',
+        subsections: [['1.1', 'The semi-permeable membrane'], ['1.2', 'Osmosis'], ['1.3', 'Osmotic pressure']],
+        purpose: 'Can you see water cross the membrane, the solution column rise until its pressure balances the flow, and the flow reverse when a piston presses harder than the osmotic pressure?' }, [
+        { kind: 'definition', title: 'Semi-permeable membrane', section: '1.1', statement: 'A barrier with pores that pass small solvent molecules (water) but not larger solute molecules.', bodies: ['membrane'], opens: 'Which way does water move when solute sits on only one side of the membrane?' },
+        { kind: 'result', title: 'Osmosis', section: '1.2', statement: 'Water moves by diffusion across the membrane towards the side with more solute until the extra pressure there balances the flow.', bodies: ['water molecules', 'solute molecules'], opens: 'How large is the pressure that stops the flow?' },
+        { kind: 'theorem', title: 'Osmotic pressure', section: '1.3', statement: 'For dilute solutions the balancing pressure is $\\pi = cRT$ (van \'t Hoff), proportional to the solute concentration.', math: '\\pi = cRT', bodies: ['water levels'], opens: 'What happens to a living cell placed in water that is saltier or fresher than its inside?' }])] }];
+  }
+  // Example rooms saved before the question thread existed: fill, from the current seeds, the part's question, subsections
+  // and coverage map, each step's section/answers/opens, each demo's purpose and each lesson's question/opens/shot/pov.
+  // Parts are matched by title (in the same book first), steps by id (and title), demos by type + title, lessons by title.
+  // Only empty fields are filled, so nothing the reader changed is overwritten.
+  threadFromSeeds(book, room) {
+    const books = this.seedBooks(), C = o => JSON.parse(JSON.stringify(o));
+    const own = (books.find(x => x.title === book.title) || { parts: [] }).parts, all = books.flatMap(x => x.parts);
+    const empty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
+    const fill = (to, from, keys) => keys.forEach(k => { if (empty(to[k]) && !empty(from[k])) to[k] = C(from[k]); });
+    let n = 0;
+    for (const p of room.parts || []) {
+      const s = own.find(x => x.title === p.title) || all.find(x => x.title === p.title);
+      if (!s || !p.analysis || !Array.isArray(p.analysis.chain) || p.subOf) continue;
+      fill(p, s, ['subsections']); fill(p.analysis, s.analysis, ['question']);
+      for (const st of p.analysis.chain) {
+        const ss = s.analysis.chain.find(x => x.id === st.id && x.title === st.title); if (!ss) continue;
+        fill(st, ss, ['section', 'answers', 'opens']); n++;
+        (st.demos || []).forEach(d => {
+          const sd = (ss.demos || []).find(x => x.type === d.type && (x.title || '') === (d.title || '')); if (!sd) return;
+          fill(d, sd, ['purpose']);
+          (d.lessons || []).forEach(l => { const sl = l && l.title && (sd.lessons || []).find(x => x.title === l.title); if (sl) fill(l, sl, ['question', 'opens', 'shot', 'pov']); });
+        });
+      }
+      // the coverage map follows the steps' sections
+      if (empty(p.analysis.coverage) && (p.subsections || []).length) p.analysis.coverage = p.subsections.map(x => ({ subsection: x.id, steps: p.analysis.chain.filter(st => st.section === x.id).map(st => st.id) }));
+    }
+    return n;
   }
   // ---------- universal import / export (any AI can produce these files) ----------
   portDialog(bookId) {
@@ -141,12 +246,12 @@ class App {
     document.body.append(box);
   }
   async importJSON(j, bookId) {
-    if (j.format === 'scriptorium-library/1' && j.library) { this.lib = j.library; await store.set(LIB_KEY, this.lib); for (const id in (j.rooms || {})) await store.set('room:' + id, j.rooms[id]); toast('Library imported'); return this.openHub(); }
+    if (j.format === 'scriptorium-library/1' && j.library) { if (!Array.isArray(j.library.books) || !Array.isArray(j.library.shelves) || !j.library.hub) throw new Error('the library file has no bookcases or books'); this.lib = j.library; await store.set(LIB_KEY, this.lib); for (const id in (j.rooms || {})) await store.set('room:' + id, j.rooms[id]); toast('Library imported'); return this.openHub(); }
     const room = j.room || (j.parts ? j : null);
     if (room && Array.isArray(room.parts)) {
       room.parts.forEach(p => { p.id = p.id || 'p-' + uid(); if (p.analysis) normalizeChain(p.analysis); });
       if (bookId) { const cur = await this.loadRoom(bookId); room.dims = room.dims || cur.dims; await store.set('room:' + bookId, room); toast('Room imported'); return this.openRoom(bookId); }
-      const shelf = this.lib.shelves[0]; const title = (j.book && j.book.title) || room.title || 'Imported book';
+      const shelf = this.firstShelf(); const title = String((j.book && j.book.title) || room.title || 'Imported book').slice(0, 300);
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: 0, slot: this.lib.books.filter(x => x.shelf === shelf.id).length, color: shelf.color, icon: 'JSON', hasPdf: false };
       this.lib.books.push(b); this.saveLib(); await store.set('room:' + b.id, room); toast(`"${title}" added to ${shelf.name}`); return this.openHub();
     }

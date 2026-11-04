@@ -85,7 +85,7 @@ When no tool is available, cite only works you are certain exist and leave "doi"
 export function collectSources(A) {
   const out = []; const add = s => { if (s && (s.doi || s.title)) out.push(s); };
   (A.references || []).forEach(add);
-  (A.chain || []).forEach(st => { (st.sources || []).forEach(add); (st.demos || []).forEach(d => d && d.source && typeof d.source === 'object' && add(d.source)); });
+  (A.chain || []).forEach(st => { (st.sources || []).forEach(add); (st.extra || []).forEach(e => add(e && e.source)); (st.demos || []).forEach(d => d && d.source && typeof d.source === 'object' && add(d.source)); });
   return out;
 }
 export async function verifySources(A, onProgress) {

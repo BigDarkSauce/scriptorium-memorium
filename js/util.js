@@ -15,7 +15,9 @@ export const fmt = (v, d = 3) => {
   if (!isFinite(v)) return '—';
   const a = Math.abs(v);
   if (a !== 0 && (a < 1e-3 || a >= 1e5)) return v.toExponential(2);
-  return (+v.toFixed(d)).toString();
+  // d = the most decimals wanted; readouts also stop at about 4 significant figures (1018.3 hPa, 33.06 mm, 0.028)
+  const ints = a === 0 ? 1 : Math.floor(Math.log10(a)) + 1, dec = Math.min(d, Math.max(a >= 100 && d > 0 ? 1 : 0, 4 - ints));
+  return (+v.toFixed(Math.max(0, dec))).toString();
 };
 export function el(tag, attrs = {}, kids = []) {
   const e = document.createElement(tag);
@@ -115,6 +117,28 @@ export function typeset(node) {
   const go = () => window.MathJax.typesetPromise([node]).catch(() => {});
   if (window.MathJax && window.MathJax.typesetPromise) return go();
   return new Promise(r => { const iv = setInterval(() => { if (window.MathJax && window.MathJax.typesetPromise) { clearInterval(iv); go().then(r); } }, 300); setTimeout(() => { clearInterval(iv); r(); }, 15000); });
+}
+
+// ---------- GPU resource disposal (duck-typed: no three.js import here) ----------
+// Collects the geometries, materials and textures an object tree uses.
+export function gpuSet(roots, set = new Set()) {
+  const addMat = m => { if (!m || set.has(m)) return; set.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) set.add(v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) set.add(v); } };
+  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.isLight && o.shadow) set.add(o);   /* a shadow-casting light owns its shadow-map render target */ if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
+    if (r.isScene) { if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
+  return set;
+}
+// Frees what `roots` use (object trees, or a Set from gpuSet), except what `keep` (object trees still on screen, or a Set from gpuSet) uses and anything
+// marked userData.shared (module caches: textures.js originals, baroque.js materials, renderer environments).
+// texture.clone() copies userData, so a clone of a cached texture also says `shared`: only the first texture object seen
+// for an image (its Source) counts as the cached one; other clones are freed (the image's GPU copy stays while in use)
+const CANON = new WeakMap();
+const sharedRes = x => { if (!(x.userData && x.userData.shared)) return false; if (!x.isTexture || !x.source) return true; const c = CANON.get(x.source); if (!c) { CANON.set(x.source, x); return true; } return c === x; };
+export function disposeTree(roots, keep = null) {
+  const K = keep instanceof Set ? keep : gpuSet(keep || []);
+  const S = roots instanceof Set ? roots : gpuSet(roots);
+  const shared = sharedRes;
+  S.forEach(x => { if (x.isMaterial && shared(x)) gpuSet({ traverse: f => f({ material: x }) }, K); });   // a cached material keeps its textures
+  S.forEach(x => { if (K.has(x) || shared(x) || typeof x.dispose !== 'function') return; try { x.dispose(); } catch (e) { } });
 }
 
 // Tiny event bus

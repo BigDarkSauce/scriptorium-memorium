@@ -21,6 +21,15 @@ The post chain follows Weatherglass's miniature look:
 
 Shadows are soft (PCF). Resolution adapts to keep frames under about 22 ms. Environment lighting comes from a pre-filtered RoomEnvironment map. All textures are drawn in code (`textures.js`). Materials come from about 40 PBR presets (`materials.js`).
 
+Diorama realism (v4):
+- **Textures** (`js/gfx/proc.js`): seamless procedural wood, brushed metal, cast iron, paper, felt and marble sets with colour, normal and roughness maps; painted cloud banks and hill silhouettes; `alignUV()` gives world-scale UVs so grain runs along each part.
+- **Materials** (`materials.js`): every preset is physically based. Vessels and cases are *thin-shell* glass (reflection only, edge-weighted), because three.js transmission renders only opaque objects and a transmissive flask would hide its water. Water, liquids, ice, gel and solid glass *do* use transmission (IOR, thickness, tinted absorption). While the drawing is showing, a shader hook flattens normal maps and removes clearcoat and sheen; each hook variant has its own shader define so compiled programs are never mixed up.
+- **Lighting** (`js/dio/environments.js`): key, fill, rim and kicker lights per preset; the studio key is a spotlight with a fitted 2048 shadow map. Real-time contact shadows are rendered from below into a 512² target, blurred, every other frame.
+- **Per-scene look** (`gfx.applyLook`): contrast, saturation, vignette, a subtle tilt-shift, exposure and bloom; `gfx.envFor(kind)` gives each preset its own reflection environment.
+- **Shot hints**: `DIO.<model>.shots = {'<lowercase event-text substring>': {target, dist}}` tells the director where to point the camera for an event.
+
+Library architecture (`js/gfx/baroque.js`, `roomshell.js` with `style: 'baroque'`): the hall and the rooms are built from the study in `docs/research/baroque-libraries.md` (Metten, Admont, Mafra, Wiblingen): pilasters on a regular bay rhythm (`bay`, default 3.2 m) placed between the scrolls (`avoid`), a gilt cornice and coved ceiling with a fresco, tall arched windows on the light side, marble floors (`diagonal`, `checker`, `cubes`), and, from about 7 m height, a gallery with an upper book tier and spiral stairs. Geometry is merged by material (about 20 meshes). `userData.baroque.obstacles` gives the footprints of statues and stairs; walk mode collides with them.
+
 ## Drawing → real (`js/gfx/materialize.js`)
 
 This generalises flat-to-3d (02 Section Sweep, 06 Card Model) and Lintel (top-down):
@@ -39,7 +48,7 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 
 - `js/dio/scene.js` (`DioramaScene`) builds a scene without UI:
   - the environment preset (`environments.js`: studio, lab, landscape with Sky and a sun driven by the hour, cosmos, micro, abstract, ocean, night, plus an optional glass case);
-  - either a **built-in model** (`models.js`, 17 ported physics models running through an adapter) or a **scene spec** (`builder.js`: about 60 shapes and macros);
+  - either a **built-in model** (`models.js`, 16 ported physics models running through an adapter, plus the `custom3d` code host) or a **scene spec** (`builder.js`: about 60 shapes and macros);
   - the code API, declarative behaviours, and user edits (overrides and additions).
 - Actors come from `D.label` (built-in models), from `role:"actor"` bodies, or from `api.label`. Unlabelled objects are decor.
 - `js/dio/engine.js` (`DioramaView`) runs the stages:
@@ -55,12 +64,28 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
 - Bookcases snap flush to the nearest wall. Books take free slots, top tier first.
 - Rooms lay out stations along the perimeter, starting with the left wall, and grow when the parts don't fit.
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
-- PDF ingestion (`js/ai/ingest.js`) tries the outline, then headings, then the contents page, then fixed windows. It strips running headers and footers and rejoins hyphenated words.
+- PDF ingestion (`js/ai/ingest.js`) merges the outline with numbered/bold headings (falling back to the contents page, then fixed windows), keeps every subsection with its pages, and cuts figures from the pages. The reader verifies coverage (`verifyChain`) and fills gaps with targeted follow-ups — see PROTOCOL.md, "Recipe for any AI". `tools/verify-chain.mjs` runs the same check, plus the strict schema, offline on any chain file.
 
 ## Presentation and navigation
 
+- **Shot grammar** (`director.frame`, see `docs/research/presentation-craft.md`): every beat gets one shot, never a floating drift.
+  - *wide*: the static overview, for a step without a named subject.
+  - *push*: a cut to a medium-wide view, a 3.5 s eased dolly, then a hold. Used for an instruction about one object.
+  - *medium*: static, framing the subject and the objects the sentence names. Used for explanations.
+  - *close*: a 24° lens, cut in through a 0.5 s dip in the grade. Used for an event on a small part.
+  - *pov*: the camera rides an actor (`engine.setPOV`).
+  - Two moving shots never follow each other. The subject sits on a third of the frame left free by the panels. The lens eases back to the base FOV when the learner takes the camera.
+  - Lessons may ask for a shot with `shot` and `pov`.
+- **Read, then watch**: an instruction beat freezes the model (`timeScale` 0) until it has been read (hover pauses, › skips). The step then plays; events slow time to 0.3×, or 0.12× while descriptions are queued. During a step the instruction panel folds and the readouts shrink to the quantities the step mentions.
+- **Point of view** (`engine.setPOV(actor)`, key P, the ◉ button in Objects):
+  - The camera sits at the actor at a 74° FOV with a tiny near plane, and looks along the actor's motion, or at the current subject, or level at the model. Drag to look; Esc leaves.
+  - Small actors are hidden so you see from them. Large ones (a flask, a cell) stay visible so you are inside them.
+- **Sound** (`js/audio.js`, WebAudio, no files):
+  - Ambience beds per place: library, room, studio/lab, outdoor with live rain and wind, ocean, space, micro.
+  - One-shot effects for UI, scrolls, bookcases, pedestals, footsteps (tied to the walk bob), cuts, POV, and every diorama event. An event uses `ev.sound` if given, otherwise a keyword guess, panned to where it happens.
+  - Mute and volume are remembered.
 - **`js/dio/director.js`** turns lesson steps and simulation events into *beats*, shown one at a time.
-  - Each beat has a camera shot: a push-in to the subject's bounding sphere with a slight change of azimuth, then a slow drift.
+  - Each beat gets one shot from the shot grammar above (`director.frame`), chosen from the beat: an instruction about one object gets a *push* (a 3.5 s eased dolly to the subject's bounding sphere, then a hold), an explanation a static *medium*, an event a *close* cut, a step with no named subject the *wide* view, and `shot`/`pov` in a lesson override the choice. The same subject keeps the shot on screen; nothing floats or drifts.
   - Its callout is anchored to the subject in screen space, with a leader line and a reading timer: 1.6 s plus words ÷ reading speed (150/210/300 wpm), 3–14 s.
   - During an instructed step, simulated time slows to 0.3× while an event is read (`timeScale`). A lesson waiting on `until: event:…` completes only after its beats have been read.
   - Optional guides are SVG arrows: motion direction from the anchor's screen velocity, plus links to the other actors the sentence names.

@@ -8,6 +8,7 @@
 // The walking speed is adjustable for both modes and remembered in this browser.
 import * as THREE from 'three';
 import { el, clamp } from './util.js';
+import { sfx } from './audio.js';
 
 const KEY = 'scriptorium.view';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
@@ -56,15 +57,18 @@ export class Navigator {
     if (busy) { this.needsSync = true; this.vel.set(0, 0, 0); return; }
     if (this.mode === 'walk' && this.needsSync) { this.syncFromCamera(); }
     const f = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), s = (k.d || k.arrowright ? 1 : 0) - (k.a || k.arrowleft ? 1 : 0);
-    const fwd = V3(); c.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const side = V3().crossVectors(fwd, V3(0, 1, 0));
+    const T = this._t || (this._t = { fwd: V3(), side: V3(), up: V3(0, 1, 0), step: V3(), p: V3() });   // reused every frame (no garbage while walking)
+    const fwd = T.fwd; c.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const side = T.side.crossVectors(fwd, T.up);
     const want = fwd.multiplyScalar(f).add(side.multiplyScalar(s)); if (want.lengthSq() > 0) want.normalize().multiplyScalar(this.speed * (k.shift ? 1.9 : 1));
     // inertia: humans accelerate over ~0.3 s and stop over ~0.2 s
     this.vel.lerp(want, 1 - Math.exp(-dt * (want.lengthSq() ? 7 : 10)));
-    const step = this.vel.clone().multiplyScalar(dt);
+    const step = T.step.copy(this.vel).multiplyScalar(dt);
     if (this.mode === 'walk') {
-      const p = c.position.clone().add(step); this.collide(p, B, .28); c.position.x = p.x; c.position.z = p.z;
+      const p = T.p.copy(c.position).add(step); this.collide(p, B, .28); c.position.x = p.x; c.position.z = p.z;
       const v = this.vel.length(); this.bobT += dt * (v > .05 ? 2 * Math.PI * (1.7 + v * .25) * .5 : 0);
       const bob = v > .05 ? Math.sin(this.bobT * 2) * .018 * clamp(v / 1.4, 0, 1.6) : 0;
+      // a footstep each time the stride reaches its lowest point (soft on marble; louder when hurrying)
+      const ph = Math.floor((this.bobT * 2 + Math.PI / 2) / (2 * Math.PI));   // one footstep per bob cycle (~2 per second at 1.4 m/s) if (v > .25 && ph !== this.stepPh) { this.stepPh = ph; sfx.play('step', { gain: clamp(v / 1.4, .4, 1.4), pitch: .9 + Math.random() * .2, x: .5 + (ph % 2 ? .08 : -.08) }); }
       c.position.y += (EYE + bob - c.position.y) * Math.min(1, dt * 10);
       this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 6);
       const fov = FOV_WALK - this.zoom * 38; if (Math.abs(c.fov - fov) > .01) { c.fov = fov; c.updateProjectionMatrix(); }
