@@ -324,3 +324,7 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 /* sound toggle */
 .sound-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(78px + env(safe-area-inset-top,0px)); z-index: 40; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); cursor: pointer; padding: 0; }
 .sound-btn[aria-pressed="false"] { color: var(--ink-3); }
+/* documentary framing during a step: compact readouts */
+.dio-reads.compact { width: 240px; }
+.dio-reads.compact .reads { grid-template-columns: 1fr; }
+.dio-reads { transition: width .4s var(--ease); }

@@ -101,9 +101,11 @@ export class Director {
     const off = cam.position.clone().sub(v.controls.target); off.y = 0; if (off.lengthSq() < 1e-6) off.set(0, 0, 1); off.normalize();
     const elev = THREE.MathUtils.degToRad(kind === 'close' ? 9 : 17), dir = off.multiplyScalar(Math.cos(elev)); dir.y = Math.sin(elev);
     // rule of thirds: shift the aim so the subject sits on the third away from where the callout will go
-    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize().negate(), hw = dist * Math.tan(half) * aspect;
-    const sx = p.clone().project(cam).x, side = sx < .16 ? 1 : -1;   // subject left of centre now → keep it on the left third
-    const target = p.clone().addScaledVector(right, side * hw * .3);
+    // the free part of the frame (minus the instruction panel and the readouts), and the subject on one of its thirds
+    const W = innerWidth, fr = this.freeFrame(W), sxPx = (p.clone().project(cam).x * .5 + .5) * W;
+    const want = fr[0] + (fr[1] - fr[0]) * (sxPx < (fr[0] + fr[1]) / 2 ? 1 / 3 : 2 / 3), xd = want / W * 2 - 1;
+    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), hw = dist * Math.tan(half) * aspect;
+    const target = p.clone().addScaledVector(right, -xd * hw);
     const pos = target.clone().addScaledVector(dir, dist);
     if (kind === 'push') {
       const start = target.clone().addScaledVector(dir, dist * 1.45);
@@ -112,6 +114,7 @@ export class Director {
     } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj }; }
   }
   baseFov() { return this.v.baseFov || 40; }
+  freeFrame(W) { const v = this.v, P = v.panel, Rp = v.readPanel; const L = P && !P.hidden && !P.classList.contains('folded') ? P.getBoundingClientRect().right + 12 : 70; const R = Rp && !Rp.hidden ? Rp.getBoundingClientRect().left - 12 : W - 24; return R - L > W * .35 ? [L, R] : [0, W]; }
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {

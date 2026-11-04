@@ -164,6 +164,7 @@ export class DioramaView {
     const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, lt = String(l.text || '').toLowerCase(), fk = Object.keys(flows).find(k => lt.includes(k));
     const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : null;
     if (this.pov && this.pov.auto) this.exitPOV();
+    if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
     if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: l.shot || (povA ? 'pov' : undefined), caption: !host && !povA, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     this.ds.playing = true; this.syncTimeUI();
@@ -173,6 +174,7 @@ export class DioramaView {
   }
   completeLesson() {
     const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV();
+    if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; } this.readFocus = null; this.readPanel.classList.remove('compact');
     const l = this.lessons()[i]; const fa = this.lessonActor;
     if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
     if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
@@ -243,7 +245,7 @@ export class DioramaView {
     if (P.last) { const vel = p.clone().sub(P.last).divideScalar(Math.max(dt, 1e-3)); if (vel.length() > P.size * .4) P.look = (P.look || vel.clone()).lerp(vel.normalize(), Math.min(1, dt * 3)).normalize(); }
     P.last = p.clone();
     let fwd = P.look ? P.look.clone() : null;
-    if (!fwd) { const b = this.dir.beat, q = b && b.anchor && b.host !== P.a ? b.anchor() : null; fwd = (q || this.ds.center.clone()).sub(p); if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize(); }
+    if (!fwd) { const b = this.dir.beat, q = b && b.anchor && b.host !== P.a ? b.anchor() : null; fwd = (q || this.ds.center.clone()).sub(p); if (!q) fwd.y = 0; if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize(); if (!q) fwd.y = -.18; fwd.normalize(); }
     const yawQ = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), P.yaw); fwd.applyQuaternion(yawQ);
     const side = V3().crossVectors(fwd, V3(0, 1, 0)).normalize(); fwd.applyAxisAngle(side, P.pitch);
     c.position.lerp(p, Math.min(1, dt * 8)); c.lookAt(c.position.clone().add(fwd));
@@ -254,7 +256,8 @@ export class DioramaView {
   buildHUD() {
     const u = this.ui;
     this.labels = el('div', { class: 'pins' }); u.append(this.labels);
-    u.append(el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', text: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', text: this.opts.subtitle }) : null]));
+    this.titleEl = el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', text: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', text: this.opts.subtitle }) : null]); u.append(this.titleEl);
+    this.topBar = u.querySelector('.dio-actions');
     this.editBtn = el('button', { class: 'ibtn', title: 'Edit: select any object (E)', 'aria-label': 'Edit objects', html: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>', onclick: () => this.toggleEdit() });
     u.append(el('div', { class: 'dio-actions glass' }, [this.editBtn,
       el('button', { class: 'ibtn', title: 'Replay the drawing → real transition', 'aria-label': 'Replay transition', html: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 5h16v14H4z M4 15l5-4 4 3 3-2 4 3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>', onclick: () => this.replay() }),
@@ -487,7 +490,7 @@ export class DioramaView {
     this.dir.update(dt, this.camera, w, h);
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
-    if (!this._pr || t - this._pr > 1) { this._pr = t; this._block = [this.panel, this.readPanel].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
+    if (!this._pr || t - this._pr > 1) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
     const placed = [], items = [];
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
@@ -504,7 +507,9 @@ export class DioramaView {
       it.pin.style.visibility = ok && !under ? 'visible' : 'hidden';
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); it.pin.style.transform = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; }
     }
-    if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd = ds.readouts(); this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
+    if (!this._rt || t - this._rt > .15) { this._rt = t; this.clock.textContent = this.clockText(); const rd0 = ds.readouts(), F = this.readFocus; let rd = rd0;
+      if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><i>${esc(k)}</i> ${esc(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
   }
   drawSpark() {
     const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
