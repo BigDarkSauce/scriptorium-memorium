@@ -132,6 +132,7 @@ export class DioramaView {
   }
   lessons() {
     if (Array.isArray(this.spec.lessons) && this.spec.lessons.length) return this.spec.lessons;
+    { const D = DIO[this.spec.type]; if (D && Array.isArray(D.lessons) && D.lessons.length) return D.lessons; }   // a model's own authored lessons
     if (this._auto) return this._auto;
     const ks = Object.keys(this.ds.ranges).filter(k => !(this.spec.hidden || []).includes(k)).slice(0, 3), A = this.ds.actors;
     const L = [{ title: 'Watch it run', text: `Let the model run and follow ${A.length ? A.map(a => a.name).slice(0, 3).join(', ') : 'the bodies'}. Each event the bodies cause is logged at the bottom right.`, run: 8 }];
