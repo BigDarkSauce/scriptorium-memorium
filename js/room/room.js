@@ -48,17 +48,21 @@ export class BookRoom {
   // GPU resources (main.js calls this after the next place has rendered): the room, plus each pedestal model's own
   // off-screen environment (its world was moved onto the pedestal; lights, floor and sky stayed in ds.scene)
   disposeGPU() { const keep = this.app.mode && this.app.mode !== this ? this.app.mode.scene : null; const roots = [this.scene]; this.stations.forEach(s => { if (s.ds) roots.push(s.ds.scene); }); disposeTree(roots, keep); }
-  // Opening view: stand back from the first scrolls (up to three) along their mean wall normal, looking at the scrolls
-  // and their pedestals; drift a little toward the room centre so the neighbouring bays show too.
+  // Opening view: the first scrolls (up to three) with their pedestals are the hero. The camera stands back from them
+  // and off to the side of their wall that has more room, looking back across at ~34°: the hero sits left or right of
+  // centre, its wall (with the next scrolls) recedes beside it, and the near corner's wall is distant background behind
+  // the hero instead of a close slab of bookcases filling a third of the frame.
   frameStart() {
     const D = this.data.dims, first = (this.placed || []).slice(0, 3);
     if (!first.length) { this.camera.position.set(0, 1.65, D.d / 2 - 1.2); this.controls.target.set(0, 1.5, -D.d / 2); this.controls.update(); return; }
     // eye a little above standing height, looking slightly down: the line of sight over each pedestal's model meets the
     // wall below the scroll's lower rod (SHEET_BOTTOM), so banners show whole with their pedestals in front
     const t = V3(), n = V3(); first.forEach(({ slot }) => { t.add(slot.p.clone().addScaledVector(slot.n, .55)); n.add(slot.n); }); t.divideScalar(first.length).setY(1.62); n.normalize();
-    const back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), p = t.clone().addScaledVector(n, back).lerp(V3(0, 0, 0), .22).setY(1.95);
-    p.x = clamp(p.x, -D.w / 2 + 1.1, D.w / 2 - 1.1); p.z = clamp(p.z, -D.d / 2 + 1.1, D.d / 2 - 1.1);
-    this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update();
+    const tg = V3(n.z, 0, -n.x), m = 1.1, reach = d => { let r = Infinity; if (d.x > 1e-3) r = Math.min(r, (D.w / 2 - m - t.x) / d.x); if (d.x < -1e-3) r = Math.min(r, (-D.w / 2 + m - t.x) / d.x); if (d.z > 1e-3) r = Math.min(r, (D.d / 2 - m - t.z) / d.z); if (d.z < -1e-3) r = Math.min(r, (-D.d / 2 + m - t.z) / d.z); return r; };
+    const sg = reach(tg) >= reach(tg.clone().negate()) ? 1 : -1, back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), a = .6;
+    const p = t.clone().addScaledVector(n, back * Math.cos(a)).addScaledVector(tg, sg * back * Math.sin(a)).setY(1.95);
+    p.x = clamp(p.x, -D.w / 2 + m, D.w / 2 - m); p.z = clamp(p.z, -D.d / 2 + m, D.d / 2 - m);
+    this.camera.position.copy(p); this.controls.target.copy(t.clone().addScaledVector(tg, sg * back * .18)); this.controls.update();
   }
   placeSpots(force) {
     if (!this.spots || !this.spots.length) return; const now = performance.now(); if (!force && now - this._spotT < 250) return; this._spotT = now;
