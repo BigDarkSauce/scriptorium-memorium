@@ -40,11 +40,15 @@
    - Each moment gets one camera shot that suits it, and then the camera holds still: the **wide** view of the whole model; a slow **push** in towards the object an instruction is about; a still **medium** view framing the subject and the objects an explanation names; a **close** cut to a small part where an event happens; or a **point of view** riding along with an actor, when a step asks for it. Two moving shots never follow each other.
    - Each explanation appears beside the thing it describes, joined to it by a line.
    - Explanations come one at a time, and each stays as long as it takes to read. A thin bar shows the time left.
-   - While you read an event, simulated time slows to about a third, so you can still see the process the text describes.
+   - While you read an event, simulated time slows to about a third (more while notes are waiting), so you can still see the process the text describes.
    - When a step ends, its *Why* explanation appears next to the object.
    - Grab the camera at any time; the director gives it back to you for a few seconds.
    - The bar at the bottom left switches **Cinematic** on or off and sets the **reading pace** (slow, normal, fast).
    - **Guides** (optional) adds animated arrows that show which way the subject is moving, and links to the other objects the explanation names.
+   - Read first, then watch: when a step starts, the model waits while you read its instruction (hover over a note to keep it; › skips it), then the step plays. Each note shows the step's **question**, and the explanation ends with the question it opens next.
+   - During a step the instruction panel folds away and the readouts shrink to the quantities the step mentions; both come back when the step ends. *All readouts ▾* shows every value.
+   - **Point of view**: press **P** (or ◉ next to an object in *Objects*) to see from inside any object — ride the pendulum bob, travel with a gas molecule, sit inside a flask. Drag to look around, ‹ › switch object, **Esc** leaves. Some steps take you there by themselves.
+   - **Sound**: the speaker button (top right) switches sound on or off. Each place has its own background (library hall, reading room, workshop, meadow with live rain and wind, sea, space, the micro world), and events, clicks, scrolls, bookcases and footsteps have their own sounds.
 
    The panel itself has three parts:
    - **Instructions** appear one at a time. Press *Play this step*: it sets the variables, focuses the camera, and runs until the step's event or time is reached. The next step then appears; finished steps stay readable, with an explanation.
