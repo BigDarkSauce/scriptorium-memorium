@@ -1,0 +1,609 @@
+{
+ "title": "Motion in one dimension",
+ "summary": "Position, displacement, velocity and constant acceleration of a cart on a straight track, with the book's Examples 1.1–1.3 and Table 1.1.",
+ "question": "How do we describe the motion of a cart along a straight track, and how fast that motion changes?",
+ "sourceNote": "Example chain built from Chapter 1 of the repository's test book (a generated PDF). Its coverage map is complete: every subsection 1.0–1.3 has its own steps.",
+ "chain": [
+  {
+   "id": "S1",
+   "section": "1.0",
+   "kind": "remark",
+   "title": "What kinematics describes",
+   "answers": "How do we describe the motion of a cart along a straight track, and how fast that motion changes?",
+   "opens": "Where exactly is the cart at a given moment?",
+   "ref": "Chapter 1 opening, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "Kinematics describes how objects move without asking why. The cart rolls along a straight track; its motion is described by position, velocity and acceleration, each measured along one axis $x$.",
+   "terms": [
+    {
+     "term": "kinematics",
+     "meaning": "the description of motion (where, how fast, how the speed changes) without its causes"
+    }
+   ],
+   "intuition": "A film of the cart, frame by frame, with a ruler along the track: kinematics reads the ruler; dynamics would ask who pushed.",
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "straight track",
+    "ruler along the track"
+   ],
+   "demos": [],
+   "from": []
+  },
+  {
+   "id": "S2",
+   "section": "1.1",
+   "kind": "definition",
+   "title": "Position and displacement",
+   "answers": "Where exactly is the cart at a given moment?",
+   "opens": "Does the answer depend on where we put the zero of the ruler?",
+   "ref": "§1.1, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "The position $x$ is the signed distance of the cart from a chosen origin, in metres. The displacement over a time interval is the change of position, $\\Delta x = x_2 - x_1$. Displacement is not the distance travelled: a cart that moves 3 m forward and 3 m back has displacement zero but has travelled 6 m.",
+   "math": "\\Delta x = x_2 - x_1",
+   "terms": [
+    {
+     "term": "$x$",
+     "meaning": "position along the track, signed, m"
+    },
+    {
+     "term": "$\\Delta x$",
+     "meaning": "displacement = change of position, m"
+    },
+    {
+     "term": "distance travelled",
+     "meaning": "total length of path covered, always ≥ |Δx|, m"
+    }
+   ],
+   "misconception": "Displacement and distance are the same thing. They differ whenever the cart turns back: 3 m out and 3 m back gives Δx = 0 m but 6 m travelled.",
+   "check": {
+    "q": "A cart goes 5 m forward and 2 m back. Give its displacement and its distance travelled.",
+    "a": "Δx = +3 m (net change of position); distance = 7 m (5 + 2)."
+   },
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "origin mark",
+    "ruler"
+   ],
+   "demos": [
+    {
+     "type": "scene",
+     "title": "Out and back on the track",
+     "purpose": "Why can displacement be zero while the distance travelled is not?",
+     "technique": "card",
+     "request": "Actors: a cart on a 4 m straight track with a ruler and an origin mark; a red displacement arrow from start to current position; an odometer readout of distance travelled. The cart drives 3 m forward then 3 m back. Events: 'turns back' at x = 3 m, 'back at start'. Lessons (question → opens): 1 'Where is the cart after 3 m?' → 'What happens to Δx when it turns back?'; 2 'What happens to Δx when it turns back?' → 'Has the odometer gone back too?'; 3 'Has the odometer gone back too?' → 'Does the origin we chose matter?'."
+    }
+   ],
+   "from": [
+    "S1"
+   ]
+  },
+  {
+   "id": "S3",
+   "section": "1.1.1",
+   "kind": "remark",
+   "title": "Choosing an origin",
+   "answers": "Does the answer depend on where we put the zero of the ruler?",
+   "opens": "What is the cart's displacement in the book's first example?",
+   "ref": "§1.1.1, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "The origin and the positive direction are free choices. Moving the origin shifts every position by the same constant $c$, so displacements do not change: $(x_2 + c) - (x_1 + c) = x_2 - x_1$. In this book the origin is the left end of the track and $x$ grows to the right.",
+   "derivation": [
+    {
+     "expr": "x' = x + c",
+     "why": "new origin a distance c to the left"
+    },
+    {
+     "expr": "\\Delta x' = (x_2 + c) - (x_1 + c) = \\Delta x",
+     "why": "the constant cancels"
+    }
+   ],
+   "terms": [
+    {
+     "term": "$c$",
+     "meaning": "shift of the origin, m"
+    }
+   ],
+   "intuition": "Sliding the ruler under the track changes every reading but not the gap between two readings.",
+   "basis": "source-text",
+   "bodies": [
+    "ruler",
+    "origin mark"
+   ],
+   "demos": [],
+   "from": [
+    "S2"
+   ]
+  },
+  {
+   "id": "S4",
+   "section": "1.1.2",
+   "kind": "example",
+   "title": "Example 1.1: displacement of the cart",
+   "answers": "What is the cart's displacement in the book's first example?",
+   "opens": "What if the cart overshoots and comes back to the same point?",
+   "ref": "Example 1.1, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "A cart starts at $x_1 = 2.0$ m and after 4.0 s is at $x_2 = 14.4$ m.",
+   "derivation": [
+    {
+     "expr": "\\Delta x = 14.4\\,\\mathrm{m} - 2.0\\,\\mathrm{m} = 12.4\\,\\mathrm{m}",
+     "why": "definition of displacement (S2)"
+    }
+   ],
+   "figures": [
+    "fig-1-1"
+   ],
+   "basis": "source-text",
+   "bodies": [
+    "cart"
+   ],
+   "demos": [
+    {
+     "type": "plot",
+     "title": "x(t) of the cart with the book's values",
+     "purpose": "Where is the cart at each instant, and does the curve pass through the book's values?",
+     "exprs": [
+      "2+1.5*x+0.4*x^2"
+     ],
+     "x": [
+      0,
+      5
+     ],
+     "y": [
+      0,
+      20
+     ],
+     "xlabel": "t (s)",
+     "ylabel": "x (m)",
+     "params": {},
+     "points": [
+      [
+       0,
+       2.0,
+       "2.0 m"
+      ],
+      [
+       1,
+       3.9
+      ],
+      [
+       2,
+       6.6
+      ],
+      [
+       4,
+       14.4,
+       "14.4 m"
+      ]
+     ]
+    }
+   ],
+   "from": [
+    "S2"
+   ]
+  },
+  {
+   "id": "S5",
+   "section": "1.1.2",
+   "kind": "example",
+   "title": "Example 1.1 continued: overshoot and return",
+   "answers": "What if the cart overshoots and comes back to the same point?",
+   "opens": "How fast, on average, did the cart move over those 4.0 s?",
+   "ref": "Example 1.1, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "If the cart had first gone to $x = 16.0$ m and come back to 14.4 m, the displacement would still be 12.4 m, but the distance travelled would be 15.6 m.",
+   "derivation": [
+    {
+     "expr": "\\Delta x = 14.4\\,\\mathrm{m} - 2.0\\,\\mathrm{m} = 12.4\\,\\mathrm{m}",
+     "why": "only the end points count"
+    },
+    {
+     "expr": "d = (16.0 - 2.0)\\,\\mathrm{m} + (16.0 - 14.4)\\,\\mathrm{m} = 14.0\\,\\mathrm{m} + 1.6\\,\\mathrm{m} = 15.6\\,\\mathrm{m}",
+     "why": "every metre of path counts"
+    }
+   ],
+   "check": {
+    "q": "Which of Δx and d can be negative?",
+    "a": "Only Δx: it is a signed change of position; d adds path lengths, which are positive."
+   },
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "turning point at 16.0 m"
+   ],
+   "extra": [
+    {
+     "what": "Usain Bolt's 10 m split times in his 9.58 s 100 m (Berlin 2009) as a second, measured position–time record",
+     "source": {
+      "title": "A Kinematics Analysis Of Three Best 100 M Performances Ever",
+      "authors": "Maćkała K; Mero A A",
+      "year": 2013,
+      "doi": "10.2478/hukin-2013-0015"
+     }
+    }
+   ],
+   "demos": [],
+   "from": [
+    "S4"
+   ]
+  },
+  {
+   "id": "S6",
+   "section": "1.2",
+   "kind": "definition",
+   "title": "Average velocity",
+   "answers": "How fast, on average, did the cart move over those 4.0 s?",
+   "opens": "How fast is the cart moving at one instant?",
+   "ref": "§1.2, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "The average velocity over an interval is the displacement divided by the elapsed time, in metres per second.",
+   "math": "v_{\\mathrm{avg}} = \\frac{\\Delta x}{\\Delta t}",
+   "terms": [
+    {
+     "term": "$v_{\\mathrm{avg}}$",
+     "meaning": "average velocity, m/s"
+    },
+    {
+     "term": "$\\Delta t$",
+     "meaning": "elapsed time, s"
+    }
+   ],
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "stopwatch"
+   ],
+   "demos": [],
+   "from": [
+    "S2"
+   ]
+  },
+  {
+   "id": "S7",
+   "section": "1.2",
+   "kind": "definition",
+   "title": "Instantaneous velocity",
+   "answers": "How fast is the cart moving at one instant?",
+   "opens": "Does the book's cart give the same value both ways?",
+   "ref": "§1.2, Eq. v = dx/dt, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "The instantaneous velocity is the limit of the average velocity as $\\Delta t \\to 0$: the slope of the $x(t)$ curve.",
+   "math": "v = \\lim_{\\Delta t\\to 0}\\frac{\\Delta x}{\\Delta t} = \\frac{dx}{dt}",
+   "terms": [
+    {
+     "term": "$v$",
+     "meaning": "instantaneous velocity, m/s"
+    }
+   ],
+   "intuition": "Zoom into the x(t) curve until it looks straight: its steepness there is the velocity.",
+   "misconception": "The average velocity over an interval equals the velocity at its start. It equals the slope of the chord, which matches the instantaneous slope only at some instant inside the interval.",
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "tangent to x(t)"
+   ],
+   "demos": [
+    {
+     "type": "tangent",
+     "title": "Secant slope → tangent slope on the cart's x(t)",
+     "purpose": "How does the average velocity become the velocity at an instant?",
+     "expr": "2+1.5*x+0.4*x^2",
+     "x": [
+      0,
+      5
+     ],
+     "y": [
+      0,
+      20
+     ]
+    }
+   ],
+   "from": [
+    "S6"
+   ]
+  },
+  {
+   "id": "S8",
+   "section": "1.2",
+   "kind": "example",
+   "title": "Example 1.2: average and midpoint velocity",
+   "answers": "Does the book's cart give the same value both ways?",
+   "opens": "How does the velocity itself change when it is not constant?",
+   "ref": "Example 1.2, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "For the cart of Example 1.1 the average velocity is 3.1 m/s. The slope of the curve in Figure 1.1 at $t = 2$ s is 3.1 m/s as well, because for constant acceleration the average velocity over an interval equals the instantaneous velocity at its midpoint.",
+   "derivation": [
+    {
+     "expr": "v_{\\mathrm{avg}} = \\frac{12.4\\,\\mathrm{m}}{4.0\\,\\mathrm{s}} = 3.1\\,\\mathrm{m/s}",
+     "why": "S6 with Δx from S4"
+    }
+   ],
+   "figures": [
+    "fig-1-1"
+   ],
+   "basis": "source-text",
+   "bodies": [
+    "cart"
+   ],
+   "demos": [],
+   "from": [
+    "S4",
+    "S7"
+   ]
+  },
+  {
+   "id": "S9",
+   "section": "1.3",
+   "kind": "definition",
+   "title": "Acceleration",
+   "answers": "How does the velocity itself change when it is not constant?",
+   "opens": "If the acceleration is constant, how do velocity and position grow with time?",
+   "ref": "§1.3, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "Acceleration is the rate of change of velocity, measured in m/s².",
+   "math": "a = \\frac{dv}{dt}",
+   "terms": [
+    {
+     "term": "$a$",
+     "meaning": "acceleration, m/s²"
+    }
+   ],
+   "basis": "source-text",
+   "bodies": [
+    "cart"
+   ],
+   "demos": [],
+   "from": [
+    "S7"
+   ]
+  },
+  {
+   "id": "S10",
+   "section": "1.3",
+   "kind": "formula",
+   "title": "The constant-acceleration equations",
+   "answers": "If the acceleration is constant, how do velocity and position grow with time?",
+   "opens": "Do the equations reproduce the book's numbers for the cart?",
+   "ref": "§1.3, three displayed equations, pp. 3–4",
+   "pages": [
+    3,
+    4
+   ],
+   "statement": "When $a$ is constant the velocity grows linearly and the position quadratically; eliminating $t$ gives the third relation. The area under $v(t)$ is the displacement (Figure 1.2).",
+   "derivation": [
+    {
+     "expr": "v(t) = v_0 + a t",
+     "why": "integrate a = dv/dt with a constant"
+    },
+    {
+     "expr": "x(t) = x_0 + v_0 t + \\tfrac12 a t^2",
+     "why": "integrate v = dx/dt"
+    },
+    {
+     "expr": "v^2 = v_0^2 + 2a(x - x_0)",
+     "why": "eliminate t between the two"
+    }
+   ],
+   "terms": [
+    {
+     "term": "$v_0$",
+     "meaning": "velocity at t = 0, m/s"
+    },
+    {
+     "term": "$x_0$",
+     "meaning": "position at t = 0, m"
+    },
+    {
+     "term": "$t$",
+     "meaning": "time, s"
+    }
+   ],
+   "figures": [
+    "fig-1-2"
+   ],
+   "basis": "source-text",
+   "bodies": [
+    "cart",
+    "shaded area under v(t)"
+   ],
+   "demos": [
+    {
+     "type": "plot",
+     "title": "v(t) and x(t) for the book's cart",
+     "purpose": "Why does a straight v(t) give a parabolic x(t)?",
+     "exprs": [
+      "v0+a*x",
+      "2+v0*x+0.5*a*x^2"
+     ],
+     "x": [
+      0,
+      6
+     ],
+     "y": [
+      0,
+      30
+     ],
+     "xlabel": "t (s)",
+     "ylabel": "v (m/s), x (m)",
+     "params": {
+      "v0": [
+       0,
+       4,
+       1.5
+      ],
+      "a": [
+       0,
+       2,
+       0.8
+      ]
+     }
+    },
+    {
+     "type": "projectile",
+     "title": "Constant acceleration in a throw",
+     "purpose": "What does constant acceleration look like when it acts on only one of two directions?",
+     "params": {
+      "v0": 20,
+      "angle": 40,
+      "g": 9.81,
+      "drag": 0
+     },
+     "lessons": [
+      {
+       "title": "Throw",
+       "question": "What path does a constant downward acceleration give?",
+       "text": "Press Play and watch the ball's path and the vertical-speed readout.",
+       "run": 3,
+       "explain": "The vertical speed falls by 9.81 m/s every second while the horizontal speed stays: x grows linearly, y quadratically, so the path is a parabola.",
+       "opens": "Where is the ball highest?"
+      },
+      {
+       "title": "Peak",
+       "question": "Where is the ball highest?",
+       "text": "Watch the vertical-speed readout reach zero.",
+       "run": 2,
+       "explain": "At the top v_y = 0; from v² = v0² + 2a(y − y0), H = (20 sin 40°)²/(2·9.81) ≈ 8.4 m.",
+       "opens": "How does this extend to two directions at once?",
+       "shot": "close"
+      }
+     ]
+    }
+   ],
+   "from": [
+    "S9"
+   ]
+  },
+  {
+   "id": "S11",
+   "section": "1.3",
+   "kind": "example",
+   "title": "Example 1.3 and Table 1.1: the cart after 4.0 s",
+   "answers": "Do the equations reproduce the book's numbers for the cart?",
+   "opens": "How do we describe motion that needs two directions at once?",
+   "ref": "Example 1.3, Table 1.1, p. 4",
+   "pages": [
+    4
+   ],
+   "statement": "With $v_0 = 1.5$ m/s and $a = 0.8$ m/s², after 4.0 s the cart moves at 4.7 m/s and has moved 12.4 m, matching Example 1.1.",
+   "derivation": [
+    {
+     "expr": "v = 1.5 + 0.8 \\times 4.0 = 4.7\\,\\mathrm{m/s}",
+     "why": "v(t) = v_0 + at (S10)"
+    },
+    {
+     "expr": "\\Delta x = 1.5 \\times 4.0 + 0.4 \\times 16 = 12.4\\,\\mathrm{m}",
+     "why": "x(t) - x_0 = v_0 t + ½ a t² (S10)"
+    }
+   ],
+   "table": {
+    "caption": "Table 1.1: Values of x and v for the cart",
+    "columns": [
+     "t (s)",
+     "x (m)",
+     "v (m/s)"
+    ],
+    "rows": [
+     [
+      "0",
+      "2.0",
+      "1.5"
+     ],
+     [
+      "1",
+      "3.9",
+      "2.3"
+     ],
+     [
+      "2",
+      "6.6",
+      "3.1"
+     ],
+     [
+      "4",
+      "14.4",
+      "4.7"
+     ]
+    ]
+   },
+   "figures": [
+    "tab-1-1"
+   ],
+   "check": {
+    "q": "Use the table: is the x-increase from t = 2 s to t = 4 s twice the increase from 0 to 2 s?",
+    "a": "No: 7.8 m against 4.6 m. Equal time steps give growing increments because v grows."
+   },
+   "basis": "source-text",
+   "bodies": [
+    "cart"
+   ],
+   "demos": [],
+   "from": [
+    "S10"
+   ]
+  }
+ ],
+ "coverage": [
+  {
+   "subsection": "1.0",
+   "steps": [
+    "S1"
+   ]
+  },
+  {
+   "subsection": "1.1",
+   "steps": [
+    "S2"
+   ]
+  },
+  {
+   "subsection": "1.1.1",
+   "steps": [
+    "S3"
+   ]
+  },
+  {
+   "subsection": "1.1.2",
+   "steps": [
+    "S4",
+    "S5"
+   ]
+  },
+  {
+   "subsection": "1.2",
+   "steps": [
+    "S6",
+    "S7",
+    "S8"
+   ]
+  },
+  {
+   "subsection": "1.3",
+   "steps": [
+    "S9",
+    "S10",
+    "S11"
+   ]
+  }
+ ],
+ "references": []
+}

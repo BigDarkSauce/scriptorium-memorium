@@ -26,7 +26,7 @@ export class Director {
     this.caption = el('div', { class: 'dir-caption', hidden: true }); this.layer.append(this.caption);
     this.trail = new Map();      // object → recent screen positions (for motion arrows)
   }
-  dispose() { this.layer.remove(); }
+  dispose() { this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
   userGrab() { this.hold = 6; this.move = null; this.fovTo = this.baseFov(); this.last = null; }
 

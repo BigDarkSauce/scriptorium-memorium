@@ -187,7 +187,7 @@ const normT = s => String(s || '').toLowerCase().replace(/\$[^$]*\$/g, ' ').repl
 const words = s => new Set(normT(s).split(' ').filter(w => w.length > 2));
 export function similar(a, b) { const A = words(a), B = words(b); if (!A.size || !B.size) return 0; let n = 0; A.forEach(w => { if (B.has(w)) n++; }); return n / Math.min(A.size, B.size); }
 const NUM_RE = /(?<![\p{L}\d.])[−-]?\d+(?:[.,]\d+)?(?![\d])/gu;
-const numsIn = s => (String(s || '').replace(/\\[a-zA-Z]+/g, ' ').match(NUM_RE) || []).map(x => x.replace('−', '-').replace(',', '.')).filter(x => !/^-?[0-9]$/.test(x));   // single digits are too common to check
+const numsIn = s => (String(s || '').replace(/\\[a-zA-Z]+\d{0,2}/g, ' ').match(NUM_RE) || []).map(x => x.replace('−', '-').replace(',', '.')).filter(x => !/^-?[0-9]$/.test(x));   // single digits are too common to check
 function stepText(st) { return [st.statement, st.math, ...(st.derivation || []).map(d => typeof d === 'string' ? d : d.expr), st.table ? JSON.stringify(st.table.rows || []) : ''].join(' '); }
 // map a step's "section" (an id, a number, or a title) to a known subsection id
 export function resolveSection(val, sections) {
