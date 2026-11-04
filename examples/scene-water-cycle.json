@@ -934,7 +934,8 @@
       "shot": "wide",
       "until": "event:has cooled to",
       "run": 45,
-      "explain": "At 18:30 the sun gives almost no heat. The lake air cools to 10.2 °C, and e_s falls to 12.5 hPa, less than a third of its midday value. The air above the lake is now saturated, so evaporation stops and mist forms over the water. The sun powers the cycle: evaporating one kilogram of water takes about 2.45 MJ, and gravity brings the water back down."
+      "explain": "At 18:30 the sun gives almost no heat. The lake air cools to 10.2 °C, and e_s falls to 12.5 hPa, less than a third of its midday value. The air above the lake is now saturated, so evaporation stops and mist forms over the water. The sun powers the cycle: evaporating one kilogram of water takes about 2.45 MJ, and gravity brings the water back down.",
+      "opens": "How will the cycle change as the climate warms, now that e_s rises about 6–7 % per kelvin?"
     }
   ],
   "sources": [

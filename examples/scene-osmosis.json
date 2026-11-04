@@ -510,7 +510,8 @@
       "shot": "medium",
       "until": "event:reverse osmosis",
       "run": 60,
-      "explain": "Pressure on the solution raises the water's chemical potential there. Once it exceeds the osmotic pressure, the net flow reverses and water is squeezed out of the solution through the membrane, leaving the solute behind. The flow follows J = Lp(ΔP − σΔπ) (Kedem & Katchalsky 1958). Desalination plants work this way: seawater has an osmotic pressure of about 27 bar, so they press it at 55–80 bar."
+      "explain": "Pressure on the solution raises the water's chemical potential there. Once it exceeds the osmotic pressure, the net flow reverses and water is squeezed out of the solution through the membrane, leaving the solute behind. The flow follows J = Lp(ΔP − σΔπ) (Kedem & Katchalsky 1958). Desalination plants work this way: seawater has an osmotic pressure of about 27 bar, so they press it at 55–80 bar.",
+      "opens": "What happens to a living cell placed in water that is saltier or fresher than its inside?"
     }
   ],
   "sources": [

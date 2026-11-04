@@ -64,6 +64,9 @@ class App {
       r.lessonsV = 4; store.set('room:' + id, r);
     }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
+    // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
+    // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
+    if (b && b.example && r.threadV !== 1) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 1; store.set('room:' + id, r); }
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
@@ -128,7 +131,7 @@ class App {
   }
   // ---------- seed library: subject bookcases with example books and flagship dioramas ----------
   seedLibrary() {
-    const L = legacyScrolls(); this.seedRooms = new Map();
+    this.seedRooms = new Map();
     const lib = { v: 3, hub: { w: 18, d: 12, h: 7 }, shelves: [], books: [] };
     const W = lib.hub.w, D = lib.hub.d;
     const sh = (name, kind, x, z, rot, color) => { const s = { id: 'sh-' + uid(), name, kind, x, z, rot, color }; lib.shelves.push(s); return s; };
@@ -138,7 +141,7 @@ class App {
     const bio = sh('Biology', 'vertical', -W / 2 + .28, .2, Math.PI / 2, '#6a8a3a');
     const econ = sh('Economics & Statistics', 'vertical', W / 2 - .28, -2.2, -Math.PI / 2, '#8f733a');
     const earth = sh('Earth Science', 'vertical', W / 2 - .28, .2, -Math.PI / 2, '#2f6f8f');
-    const slots = new Map();
+    const slots = new Map(), shelves = { physics, maths, chem, bio, econ, earth };
     const book = (shelf, title, parts, icon = 'EX') => {
       const n = slots.get(shelf.id) || 0; slots.set(shelf.id, n + 1);
       const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
@@ -146,30 +149,83 @@ class App {
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
-    const asPart = s => ({ title: s.title, summary: s.analysis.summary, analysis: normalizeChain(groundChain(JSON.parse(JSON.stringify(s.analysis)))) });
-    const scenePart = (spec, title, summary, steps) => ({ title, summary, analysis: normalizeChain(groundChain({ title, summary, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s[0], title: s[1], statement: s[2], math: s[3] || '', from: i ? ['S' + i] : [], bodies: s[4] || [], demos: i === steps.length - 1 || s[5] ? [JSON.parse(JSON.stringify(spec))] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
-    book(physics, 'Classical Mechanics', L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart), 'PHY');
-    book(earth, 'The Weather Glass', L[0].filter(s => /Weather/.test(s.title)).map(asPart), 'ATM');
-    book(maths, 'Calculus & Linear Maps', L[1].map(asPart), 'MATH');
-    book(chem, 'Collision Theory', L[2].map(asPart), 'CHEM');
-    const [water, galton, market, osmo] = FLAGSHIPS;
-    book(earth, 'The Water Cycle', [scenePart(water, 'The water cycle', 'Energy from the sun moves water from lake to cloud to mountain and back.', [
-      ['definition', 'Evaporation', 'Molecules at the surface of liquid water that gain enough energy escape as vapour; the rate grows with heating.', '', ['lake', 'sun']],
-      ['definition', 'Saturation', 'Air at a given temperature can hold at most a certain amount of water vapour; cooler air holds less.', '', ['air parcel']],
-      ['result', 'Orographic rain', 'Wind forces moist air up a mountain slope; it expands, cools below saturation, and the excess condenses and falls as rain.', '', ['cloud', 'wind', 'mountains', 'rain']]])], 'H2O');
-    book(econ, 'Probability & the Bell Curve', [scenePart(galton, 'Galton board', 'A bell curve made of coin flips.', [
-      ['definition', 'Bernoulli trial', 'One random event with two outcomes: "right" with probability $p$, "left" with probability $1-p$.', '', ['peg', 'ball']],
-      ['theorem', 'Binomial distribution', 'The number $K$ of right-bounces in $N$ independent trials satisfies $P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}$, with mean $Np$ and variance $Np(1-p)$.', 'P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}', ['bins']],
-      ['result', 'Normal approximation', 'For large $N$ the binomial is close to a normal curve with the same mean and spread (de Moivre–Laplace, a case of the central limit theorem).', '', ['curve', 'bins']]])], 'STAT');
-    book(econ, 'Markets', [scenePart(market, 'Supply and demand', 'How a market finds the price where buyers and sellers agree.', [
-      ['definition', 'Demand', 'At each price $p$, the quantity $D(p)$ buyers want; it falls as $p$ rises because fewer buyers value the good above the price.', '', ['buyers']],
-      ['definition', 'Supply', 'At each price $p$, the quantity $S(p)$ sellers offer; it rises with $p$ because more sellers cover their cost.', '', ['sellers']],
-      ['result', 'Equilibrium', 'In a double auction, bids and asks meet at the stall; trade prices converge towards $p^*$ where $D(p^*)=S(p^*)$, even with random traders bound only by a no-loss rule (Smith 1962; Gode & Sunder 1993).', 'D(p^*)=S(p^*)', ['price', 'stall', 'curves']]])], 'ECON');
-    book(bio, 'Cell Membranes', [scenePart(osmo, 'Osmosis', 'Why water flows towards dissolved particles across a membrane.', [
-      ['definition', 'Semi-permeable membrane', 'A barrier with pores that pass small solvent molecules (water) but not larger solute molecules.', '', ['membrane']],
-      ['result', 'Osmosis', 'Water moves by diffusion across the membrane towards the side with more solute until the extra pressure there balances the flow.', '', ['water molecules', 'solute molecules']],
-      ['theorem', 'Osmotic pressure', 'For dilute solutions the balancing pressure is $\\pi = cRT$ (van \'t Hoff), proportional to the solute concentration.', '\\pi = cRT', ['water levels']]])], 'BIO');
+    this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
     return lib;
+  }
+  // The example books' content (parts without ids), in the chain format of docs/PROTOCOL.md: every part has its question
+  // and subsections, every step its section and its place in the question thread (answers = the previous step's opens),
+  // every demo its purpose. Also the source the saved example rooms are brought up to date from (threadFromSeeds).
+  seedBooks() {
+    const L = legacyScrolls(), C = o => JSON.parse(JSON.stringify(o));
+    // the coverage map, from each step's section
+    const covered = P => { P.analysis.coverage = (P.subsections || []).map(x => ({ subsection: x.id, steps: P.analysis.chain.filter(st => st.section === x.id).map(st => st.id) })); return P; };
+    const asPart = s => covered({ title: s.title, summary: s.analysis.summary, subsections: C(s.subsections || []), analysis: normalizeChain(groundChain(C(s.analysis))) });
+    const subs = list => list.map(([id, title]) => ({ id, num: id, title, level: 2 }));
+    // a part built around one flagship scene; steps: {kind, title, statement, math?, bodies?, section, opens, demo?}.
+    // The thread is unbroken by construction: step 1 answers the part's question, step k+1 answers step k's "opens".
+    const scenePart = (spec, title, summary, { question, subsections, purpose }, steps) => covered({ title, summary, subsections: subs(subsections), analysis: normalizeChain(groundChain({ title, summary, question, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s.kind, title: s.title, section: s.section, answers: i ? steps[i - 1].opens : question, opens: s.opens, statement: s.statement, math: s.math || '', from: i ? ['S' + i] : [], bodies: s.bodies || [], demos: i === steps.length - 1 || s.demo ? [{ ...C(spec), purpose }] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
+    const [water, galton, market, osmo] = FLAGSHIPS;
+    return [
+      { shelf: 'physics', title: 'Classical Mechanics', icon: 'PHY', parts: L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart) },
+      { shelf: 'earth', title: 'The Weather Glass', icon: 'ATM', parts: L[0].filter(s => /Weather/.test(s.title)).map(asPart) },
+      { shelf: 'maths', title: 'Calculus & Linear Maps', icon: 'MATH', parts: L[1].map(asPart) },
+      { shelf: 'chem', title: 'Collision Theory', icon: 'CHEM', parts: L[2].map(asPart) },
+      { shelf: 'earth', title: 'The Water Cycle', icon: 'H2O', parts: [scenePart(water, 'The water cycle', 'Energy from the sun moves water from lake to cloud to mountain and back.', {
+        question: 'How does energy from the sun move water from a lake into a cloud, onto a mountainside and back?',
+        subsections: [['1.1', 'Evaporation'], ['1.2', 'Saturation'], ['1.3', 'Orographic rain']],
+        purpose: 'Can you follow the water through the whole cycle: evaporation from the sunlit lake, a parcel rising to its dew point, orographic rain on the windward slope, and the dry, warm rain shadow beyond the crest?' }, [
+        { kind: 'definition', title: 'Evaporation', section: '1.1', statement: 'Molecules at the surface of liquid water that gain enough energy escape as vapour; the rate grows with heating.', bodies: ['lake', 'sun'], opens: 'How much water vapour can collect above water at a given temperature?' },
+        { kind: 'definition', title: 'Saturation', section: '1.2', statement: 'Air at a given temperature can hold at most a certain amount of water vapour; cooler air holds less.', bodies: ['air parcel'], opens: 'How does moist air carried over a mountain reach saturation and rain?' },
+        { kind: 'result', title: 'Orographic rain', section: '1.3', statement: 'Wind forces moist air up a mountain slope; it expands, cools below saturation, and the excess condenses and falls as rain.', bodies: ['cloud', 'wind', 'mountains', 'rain'], opens: 'How will the cycle change as the climate warms, now that e_s rises about 6–7 % per kelvin?' }])] },
+      { shelf: 'econ', title: 'Probability & the Bell Curve', icon: 'STAT', parts: [scenePart(galton, 'Galton board', 'A bell curve made of coin flips.', {
+        question: 'Why do many independent left-or-right bounces pile up into a bell curve?',
+        subsections: [['1.1', 'Bernoulli trials'], ['1.2', 'The binomial distribution'], ['1.3', 'The normal approximation']],
+        purpose: 'Can you watch single random paths add up, bead by bead, into the binomial histogram and its normal curve, and see the pile shift and widen as p and N change?' }, [
+        { kind: 'definition', title: 'Bernoulli trial', section: '1.1', statement: 'One random event with two outcomes: "right" with probability $p$, "left" with probability $1-p$.', bodies: ['peg', 'ball'], opens: 'How many right-bounces does a bead make in N independent trials?' },
+        { kind: 'theorem', title: 'Binomial distribution', section: '1.2', statement: 'The number $K$ of right-bounces in $N$ independent trials satisfies $P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}$, with mean $Np$ and variance $Np(1-p)$.', math: 'P(K=k)=\\binom{N}{k}p^k(1-p)^{N-k}', bodies: ['bins'], opens: 'What curve does the binomial distribution approach when N is large?' },
+        { kind: 'result', title: 'Normal approximation', section: '1.3', statement: 'For large $N$ the binomial is close to a normal curve with the same mean and spread (de Moivre–Laplace, a case of the central limit theorem).', bodies: ['curve', 'bins'], opens: 'Why do sums of other independent random steps, not only coin flips, also make a bell?' }])] },
+      { shelf: 'econ', title: 'Markets', icon: 'ECON', parts: [scenePart(market, 'Supply and demand', 'How a market finds the price where buyers and sellers agree.', {
+        question: 'How does a market find the price at which buyers and sellers agree?',
+        subsections: [['1.1', 'Demand'], ['1.2', 'Supply'], ['1.3', 'Equilibrium']],
+        purpose: 'Do random traders bound only by a no-loss rule really converge on the price where the staircases cross, and how do the price and the quantity move when demand, costs or the rules change?' }, [
+        { kind: 'definition', title: 'Demand', section: '1.1', statement: 'At each price $p$, the quantity $D(p)$ buyers want; it falls as $p$ rises because fewer buyers value the good above the price.', bodies: ['buyers'], opens: 'How much do sellers offer at each price?' },
+        { kind: 'definition', title: 'Supply', section: '1.2', statement: 'At each price $p$, the quantity $S(p)$ sellers offer; it rises with $p$ because more sellers cover their cost.', bodies: ['sellers'], opens: 'At what price do the quantities demanded and supplied match, and does trading actually reach it?' },
+        { kind: 'result', title: 'Equilibrium', section: '1.3', statement: 'In a double auction, bids and asks meet at the stall; trade prices converge towards $p^*$ where $D(p^*)=S(p^*)$, even with random traders bound only by a no-loss rule (Smith 1962; Gode & Sunder 1993).', math: 'D(p^*)=S(p^*)', bodies: ['price', 'stall', 'curves'], opens: 'Would human traders, who learn and remember, reach the equilibrium faster or more reliably than these random ones?' }])] },
+      { shelf: 'bio', title: 'Cell Membranes', icon: 'BIO', parts: [scenePart(osmo, 'Osmosis', 'Why water flows towards dissolved particles across a membrane.', {
+        question: 'Why does water flow across a membrane towards dissolved particles, and what stops the flow?',
+        subsections: [['1.1', 'The semi-permeable membrane'], ['1.2', 'Osmosis'], ['1.3', 'Osmotic pressure']],
+        purpose: 'Can you see water cross the membrane, the solution column rise until its pressure balances the flow, and the flow reverse when a piston presses harder than the osmotic pressure?' }, [
+        { kind: 'definition', title: 'Semi-permeable membrane', section: '1.1', statement: 'A barrier with pores that pass small solvent molecules (water) but not larger solute molecules.', bodies: ['membrane'], opens: 'Which way does water move when solute sits on only one side of the membrane?' },
+        { kind: 'result', title: 'Osmosis', section: '1.2', statement: 'Water moves by diffusion across the membrane towards the side with more solute until the extra pressure there balances the flow.', bodies: ['water molecules', 'solute molecules'], opens: 'How large is the pressure that stops the flow?' },
+        { kind: 'theorem', title: 'Osmotic pressure', section: '1.3', statement: 'For dilute solutions the balancing pressure is $\\pi = cRT$ (van \'t Hoff), proportional to the solute concentration.', math: '\\pi = cRT', bodies: ['water levels'], opens: 'What happens to a living cell placed in water that is saltier or fresher than its inside?' }])] }];
+  }
+  // Example rooms saved before the question thread existed: fill, from the current seeds, the part's question, subsections
+  // and coverage map, each step's section/answers/opens, each demo's purpose and each lesson's question/opens/shot/pov.
+  // Parts are matched by title (in the same book first), steps by id (and title), demos by type + title, lessons by title.
+  // Only empty fields are filled, so nothing the reader changed is overwritten.
+  threadFromSeeds(book, room) {
+    const books = this.seedBooks(), C = o => JSON.parse(JSON.stringify(o));
+    const own = (books.find(x => x.title === book.title) || { parts: [] }).parts, all = books.flatMap(x => x.parts);
+    const empty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
+    const fill = (to, from, keys) => keys.forEach(k => { if (empty(to[k]) && !empty(from[k])) to[k] = C(from[k]); });
+    let n = 0;
+    for (const p of room.parts || []) {
+      const s = own.find(x => x.title === p.title) || all.find(x => x.title === p.title);
+      if (!s || !p.analysis || !Array.isArray(p.analysis.chain) || p.subOf) continue;
+      fill(p, s, ['subsections']); fill(p.analysis, s.analysis, ['question']);
+      for (const st of p.analysis.chain) {
+        const ss = s.analysis.chain.find(x => x.id === st.id && x.title === st.title); if (!ss) continue;
+        fill(st, ss, ['section', 'answers', 'opens']); n++;
+        (st.demos || []).forEach(d => {
+          const sd = (ss.demos || []).find(x => x.type === d.type && (x.title || '') === (d.title || '')); if (!sd) return;
+          fill(d, sd, ['purpose']);
+          (d.lessons || []).forEach(l => { const sl = l && l.title && (sd.lessons || []).find(x => x.title === l.title); if (sl) fill(l, sl, ['question', 'opens', 'shot', 'pov']); });
+        });
+      }
+      // the coverage map follows the steps' sections
+      if (empty(p.analysis.coverage) && (p.subsections || []).length) p.analysis.coverage = p.subsections.map(x => ({ subsection: x.id, steps: p.analysis.chain.filter(st => st.section === x.id).map(st => st.id) }));
+    }
+    return n;
   }
   // ---------- universal import / export (any AI can produce these files) ----------
   portDialog(bookId) {

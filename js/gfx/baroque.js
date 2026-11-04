@@ -22,7 +22,7 @@ export function bmat(name) {
     case 'gilt-dim': { const t = gildTex(); m = S({ color: 0xd8c08a, map: t.map, roughnessMap: t.rough, metalness: .85, roughness: 1.15, envMapIntensity: 2.3 }); m.userData.boxUV = 2.2; break; }
     case 'stucco': m = S({ color: 0xf3ede2, map: plaster([240, 234, 222], 'stucco', .1), roughness: .78 }); m.userData.boxUV = .35; break;
     // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
-    case 'wall': m = S({ color: 0xffffff, map: plaster([218, 199, 170], 'bwall2', .09), roughness: .9 }); m.userData.boxUV = .22; break;
+    case 'wall': m = S({ color: 0xffffff, map: plaster([222, 207, 182], 'bwall3', .09), roughness: .9 }); m.userData.boxUV = .22; break;
     // painted wood (Admont's white cases): ivory lacquer with the grain faintly showing through
     case 'cream': m = P({ color: 0xfbf6ec, map: figuredWood([244, 236, 220], 'ivory', { paint: 1 }), roughness: .4, clearcoat: .45, clearcoatRoughness: .28 }); m.userData.boxUV = .55; break;
     // case interiors (backs, inner side panels) a shade deeper, as they sit in their own shadow: the shelves read as
@@ -49,7 +49,7 @@ export function bmat(name) {
     case 'candle': m = S({ color: 0xf6eedc, roughness: .5, emissive: 0xffcf8a, emissiveIntensity: .12 }); break;
     case 'flame': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 2.5, 1.1), toneMapped: false }); m.userData.noCast = true; break;
     case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; break;
-    case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
+    case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .14, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
     case 'cove': { const t = rocailleTex(3); m = S({ map: t.map, metalnessMap: t.mr, roughnessMap: t.mr, metalness: 1, roughness: 1, envMapIntensity: 2.6, emissive: 0xffffff, emissiveMap: t.map, emissiveIntensity: .06 }); break; }
     case 'eggdart': m = S({ map: eggDartTex(), metalness: .7, roughness: .38, envMapIntensity: 2.8 }); break;
     case 'fluted': m = P({ color: 0xf1e9d8, normalMap: fluteNormal(), normalScale: new THREE.Vector2(1, 1), roughness: .42, clearcoat: .35, clearcoatRoughness: .3 }); m.normalMap.repeat.set(3, 1); break;
@@ -823,18 +823,25 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       if (isWin) { const n = W.piers.length - 1; if (n < 3) return; const k = (n - 1) >> 1; pair = [W.piers[k], W.piers[k + 1]]; }
       else { const cand = W.pil.filter(s => Math.abs(s) >= doorW / 2 + .3 + pw / 2); const l = Math.max(...cand.filter(s => s < 0)), r = Math.min(...cand.filter(s => s > 0)); if (!isFinite(l) || !isFinite(r)) return; pair = [l, r]; }
       pair.forEach((s, j) => {
-        // the figures support the window bay rather than dominate the hall: at most ~3 m of herm and torso (in a high
-        // hall the rest is a taller pedestal), white statuary on a stucco-and-gilt pedestal with a small scagliola panel
-        const pH0 = clamp(yE * .2, .7, 1.1), Hf = Math.min(yE - pH0 - .2, 3.0), pH = yE - .2 - Hf, M0 = M.clone().multiply(Mx(s, 0, .34));
+        // the figures support the window bay rather than dominate the hall: in a low hall the herm-atlas carries the
+        // entablature (as at Metten); in a high one it stands at 2.3 m on its pedestal and carries a gilt urn on an abacus,
+        // so it stays below the eye's upper frame edge from across the room. White statuary, a stucco-and-gilt pedestal
+        // with a small scagliola panel (no rose term or pedestal block: the pink stays in the pilasters).
+        const pH = clamp(yE * .2, .7, 1.1), full = yE - pH - .2, carry = full <= 2.7, Hf = carry ? full : 2.3, M0 = M.clone().multiply(Mx(s, 0, .34));
         if (Hf < 1) return;
         pedestal(A, M0, .7, .62, pH, 'stucco');
-        if (pH > 1.4) { // a fielded panel on the die's face: gilt frame round a scagliola inset
+        if (pH > .9) { // a fielded panel on the die's face: gilt frame round a scagliola inset
           const ph = pH - .62, pc = .145 + (pH - .3) / 2, P = (mat, geo, x, y) => A.add(mat, geo, M0.clone().multiply(Mx(x, y, .312)));
           P(scag, new THREE.BoxGeometry(.44, ph - .1, .006), 0, pc); [-1, 1].forEach(k => { P(gilt, new THREE.BoxGeometry(.52, .022, .014), 0, pc + k * (ph / 2 - .02)); P(gilt, new THREE.BoxGeometry(.022, ph - .02, .014), k * .25, pc); });
         }
-        const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .76, Hf, Hf * .76));
+        const FM = M0.clone().multiply(Mx(0, pH, -.02, 0, j ? -.1 : .1, 0, Hf * .8, Hf, Hf * .8));
         atlasFigure((geo, m) => A.add(st, geo, FM.clone().multiply(m)), j ? -1 : 1, { herm: true, addTerm: (geo, m) => A.add(bmat('statuary'), geo, FM.clone().multiply(m)), addGilt: (geo, m) => A.add(gilt, geo, FM.clone().multiply(m)) });
-        A.add(gilt, new THREE.BoxGeometry(.62, .2, .52), M.clone().multiply(Mx(s, yE - .1, .3)));
+        if (carry) A.add(gilt, new THREE.BoxGeometry(.62, .2, .52), M.clone().multiply(Mx(s, yE - .1, .3)));
+        else {
+          const yt = pH + Hf, U = (mat, geo, y) => A.add(mat, geo, M0.clone().multiply(Mx(0, y, -.02)));
+          U(stucco, new THREE.BoxGeometry(.46, .08, .38), yt + .04); U(gilt, new THREE.BoxGeometry(.5, .02, .42), yt + .09);
+          U(gilt, new THREE.LatheGeometry([[0, 0], [.1, 0], [.11, .03], [.06, .07], [.05, .1], [.14, .2], [.16, .3], [.12, .4], [.07, .45], [.09, .48], [0, .5]].map(([r, y]) => new THREE.Vector2(r, y)), 20), yt + .1);
+        }
         A.add(stucco, new THREE.BoxGeometry(.7, E * .34 - .004, .6), M.clone().multiply(Mx(s, yE + E * .17, .3)));
         A.add(scag, new THREE.BoxGeometry(.66, E * .28 - .004, .56), M.clone().multiply(Mx(s, yE + E * .48, .28)));
         A.add(stucco, new THREE.BoxGeometry(.84, E * .26 - .004, .72), M.clone().multiply(Mx(s, yE + E * .75, .36)));

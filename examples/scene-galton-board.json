@@ -495,7 +495,8 @@
       "focus": "bins",
       "shot": "close",
       "run": 15,
-      "explain": "For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With a few hundred beads the measured share still wobbles by about 2 percentage points around them (the standard error √(0.21 × 0.79 / n)); more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it)."
+      "explain": "For N = 14 the exact binomial share of the centre bin is C(14,7)/2^14 = 3432/16384 = 20.9 %. The normal curve gives 1/√(2π·N·p(1−p)) = 21.3 %. With a few hundred beads the measured share still wobbles by about 2 percentage points around them (the standard error √(0.21 × 0.79 / n)); more beads shrink that wobble like 1/√n. The curve is an approximation that gets better as N grows (Galton 1889 built the board to show it).",
+      "opens": "Why do sums of other independent random steps, not only coin flips, also make a bell?"
     }
   ],
   "sources": [

@@ -1120,7 +1120,8 @@
       "shot": "medium",
       "until": "event:closes",
       "run": 60,
-      "explain": "Without the rule every trader eventually trades, including buyers whose cards lie below the crossing and sellers whose costs lie above it. Their losses cancel most of the gains: here exactly 40 % remains (gain 8 of a possible 20, with these cards), and prices scatter around 6, the middle of the 0–12 range. The same random traders reach about 95 % with the rule on. As Gode & Sunder (1993) found, the constraint, a rule of the market, not the traders' intelligence, lifts efficiency close to 100 %."
+      "explain": "Without the rule every trader eventually trades, including buyers whose cards lie below the crossing and sellers whose costs lie above it. Their losses cancel most of the gains: here exactly 40 % remains (gain 8 of a possible 20, with these cards), and prices scatter around 6, the middle of the 0–12 range. The same random traders reach about 95 % with the rule on. As Gode & Sunder (1993) found, the constraint, a rule of the market, not the traders' intelligence, lifts efficiency close to 100 %.",
+      "opens": "Would human traders, who learn and remember, reach the equilibrium faster or more reliably than these random ones?"
     }
   ],
   "sources": [

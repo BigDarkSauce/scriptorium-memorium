@@ -15,7 +15,9 @@ export class Hub {
     this.app = app; this.gfx = app.gfx; this.lib = app.lib;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0d0a07);
     this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;
-    this.scene.userData.look = this.gfx.constructor.HOUSE; // crisp warm daylight (renderer.js); set before setView
+    // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
+    // under its own key light, separates from it (presentation-craft value check); set before setView
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36 });
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
@@ -23,7 +25,7 @@ export class Hub {
     this.ui = el('div', { class: 'hub-ui' }); app.ui.append(this.ui);
     // the hero's key light: one warm spot (always present, so the light count and the shaders never change), aimed at
     // the bookcase holding the user's newest scrolls; every bookcase with scrolls also gets a warm pool on the floor
-    this.key = new THREE.SpotLight(0xffe0b4, 0, 0, .5, .75, 2); this.key.castShadow = false; this.key.name = 'hero-key'; this.scene.add(this.key, this.key.target);
+    this.key = new THREE.SpotLight(0xffeedd, 0, 0, .5, .75, 2); this.key.castShadow = false; this.key.name = 'hero-key'; this.scene.add(this.key, this.key.target);
     this.buildRoom(); this.buildShelves(); this.buildUI();
     this.frameHero(); this.syncGlow();
     this.gfx.setView(this.scene, this.camera);
@@ -121,10 +123,10 @@ export class Hub {
     if (mine.length) { const last = mine.reduce((a, b) => (b.added >= a.added ? b : a)); return this.lib.shelves.find(s => s.id === last.shelf); }
     return this.lib.shelves.find(s => this.shelfObjs.get(s.id) && this.freeSlot(s)) || this.lib.shelves.find(s => this.shelfObjs.get(s.id)) || null;
   }
-  // Opening view (presentation-craft: three planes, the hero lit and readable). From ~2.2 m, at ~38° to the hero
-  // bookcase's face, so its scroll tags read (a 0.112 m tag ≈ 44 px on an 800 px-high view at 50° FOV) and its plaque
-  // is in frame; the camera stands on the side of the nearer corner, so the line of sight runs on along the wall into
-  // the hall: the near end of the bookcase/corner at the frame edge, the lit hero left of centre, the hall behind it.
+  // Opening view (presentation-craft: three planes, the hero lit and readable). The camera stands ~2.3 m from the
+  // hero scrolls' name tags (a 0.112 m tag ≈ 40–45 px tall on an 800 px-high view at 50° FOV), at ~42° to the bookcase's
+  // face, on the side of the nearer corner; the view is then turned along the wall, so the hero scrolls and the plaque
+  // sit in the left (or right) third, the near corner is the frame edge, and the rest of the hall recedes on the other side.
   frameHero() {
     const R = this.lib.hub, cam = this.camera, s = this.heroShelf(), o = s && this.shelfObjs.get(s.id);
     if (!o) { cam.position.set(R.w * .07, 1.7, R.d * .28); this.controls.target.set(-R.w * .29, 1.75, -R.d * .22); this.controls.update(); return; }
@@ -132,16 +134,19 @@ export class Hub {
     const books = this.lib.books.filter(b => b.shelf === s.id), mine = books.filter(b => !b.example), use = mine.length ? mine : books;
     let lx = 0, ly = .13 + this.tierOrder(u)[0] * u.tierH + .07;
     if (use.length) { const ps = use.map(b => slotPos(o, b.tier || 0, b.slot || 0)); lx = ps.reduce((a, p) => a + p.x, 0) / ps.length; ly = ps.reduce((a, p) => a + p.y, 0) / ps.length; }
-    lx *= .5;   // halfway to the centre: the plaque (centred on the crest) frames with the scrolls
-    const tagY = ly - .09, plaqueY = u.h + .32, P = V3(lx, 0, u.d / 2).applyMatrix4(M);
-    const fpx = 800 / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))), D = clamp(.112 * fpx / 44, 1.8, 3.2), a = THREE.MathUtils.degToRad(38);
-    // room left along ±t from P (to the inner face of the wall cases)
-    const c = this.caseDepth() + .5, reach = dir => { let m = Infinity; if (dir.x > 1e-3) m = Math.min(m, (R.w / 2 - c - P.x) / dir.x); if (dir.x < -1e-3) m = Math.min(m, (-R.w / 2 + c - P.x) / dir.x); if (dir.z > 1e-3) m = Math.min(m, (R.d / 2 - c - P.z) / dir.z); if (dir.z < -1e-3) m = Math.min(m, (-R.d / 2 + c - P.z) / dir.z); return m; };
+    const tagY = ly - .09, plaqueY = u.h + .32, Tg = V3(lx, 0, .4).applyMatrix4(M);   // the tags hang ~0.4 m before the back board
+    const fpx = 800 / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))), D = clamp(.112 * fpx / 42, 1.8, 3.2), a = THREE.MathUtils.degToRad(42);
+    // room left along ±t from the tags (to the inner face of the wall cases); the camera takes the nearer-corner side if it fits
+    const c = this.caseDepth() + .5, reach = dir => { let m = Infinity; if (dir.x > 1e-3) m = Math.min(m, (R.w / 2 - c - Tg.x) / dir.x); if (dir.x < -1e-3) m = Math.min(m, (-R.w / 2 + c - Tg.x) / dir.x); if (dir.z > 1e-3) m = Math.min(m, (R.d / 2 - c - Tg.z) / dir.z); if (dir.z < -1e-3) m = Math.min(m, (-R.d / 2 + c - Tg.z) / dir.z); return m; };
     const rp = reach(t), rm = reach(t.clone().negate()), need = D * Math.sin(a);
     let sg = rp < rm ? 1 : -1; if ((sg > 0 ? rp : rm) < need) sg = -sg;
-    const eye = u.h > 2.2 ? 1.75 : 1.62, C = P.clone().addScaledVector(n, D * Math.cos(a)).addScaledVector(t, sg * D * Math.sin(a)).setY(eye);
+    const eye = u.h > 2.2 ? 1.75 : 1.62, C = Tg.clone().addScaledVector(n, D * Math.cos(a)).addScaledVector(t, sg * D * Math.sin(a)).setY(eye);
     C.x = clamp(C.x, -R.w / 2 + c, R.w / 2 - c); C.z = clamp(C.z, -R.d / 2 + c, R.d / 2 - c);
-    const T = P.clone().addScaledVector(t, -sg * D * .3).setY((tagY + plaqueY) / 2);
+    // look at the hero, then turn ~60 % of the half-FOV toward the wall's far run (-sg·t): hero in a third, depth beside it
+    const h = V3(Tg.x - C.x, 0, Tg.z - C.z), dist = h.length(); h.normalize();
+    const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * cam.aspect), phi = Math.min(.45, half * .6) * (h.clone().cross(t.clone().multiplyScalar(-sg)).y > 0 ? 1 : -1);
+    const f = h.applyAxisAngle(V3(0, 1, 0), phi);
+    const T = C.clone().addScaledVector(f, dist).setY((tagY + plaqueY) / 2);
     cam.position.copy(C); this.controls.target.copy(T); this.controls.update();
   }
   // warm light pools before every bookcase holding scrolls (they follow a dragged bookcase); the key light on the hero
@@ -161,7 +166,7 @@ export class Hub {
     this.key.position.set(ho.position.x + nx * 2.4, Math.max(4.2, u.h + 2.2), ho.position.z + nz * 2.4);
     this.key.target.position.set(ho.position.x + nx * .1, u.h * .55, ho.position.z + nz * .1); this.key.target.updateMatrixWorld();
     const dist = this.key.position.distanceTo(this.key.target.position); this.key.angle = Math.min(.9, Math.atan((Math.max(u.w, u.h) / 2 + .45) / dist));
-    this.key.intensity = 22;
+    this.key.intensity = 24;
   }
   // ---------- UI ----------
   buildUI() {
@@ -244,7 +249,8 @@ export class Hub {
       const cands = [{ d: s.z + R.d / 2, set: () => { s.z = -R.d / 2 + half; s.rot = 0; } }, { d: R.d / 2 - s.z, set: () => { s.z = R.d / 2 - half; s.rot = Math.PI; } }, { d: s.x + R.w / 2, set: () => { s.x = -R.w / 2 + half; s.rot = Math.PI / 2; } }, { d: R.w / 2 - s.x, set: () => { s.x = R.w / 2 - half; s.rot = -Math.PI / 2; } }].sort((a, b) => a.d - b.d);
       if (cands[0].d < lim) cands[0].set();
     }
-    const r = s.rot || 0, c = Math.abs(Math.cos(r)), sn = Math.abs(Math.sin(r)), hx = Math.min(R.w / 2 - .05, c * w / 2 + sn * K.d / 2 + .03), hz = Math.min(R.d / 2 - .05, sn * w / 2 + c * K.d / 2 + .03);
+    // (along its width the cornice and crest reach 0.1 m past the carcass on each side; at the back they sit in the wall gap)
+    const r = s.rot || 0, c = Math.abs(Math.cos(r)), sn = Math.abs(Math.sin(r)), ww = w + .2, hx = Math.min(R.w / 2 - .05, c * ww / 2 + sn * K.d / 2 + .03), hz = Math.min(R.d / 2 - .05, sn * ww / 2 + c * K.d / 2 + .03);
     s.x = clamp(s.x, -R.w / 2 + hx, R.w / 2 - hx); s.z = clamp(s.z, -R.d / 2 + hz, R.d / 2 - hz);
   }
   clampShelves() { this.lib.shelves.forEach(s => { this.snap(s, true); const o = this.shelfObjs.get(s.id); if (o) { o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; } }); this.updateWallCases(); this.glowDirty = true; }
