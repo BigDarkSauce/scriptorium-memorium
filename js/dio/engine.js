@@ -305,7 +305,9 @@ export class DioramaView {
   syncTimeUI() { this.playBtn.innerHTML = this.ds.playing ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>'; }
   onEvent(ev) {
     if (this.stage === 'sketch') return;
-    const now = performance.now(); this._seen = this._seen || new Map(); if (now - (this._seen.get(ev.text) || -1e9) < 4000) return; this._seen.set(ev.text, now);
+    // a step waiting for this event ends even if the same sentence was shown a moment ago
+    const hit = this.running != null && this.runUntil && ((ev.id && ev.id.toLowerCase() === this.runUntil) || ev.text.toLowerCase().includes(this.runUntil));
+    const now = performance.now(); this._seen = this._seen || new Map(); if (now - (this._seen.get(ev.text) || -1e9) < 4000) { if (hit) { if (this.dir.cinematic) this.awaitIdle = true; else this.runT = this.runDur; } return; } this._seen.set(ev.text, now);
     const named = this.namesIn(ev.text), host = named[0] || this.lessonActor;
     // during a step, events about objects the step doesn't mention don't take the camera (they go to the ticker)
     const L = this.running != null ? this.lessons()[this.running] : null, lt0 = L ? ((L.title || '') + ' ' + (L.text || '')).toLowerCase() : '';

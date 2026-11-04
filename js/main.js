@@ -164,7 +164,7 @@ class App {
     book(econ, 'Markets', [scenePart(market, 'Supply and demand', 'How a market finds the price where buyers and sellers agree.', [
       ['definition', 'Demand', 'At each price $p$, the quantity $D(p)$ buyers want; it falls as $p$ rises because fewer buyers value the good above the price.', '', ['buyers']],
       ['definition', 'Supply', 'At each price $p$, the quantity $S(p)$ sellers offer; it rises with $p$ because more sellers cover their cost.', '', ['sellers']],
-      ['result', 'Equilibrium', 'Price adjusts with excess demand, $\\dot p \\propto D(p)-S(p)$, and comes to rest where $D(p^*)=S(p^*)$.', '\\dot p = k\\,(D(p)-S(p))', ['price', 'stall', 'curves']]])], 'ECON');
+      ['result', 'Equilibrium', 'In a double auction, bids and asks meet at the stall; trade prices converge towards $p^*$ where $D(p^*)=S(p^*)$, even with random traders bound only by a no-loss rule (Smith 1962; Gode & Sunder 1993).', 'D(p^*)=S(p^*)', ['price', 'stall', 'curves']]])], 'ECON');
     book(bio, 'Cell Membranes', [scenePart(osmo, 'Osmosis', 'Why water flows towards dissolved particles across a membrane.', [
       ['definition', 'Semi-permeable membrane', 'A barrier with pores that pass small solvent molecules (water) but not larger solute molecules.', '', ['membrane']],
       ['result', 'Osmosis', 'Water moves by diffusion across the membrane towards the side with more solute until the extra pressure there balances the flow.', '', ['water molecules', 'solute molecules']],
