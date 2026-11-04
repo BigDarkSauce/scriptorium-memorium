@@ -10,13 +10,13 @@ import { canvasTex, parchment, radialGlow } from '../gfx/textures.js';
 import { addInk, addOutlines, PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
-import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox } from '../util.js';
+import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const SPACING = 2.9;
 // Station heights: every hanging scroll's lower rod sits at SHEET_BOTTOM, above the pedestal and its turning model
 // (PED_TOP + up to ~.4 m), so from the opening view (eye ~1.9 m, ~4.5 m back) the model never hides the sheet.
-const SHEET_BOTTOM = 1.3, PED_TOP = .965;
+const SHEET_BOTTOM = 1.3, PED_TOP = .965, SPOTS = 8;
 
 export class BookRoom {
   constructor(app, book, data, opts = {}) {
@@ -40,9 +40,14 @@ export class BookRoom {
     this.gfx.canvas.addEventListener('pointerdown', this.onDown); this.gfx.canvas.addEventListener('pointerup', this.onUp); this.gfx.canvas.addEventListener('pointermove', this.onMove);
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     if (!this.data.parts.length) this.ingest();
-    if (opts.openPart) { const p = this.data.parts.find(x => x.id === opts.openPart); if (p) setTimeout(() => this.openPart(p, true), 200); }
+    if (opts.openPart) { const p = this.data.parts.find(x => x.id === opts.openPart); if (p) setTimeout(() => { if (!this.disposed) this.openPart(p, true); }, 200); }
   }
   save() { this.app.saveRoom(this.book.id, this.data); }
+  // free removed objects once the rebuilt room has drawn, keeping what is still on screen (shared materials, cached textures)
+  trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); }
+  // GPU resources (main.js calls this after the next place has rendered): the room, plus each pedestal model's own
+  // off-screen environment (its world was moved onto the pedestal; lights, floor and sky stayed in ds.scene)
+  disposeGPU() { const keep = this.app.mode && this.app.mode !== this ? this.app.mode.scene : null; const roots = [this.scene]; this.stations.forEach(s => { if (s.ds) roots.push(s.ds.scene); }); disposeTree(roots, keep); }
   // Opening view: stand back from the first scrolls (up to three) along their mean wall normal, looking at the scrolls
   // and their pedestals; drift a little toward the room centre so the neighbouring bays show too.
   frameStart() {
@@ -54,6 +59,11 @@ export class BookRoom {
     const back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), p = t.clone().addScaledVector(n, back).lerp(V3(0, 0, 0), .22).setY(1.95);
     p.x = clamp(p.x, -D.w / 2 + 1.1, D.w / 2 - 1.1); p.z = clamp(p.z, -D.d / 2 + 1.1, D.d / 2 - 1.1);
     this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update();
+  }
+  placeSpots(force) {
+    if (!this.spots || !this.spots.length) return; const now = performance.now(); if (!force && now - this._spotT < 250) return; this._spotT = now;
+    const c = this.camera.position, list = [...this.stations.values()].map(st => ({ st, d: st.group.position.distanceToSquared(c) })).sort((a, b) => a.d - b.d);
+    this.spots.forEach((L, i) => { const it = list[i]; if (!it) { L.visible = false; return; } L.visible = true; if (L.target !== it.st.sheet) { L.target = it.st.sheet; it.st.group.updateMatrixWorld(); L.position.copy(it.st.spotAt).applyMatrix4(it.st.group.matrixWorld); } });
   }
   partIndex(p) { return this.data.parts.filter(x => !x.subOf).indexOf(p); }
   // ---------- ingestion: split the PDF into parts (outline → headings → contents page → windows) ----------
@@ -85,15 +95,20 @@ export class BookRoom {
     this.slots = slots; this.placed = parts.map((p, i) => ({ part: p, slot: slots[i] })).filter(x => x.slot);
   }
   buildShell() {
-    if (this.shell) { this.scene.remove(this.shell); this.shell.userData.dispose && this.shell.userData.dispose(); }
+    if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
     // Metten-like walnut-and-gilt wall bookcases; every hanging scroll gets an open, panelled niche in its bay
     const D = this.data.dims; this.shell = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p) }); this.scene.add(this.shell);
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
-    this.stations.forEach(s => s.group.removeFromParent()); this.stations.clear();
+    const old = []; this.stations.forEach(s => { s.group.removeFromParent(); old.push(s.group); if (s.ds) old.push(s.ds.scene); }); this.stations.clear(); if (old.length) this.trash(old);
     if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ niches: this.placed.map(x => x.slot.p) }); // no-op when unchanged
     this.placed.forEach(({ part, slot }, i) => this.makeStation(part, slot, i));
+    // one spot per scroll, up to SPOTS: a big book's room (dozens of scrolls) would otherwise shade every pixel with
+    // dozens of lights; the pool follows the scrolls nearest the viewer (a spot only reaches 6 m anyway)
+    const n = Math.min(SPOTS, this.stations.size); while ((this.spots || []).length > n) this.spots.pop().removeFromParent(); this.spots = this.spots || [];
+    while (this.spots.length < n) { const L = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); this.scene.add(L); this.spots.push(L); }
+    this._spotT = -1; this.placeSpots(true);
   }
   makeStation(part, slot, i) {
     const g = new THREE.Group(); g.position.copy(slot.p); g.lookAt(slot.p.clone().add(slot.n)); this.scene.add(g);
@@ -104,7 +119,7 @@ export class BookRoom {
     sheet.position.set(0, y0 - H / 2, .06); sheet.castShadow = true; sheet.receiveShadow = true; g.add(sheet);
     [y0, y0 - H].forEach(y => { const rod = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, W + .16, 16), makeMaterial('darkwood')); rod.rotation.z = Math.PI / 2; rod.position.set(0, y, .08); rod.castShadow = true; g.add(rod); [-1, 1].forEach(s => { const k = new THREE.Mesh(new THREE.SphereGeometry(.045, 12, 10), makeMaterial('brass')); k.position.set(s * (W / 2 + .1), y, .08); g.add(k); }); });
     const cl = Math.max(.08, nt - y0), cord = new THREE.Mesh(new THREE.CylinderGeometry(.004, .004, cl, 4), makeMaterial('iron')); cord.position.set(0, y0 + cl / 2, .07); g.add(cord); // up to the niche head
-    const spot = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); spot.position.set(0, y0 + 1.4, 1.4); spot.target = sheet; g.add(spot);
+    const spotAt = V3(0, y0 + 1.4, 1.4);   // where this scroll's warm spot hangs (the lights themselves are a pool, see placeSpots)
     sheet.userData = { station: part.id, kind: 'sheet' };
     // pedestal with the card model
     const ped = new THREE.Group(); ped.position.set(0, 0, 1.15); g.add(ped);
@@ -113,7 +128,7 @@ export class BookRoom {
     const card = new THREE.Mesh(new THREE.CircleGeometry(.36, 48), new THREE.MeshStandardMaterial({ color: PAPER, roughness: .9 })); card.rotation.x = -Math.PI / 2; card.position.y = PED_TOP; card.receiveShadow = true; ped.add(card);
     ped.userData = { station: part.id, kind: 'pedestal' };
     const mini = new THREE.Group(); mini.position.y = PED_TOP + .005; ped.add(mini);
-    const st = { part, group: g, sheet, ped, mini, slot, spec: null };
+    const st = { part, group: g, sheet, ped, mini, slot, spec: null, spotAt };
     this.stations.set(part.id, st); this.buildMini(st);
     return st;
   }
@@ -124,7 +139,8 @@ export class BookRoom {
     return null;
   }
   buildMini(st) {
-    st.mini.clear(); const ps = this.pedestalSpec(st.part); st.spec = ps;
+    const gone = [...st.mini.children]; if (st.ds) { gone.push(st.ds.scene); st.ds = null; } st.mini.clear(); if (gone.length) this.trash(gone);
+    const ps = this.pedestalSpec(st.part); st.spec = ps;
     if (!ps) { // a closed scroll lying on the pedestal
       const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .4, 24), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 })); r.rotation.z = Math.PI / 2; r.position.y = .05; r.castShadow = true; st.mini.add(r); return;
     }
@@ -143,8 +159,10 @@ export class BookRoom {
       g.fillStyle = '#2a1e15'; g.textAlign = 'center';
       g.font = '22px "IBM Plex Mono", monospace'; g.globalAlpha = .7; g.fillText(part.subOf ? 'SUB-SCROLL' : 'PART ' + (this.partIndex(part) + 1), w / 2, 70); g.globalAlpha = 1;
       g.font = '600 44px "IM Fell English SC", Georgia, serif'; const words = String(part.title).split(/\s+/); let line = '', y = 140; const lines = [];
-      words.forEach(wd => { const t = line ? line + ' ' + wd : wd; if (g.measureText(t).width > w - 80) { lines.push(line); line = wd; } else line = t; }); if (line) lines.push(line);
-      lines.slice(0, 5).forEach(l => { g.fillText(l, w / 2, y); y += 52; });
+      const fitW = t => { if (g.measureText(t).width <= w - 80) return t; while (t.length > 1 && g.measureText(t + '…').width > w - 80) t = t.slice(0, -1); return t + '…'; };   // one very long word is cut, not drawn off the sheet
+      words.forEach(wd => { const t = line ? line + ' ' + wd : wd; if (g.measureText(t).width > w - 80 && line) { lines.push(line); line = wd; } else line = t; }); if (line) lines.push(line);
+      if (lines.length > 5) { lines.length = 5; lines[4] = lines[4] + '…'; }
+      lines.forEach(l => { g.fillText(fitW(l), w / 2, y); y += 52; });
       g.strokeStyle = '#8f733a'; g.lineWidth = 2; g.beginPath(); g.moveTo(140, y); g.lineTo(w - 140, y); g.stroke();
       g.font = '24px "IBM Plex Mono", monospace'; g.fillStyle = '#5b4532';
       if (part.startPage) g.fillText(`pages ${part.startPage}–${part.endPage}`, w / 2, y + 44);
@@ -155,7 +173,7 @@ export class BookRoom {
   }
   refreshStation(part) {
     const st = this.stations.get(part.id); if (!st) { this.layout(); this.buildStations(); return; }
-    st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part === part)); st.sheet.material.needsUpdate = true; this.buildMini(st);
+    const oldMap = st.sheet.material.map; st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part === part)); st.sheet.material.needsUpdate = true; if (oldMap) this.app.retire(() => oldMap.dispose()); this.buildMini(st);
   }
   addPart(part, after) {
     const i = this.data.parts.indexOf(after); this.data.parts.splice(i + 1, 0, part); this.save();
@@ -220,6 +238,7 @@ export class BookRoom {
     else {
       this.nav.update(dt, !!this.reader || !!this.unfold);
     }
+    this.placeSpots();
     // card models turn slowly; the chosen one unfolds (grows, lifts, glows) before the dive
     this.stations.forEach(s => { s.mini.rotation.y += dt * .15; });
     if (this.unfold) {

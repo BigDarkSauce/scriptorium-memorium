@@ -14,12 +14,16 @@ const save = o => { try { localStorage.setItem(KEY, JSON.stringify(Object.assign
 class Sound {
   constructor() {
     const P = load(); this.muted = !!P.muted; this.vol = P.vol ?? .6; this.ctx = null; this.amb = null; this.want = null; this.rain = 0; this.wind = 0;
-    const start = () => { this.init(); removeEventListener('pointerdown', start, true); removeEventListener('keydown', start, true); };
+    // the context starts on a gesture; if the browser keeps it suspended (autoplay policy, a sandboxed frame) the next
+    // gestures try to resume it, and the listeners go only once it really runs
+    const start = () => { this.init(); const c = this.ctx; if (c && c.state === 'suspended') { try { c.resume().catch(() => { }); } catch (e) { } } if (!c || c.state === 'running' || this._tries++ > 20) { removeEventListener('pointerdown', start, true); removeEventListener('keydown', start, true); } };
+    this._tries = 0;
     addEventListener('pointerdown', start, true); addEventListener('keydown', start, true);
   }
   init() {
-    if (this.ctx) return; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const c = this.ctx = new AC();
+    if (this.ctx || this.failed) return; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    let c; try { c = new AC(); } catch (e) { this.failed = true; console.warn('Sound is unavailable here:', e.message); return; }   // too many contexts, blocked by policy
+    this.ctx = c;
     this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : this.vol; this.master.connect(c.destination);
     // a gentle room so dry synth sounds sit in a space (short noise-burst impulse response)
     this.verb = c.createConvolver(); this.verb.buffer = this.impulse(1.6, 2.8); this.wet = c.createGain(); this.wet.gain.value = .22; this.verb.connect(this.wet); this.wet.connect(this.master);

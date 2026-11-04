@@ -331,6 +331,7 @@ export class DioramaView {
     const typing = e.target.closest && e.target.closest('textarea,input:not([type=range]):not([type=checkbox]),[contenteditable]');
     if (!typing && (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); this.undo(); return; }
     if (e.target.closest && e.target.closest('input,textarea,select')) return;
+    if (document.querySelector('.modal-veil')) return;   // a dialog is open (replace, add, ask AI): Esc must not leave the diorama behind it
     if (this.stage === 'tour' && (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ')) { e.preventDefault(); this.next(); }
     else if (this.stage === 'tour' && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) { e.preventDefault(); this.prev(); }
     else if (e.key === 'Escape') { if (this.pov) this.exitPOV(); else if (this.sel) this.deselect(); else this.exit(); }
@@ -571,7 +572,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
     const bx = new THREE.Box3(); focus.forEach(a => { if (a.obj) bx.expandByObject(a.obj); else { const p = a.getPos && a.getPos(); if (p) bx.expandByPoint(p); } });
     if (!bx.isEmpty()) { fc = bx.getCenter(V3()); fr = clamp(bx.getSize(V3()).length() * .62, ds.radius * .22, ds.radius); }
   }
-  if (opts.focusText && !focus.length) { ds.dispose(); sketchCache.set(key, null); return null; }
+  if (opts.focusText && !focus.length) { disposeTree(ds.scene, gfx.scene); sketchCache.set(key, null); return null; }
   const m = new Materializer({ scene: ds.scene, camera: cam, world: ds.world, U: ds.U, technique: spec.technique || spec.style || 'card', endKey, center: fc, radius: fr, env: ds.env });
   m.setProgress(0); ds.step(0); m.setProgress(0);
   const paper = new THREE.Color('#efe9dc'); const keepBg = ds.scene.background, keepFog = ds.scene.fog; ds.scene.background = paper; ds.scene.fog = null;
@@ -617,6 +618,6 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const avail = w - 52 - 24, lW = Math.min(g.measureText(L0).width, avail * .5), Lt = fit(L0, lW), Rt = fit(R0, avail - g.measureText(Lt).width);
   g.fillStyle = 'rgba(239,233,220,.94)'; g.fillRect(15, h - 44, w - 30, 29); g.strokeStyle = 'rgba(29,28,25,.35)'; g.beginPath(); g.moveTo(15, h - 44); g.lineTo(w - 15, h - 44); g.stroke();
   g.fillStyle = 'rgba(29,28,25,.85)'; g.fillText(Lt, 26, h - 25); g.textAlign = 'right'; g.fillText(Rt, w - 26, h - 25);
-  rt.dispose(); ds.scene.background = keepBg; ds.scene.fog = keepFog; ds.dispose();
+  rt.dispose(); ds.scene.background = keepBg; ds.scene.fog = keepFog; disposeTree(ds.scene, gfx.scene);   // like ds.dispose(), plus its textures (labels, canvases); the scene on screen keeps what it shares
   const url = c.toDataURL('image/jpeg', .86); sketchCache.set(key, url); return url;
 }

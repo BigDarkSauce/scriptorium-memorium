@@ -1,6 +1,6 @@
 // The reading scroll: a parchment overlay showing one part's logical chain. 3D showcases appear as 2D drawings
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
-import { el, esc, typeset, toast, uid, $, clamp } from '../util.js';
+import { el, esc, typeset, toast, uid, $, clamp, nextFrame } from '../util.js';
 import { SVGDEMO, SVG_TYPES } from './diagrams.js';
 import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
@@ -8,6 +8,10 @@ import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
 import { chapterPrompt, authorPrompt, detailPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp } from '../ai/prompts.js';
 import { partKey, cached } from '../store.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
+// Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
+// never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
+let sketchQ = Promise.resolve();
+const queueSketch = f => (sketchQ = sketchQ.then(nextFrame).then(f).catch(e => console.warn(e)));
 const TOOLNAME = { search_literature: 'OpenAlex', search_evidence: 'Consensus', search_biomedical: 'PubMed' };
 const toolStatus = st => (name, input) => { st.textContent = `Looking it up in ${TOOLNAME[name] || name}: “${String((input && input.query) || '').slice(0, 70)}”…`; };
 
@@ -251,7 +255,7 @@ export class Reader {
         el('figcaption', {}, [el('div', {}, [el('div', { class: 'kicker', text: stage ? `stage of the diorama shown in ${stage.first} · numbered parts are this step's bodies` : (d.technique || d.style || 'card') + ' · ' + (d.type === 'scene' ? 'authored scene' : d.type) }), el('b', { text: d.title || d.type })]), el('div', { class: 'row' }, [
           el('button', { class: 'btn small', text: 'Pedestal', title: 'Show this as the card model on the pedestal by this scroll', onclick: () => { this.part.pedestal = { step: st.id, demo: i }; this.save(); this.room.refreshStation(this.part); toast('Placed on the pedestal'); } }), go])]));
       img.addEventListener('click', () => this.openDiorama(d, st, img));
-      requestAnimationFrame(() => renderSketch(this.app.gfx, d, 800, stage ? 420 : 500, stage || {}).then(url => {
+      queueSketch(() => !this.el.isConnected ? null : renderSketch(this.app.gfx, d, 800, stage ? 420 : 500, stage || {}).then(url => {
         if (!url) { // nothing specific to frame: a compact reference rather than the same picture again
           card.className = 'sketch-ref'; card.innerHTML = '';
           card.append(el('span', { class: 'ic', text: '↺' }), el('span', { html: `Same diorama as <a>${esc(stage.first)}</a>${d.params ? ', with this step\'s settings: ' + esc(Object.entries(d.params).map(([k, v]) => k + ' = ' + v).join(', ')) : ''}.` }), el('button', { class: 'btn small primary', text: 'Open ▸', onclick: () => this.openDiorama(d, st, null) }));

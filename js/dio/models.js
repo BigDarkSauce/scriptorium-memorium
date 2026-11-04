@@ -77,6 +77,19 @@ function stopwatch(s=1){const g=new T.Group();g.name='stopwatch';const ch=makeMa
   const hand=new T.Mesh(new T.BoxGeometry(.012*s,.004*s,.3*s),new T.MeshBasicMaterial({color:0x9c2a1a}));hand.position.set(0,.125*s,-.12*s);g.add(hand);return g}
 // elliptic integral K(k) by the arithmetic–geometric mean (exact pendulum period)
 function ellK(k){let a=1,b=Math.sqrt(1-k*k);for(let i=0;i<20;i++){const a1=(a+b)/2;b=Math.sqrt(a*b);a=a1}return Math.PI/(2*a)}
+// satin finish for large horizontal boards: a softer clearcoat, so the key light makes a sheen, not a white hotspot
+function satin(m){const c=m.clone();c.clearcoat=Math.min(c.clearcoat||0,.3);c.clearcoatRoughness=.6;c.roughness=Math.max(c.roughness,.72);return c}
+// countryside around an outdoor plinth: hedgerow trees beyond the plinth and far hills in the haze, so the frame has
+// a middle and a far plane (aerial perspective comes from the landscape fog)
+function countryside(W,seed=3,skip=null){const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=makeMaterial({preset:'grass',color:'#5a7a3a'});
+  const field=new T.Mesh(new T.RingGeometry(7.6,120,96,3).rotateX(-Math.PI/2),grass);field.position.y=-1.02;field.receiveShadow=true;g.add(field);
+  const crown=new T.IcosahedronGeometry(1,1),trunk=new T.CylinderGeometry(.08,.12,1,6),NT=34,cr=new T.InstancedMesh(crown,leaf,NT*3),tr=new T.InstancedMesh(trunk,bark,NT),m4=new T.Matrix4(),q=new T.Quaternion(),sv=V3(1,1,1),pv=V3(0,0,0);let nt=0,nc=0;
+  for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1,x=Math.sin(a)*d,z=Math.cos(a)*d;m4.compose(pv.set(x,-1+s*.7,z),q,sv.set(s,s*1.4,s));tr.setMatrixAt(nt++,m4);
+   for(let k=0;k<3;k++){const c=s*(.8+r()*.5);m4.compose(pv.set(x+(r()-.5)*s,-1+s*(1.7+r()*.8),z+(r()-.5)*s),q,sv.set(c,c,c));cr.setMatrixAt(nc++,m4)}}
+  tr.count=nt;cr.count=nc;tr.computeBoundingSphere();cr.computeBoundingSphere();g.add(tr,cr);
+  const hill=new T.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),hm=new T.MeshStandardMaterial({color:0x4a6040,roughness:1});
+  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
+  g.traverse(o=>{o.userData.noInk=true;o.userData.noContact=true});W.add(g);return g}
 // shots helper: target may be a function (moving bodies); dist is for the base lens
 const SHOT=(target,dist)=>({target,dist});
 
@@ -92,7 +105,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
   const orbit={target:V3(0,3.3,0),r:14.5,ph:1.2,th:.42};
   // oak stand behind the swing plane: base board, two posts, cross bar, and a steel bracket out to the pivot
   const ST=part('oak stand');
-  put(box(6.6,.2,1.2,oak),'base board',ST).position.set(0,.1,FZ);
+  put(box(6.6,.2,1.2,satin(oak)),'base board',ST).position.set(0,.1,FZ);
   [-2.7,2.7].forEach(x=>{const c=box(.32,piv.y+.2,.32,oak);c.position.set(x,.2+(piv.y+.2)/2,FZ);ST.add(c);const f=box(.5,.1,1.1,oak);f.position.set(x,.25,FZ);ST.add(f)});
   put(box(5.9,.26,.36,oak),'cross bar',ST).position.set(0,piv.y+.46,FZ);
   put(box(.26,.18,Math.abs(FZ)+.25,steel),'pivot bracket',ST).position.set(0,piv.y+.3,FZ/2+.06);
@@ -113,7 +126,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
   const bob=put(ball(BR,brass),'brass bob',BOB);put(new T.Mesh(new T.TorusGeometry(.06,.018,8,20),steel),'hook',BOB).position.y=BR+.02;
   put(cyl(.05,.12,brass),'bob neck',BOB).position.y=BR-.02;
   const GH=part('small-angle model',W,true);GH.position.copy(piv);
-  const ghost=put(ball(BR,new T.MeshPhysicalMaterial({color:0x6aa0e0,transparent:true,opacity:.3,roughness:.2,depthWrite:false})),'small-angle bob',GH);ghost.position.y=-Lv;ghost.castShadow=false;
+  const ghost=put(ball(BR*.85,new T.MeshPhysicalMaterial({color:0x6aa0e0,transparent:true,opacity:.3,roughness:.2,depthWrite:false})),'small-angle bob',GH);ghost.position.set(0,-Lv,-.32);ghost.castShadow=false;
   // helpers: trail, vertical reference, the θ arc
   const tr=put(trail(260,0xffc56b),'trail',guides);
   put(lineFrom([piv,V3(0,piv.y-Lv-.6,0)],0x8f733a,true),'vertical reference',guides);
@@ -126,7 +139,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
   PEN.bob=()=>bobW(V3(0,0,0));PEN.Lv=Lv;PEN.piv=piv;
   D.label('bob · m',at(v=>{bobW(v);v.y+=.5;return v}),BOB);D.label('string · L',at(v=>v.set(piv.x+Lv*.5*Math.sin(th),piv.y-Lv*.5*Math.cos(th),0)),cord);
   D.label('θ',at(v=>v.set(piv.x+1.05*Math.sin(th/2),piv.y-1.05*Math.cos(th/2),0)),true);D.label('pivot',at(v=>v.copy(piv).setY(piv.y+.5)),PV);
-  D.label('small-angle model',at(v=>v.set(piv.x+Lv*Math.sin(gth),piv.y-Lv*Math.cos(gth)-.6,0)),GH);
+  D.label('small-angle model',at(v=>v.set(piv.x+Lv*Math.sin(gth),piv.y-Lv*Math.cos(gth)-.6,-.32)),GH);
   D.label('angle scale',at(v=>v.set(-1.25,piv.y-.15,-.42)),PR);
   D.seriesName='θ(t) in degrees';ev('bob released from rest at θ₀ = '+fx(p.theta0,1)+'°',bobW(V3(0,0,0)),{sound:'whoosh'});
   return{orbit,
@@ -173,7 +186,7 @@ DIO.spring={params:{k:[1,60,12,'N/m','spring constant'],m:[.2,5,1,'kg','mass'],c
   const wallX=-5,S_=2.2,TY=.77,YB=.42,oak=D.mats.wood,walnut=makeMaterial('walnut'),steel=makeMaterial('steel'),brass=D.mats.brass;
   const orbit={target:V3(0,1.1,0),r:12.5,ph:1.17,th:.32};
   const BS=part('track and wall');
-  put(box(11.6,.18,1.5,walnut),'base board',BS).position.set(.3,.09,0);
+  put(box(11.6,.18,1.5,satin(walnut)),'base board',BS).position.set(.3,.09,0);
   [-.32,.32].forEach(z=>{const r=put(box(11,.07,.08,steel),'rail',BS);r.position.set(.35,.215,z)});
   const wall=put(box(.5,2.7,1.5,oak),'oak wall',BS);wall.position.set(wallX-.05,1.35+.18,0);
   const plate=put(box(.04,.5,.5,brass),'anchor plate',BS);plate.position.set(wallX+.22,TY,0);
@@ -219,8 +232,8 @@ const PRJ={};
 DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','launch angle'],g:[1,25,9.81,'m/s²','gravity'],drag:[0,1,0,'1/s','linear drag']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'landscape',{time:10.2});
   const a=p.angle/DEG,Rr=p.v0*p.v0*Math.sin(2*a)/p.g,Hm=p.v0*p.v0*Math.sin(a)**2/(2*p.g),Tf=2*p.v0*Math.sin(a)/p.g,sc=Math.min(10/Rr,4.5/Hm),X0=-5,Y0=.62;
-  const orbit={target:V3(0,1.9,0),r:15.5,ph:1.2,th:.38};
-  const oak=D.mats.wood,iron=D.mats.iron,brass=D.mats.brass;
+  const orbit={target:V3(0,1.9,0),r:15.5,ph:1.3,th:.38};
+  const oak=D.mats.wood,iron=D.mats.iron,brass=D.mats.brass;countryside(W,5);
   // cannon: two oak cheeks on an axle, spoked wheels, iron barrel on trunnions at the elevation angle
   const CN=part('cannon',W,true);CN.position.set(X0,0,0);
   [-.32,.32].forEach(z=>{const ch=box(1.5,.36,.1,oak);ch.position.set(-.25,.42,z);ch.rotation.z=.18;CN.add(ch);
@@ -272,7 +285,7 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
    Kepler II: dA/dt = L/2, so wedges swept in equal times (T/12) have equal areas. */
 const ORB={};
 DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,'u','start radius'],vfactor:[.3,1.7,.8,'× v_circ','launch speed']},
- build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'cosmos');const Y=2.4,SR=.55,PR=.2;
+ build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'cosmos');const Y=2.4,SR=.55,PR=.27;
   const orbit={target:V3(0,Y,0),r:16,ph:.92,th:.35};
   if(own){if(R.sun){R.sun.intensity=.06;R.sun.castShadow=false}if(R.rim)R.rim.intensity=.12;if(R.hemi)R.hemi.intensity=.02;D.scene.environmentIntensity=.12}
   // the star: an emissive sphere bright enough to bloom, a corona, and the point light that lights the planet
@@ -296,7 +309,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
   const NW=12,NP=48,WG=part('equal-area wedges',guides);const wedges=[];for(let i=0;i<NW;i++){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(new Float32Array(NP*9),3));g.setDrawRange(0,0);const m=new T.Mesh(g,new T.MeshBasicMaterial({color:i%2?0xcfa84f:0x2d5b8e,transparent:true,opacity:.3,side:T.DoubleSide,depthWrite:false}));m.frustumCulled=false;WG.add(m);wedges.push({m,n:0,area:0})}
   const Tg=bound?Tk/NW:2*Math.PI*Math.sqrt(p.r0**3/p.GM)/NW;let wi=0,wt=0,lx=x,lz=z,ns=0;
   // foreground: a tumbling asteroid at the lower-left frame edge, lit only by the star; a faint nebula far behind
-  {const g=new T.IcosahedronGeometry(.9,3),P=g.attributes.position,q=V3(0,0,0),rr=mulberry(5);for(let i=0;i<P.count;i++){q.fromBufferAttribute(P,i);const n=1+.25*Math.sin(q.x*3.1+q.y*2)*Math.cos(q.z*2.7)+.12*Math.sin(q.x*9+q.z*7);q.multiplyScalar(n);P.setXYZ(i,q.x,q.y*.75,q.z)}g.computeVertexNormals();
+  {const g=mergeVertices(new T.IcosahedronGeometry(.9,4).deleteAttribute('normal').deleteAttribute('uv')),P=g.attributes.position,q=V3(0,0,0),rr=mulberry(5);for(let i=0;i<P.count;i++){q.fromBufferAttribute(P,i);const n=1+.25*Math.sin(q.x*3.1+q.y*2)*Math.cos(q.z*2.7)+.12*Math.sin(q.x*9+q.z*7);q.multiplyScalar(n);P.setXYZ(i,q.x,q.y*.75,q.z)}g.computeVertexNormals();{const uv=new Float32Array(P.count*2);for(let i=0;i<P.count;i++){q.fromBufferAttribute(P,i);uv[i*2]=Math.atan2(q.z,q.x)/Math.PI+1;uv[i*2+1]=q.y*.6+.5}g.setAttribute('uv',new T.BufferAttribute(uv,2))}
    const ast=put(new T.Mesh(g,makeMaterial('stone')),'asteroid (foreground)');const fp=groundAt(orbit,-.9,-.62,0);ast.position.copy(fp).lerp(orbit.target,.0);ast.position.y=Math.max(ast.position.y,-1.5);ast.rotation.set(.4,.8,.2);ORB.ast=ast}
   {const neb=new T.Sprite(new T.SpriteMaterial({map:canvasTex(256,256,(g)=>{const r=mulberry(3);for(let i=0;i<40;i++){const x=40+r()*176,y=60+r()*136,rad=30+r()*70,gr=g.createRadialGradient(x,y,1,x,y,rad);gr.addColorStop(0,`rgba(${90+r()*60|0},${70+r()*40|0},${150+r()*80|0},.16)`);gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,256,256)}}),blending:T.AdditiveBlending,depthWrite:false,fog:false}));neb.position.set(-30,14,-70);neb.scale.set(70,50,1);put(neb,'nebula (background)')}
   let lastDr=0,Tm=NaN,laps=0,lastAng=0,swept=0,lapT=0;const tmp=V3(0,0,0);
@@ -330,7 +343,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
 const COL={};
 DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:[-4,6,3,'m/s','velocity 1'],v2:[-6,4,-1,'m/s','velocity 2'],e:[0,1,1,'','restitution']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'lab');
-  const orbit={target:V3(0,1,0),r:12,ph:1.17,th:.34},alu=makeMaterial('steel'),walnut=makeMaterial('walnut'),brass=D.mats.brass,rub=makeMaterial('rubber'),TOP=.78;
+  const orbit={target:V3(.2,1,0),r:13.8,ph:1.17,th:.24},alu=makeMaterial('steel'),walnut=makeMaterial('walnut'),brass=D.mats.brass,rub=makeMaterial('rubber'),TOP=.78;alu.color.set(0x8a9096);alu.roughness=.55;alu.envMapIntensity=.7;
   // air track: an aluminium beam on walnut feet, a brass end stop with a rubber bumper at each end, and two photogates
   const TR=part('air track');
   put(box(12.6,.24,.42,alu),'aluminium beam',TR).position.set(0,TOP-.12,0);
@@ -379,7 +392,7 @@ DIO.incline={params:{angle:[5,60,30,'°','incline angle'],mu:[0,1,.2,'','frictio
   const dir=V3(Math.cos(a),-Math.sin(a),0),nrm=V3(Math.sin(a),Math.cos(a),0);
   // the plane: an oak board (grain along the slope) on two walnut side cheeks and a back post
   const PL=part('inclined plane');
-  const board=put(box(Lw,TH,2,oak),'oak board',PL);board.position.copy(V3(x0,hgt,0).addScaledVector(dir,Lw/2).addScaledVector(nrm,-TH/2));board.rotation.z=-a;
+  const board=put(box(Lw,TH,2,satin(oak)),'oak board',PL);board.position.copy(V3(x0,hgt,0).addScaledVector(dir,Lw/2).addScaledVector(nrm,-TH/2));board.rotation.z=-a;
   {const sh=new T.Shape();sh.moveTo(0,0);sh.lineTo(base,0);sh.lineTo(0,hgt-TH/Math.cos(a));sh.lineTo(0,0);const g=new T.ExtrudeGeometry(sh,{depth:.08,bevelEnabled:false});const u=g.attributes.uv;for(let i=0;i<u.count;i++)u.setXY(i,u.getX(i)/2.4,u.getY(i)/2.4);
    [-1,.92].forEach(z=>{const m=new T.Mesh(g,walnut);m.position.set(x0,0,z);m.castShadow=m.receiveShadow=true;PL.add(m)})}
   put(box(.25,Math.max(.1,hgt-.2),1.8,walnut),'back post',PL).position.set(x0+.12,Math.max(.1,hgt-.2)/2,0);
@@ -1050,7 +1063,7 @@ DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower
 const LEV={};
 DIO.lever={params:{m1:[.2,10,3,'kg','left mass'],x1:[-4,4,-2.5,'m','left position'],m2:[.2,10,2,'kg','right mass'],x2:[-4,4,3,'m','right position'],fulcrum:[-2,2,0,'m','fulcrum position'],beam:[0,5,1,'kg','beam mass']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'landscape',{time:16.3,felt:'#46552e'});const H=2.2,g=9.81,oak=D.mats.wood,iron=D.mats.iron;
-  const orbit={target:V3(0,1.9,0),r:12.5,ph:1.2,th:.28};
+  const orbit={target:V3(0,1.9,0),r:12.5,ph:1.28,th:.28};countryside(W,9);
   const FU=part('fulcrum',W,true);{const sh=new T.Shape();sh.moveTo(-.75,0);sh.lineTo(.75,0);sh.lineTo(.04,H);sh.lineTo(-.04,H);sh.lineTo(-.75,0);const gq=new T.ExtrudeGeometry(sh,{depth:1,bevelEnabled:true,bevelSize:.03,bevelThickness:.03,bevelSegments:2});gq.translate(0,0,-.5);const u=gq.attributes.uv;for(let i=0;i<u.count;i++)u.setXY(i,u.getX(i)/2,u.getY(i)/2);
    const m=put(new T.Mesh(gq,makeMaterial('stone')),'granite wedge',FU);m.castShadow=m.receiveShadow=true}FU.position.x=p.fulcrum;
   const BM=part('beam',W,true);BM.position.set(p.fulcrum,H+.1,0);const beam=put(box(9,.16,.7,oak),'oak beam',BM);beam.position.x=-p.fulcrum;

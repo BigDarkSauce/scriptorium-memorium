@@ -47,7 +47,7 @@ export class Director {
   idle() { return !this.beat && !this.queue.length; }
   clear() { this.queue = []; this.endBeat(true); }
   nextBeat() {
-    const b = this.queue.shift(); this.beat = b || null; if (!b) { this.timeScale = 1; return; }
+    const b = this.queue.shift(); this.beat = b || null; if (!b) { this.timeScale = 1; this.targetScale = 1; return; }   // nothing left to read: the step plays at full speed (a lesson beat had set 0)
     b.t = 0; b.dur = b.dur || this.readTime((b.title || '') + ' ' + b.text) + (b.kind === 'lesson' ? 1.2 : 0);
     // time dilation: slow the simulation while an event is being read (the process keeps moving, slowly)
     // (only during an instructed step: free exploration keeps its own camera and pace)
@@ -70,7 +70,7 @@ export class Director {
   }
   endBeat(all) {
     const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
-    this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; return; } this.nextBeat();
+    this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; this.targetScale = 1; return; } this.nextBeat();
   }
   // ---------- shots ----------
   // A shot grammar taken from documentary and architectural film (docs/research/presentation-craft.md §5):

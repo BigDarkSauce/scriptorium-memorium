@@ -29,8 +29,10 @@ class App {
   }
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {
+    try { performance.mark('sm:boot'); } catch (e) { }
     this.lib = await store.get(LIB_KEY);
-    if (!this.lib || !this.lib.shelves) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
+    if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
+    if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
     this.openHub();
     requestAnimationFrame(() => document.body.classList.add('ready'));
@@ -42,10 +44,12 @@ class App {
     this.lib.migratedV2 = true; this.saveLib(); if (!old || !Array.isArray(old.layers)) return;
     const parts = []; old.layers.forEach(L => (L.scrolls || []).forEach(sc => { if (sc.analysis && Array.isArray(sc.analysis.chain)) parts.push({ id: 'p-' + uid(), title: sc.title || sc.analysis.title || 'Scroll', summary: sc.analysis.summary || '', analysis: normalizeChain(sc.analysis), layer: L.name }); }));
     const mine = parts.filter(p => !/^Example scroll/.test(p.analysis.sourceNote || '')); if (!mine.length) return;
-    const shelf = this.lib.shelves[0]; const n = this.lib.books.filter(b => b.shelf === shelf.id).length;
+    const shelf = this.firstShelf(); const n = this.lib.books.filter(b => b.shelf === shelf.id).length;
     const b = { id: 'bk-' + uid(), title: 'My earlier scrolls', shelf: shelf.id, tier: 2 - Math.floor(n / 17), slot: n % 17, color: '#9c3a28', icon: 'V2', hasPdf: false };
     this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
   }
+  // a library whose bookcases were all removed still gets a place for imported books
+  firstShelf() { if (!this.lib.shelves.length) { const R = this.lib.hub; this.lib.shelves.push({ id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .28, z: 0, rot: Math.PI / 2, color: '#8a2a1e' }); } return this.lib.shelves[0]; }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
   saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); }
   async loadRoom(id) {
@@ -84,7 +88,7 @@ class App {
     // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
     if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
     // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
-    if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.renderer.compileAsync(this.mode.scene, this.mode.camera), sleep(4000)]); } catch (e) { } }
+    if (this.mode && this.mode.scene && this.mode.camera) { const r = this.gfx.renderer; try { if (r.extensions.has('KHR_parallel_shader_compile')) await Promise.race([r.compileAsync(this.mode.scene, this.mode.camera), sleep(4000)]); else r.compile(this.mode.scene, this.mode.camera); } catch (e) { } }
     this.gfx.resetAdapt();
     await sleep(60); await fade(1, 0, 330); g.value = 0;
   }
@@ -186,12 +190,12 @@ class App {
     document.body.append(box);
   }
   async importJSON(j, bookId) {
-    if (j.format === 'scriptorium-library/1' && j.library) { this.lib = j.library; await store.set(LIB_KEY, this.lib); for (const id in (j.rooms || {})) await store.set('room:' + id, j.rooms[id]); toast('Library imported'); return this.openHub(); }
+    if (j.format === 'scriptorium-library/1' && j.library) { if (!Array.isArray(j.library.books) || !Array.isArray(j.library.shelves) || !j.library.hub) throw new Error('the library file has no bookcases or books'); this.lib = j.library; await store.set(LIB_KEY, this.lib); for (const id in (j.rooms || {})) await store.set('room:' + id, j.rooms[id]); toast('Library imported'); return this.openHub(); }
     const room = j.room || (j.parts ? j : null);
     if (room && Array.isArray(room.parts)) {
       room.parts.forEach(p => { p.id = p.id || 'p-' + uid(); if (p.analysis) normalizeChain(p.analysis); });
       if (bookId) { const cur = await this.loadRoom(bookId); room.dims = room.dims || cur.dims; await store.set('room:' + bookId, room); toast('Room imported'); return this.openRoom(bookId); }
-      const shelf = this.lib.shelves[0]; const title = (j.book && j.book.title) || room.title || 'Imported book';
+      const shelf = this.firstShelf(); const title = String((j.book && j.book.title) || room.title || 'Imported book').slice(0, 300);
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: 0, slot: this.lib.books.filter(x => x.shelf === shelf.id).length, color: shelf.color, icon: 'JSON', hasPdf: false };
       this.lib.books.push(b); this.saveLib(); await store.set('room:' + b.id, room); toast(`"${title}" added to ${shelf.name}`); return this.openHub();
     }
