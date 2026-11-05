@@ -142,7 +142,7 @@ export class Director {
   // when they would not fit across it. Returns {target, pos} (the orbit pivot pans with the view).
   wideKey(W = innerWidth) {
     const v = this.v, k = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10, target = k.target.clone(), pos = target.clone().addScaledVector(k.dir, R);
-    const fr = this.freeFrame(W); if (fr[0] <= 0 && fr[1] >= W) return { target, pos };
+    const fr = this.freeFrame(W, true); if (fr[1] - fr[0] < 120 || (fr[0] <= 80 && fr[1] >= W - 30)) return { target, pos };
     const c = this._wc || (this._wc = new THREE.PerspectiveCamera()); c.fov = this.baseFov(); c.aspect = v.camera.aspect || 1.6; c.near = .05; c.far = 1e3; c.position.copy(pos); c.lookAt(target); c.updateProjectionMatrix(); c.updateMatrixWorld();
     v.scene.updateMatrixWorld(true);
     let x0 = 1e9, x1 = -1e9; const q = V3(), bx = new THREE.Box3();
@@ -200,7 +200,7 @@ export class Director {
       this.saveLens();
       // the approach: the axis the dolly arrives along is chosen so nothing opaque stands between the lens and the subject
       // at the end (other molecules, a shelf, a frame bar), and the camera swings onto it during the first 75 % of the travel
-      const occ = this.occluders(a), ax1 = this.clearAxis(T.c, axis, d0, d1, T.rs, occ, 75);
+      const occ = this.occluders(a), ax1 = this.clearAxis(T.c, axis, d0, d1, T.rs, occ, 105);
       this.zoom = { phase: reduced ? 'done' : 'ring', t: 0, a, c: T.c, r: T.r, rs: T.rs, d0, d1, d: d0, axis: axis.clone(), ax0: axis.clone(), ax1, qa: new THREE.Quaternion().setFromUnitVectors(axis, ax1), occ, cv: V3(), goal: V3(), follow: true, chk: 0, blockedN: 0, sw: null, fov0: cam.fov, fovEnd, segs, si: 0, q0: cam.quaternion.clone(), qT, back: !!Z.back, perDecade: +Z.perDecade || 3, n: segs.length, k: -1 };
       v.fly = null; this.move = null; this.fovTo = null; v.controls.enabled = false; v.controls.target.copy(T.c); this.hud();
       if (reduced) { this.zoom.d = d1; this.zoom.axis.copy(ax1); this.zoomPose(true); this.zoomDone(); }   // reduced motion: a cut and the scale bar
@@ -216,7 +216,8 @@ export class Director {
   occluders(a) {
     const out = [], ds = this.v.ds, mine = new Set(); if (a && a.obj) a.obj.traverse(o => mine.add(o));
     const shown = o => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
-    [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o)) return; const ms = [].concat(o.material); if (ms.some(m => !m || m.transmission > 0 || (m.transparent && m.opacity < .6) || m.visible === false)) return; out.push(o); }));
+    const see = []; [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o)) return; const ms = [].concat(o.material); if (ms.some(m => !m || m.visible === false)) return; if (ms.some(m => m.transmission > 0 || (m.transparent && m.opacity < .6))) see.push(o); else out.push(o); }));
+    out.see = see;   // see-through surfaces (glass, a membrane, water): they still dim and tint the view, so they count a little
     return out;
   }
   // how blocked the view of a target at c is from direction ax: five rays (centre and four around the target's rim) up to
@@ -224,22 +225,23 @@ export class Director {
   blockCost(c, ax, d0, d1, r, occ) {
     const rc = this._rc || (this._rc = new THREE.Raycaster()), u = V3(), w = V3(), o = V3(); let cost = 0;
     u.crossVectors(ax, Math.abs(ax.y) > .9 ? V3(1, 0, 0) : UP).normalize(); w.crossVectors(ax, u);
-    const offs = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+    const offs = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [.75, .75], [-.75, .75], [.75, -.75], [-.75, -.75]];
     for (const [i, j] of offs) {
-      o.copy(c).addScaledVector(u, i * r * .7).addScaledVector(w, j * r * .7); rc.set(o, ax); rc.near = r * .5; rc.far = d1 * 1.05;   // r: the subject's own radius; from inside its surface, so a neighbour pressed against it counts
+      o.copy(c).addScaledVector(u, i * r * .85).addScaledVector(w, j * r * .85); const e = (this._bf || (this._bf = V3())).copy(c).addScaledVector(ax, d1).sub(o), L = e.length(); rc.set(o, e.divideScalar(L)); rc.near = r * .5; rc.far = L;   // toward the lens: the rays follow the view cone   // r: the subject's own radius; from inside its surface, so a neighbour pressed against it counts
       if (rc.intersectObjects(occ, false).length) cost += i || j ? 120 : 260;
+      else if (occ.see && occ.see.length && rc.intersectObjects(occ.see, false).length) cost += i || j ? 25 : 50;
     }
     if (d0 > d1 * 1.1) { rc.set(c, ax); rc.near = d1 * 1.05; rc.far = d0; cost += rc.intersectObjects(occ, false).length * 3; }
     return cost;
   }
-  // the clearest approach direction near ax0 (azimuth ±25°/50°/75°, a little above or below), never far below the horizon
+  // the clearest approach direction near ax0 (azimuth steps of 20°, a little above or below), never below the orbit's limit
   clearAxis(c, ax0, d0, d1, r, occ, maxAz = 75) {
     if (!occ || !occ.length) return ax0.clone();
     const base = this.blockCost(c, ax0, d0, d1, r, occ); if (base === 0) return ax0.clone();
-    let best = ax0.clone(), bc = base; const az = [0, 25, -25, 50, -50, 75, -75].filter(x => Math.abs(x) <= maxAz), el = [0, 18, -12], t = V3(), side = V3();
+    let best = ax0.clone(), bc = base; const az = [0, 20, -20, 40, -40, 60, -60, 80, -80, 105, -105].filter(x => Math.abs(x) <= maxAz), el = [0, 18, 34, -12], t = V3(), side = V3();
     for (const a of az) for (const e of el) {
       if (!a && !e) continue; t.copy(ax0).applyAxisAngle(UP, rad(a)); side.crossVectors(t, UP); if (side.lengthSq() > 1e-6) t.applyAxisAngle(side.normalize(), rad(e));
-      if (t.y < -.17 || t.y > .94) continue;
+      if (t.y < Math.max(.05, Math.cos(this.v.controls.maxPolarAngle ?? Math.PI) + .02) || t.y > .94) continue;   // never below the orbit's polar limit: the controls would snap the view back once they take over
       const k = this.blockCost(c, t, d0, d1, r, occ) + (Math.abs(a) + Math.abs(e)) * .4; if (k < bc) { bc = k; best = t.clone(); }
     }
     return best;
@@ -429,7 +431,7 @@ export class Director {
   updateShots(dt) { this.updateZoom(dt); this.updateTrack(dt); this.updateBracket(dt); this.drawScale(); this.drawEdge(); }
   baseFov() { return this.v.baseFov || 40; }
   // the free part of the frame, from the panels' final layout (offsets ignore the slide/fold transforms in progress)
-  freeFrame(W) { const v = this.v, P = v.panel, Rp = v.readPanel, ox = P && P.offsetParent ? P.offsetParent.getBoundingClientRect().left : 0; const L = P && !P.hidden && !P.classList.contains('folded') ? ox + P.offsetLeft + P.offsetWidth + 12 : 70; const R = Rp && !Rp.hidden && Rp.offsetWidth ? ox + Rp.offsetLeft - 12 : W - 24; return R - L > W * .35 ? [L, R] : [0, W]; }
+  freeFrame(W, raw) { const v = this.v, P = v.panel, Rp = v.readPanel, ox = P && P.offsetParent ? P.offsetParent.getBoundingClientRect().left : 0; const L = P && !P.hidden && !P.classList.contains('folded') ? ox + P.offsetLeft + P.offsetWidth + 12 : 70; const R = Rp && !Rp.hidden && Rp.offsetWidth ? ox + Rp.offsetLeft - 12 : W - 24; return raw || R - L > W * .35 ? [L, R] : [0, W]; }   // raw: the gap itself, however narrow
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {
