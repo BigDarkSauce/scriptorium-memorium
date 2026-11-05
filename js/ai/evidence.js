@@ -3,11 +3,14 @@
 //   OpenAlex  — 250M+ works in every field, CC0 metadata, DOIs; also verifies citations (resolve_references)
 //   Consensus — semantic search over peer-reviewed papers (plain-language questions)
 //   PubMed    — biomedical and life-science literature
+//   SciSpace  — 280M papers in every discipline, strong for humanities and social sciences (history, law, literature, education)
+//   Hugging Face — arXiv-linked papers and library docs for computing, AI/ML, programming and graphics
+//   ClinicalTrials.gov — registered trials (medicine, pharmacology, public health)
 // These are passed to Claude as tools while it writes, so every non-trivial claim can carry sources that
 // really exist. Afterwards, every cited reference is checked against OpenAlex and marked verified / not found.
 // Outside claude.ai (or with no connector), prompts still ask for sources and they are shown as "unverified".
 let MCP = null, SERVERS = new Set(), ready;
-const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'] };
+const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'], SciSpace: ['search'], Hugging_Face: ['hf_fs'], Clinical_Trials: ['search_trials'] };
 
 export function initEvidence() {
   ready = (async () => {
@@ -66,15 +69,38 @@ export async function searchPubMed(query) {
   return arr.map(a => { const id = a.identifiers || {}; const doi = a.doi || id.doi || ''; const pmid = id.pmid || a.pmid; return { title: a.title, year: +((a.publication_date && a.publication_date.year) || 0) || null, authors: (a.authors || []).slice(0, 3).map(x => typeof x === 'string' ? x : [x.last_name, x.initials].filter(Boolean).join(' ')).join('; '), venue: (a.journal && (a.journal.title || a.journal)) || '', doi, pmid, url: doi ? doiUrl(doi) : 'https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/', abstract: cut(a.abstract, 450), source: 'PubMed (cite with DOI)' }; });
 }
 
+// SciSpace: {results:[{id,title,text:"YEAR · Authors · Venue\nTL;DR…\nAbstract…",url}]} (observed)
+export async function searchSciSpace(query) {
+  const q = /\?\s*$/.test(query) ? query : query + '?';
+  const p = await call('SciSpace', 'search', { query: cut(q, 470) + ' limit:6' });
+  return ((p && p.results) || []).slice(0, 6).map(r => { const head = String(r.text || '').split('\n')[0].split(' · '); const year = +(head[0] || '').trim() || null;
+    return { title: r.title, year, authors: (head[1] || '').trim(), venue: (head[2] || '').trim(), url: r.url, abstract: cut(String(r.text || '').split('\n').slice(1).join(' ').replace(/^TL;DR:\s*/, ''), 450), source: 'SciSpace' }; });
+}
+// Hugging Face: hf_fs search over papers (arXiv) or docs. {results:[{status,result:{entries:[{title,description,url,arxiv_url,published_at}]}}]} (observed)
+export async function searchComputing(query, scope = 'papers') {
+  const p = await call('Hugging_Face', 'hf_fs', { operations: [{ cmd: 'search', args: ['hf://' + (scope === 'docs' ? 'docs' : 'papers'), cut(query, 200), '--limit', '6'] }] });
+  const ent = (((p && p.results) || [])[0] || {}).result; const E = (ent && ent.entries) || [];
+  return E.map(e => ({ title: String(e.title || e.name || '').replace(/\s+/g, ' '), year: e.published_at ? +String(e.published_at).slice(0, 4) : null, authors: '', venue: e.arxiv_url ? 'arXiv' : 'Hugging Face', url: e.arxiv_url || e.url || '', abstract: cut(e.description, 450), source: 'Hugging Face' }));
+}
+export async function searchTrials(condition, intervention) {
+  const p = await call('Clinical_Trials', 'search_trials', { condition: cut(condition, 200), ...(intervention ? { intervention: cut(intervention, 120) } : {}), page_size: 5 });
+  const S = (p && (p.items || p.studies || p.trials || p.results)) || [];   // observed: {items:[{nct_id,title,status,phase,conditions,interventions,sponsor,enrollment,start_date}]}
+  return S.slice(0, 5).map(s => { const id = s.nct_id || s.nctId || (s.protocolSection && s.protocolSection.identificationModule && s.protocolSection.identificationModule.nctId) || '';
+    return { title: s.title || s.brief_title || s.briefTitle || id, year: +String(s.start_date || s.startDate || '').slice(0, 4) || null, authors: s.sponsor || '', venue: 'ClinicalTrials.gov ' + (s.status || s.overall_status || ''), url: id ? 'https://clinicaltrials.gov/study/' + id : '', abstract: cut(s.brief_summary || s.summary || [[].concat(s.phase || []).join('/'), s.conditions && [].concat(s.conditions).join(', '), s.interventions && 'intervention: ' + [].concat(s.interventions).join(', '), s.enrollment && 'n = ' + s.enrollment].filter(Boolean).join(' · '), 400), source: 'ClinicalTrials.gov' }; });
+}
+
 // ---- tools handed to Claude while it writes (sample `tools`) ----
 export function evidenceTools() {
   const T = [];
   if (SERVERS.has('OpenAlex')) T.push({ name: 'search_literature', description: 'Search OpenAlex (250M scholarly works, every field: maths, physics, chemistry, biology, economics, history…). Returns title, year, authors, venue, DOI, citation count and abstract. Use it to find the textbook, review or original paper behind a definition, law, constant or data value.', inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'keywords or a short phrase' }, from_year: { type: 'integer' } }, required: ['query'] }, execute: i => searchOpenAlex(i.query, i) });
   if (SERVERS.has('Consensus')) T.push({ name: 'search_evidence', description: 'Semantic search over peer-reviewed papers for a plain-language research question ("how large is global land evaporation?"). Returns ranked papers with abstracts. Use it for empirical claims and measured values.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchConsensus(i.query) });
   if (SERVERS.has('PubMed')) T.push({ name: 'search_biomedical', description: 'Search PubMed (medicine, physiology, molecular and cell biology, pharmacology only). Returns articles with DOIs and abstracts.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchPubMed(i.query) });
+  if (SERVERS.has('SciSpace')) T.push({ name: 'search_any_discipline', description: 'Search SciSpace (280M papers in every discipline). Best for the humanities and social sciences (history, philosophy, law, literature, linguistics, education, art) and as a second source anywhere. Write a full question.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchSciSpace(i.query) });
+  if (SERVERS.has('Hugging_Face')) T.push({ name: 'search_computing', description: 'Search arXiv-linked papers (scope "papers") or library documentation (scope "docs") on Hugging Face: computer science, AI/ML, statistics software, programming, computer graphics.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['papers', 'docs'] } }, required: ['query'] }, execute: i => searchComputing(i.query, i.scope) });
+  if (SERVERS.has('Clinical_Trials')) T.push({ name: 'search_clinical_trials', description: 'Search ClinicalTrials.gov registered trials by condition (and optional intervention). Medicine and pharmacology only.', inputSchema: { type: 'object', properties: { condition: { type: 'string' }, intervention: { type: 'string' } }, required: ['condition'] }, execute: i => searchTrials(i.condition, i.intervention) });
   return T;
 }
-export const EVIDENCE_RULES = `GROUNDING. Tools that search the scholarly record may be available (search_literature, search_evidence, search_biomedical). When they are:
+export const EVIDENCE_RULES = `GROUNDING. Tools that search the scholarly record may be available (search_literature, search_evidence, search_biomedical, search_any_discipline, search_computing, search_clinical_trials). Pick by field: maths/physics/chemistry/earth science → search_literature + search_evidence; biology/medicine → add search_biomedical (trials: search_clinical_trials); humanities/social sciences → search_any_discipline + search_literature; computing/AI/programming/graphics → search_computing + search_literature. When they are:
 - Before writing, search for the part's central laws, definitions and any numbers you will state or plot (2–6 searches; one idea per query).
 - Give each non-trivial step 1–3 "sources" you actually saw in a tool result or know with certainty (canonical textbooks, standards such as SI/CODATA/IUPAC, review articles, the original paper). Copy title, year and DOI exactly from the result. NEVER invent a DOI or a title; if unsure, leave "doi" empty and say so in "note".
 - Measured values (constants, fluxes, prices, rates) must come from a source and say which. Data in a diagram cites its source in the demo's "source" field.
