@@ -1,5 +1,6 @@
 // Scriptorium Memorium — boot, mode switching (library hub ↔ book room ↔ diorama), persistence, import/export.
 import { Gfx } from './gfx/renderer.js';
+import { detectQuality } from './gfx/aaa.js';
 import * as store from './store.js';
 import * as ingest from './ai/ingest.js';
 import { initAI } from './ai/claude.js';
@@ -25,7 +26,37 @@ class App {
     initAI(); initEvidence();
     // sound: one speaker button, a soft click for every button, ambience per place
     this.sfx = sfx; document.body.append(sfx.button());
+    this.qualityControl();
     document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button, .btn, [role=button], summary'); if (b && !b.classList.contains('sound-btn')) sfx.play('click', { gain: .6 }); }, true);
+  }
+  // Graphics quality (renderer.js: 'low' | 'medium' | 'high'). "auto" keeps the detected level and the automatic step-
+  // down when frames stay slow; picking a level pins it (localStorage 'sm-gfx-quality'). A step-down taken later still
+  // shows up here (gfx.onQuality), marked "(auto)". The control: a round button under the speaker, opening a small card.
+  qualityControl() {
+    const G = this.gfx, KEY = 'sm-gfx-quality', names = { low: 'Low', medium: 'Medium', high: 'High' };
+    let pref = 'auto'; try { pref = localStorage.getItem(KEY) || 'auto'; } catch (e) { }
+    let byUser = false, autoSet = pref === 'auto';
+    if (pref !== 'auto' && G.qualityLevels.includes(pref)) { byUser = true; G.setQuality(pref); byUser = false; }
+    const btn = el('button', { class: 'gfx-btn glass', type: 'button', title: 'Graphics quality', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5" stroke="currentColor" stroke-width="1.6"/></svg>' });
+    const seg = el('div', { class: 'gfx-seg', role: 'radiogroup', 'aria-label': 'Graphics quality' });
+    const note = el('p', { class: 'gfx-note' });
+    const autoBtn = el('button', { class: 'btn small ghost', type: 'button', text: 'Auto' });
+    const card = el('div', { class: 'gfx-card glass', hidden: true, role: 'dialog', 'aria-label': 'Graphics' }, [el('div', { class: 'gfx-head' }, [el('b', { text: 'Graphics' }), autoBtn]), seg, note]);
+    const opts = G.qualityLevels.map(q => { const b = el('button', { type: 'button', role: 'radio', class: 'gfx-opt', 'data-q': q }); b.onclick = () => { autoSet = false; try { localStorage.setItem(KEY, q); } catch (e) { } byUser = true; G.setQuality(q); byUser = false; sync(); }; seg.append(b); return b; });
+    // back to automatic: forget the remembered step-down and detect again (GPU string, DPR, caps)
+    autoBtn.onclick = () => { autoSet = true; try { localStorage.setItem(KEY, 'auto'); localStorage.removeItem('sm-gfx-history'); } catch (e) { } let d = G.quality; try { d = detectQuality(G.renderer).quality; } catch (e) { } byUser = true; G.setQuality(d); byUser = false; sync(); };
+    const sync = () => {
+      const cur = G.quality;
+      opts.forEach(b => { const q = b.dataset.q, on = q === cur; b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on); b.textContent = names[q] + (on && autoSet ? ' (auto)' : ''); });
+      autoBtn.hidden = autoSet; btn.dataset.q = cur;
+      note.textContent = autoSet ? 'Chosen for this device; lowered by itself if frames stay slow.' : 'Kept at your choice. Shadow detail changes with the next diorama.';
+    };
+    const prev = G.onQuality; G.onQuality = q => { try { prev && prev(q); } catch (e) { } if (!byUser) { autoSet = true; } sync(); };
+    const close = () => { card.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.onclick = e => { e.stopPropagation(); card.hidden = !card.hidden; btn.setAttribute('aria-expanded', String(!card.hidden)); if (!card.hidden) sync(); };
+    document.addEventListener('pointerdown', e => { if (!card.hidden && !card.contains(e.target) && e.target !== btn && !btn.contains(e.target)) close(); }, true);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !card.hidden) close(); });
+    sync(); document.body.append(btn, card); this.gfxControl = { btn, card, sync };
   }
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {

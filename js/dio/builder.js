@@ -8,6 +8,7 @@ import { aaaMaterial } from '../gfx/aaa.js';
 import { alignUV, relief } from '../gfx/proc.js';
 import { canvasTex, labelTex } from '../gfx/textures.js';
 import { compile, mulberry, makeNoise } from '../util.js';
+import { buildTree, treeForest } from './trees.js';
 
 const D2R = Math.PI / 180;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -65,21 +66,9 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       g.add(m); return g;
     }
     case 'group': return g;
-    case 'tree': case 'bush': {
-      const h = num(shape.h, k === 'bush' ? .6 : 2), r = mulberry(ctx.seed || 7);
-      const trunk = mesh(new THREE.CylinderGeometry(h * .04, h * .06, h * .5, 10), makeMaterial(matSpec?.trunk || 'bark'));
-      trunk.position.y = h * .25; if (k === 'tree') g.add(trunk);
-      const leaf = makeMaterial(matSpec && matSpec.preset ? matSpec : { preset: 'foliage', color: shape.color || '#4f7a3a' });
-      const n = k === 'bush' ? 4 : 6;
-      for (let i = 0; i < n; i++) { const s = h * (.22 + r() * .14); const b = mesh(new THREE.IcosahedronGeometry(s, 1), leaf); b.position.set((r() - .5) * h * .35, (k === 'bush' ? s * .7 : h * .55) + r() * h * .3, (r() - .5) * h * .35); b.rotation.set(r() * 3, r() * 3, 0); b.userData.sway = 1; b.userData.inkAngle = 70; g.add(b); }
-      g.userData.sway = true; return g;
-    }
-    case 'pine': {
-      const h = num(shape.h, 2.4); const trunk = mesh(new THREE.CylinderGeometry(h * .03, h * .05, h * .3, 8), makeMaterial('bark')); trunk.position.y = h * .15; g.add(trunk);
-      const leaf = makeMaterial({ preset: 'foliage', color: shape.color || '#2f5a3a' });
-      for (let i = 0; i < 4; i++) { const c = mesh(new THREE.ConeGeometry(h * (.28 - i * .05), h * .38, 9), leaf); c.position.y = h * (.32 + i * .17); c.userData.sway = 1; g.add(c); }
-      g.userData.sway = true; return g;
-    }
+    // believable trees (js/dio/trees.js): bent tapered trunk + branches in AAA bark, displaced leaf clumps fringed by
+    // alpha-tested leaf cards, whorled drooping tiers for pines; shared geometry (4 variants per kind), 2 draw calls each
+    case 'tree': case 'bush': case 'pine': return buildTree(k, shape, matSpec, ctx);
     case 'house': {
       const w = num(shape.w, 1.6), d = num(shape.d, 1.2), h = num(shape.h, 1);
       const wall = mesh(alignUV(new THREE.BoxGeometry(w, h, d)), makeMaterial(matSpec || { preset: 'plaster', color: '#efe3cc' })); wall.position.y = h / 2; g.add(wall);
@@ -256,4 +245,4 @@ export function buildBody(b, ctx) {
   if (b.hidden) o.visible = false;
   return o;
 }
-export { V3 };
+export { V3, treeForest };

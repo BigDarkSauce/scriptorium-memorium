@@ -324,6 +324,19 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 /* sound toggle */
 .sound-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(78px + env(safe-area-inset-top,0px)); z-index: 40; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); cursor: pointer; padding: 0; }
 .sound-btn[aria-pressed="false"] { color: var(--ink-3); }
+/* graphics quality: a round button under the speaker and its small card (main.js qualityControl) */
+.gfx-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(126px + env(safe-area-inset-top,0px)); z-index: 40; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); cursor: pointer; padding: 0; }
+.gfx-btn:hover, .gfx-btn[aria-expanded="true"] { color: var(--brass); }
+.gfx-card { position: fixed; right: calc(var(--gut, 16px) + 50px + env(safe-area-inset-right,0px)); top: calc(118px + env(safe-area-inset-top,0px)); z-index: 41; width: min(300px, calc(100vw - 2 * var(--gut, 16px) - 50px)); padding: 12px 14px; border-radius: 16px; }
+.gfx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.gfx-head b { font-family: var(--f-display); font-weight: 400; font-size: 17px; letter-spacing: .03em; color: var(--brass-hi); }
+.gfx-seg { display: flex; gap: 0; padding: 3px; border-radius: 999px; background: rgba(0,0,0,.28); border: 1px solid var(--glass-edge); }
+.gfx-opt { flex: 1 1 0; min-height: 40px; padding: 6px 4px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font-size: 13px; white-space: nowrap; transition: background .2s, color .2s; }
+.gfx-opt + .gfx-opt { position: relative; } .gfx-opt + .gfx-opt::before { content: '·'; position: absolute; left: -3px; top: 50%; transform: translateY(-52%); color: var(--ink-4); }
+.gfx-opt.on { background: radial-gradient(120% 100% at 50% 0%, rgba(255,217,138,.4), rgba(255,217,138,.14)); color: var(--brass-hi); }
+.gfx-opt.on::before, .gfx-opt.on + .gfx-opt::before { opacity: 0; }
+.gfx-note { margin: 9px 2px 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+body:has(.reader:not([hidden])) .gfx-btn, body:has(.reader:not([hidden])) .gfx-card { display: none; }
 /* documentary framing during a step: compact readouts */
 .dio-reads.compact { width: 240px; }
 .dio-reads.compact .reads { grid-template-columns: 1fr; }
@@ -466,6 +479,30 @@ i { font-style: italic; }
 .pin.mini .pin-num { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: -9px; padding: 0 4px; border-radius: 9px; font: 600 10px var(--f-mono); color: #1d140b; background: rgba(255,217,138,.8); box-shadow: 0 0 0 2px rgba(20,17,14,.55); }
 @media (prefers-reduced-motion: reduce) { .cue-flow { animation: none; } }
 /* ---- end explainer cues ---- */
+/* ---- touch and phone polish (retest on iPhone 13 and a 360 × 740 Android) ----
+   every control the finger meets is at least 40 px in both directions; small inline chips keep their look and get an
+   invisible 40 px hit area; the diorama time bar wraps into two rows instead of running off a narrow screen */
+@media (pointer: coarse), (max-width: 760px) {
+  .btn, .btn.small, .tog, .tab, select, .field.small { min-height: 40px; }
+  .btn.small { padding: 6px 12px; }
+  .tog { padding: 4px 12px; font-size: 12px; }
+  .ibtn, .ibtn.tiny { width: 40px; height: 40px; }
+  .ibtn.tiny { font-size: 13px; }
+  input[type="range"] { min-height: 32px; touch-action: pan-x; }
+  .chip, .olist .pov, .pin { position: relative; }
+  .chip::after, .olist .pov::after { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 40px; transform: translateY(-50%); }
+  .hub-actions { gap: 4px; }
+}
+@media (max-width: 560px) {
+  .dio-time { flex-wrap: wrap; row-gap: 4px; border-radius: 22px; max-width: calc(100vw - 2 * var(--gut) - 52px); }
+  .dio-time .sep { display: none; }
+  .nav-box { max-width: calc(100vw - 2 * var(--gut)); }
+  .hub-actions { flex-wrap: nowrap; max-width: calc(100vw - 2 * var(--gut)); }
+  .hub-actions .btn { padding: 6px 8px; font-size: 12.5px; white-space: nowrap; }
+  .gfx-card { top: calc(172px + env(safe-area-inset-top,0px)); right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); width: calc(100vw - 2 * var(--gut, 16px)); }
+}
+@media (max-width: 400px) { :root { --gut: 12px; } }
+/* ---- end touch and phone polish ---- */
 /* ---- S10 "you are here" inset (js/dio/inset.js; docs/research/explainer-animation.md S10) ----
    a passive overview in a free corner during zooms, track and POV rides and deep close-ups: the picture is drawn by
    WebGL (InsetPass) under this frame; the frame, the caption and the marks (camera dot and view wedge, zoom target,
