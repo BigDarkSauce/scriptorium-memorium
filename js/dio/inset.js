@@ -66,7 +66,7 @@ export class Inset {
     const mk = (tag, cls) => { const e = document.createElementNS(NS, tag); e.setAttribute('class', cls); this.svg.append(e); return e; };
     this.rail = mk('polyline', 'ins-rail'); this.wedge = mk('path', 'ins-wedge'); this.dot = mk('circle', 'ins-dot'); this.dot.setAttribute('r', '3.6'); this.tgt = mk('circle', 'ins-target'); this.tgt.setAttribute('r', '6');
     view.ui.append(this.box);
-    this.a = 0; this.linger = 0; this.frame = 0; this.corner = -1; this.placeT = 0; this.avgMs = 0; this.why = ''; this.force = false; this._q = V3(); this._f = V3(); this._r = V3(); this._railKey = null;
+    this.a = 0; this.linger = 0; this.frame = 0; this.corner = -1; this.badT = 0; this.pend = null; this.swA = 1; this.placeT = 0; this.avgMs = 0; this.why = ''; this.force = false; this._q = V3(); this._f = V3(); this._r = V3(); this._railKey = null;
   }
   // why the main view has lost the overview (or '' when it has not)
   reason() {
@@ -83,25 +83,34 @@ export class Inset {
     c.position.copy(k.target).addScaledVector(k.dir, R * 1.08); c.near = Math.max(.02, R * .01); c.far = R * 30; c.fov = 40; c.aspect = SIZE[0] / SIZE[1]; c.updateProjectionMatrix(); c.lookAt(k.target); c.updateMatrixWorld();
     this.R = R;
   }
-  // a free corner: the least overlap with the panels, the readouts, the time bar, the callout, the chip and the scale bar;
-  // among equals, the corner farthest from the callout (S10: "the free-frame corner opposite the callout")
-  place() {
-    const v = this.v, d = v.dir, W = innerWidth, H = innerHeight, [w, h] = SIZE, m = 16;
-    const blocks = [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-time'), v.ui && v.ui.querySelector('.dio-actions'), d && d.chipEl, d && d.sbar, d && d.beat && d.beat.el, document.querySelector('.sound-btn')]
-      .filter(P => P && !P.hidden && P.getBoundingClientRect).map(P => P.getBoundingClientRect()).filter(r => r.width && r.height);
-    const co = d && d.beat && d.beat.el ? d.beat.el.getBoundingClientRect() : null;
-    // the left corners start right of the instruction panel (also when it is folded to its tab)
-    const pr = v.panel && !v.panel.hidden && v.panel.getBoundingClientRect ? v.panel.getBoundingClientRect() : null, xl = Math.min(W - w - m, Math.max(m, pr && pr.width ? pr.right + 12 : m));
-    const C = [[W - w - m, 78], [xl, 78], [W - w - m, H - h - 112], [xl, H - h - 112]];
-    let best = this.corner >= 0 ? this.corner : 0, bc = 1e18;
-    C.forEach(([x, y], i) => {
-      let o = 0; for (const r of blocks) o += Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left)) * Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top));
-      const far = co ? Math.hypot(x + w / 2 - (co.left + co.width / 2), y + h / 2 - (co.top + co.height / 2)) : 0, cost = o * 10 - far + (i === this.corner ? -60 : 0);
-      if (cost < bc) { bc = cost; best = i; }
-    });
-    if (best !== this.corner) { this.corner = best; const [x, y] = C[best]; this.x = x; this.y = y; this.box.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; }
+  // a free corner: the least overlap with the panels, the readouts, the time bar, the POV bar, the callout, the chips and
+  // the scale bar; among equals, the corner farthest from the callout (S10: "the free-frame corner opposite the callout").
+  // Measured from the FINAL layout (the instruction panel's folded tab, not its width while it is folding), and sticky:
+  // once placed it stays in its corner unless a real collision there lasts over 1 s, and then it fades across.
+  rects() {
+    const v = this.v, d = v.dir, ox = v.ui ? v.ui.getBoundingClientRect() : { left: 0, top: 0 };
+    const lay = P => P && !P.hidden && P.offsetWidth ? { left: ox.left + P.offsetLeft, top: ox.top + P.offsetTop, right: ox.left + P.offsetLeft + P.offsetWidth, bottom: ox.top + P.offsetTop + P.offsetHeight } : null;   // untransformed layout box
+    const box = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.classList.contains('out')) return null; const r = P.getBoundingClientRect(); return r.width && r.height ? r : null; };
+    const pn = v.panel && !v.panel.hidden ? lay(v.panel) : null, folded = v.panel && v.panel.classList.contains('folded');
+    const panelR = pn ? (folded ? { left: pn.left, top: pn.top, right: pn.left + 46, bottom: pn.top + 46 } : pn) : null;
+    const co = d && d.beat && d.beat.box ? { left: d.beat.box[0], top: d.beat.box[1], right: d.beat.box[0] + d.beat.box[2], bottom: d.beat.box[1] + d.beat.box[3] } : box(d && d.beat && d.beat.el);
+    const blocks = [panelR, lay(v.readPanel), box(v.titleEl), box(v.povBar), box(v.ui && v.ui.querySelector('.dio-time')), box(v.ui && v.ui.querySelector('.dio-actions')), box(d && d.chipEl), box(d && d.sbar), co, box(v.cues && v.cues.chip && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null), box(document.querySelector('.sound-btn')), box(document.querySelector('.gfx-btn'))].filter(Boolean);
+    return { blocks, co, panelR, povR: box(v.povBar) };
   }
-  show(on) { if (on === !this.box.hidden) return; this.box.hidden = !on; if (on) { this.corner = -1; this.placeT = 1e9; this._railKey = null; } }
+  // top corners: left of the sound / quality buttons, and below the POV bar where it spans them
+  corners(panelR, povR) { const W = innerWidth, H = innerHeight, [w, h] = SIZE, m = 16, xl = Math.min(W - w - m, Math.max(m, panelR ? panelR.right + 12 : m)), xr = W - w - m - 52, ty = x => povR && x < povR.right && x + w > povR.left && povR.top < 78 + h ? Math.round(povR.bottom + 10) : 78; return [[xr, ty(xr)], [xl, ty(xl)], [W - w - m, H - h - 112], [xl, H - h - 112]]; }
+  place() {
+    const [w, h] = SIZE, { blocks, co, panelR, povR } = this.rects(), C = this.corners(panelR, povR);
+    const over = ([x, y]) => { let o = 0; for (const r of blocks) o += Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left)) * Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top)); return o; };
+    let best = 0, bc = 1e18;
+    C.forEach((c, i) => { const far = co ? Math.hypot(c[0] + w / 2 - (co.left + co.right) / 2, c[1] + h / 2 - (co.top + co.bottom) / 2) : 0, cost = over(c) * 10 - far; if (cost < bc) { bc = cost; best = i; } });
+    if (this.corner < 0) { this.setCorner(best, C); this.badT = 0; return; }
+    const [x, y] = C[this.corner]; if (x !== this.x || y !== this.y) { this.x = x; this.y = y; this.box.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; }   // the same corner after a resize or a fold
+    const cur = over(C[this.corner]);
+    if (cur > 600 && best !== this.corner && over(C[best]) < cur * .5) { this.badT += this.placeDt || .5; if (this.badT > 1 && this.pend == null) { this.pend = best; this.badT = 0; } } else this.badT = 0;
+  }
+  setCorner(i, C = (r => this.corners(r.panelR, r.povR))(this.rects())) { this.corner = i; const [x, y] = C[i]; this.x = x; this.y = y; this.box.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; }
+  show(on) { if (on === !this.box.hidden) return; this.box.hidden = !on; if (on) { this.corner = -1; this.pend = null; this.swA = 1; this.placeT = 1e9; this._railKey = null; } }
   update(dt) {
     const v = this.v, P = this.pass, why = this.allowed() ? this.reason() : '';
     if (why) { this.why = why; this.linger = 2; } else this.linger = Math.max(0, this.linger - dt);   // S10: it fades out 2 s after the shot ends
@@ -109,14 +118,16 @@ export class Inset {
     this.a = clamp(this.a + (want ? dt / .35 : -dt / .4), 0, 1);
     if (this.a <= 0) { if (P.enabled) { P.enabled = false; this.show(false); } return; }
     if (!P.enabled) { P.enabled = true; this.show(true); this.pose(); P.dirty = true; this.frame = 0; }
-    this.placeT += dt; if (this.placeT > .5) { this.placeT = 0; this.place(); }
+    this.placeT += dt; if (this.placeT > .5) { this.placeDt = Math.min(1, this.placeT); this.placeT = 0; this.place(); }
+    // a corner change fades out (0.25 s), moves, and fades back in: never a jump on screen
+    if (this.pend != null) { this.swA = Math.max(0, (this.swA ?? 1) - dt / .25); if (this.swA === 0) { this.setCorner(this.pend); this.pend = null; } } else this.swA = Math.min(1, (this.swA ?? 1) + dt / .25);
     // the rectangle in drawing-buffer pixels (bottom-left origin), from the composer's own size
     const g = v.gfx, r = g.renderer, k = r.getPixelRatio(), [w, h] = SIZE, W = Math.round(w * k), H = Math.round(h * k);
     P.rect = [Math.round(this.x * k), Math.round((innerHeight - this.y - h) * k), W, H];
     // half resolution, but never below 0.6 of a CSS pixel per pixel (the rail and the wedge are drawn crisp in SVG on top)
     const s = Math.max(.6, k * .5), tw = Math.max(16, Math.round(w * s)), th = Math.max(10, Math.round(h * s));
     if (P.rt.width !== tw || P.rt.height !== th) { P.rt.setSize(tw, th); P.dirty = true; }
-    P.scene = v.scene; P.camera = this.cam; P.uniforms.uAlpha.value = this.a * this.a * (3 - 2 * this.a); P.uniforms.uVig.value = g.grade ? g.grade.uniforms.uVignette.value : .32;
+    P.scene = v.scene; P.camera = this.cam; P.uniforms.uAlpha.value = this.a * this.a * (3 - 2 * this.a) * (this.swA ?? 1); P.uniforms.uVig.value = g.grade ? g.grade.uniforms.uVignette.value : .32;
     // at most every other frame; every 3rd/4th when it is expensive or the adaptive resolution is already reduced
     this.avgMs += (P.ms - this.avgMs) * .1; const slow = g.dpr != null && g.maxDpr != null && g.dpr < Math.min(1, g.maxDpr);
     const every = this.avgMs > 3 || slow ? 4 : this.avgMs > 1.5 ? 3 : 2; if (this.frame++ % every === 0) P.dirty = true;

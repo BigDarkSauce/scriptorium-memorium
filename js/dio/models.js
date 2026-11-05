@@ -1641,8 +1641,12 @@ DIO.efield.lessons=[
   opens:'Explore: move the charges apart (separation 6) and watch the lines.'}];
 
 // a ride along the wire with the discharge current: from the capacitor's + plate along the near wire, through the
-// resistor, along the far wire to the bypass branch (switch open to the battery); the eye rides just above the copper
-DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',points:[[-4.5,1.0,.9],[-4.4,1.0,2.4],[-3.0,1.0,2.5],[0,1.0,2.5],[3.0,1.0,2.5],[4.4,1.0,2.4],[4.5,1.15,1.0],[4.5,1.25,0],[4.5,1.15,-1.0],[4.4,1.0,-2.4],[3.0,1.0,-2.5],[1.7,1.0,-2.6],[1.6,1.0,-3.2],[0,1.0,-3.3],[-1.5,1.0,-3.3]],dur:11,lookAhead:.06}};
+// resistor, along the far wire and through the bypass branch beside the battery (switch open to the battery). The eye
+// rides 1.2 above the board and 1.1 outside the loop (never inside a part), and looks at the wire a little ahead on the
+// subject path ('look', the copper itself), so the wire and its drifting electrons stay framed with the parts beyond
+DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',dur:13,lookAhead:.07,fov:55,
+ points:[[-5.7,1.7,-.2],[-5.6,1.55,1.4],[-5.2,1.5,3.2],[-3.6,1.5,3.6],[0,1.5,3.6],[3.6,1.5,3.6],[5.2,1.5,3.2],[5.6,1.5,1.4],[5.6,1.5,-1.4],[5.2,1.5,-3.2],[3.6,1.5,-3.6],[2.4,1.5,-3.8],[1.4,1.5,-4.4],[0,1.5,-4.5],[-1.2,1.55,-4.4]],
+ look:[[-4.5,.6,.2],[-4.5,.45,1.4],[-4.3,.45,2.4],[-3.0,.45,2.5],[0,.45,2.5],[3.0,.45,2.5],[4.3,.45,2.4],[4.5,.45,1.0],[4.5,.45,-1.0],[4.3,.45,-2.4],[3.0,.45,-2.5],[1.8,.45,-2.6],[1.5,.45,-3.2],[0,.45,-3.3],[-1.5,.45,-3.2]]}};
 DIO.circuit.lessons=[
  {title:'How fast does it charge?',question:'How fast does a capacitor charge?',focus:'capacitor',set:{V:9,R:5,C:.6,closed:1},until:'event:t = τ',run:8,
   chain:[{a:'battery · ε',note:'ε = 9 V drives it'},{a:'switch',note:'closes the loop'},{a:'resistor · R',note:'limits the current'},{a:'capacitor · C',note:'charge piles up on its plates'},{a:'voltmeter',note:'reads V_C rising'}],chainPace:1,

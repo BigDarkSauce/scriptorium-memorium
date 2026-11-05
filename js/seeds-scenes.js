@@ -35,9 +35,13 @@ export const WATER_CYCLE = {
   ],
   tour: ['sun', 'lake', 'vapour', 'parcel', 'cloud', 'windsock', 'mountain', 'rain'],
   // the path of a parcel of the cloud's air over the ridge (lesson "Over the crest"): along the wind from the lake, up the
-  // windward slope, over the crest well above the rock (the ridge rises to about 3.5 units), down into the rain shadow;
-  // it runs just above the cloud tops (about 3.1 units) so the ride is not spent inside a cloud
-  tracks: { parcel: { label: 'a parcel of air over the ridge', points: [[.8, 3.4, 1.7], [.7, 3.5, .3], [.7, 3.9, -1.0], [.7, 4.5, -2.0], [.7, 4.9, -2.9], [.7, 4.5, -3.8], [.6, 3.9, -4.6], [.5, 3.6, -5.3]], dur: 10, lookAhead: .08 } },
+  // windward slope, over the crest (the ridge rises to about 2.9 units), down into the rain shadow ('look', marked by a
+  // bead). The eye follows it from behind, on the sunlit side and above (points: never inside a cloud, which fills the
+  // parcel's own path, and well inside the fog's clear range), looking a little below the bead so the ridge, the lake and
+  // the valley floor stay in the frame
+  tracks: { parcel: { label: 'a parcel of air over the ridge', dur: 12, lookAhead: .04, fov: 55, marker: '#eef6ff', markerR: .09, aim: [0, -.45, 0],
+    look: [[.8, 3.4, 1.7], [.7, 3.5, .3], [.7, 3.9, -1.0], [.7, 4.5, -2.0], [.7, 4.9, -2.9], [.7, 4.5, -3.8], [.6, 3.9, -4.6], [.5, 3.6, -5.3]],
+    points: [[-1.6, 4.8, 4.1], [-1.7, 4.9, 2.7], [-1.7, 5.3, 1.4], [-1.7, 5.9, .4], [-1.7, 6.3, -.5], [-1.7, 5.9, -1.4], [-1.8, 5.3, -2.2], [-1.9, 5.0, -2.9]] } },
   params: [
     { key: 'sun', label: 'sunshine (0 = overcast)', min: 0, max: 1.5, value: .9, unit: '' },
     { key: 'wind', label: 'wind speed', min: 0, max: 10, value: 4, unit: 'm/s' },
@@ -426,7 +430,7 @@ export const OSMOSIS = {
     { id: 'clampB', name: 'Membrane clamp', role: 'decor', shape: { kind: 'box', w: .16, h: .1, d: 1.66, round: .01 }, material: { preset: 'steel' }, position: [0, .17, 0] },
     { id: 'left', name: 'Left level', label: 'Pure water side · level', role: 'actor', describe: 'Water only.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#58b4d0' }, position: [-1.5, 1.42, 0] },
     { id: 'right', name: 'Right level', label: 'Solution side · level', role: 'actor', describe: 'Water plus dissolved solute.', shape: { kind: 'water', w: 2.95, d: 1.55, depth: 1.3 }, material: { preset: 'water', color: '#d8b070' }, position: [1.5, 1.42, 0] },
-    { id: 'tracer', name: 'Tagged water molecule', label: 'Tagged water molecule', role: 'actor', describe: 'One water molecule marked so you can follow it, or ride it (POV).', shape: { kind: 'sphere', r: .075 }, material: { preset: 'emissive', color: '#7fe0ff' }, position: [-.6, .9, .2] },
+    { id: 'tracer', name: 'Tagged water molecule', label: 'Tagged water molecule', role: 'actor', describe: 'One water molecule marked so you can follow it, or ride it (POV).', shape: { kind: 'sphere', r: .075 }, material: { preset: 'plastic', color: '#b4f2ff', emissive: '#3cc6ee', emissiveIntensity: 1.1, roughness: .25 }, position: [-.6, .9, .2] },
     { id: 'piston', name: 'Piston', label: 'Piston · extra pressure on the solution', role: 'actor', describe: 'Pressing on the solution side pushes back against the osmotic flow.', shape: { kind: 'group' }, position: [1.5, 3.3, 0] },
     { id: 'plate', name: 'Piston plate', role: 'decor', parent: 'piston', shape: { kind: 'box', w: 2.86, h: .08, d: 1.5, round: .02 }, material: { preset: 'plastic', color: '#c9ced4' }, position: [0, .04, 0] },
     { id: 'rod', name: 'Piston rod', role: 'decor', parent: 'piston', shape: { kind: 'cylinder', r: .05, h: 1.6 }, material: { preset: 'chrome' }, position: [0, .84, 0] },

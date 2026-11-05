@@ -141,7 +141,7 @@ export class DioramaView {
     this.renderLessons(); this.renderParams(); this.renderObjects();
     this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); });
     if (immediate) this.ds.actors.forEach(a => this.ensurePin(a, false));
-    this.ds.playing = true; this.syncTimeUI();
+    this.ds.playing = true; this.syncTimeUI(); this._wideFix = 2;   // the opening view is re-framed into the free frame once the panels are laid out
   }
   lessons() {
     if (Array.isArray(this.spec.lessons) && this.spec.lessons.length) return this.spec.lessons;
@@ -181,7 +181,7 @@ export class DioramaView {
     const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : l.track === 'actor' ? host : null;
     const cue = this.dir.cinematic ? this.lessonCues(l, host) : {}; this.stepCue = cue;
     if (this.pov && this.pov.auto) this.exitPOV(false, true);
-    if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
+    if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
     if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     if (cue.isolate) this.cues.setIsolate(cue.isolate);
@@ -194,7 +194,7 @@ export class DioramaView {
   }
   completeLesson() {
     const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV(false, true);
-    const unfold = () => { if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; } this.readFocus = null; this.readPanel.classList.remove('compact'); };
+    const unfold = () => { if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; this.fold.textContent = '‹'; } this.readFocus = null; this.readPanel.classList.remove('compact'); };
     const l = this.lessons()[i]; const fa = this.lessonActor;
     const cue = this.stepCue || {}; this.stepCue = null; this.cues.endStep(); const back = !!(cue.zoom && cue.zoom.back && this.dir.zoomBack()); if (cue.zoom && !back) this.dir.endZoomHud();   // zoom back: the generalising pull-out
     if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', noShot: back, onEnd: unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
@@ -354,17 +354,21 @@ export class DioramaView {
   reducedMotion() { const m = this.prefs.motion; if (m === 'reduced') return true; if (m === 'full') return false; try { this._rmq = this._rmq || matchMedia('(prefers-reduced-motion: reduce)'); return this._rmq.matches; } catch (e) { return false; } }
   scaleM() { const s = this.spec.scale || (DIO[this.spec.type] || {}).scale; return s && +s.m > 0 ? +s.m : 0; }   // metres per world unit (no scale → no scale bar)
   scaleMicro() { const s = this.spec.scale || (DIO[this.spec.type] || {}).scale, u = s && s.micro; return u && +u.m > 0 && +u.below > 0 ? { m: +u.m, below: +u.below, note: u.note ? String(u.note) : '' } : null; }   // the molecular scale of a scene drawn at two scales
-  // S5 label rules: at most 4 full labels; older ones shrink to numbered dots that stay for the step; a label named by a
-  // beat or an event comes up at once (≤ 0.3 s) and stays at least its reading time
+  // S5 label rules. Free exploration: every label at full size (overlaps are resolved by placement, never by shrinking
+  // labels to unexplained numbers). During a step with many bodies: at most 4 full labels (the beat's, the recent and
+  // the chain front first); a chain's other links shrink to their step numbers (the chain chip carries the key of what
+  // each number is); every other label steps aside (hidden, not numbered). A label named by a beat or an event comes up
+  // at once (<= 0.3 s) and stays at least its reading time.
   touchLabels(actors) { const R = this._recent || (this._recent = new Map()), now = this.dir ? this.dir.clock || 0 : 0; (actors || []).forEach(a => { if (!a || !a.name) return; const r = R.get(a.name); R.set(a.name, { t: now, min: r && now - r.t < r.min ? r.min : (this.dir ? this.dir.readTime(a.name) : 3) }); }); this._labT = -1; }
   labelRule(t) {
     if (this._labT != null && t - this._labT < .25) return; this._labT = t;
-    const A = this.ds.actors, on = this.stage === 'explore' && A.length > 4;
-    if (!on) { if (this._labOn) { this.pins.forEach(p => this.setMini(p, false)); this._labOn = false; } return; }
-    this._labOn = true; const R = this._recent || (this._recent = new Map()), now = this.dir.clock || 0, C = this.cues.chain;
-    const score = (a, i) => { const pin = this.pins.get(a.name), r = R.get(a.name); return (pin && pin.classList.contains('hot') ? 1e7 : 0) + (r && now - r.t < r.min ? 1e6 : 0) + (r ? 1e3 + r.t : -i); };
+    const A = this.ds.actors, C = this.cues.chain, step = this.stage === 'explore' && this.running != null && this.dir.cinematic, on = step && (A.length > 4 || !!C);
+    if (!on) { if (this._labOn) { this.pins.forEach(p => { this.setMini(p, false); p._quiet = false; }); this._labOn = false; } return; }
+    this._labOn = true; const R = this._recent || (this._recent = new Map()), now = this.dir.clock || 0;
+    const link = a => C ? C.links.findIndex(x => x.a === a) : -1;
+    const score = (a, i) => { const pin = this.pins.get(a.name), r = R.get(a.name); return (pin && pin.classList.contains('hot') ? 1e7 : 0) + (C && C.front === a ? 5e6 : 0) + (r && now - r.t < r.min ? 1e6 : 0) + (a === this.lessonActor ? 5e5 : 0) + (r ? 1e3 + r.t : -i); };
     const full = new Set(A.map((a, i) => [a, score(a, i)]).sort((p, q) => q[1] - p[1]).slice(0, 4).map(x => x[0].name));
-    this.pins.forEach((pin, name) => { const a = pin._actor; let n = A.indexOf(a) + 1; if (C) { const k = C.links.findIndex(x => x.a === a); if (k >= 0) n = k + 1; } this.setMini(pin, !full.has(name), n); });
+    this.pins.forEach((pin, name) => { const a = pin._actor; if (!a) return; const k = link(a); const isFull = full.has(name); this.setMini(pin, !isFull && k >= 0, k + 1); pin._quiet = !isFull && k < 0 && A.length > 4; });
   }
   setMini(pin, on, n) {
     if (on) { let s = pin._num; if (!s) { s = pin._num = el('span', { class: 'pin-num' }); pin.prepend(s); } const tx = String(n || ''); if (s.textContent !== tx) s.textContent = tx; }
@@ -622,13 +626,18 @@ export class DioramaView {
     const w = innerWidth, h = innerHeight, v = V3();
     this.dir.update(dt, this.camera, w, h);
     this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
+    // the opening overview framed in the free part of the screen (not under the instruction panel), once the panel and the
+    // readouts are laid out (second frame) and nothing else moves the camera
+    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(); this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); } }
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
-    if (!this._pr || t - this._pr > .5) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, this.dir.beat && this.dir.beat.el].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; this.labels.childNodes.forEach(p => { p._w = 0; }); }   // re-measure widths: labels grow/shrink (full label ↔ numbered dot), so a stale width let them overflow the right edge
+    // panels are measured every 0.5 s (cheap); the callout moves every frame, so its drawn box is added fresh each frame
+    if (!this._pr || t - this._pr > .5) { this._pr = t; const insB = this.inset && this.inset.box && !this.inset.box.hidden && +this.inset.box.style.opacity > .05 ? this.inset.box : null; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, insB, this.dir.chipEl, this.cues.chip, this.ui.querySelector('.dio-time')].filter(P => P && !P.hidden && P.style.visibility !== 'hidden' && !(P === this.panel && P.classList.contains('folded'))).map(P => P.getBoundingClientRect()).filter(r => r.width > 0); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; this.labels.childNodes.forEach(p => { p._w = 0; }); }
+    const cb = this.dir.beat && this.dir.beat.box, blocks = cb ? (this._block || []).concat({ left: cb[0] + this._bo[0], top: cb[1] + this._bo[1], width: cb[2], height: cb[3] }) : (this._block || []);   // re-measure widths: labels grow/shrink (full label ↔ numbered dot), so a stale width let them overflow the right edge
     const placed = [], items = [], vis = (p, x) => { if (p._vis !== x) { p._vis = x; p.style.visibility = x; } };   // style writes only when something changed
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
-      if (!src || this.stage === 'sketch' || this.stage === 'materialize') { vis(pin, 'hidden'); return; }
+      if (!src || this.stage === 'sketch' || this.stage === 'materialize' || pin._quiet) { vis(pin, 'hidden'); return; }
       v.copy(src).project(this.camera); if (v.z > 1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02 || (this.pov && pin._actor === this.pov.a)) { vis(pin, 'hidden'); return; }   // off-screen (or the actor you ride): no label pinned to the frame edge
       if (!pin._w) pin._w = pin.offsetWidth;
       items.push({ pin, x: clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10), y: clamp((-v.y * .5 + .5) * h, 22, h - 22), pr: (pin.classList.contains('hot') ? 4 : 0) + (pin.classList.contains('focus') ? 2 : 0) + (pin._actor ? 1 : 0) });
@@ -638,7 +647,7 @@ export class DioramaView {
       const W0 = it.pin._w || 120, H0 = 28; let y = it.y, ok = false;
       for (let k = 0; k < 4 && !ok; k++) { const hit = placed.find(q => it.x < q.x + q.w && it.x + W0 > q.x && y - H0 / 2 < q.y + q.h / 2 && y + H0 / 2 > q.y - q.h / 2); if (!hit) ok = true; else y = hit.y + (y >= hit.y ? H0 : -H0); }
       if (y < 14 || y > h - 14) ok = false;   // pushed off the screen by the collision step: hide it rather than pin it outside
-      const under = (this._block || []).some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + 8 > rx && it.x < rx + r.width && y > ry && y < ry + r.height; });
+      const under = blocks.some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + W0 > rx + 2 && it.x < rx + r.width - 2 && y + H0 / 2 > ry + 2 && y - H0 / 2 < ry + r.height - 2; });   // the whole label, not just its dot
       vis(it.pin, ok && !under ? 'visible' : 'hidden');
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); const tf = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; if (it.pin._tf !== tf) { it.pin._tf = tf; it.pin.style.transform = tf; } }
     }
@@ -651,7 +660,7 @@ export class DioramaView {
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
       this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
-      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k)}</em> ${mathHTML(v)}</span>`).join(''); this.drawSpark(); this.readPanel.hidden = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); }
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k)}</em> ${mathHTML(v)}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
   }
   // S6.2 comfort vignette: while a POV ride or a moving shot turns the camera faster than 30°/s (or a POV moves faster
   // than 3 actor sizes per second), the periphery darkens, at most 0.55; a cut (a jump) never counts

@@ -157,7 +157,25 @@ export class Cues {
     this.chain = { links, n: links.length, segs, seg: 0, pass: 1, k: -1, t: 0, ft: 0, front: null, passed: [], on: opts.on ? String(opts.on).replace(/^event:/i, '').toLowerCase() : null, pace: clamp(+opts.pace || .9, .5, 2), w: 0, goal: 0, done: false, ev: false, badges: links.map((L, i) => { const b = el('div', { class: 'cue-badge', text: String(i + 1), hidden: true }); this.layer.append(b); return b; }) };
     this.log = []; this.dirty = true;
   }
-  stopChain() { const C = this.chain; if (!C) return; C.badges.forEach(b => b.remove()); this.chain = null; this.chip.hidden = true; this.flow.setAttribute('d', ''); this.dirty = true; }
+  stopChain() { const C = this.chain; if (!C) return; C.badges.forEach(b => b.remove()); this.chain = null; this.chip.hidden = true; this.dropCoStep(); this.flow.setAttribute('d', ''); this.dirty = true; }
+  dropCoStep() { if (this.coStep) { this.coStep.remove(); this.coStep = null; } }
+  // the chain chip lives in a fixed HUD slot that never covers text: inside the current callout, under its kicker (which
+  // already reads "Step k of n"), or, with no callout on screen, at the top of the free frame (desktop) / above the time
+  // bar (phones), clear of the side buttons, the readouts and the inset
+  placeChip() {
+    const d = this.v.dir, b = d && d.beat, co = b && b.el && b.el.isConnected ? b.el : null;
+    if (this.chip.hidden) { this.dropCoStep(); return; }
+    if (co) {
+      if (!this.coStep || this.coStep.parentNode !== co) { this.dropCoStep(); this.coStep = el('div', { class: 'co-step' }); const k = co.querySelector('.co-kicker'); if (k) k.after(this.coStep); else co.prepend(this.coStep); this.coStep._h = null; }
+      if (this.coStep._h !== this.chipBody) { this.coStep._h = this.chipBody; this.coStep.innerHTML = this.chipBody; b.rectT = -1; }   // the callout grows: let the director re-measure it
+      if (this.chip.style.visibility !== 'hidden') this.chip.style.visibility = 'hidden'; return;
+    }
+    this.dropCoStep(); if (this.chip.style.visibility) this.chip.style.visibility = '';
+    const w = innerWidth, h = innerHeight, phone = w < 760; if (!this.chip._w) { this.chip._w = this.chip.offsetWidth || 240; this.chip._h = this.chip.offsetHeight || 26; }
+    let x, y; if (phone) { x = 10; y = h - 128 - this.chip._h - 10; }
+    else { const fr = d ? d.freeFrame(w) : [0, w], dc = d && d.chipEl && !d.chipEl.hidden && !d.chipEl.classList.contains('out'); x = clamp((fr[0] + fr[1]) / 2 - this.chip._w / 2, fr[0] + 8, Math.max(fr[0] + 8, fr[1] - this.chip._w - 8)); y = 74 + (dc ? 44 : 0); }
+    const tc = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (this.chip._tf !== tc) { this.chip._tf = tc; this.chip.style.transform = tc; }
+  }
   chainEvent(ev) { const C = this.chain; if (!C || !C.on || C.done) return; const t = String(ev.text || '').toLowerCase(); if ((ev.id && ev.id.toLowerCase() === C.on) || t.includes(C.on)) { C.ev = true; C.evAt = performance.now(); } }
   advance() {
     const C = this.chain; C.t = 0; C.ev = false;
@@ -165,13 +183,17 @@ export class Cues {
     if (C.k >= seg.length) {
       if (C.pass === 1) { C.pass = 2; C.k = 0; C.passed = []; }   // a second, quicker pass: cue loyalty drops after the first exposure
       else if (C.seg + 1 < C.segs.length) { C.seg++; seg = C.segs[C.seg]; C.pass = 1; C.k = 0; C.passed = []; }
-      else { C.done = true; C.goal = 0; C.front = null; this.chip.hidden = true; this.flow.setAttribute('d', ''); this.dirty = true; return; }
+      else { C.done = true; C.goal = 0; C.front = null; this.chip.hidden = true; this.dropCoStep(); this.flow.setAttribute('d', ''); this.dirty = true; return; }
     }
     C.goal = 1; const prev = C.front; if (prev && !C.passed.includes(prev)) C.passed.push(prev);
     const L = seg[C.k]; C.front = L.a; C.frontLink = L; C.ft = 0; C.prevLink = C.k > 0 ? seg[C.k - 1] : null;
     const gi = C.seg * 8 + C.k; C.gi = gi; C.badges[gi].hidden = false; C.badges[gi].classList.add('now');
     C.badges.forEach((b, i) => { if (i !== gi) b.classList.remove('now'); });
-    this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (L.note ? ' · ' + mathHTML(String(L.note).split(/\s+/).slice(0, 6).join(' ')) : '');
+    // the chip: the step, its note, and the key of the numbers (the badges and any numbered labels) — the current one lit
+    const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' ')) : '';
+    const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0])}</i>`).join('') + '</span>';
+    this.chipBody = (note ? `<span class="cue-note">${note}</span>` : '') + key;
+    this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (note ? ' · ' + note : '') + key; this.chip._w = 0;
     this.kicker(`Step ${gi + 1} of ${C.n}`);
     this.v.highlightPins && this.v.touchLabels && this.v.touchLabels([L.a]);
     this.log.push({ k: gi + 1, pass: C.pass, t: performance.now(), evAt: C.evAt || null, sim: this.v.ds.t });
@@ -272,7 +294,7 @@ export class Cues {
   // ---------- step lifecycle (engine) ----------
   endStep() {
     this.iso.goal = 0;
-    if (this.chain) { this.chain.goal = 0; this.chain.done = true; this.chip.hidden = true; this.flow.setAttribute('d', ''); }   // badges stay until the next step: the scene keeps a record of the path
+    if (this.chain) { this.chain.goal = 0; this.chain.done = true; this.chip.hidden = true; this.dropCoStep(); this.flow.setAttribute('d', ''); }   // badges stay until the next step: the scene keeps a record of the path
     if (this.peel && this.peel.restore === 'step') this.restorePeel();
   }
   reset() { this.stopChain(); this.endPeel(true); this.iso.goal = 0; this.iso.w = 0; this.iso.set = []; this.dirty = true; }
@@ -312,9 +334,8 @@ export class Cues {
     for (const o of order) {
       for (let k = 0; k < 6; k++) { const hit = placed.find(p => Math.abs(p.x - o.x) < 26 && Math.abs(p.y - o.y) < 26); if (!hit) break; o.y = hit.y + 27; }
       placed.push(o); const tf = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px)`; if (o.b._tf !== tf) { o.b._tf = tf; o.b.style.transform = tf; } o.b.style.opacity = '';
-      if (o.i === C.gi && !this.chip.hidden) { const cx = Math.min(w - 260, o.x + 30), tc = `translate(${cx.toFixed(0)}px,${(o.y - 2).toFixed(0)}px)`; if (this.chip._tf !== tc) { this.chip._tf = tc; this.chip.style.transform = tc; } }
     }
-    C.rects = placed.map(p => [p.x, p.y, 22, 22]);
+    C.rects = placed.map(p => [p.x, p.y, 22, 22]); this.placeChip();
     // the flow arrow from the link just left to the link reached, while the front crosses (one pace)
     const pace = C.pace * (C.pass === 2 ? .6 : 1);
     if (!C.done && C.prevLink && C.ft < pace) {

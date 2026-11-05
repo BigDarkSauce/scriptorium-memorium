@@ -26,10 +26,11 @@ export class Director {
     this.svg.innerHTML = '<defs><marker id="dir-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffd98a"/></marker></defs>';
     this.caption = el('div', { class: 'dir-caption', hidden: true }); this.layer.append(this.caption);
     this.trail = new Map();      // object → recent screen positions (for motion arrows)
+    this._f = V3(); this._qI = new THREE.Quaternion(); this._qL = new THREE.Quaternion(); this._m4 = new THREE.Matrix4(); this.tsV = 0;
   }
   dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
-  userGrab() { this.hold = 6; this.move = null; this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase === 'back') { this.restoreLens(); this.zoom = null; if (this.sbar) this.sbar.hidden = true; if (this.ring) this.ring.style.opacity = 0; } else if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(true); }   // grabbing ends rides at once (no delayed snap-back)
+  userGrab() { this.hold = 6; this.move = null; if (this.zoom) { this.zoom.follow = false; this.zoom.sw = null; } this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase === 'back') { this.restoreLens(); this.zoom = null; if (this.sbar) this.sbar.hidden = true; if (this.ring) this.ring.style.opacity = 0; } else if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(true); }   // grabbing ends rides at once (no delayed snap-back)
 
   // ---------- beats ----------
   // beat: {kind:'event'|'lesson'|'explain', title, text, anchor:()=>Vector3|null, focus:Object3D|null, names:[actor...]}
@@ -43,7 +44,7 @@ export class Director {
     if ((this.beat && this.beat.text === beat.text) || this.queue.some(b => b.text === beat.text)) return;
     if (beat.kind === 'event') {
       const evq = this.queue.filter(b => b.kind === 'event'); if (evq.length >= 2) this.queue.splice(this.queue.indexOf(evq[0]), 1);   // only the newest events wait
-      if (this.v.running != null && this.cinematic) { this.targetScale = Math.min(this.targetScale ?? 1, .3); this.timeScale = Math.min(this.timeScale, .35); }   // slow the process at once, while its description waits
+      if (this.v.running != null && this.cinematic) this.targetScale = Math.min(this.targetScale ?? 1, .3);   // slow the process while its description waits (eased over ~0.4 s in update: a jump in speed shows as a hitch in a ride)
     }
     this.queue.push(beat); if (!this.beat) this.nextBeat();
   }
@@ -63,7 +64,7 @@ export class Director {
     // (only during an instructed step: free exploration keeps its own camera and pace)
     const inStep = this.v.running != null || b.kind !== 'event';
     // read first, then watch: an instruction freezes the model until it has been read; events play in slow motion
-    this.targetScale = !this.cinematic ? 1 : b.kind === 'lesson' ? 0 : b.kind === 'event' && inStep ? .3 : 1; if (b.kind === 'lesson' && this.cinematic) this.timeScale = 0;
+    this.targetScale = !this.cinematic ? 1 : b.kind === 'lesson' ? 0 : b.kind === 'event' && inStep ? .3 : 1; if (b.kind === 'lesson' && this.cinematic) { this.timeScale = 0; this.tsV = 0; }   // a new step starts frozen (read first); everything else eases
     if (b.caption) { this.setCaption(b.title, b.text); b.el = null; b.capBar = el('div', { class: 'co-time' }, [el('i')]); this.caption.append(b.capBar); if (this.cinematic && this.hold <= 0 && inStep && !b.noShot) this.frame(b); return; }
     // the shot
     if (this.cinematic && inStep && this.hold <= 0 && !b.noShot) this.frame(b);   // noShot: a label beat inside a move (peel layers) keeps the camera
@@ -74,7 +75,7 @@ export class Director {
       el('div', { class: 'co-text', html: mathHTML(b.text) }),
       b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + mathHTML(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
     b.el.addEventListener('mouseenter', () => b.paused = true); b.el.addEventListener('mouseleave', () => b.paused = false);
-    this.layer.append(b.el); requestAnimationFrame(() => b.el && b.el.classList.add('in'));
+    this.layer.append(b.el); requestAnimationFrame(() => b.el && this.beat === b && b.el.classList.add('in'));   // (a beat already ended never fades in)
     b.line = document.createElementNS(NS, 'path'); b.line.setAttribute('class', 'co-line'); this.svg.append(b.line);
     b.dot = el('div', { class: 'co-dot' }); this.layer.append(b.dot);
     if (this.guides) this.makeGuides(b);
@@ -82,7 +83,7 @@ export class Director {
   }
   endBeat(all) {
     const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
-    this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; this.targetScale = 1; return; } this.nextBeat();
+    this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; this.tsV = 0; this.targetScale = 1; return; } this.nextBeat();
   }
   // ---------- shots ----------
   // A shot grammar taken from documentary and architectural film (docs/research/presentation-craft.md §5):
@@ -96,14 +97,15 @@ export class Director {
     const v = this.v, cam = v.camera; if (!cam || v.pov) return;
     // the step's own moving shot keeps the camera: an event during a zoom (or at its arrival view) or a ride is read in its
     // callout, it does not cut away (a cut would end the zoom or the ride half-way)
-    if (b.kind === 'event' && !b.poseOnly && ((this.zoom && this.zoom.phase !== 'back') || (this.track && this.track.phase !== 'post'))) return;
+    // (nor during the pull-out after a ride or a POV, nor while a dolly is still on its way: the next shot waits for it)
+    if (b.kind === 'event' && !b.poseOnly && ((this.zoom && this.zoom.phase !== 'back') || this.track || (this.bracket && this.bracket.phase !== 'pre') || this.move)) return;
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
     if (kind === 'zoom') { if (b.zoom && b.zoom.to && this.startZoom(b)) return; kind = p ? 'medium' : 'wide'; }
     if (kind === 'track') { if (b.track && this.startTrack(b)) return; kind = p ? 'medium' : 'wide'; }
     if (kind === 'pov') { const a = b.host || (b.names || [])[0]; if (a && v.setPOV) { this.startBracket(a, b); return; } kind = 'close'; }
-    if (kind === 'wide' || !p) { const k = v.ds.overviewKey(); if (this.last && this.last.kind === 'wide') return; this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), true); this.last = { kind: 'wide', moving: false, t: this.clock }; return; }
+    if (kind === 'wide' || !p) { if (this.last && this.last.kind === 'wide') return; const k = this.wideKey(); this.cutTo(k.target, k.pos, this.baseFov(), true); this.last = { kind: 'wide', moving: false, t: this.clock }; return; }
     // subject size: its mesh box, grown to include its label point and (for explanations) the other named objects
     v.scene && v.scene.updateMatrixWorld(true);
     let box = null; if (b.focus) { box = new THREE.Box3().setFromObject(b.focus); if (box.isEmpty()) box = null; }
@@ -135,6 +137,22 @@ export class Director {
     } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey }; }
     this.accent(p, r);
   }
+  // the establishing view framed in the FREE part of the screen (not under the instruction panel or the readouts): the
+  // model's overview, panned sideways so the significant bodies sit in the middle of the free frame, and pulled back
+  // when they would not fit across it. Returns {target, pos} (the orbit pivot pans with the view).
+  wideKey(W = innerWidth) {
+    const v = this.v, k = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10, target = k.target.clone(), pos = target.clone().addScaledVector(k.dir, R);
+    const fr = this.freeFrame(W); if (fr[0] <= 0 && fr[1] >= W) return { target, pos };
+    const c = this._wc || (this._wc = new THREE.PerspectiveCamera()); c.fov = this.baseFov(); c.aspect = v.camera.aspect || 1.6; c.near = .05; c.far = 1e3; c.position.copy(pos); c.lookAt(target); c.updateProjectionMatrix(); c.updateMatrixWorld();
+    v.scene.updateMatrixWorld(true);
+    let x0 = 1e9, x1 = -1e9; const q = V3(), bx = new THREE.Box3();
+    v.ds.actors.forEach(a => { if (!a.obj) return; bx.setFromObject(a.obj); if (bx.isEmpty() || bx.getSize(q).length() > R * 1.6) return; for (let i = 0; i < 8; i++) { q.set(i & 1 ? bx.max.x : bx.min.x, i & 2 ? bx.max.y : bx.min.y, i & 4 ? bx.max.z : bx.min.z).project(c); if (q.z > 1) continue; const sx = (clamp(q.x, -1.6, 1.6) * .5 + .5) * W; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); } });
+    if (!(x1 > x0)) return { target, pos };
+    const fw = fr[1] - fr[0], grow = clamp((x1 - x0) / (fw * .92), 1, 1.6), dist = R * grow, hw = dist * Math.tan(rad(c.fov / 2)) * c.aspect;
+    const shiftPx = ((x0 + x1) / 2 - W / 2) / grow - ((fr[0] + fr[1]) / 2 - W / 2), right = V3().crossVectors(V3(0, 1, 0), k.dir).normalize();   // positive: the bodies sit right of the free centre
+    target.addScaledVector(right, shiftPx / W * 2 * hw); pos.copy(target).addScaledVector(k.dir, dist);
+    return { target, pos };
+  }
   // the subject of each beat gets a soft accent light (the "hero" key of docs/research/presentation-craft.md §1)
   accent(p, r) { const L = this.v.accentLight; if (!L || !p) return; const c = this.v.camera, up = V3(0, 1, 0); const side = V3().crossVectors(c.position.clone().sub(p).normalize(), up).normalize();
     L.position.copy(p).addScaledVector(c.position.clone().sub(p).normalize(), r * 3 + 1).addScaledVector(up, r * 2.2 + .8).addScaledVector(side, r * 1.6); L.target.position.copy(p); L.target.updateMatrixWorld();
@@ -142,7 +160,8 @@ export class Director {
   // ---------- explainer shots (docs/research/explainer-animation.md): zoom (S4), track (S9), the POV bracket (S6.4) ----------
   reduced() { return !!(this.v.reducedMotion && this.v.reducedMotion()); }
   // a moving shot or a bracket is still on its way: cues that play "after the shot" (chain, peel) wait for it
-  busy() { const z = this.zoom, k = this.track, br = this.bracket; return !!((z && z.phase !== 'done') || (k && k.phase !== 'post') || (br && br.phase === 'pre') || this.dip); }
+  // (the pull-out after a ride or a POV and any dolly still on its way count too: the next beat waits for them to land)
+  busy() { const z = this.zoom, k = this.track, br = this.bracket; return !!((z && z.phase !== 'done') || k || (br && br.phase !== 'ride') || this.dip || (this.move && this.hold <= 0)); }
   hud() {
     if (this.ring) return;
     this.ring = document.createElementNS(NS, 'circle'); this.ring.setAttribute('class', 'dir-ring'); this.ring.setAttribute('r', '20'); this.ring.style.opacity = 0; this.svg.append(this.ring);
@@ -167,10 +186,11 @@ export class Director {
   startZoom(b) {
     const v = this.v, Z = b.zoom, a = Z.to, cam = v.camera, R = v.ds.orb ? v.ds.orb.r : 10; if (!a) return false;
     v.scene.updateMatrixWorld(true);
-    const size = o => { const bx = o && o.obj ? new THREE.Box3().setFromObject(o.obj) : null; if (bx && !bx.isEmpty()) return { c: bx.getCenter(V3()), r: Math.max(.01, bx.getSize(V3()).length() * .5) }; const q = o && o.getPos && o.getPos(); return { c: (q || v.ds.center).clone(), r: .25 }; };
+    const size = o => { const bx = o && o.obj ? new THREE.Box3().setFromObject(o.obj) : null; if (bx && !bx.isEmpty()) { const sz = bx.getSize(V3()); return { c: bx.getCenter(V3()), r: Math.max(.01, sz.length() * .5), rs: Math.max(.005, Math.max(sz.x, sz.y, sz.z) * .5) }; } const q = o && o.getPos && o.getPos(); return { c: (q || v.ds.center).clone(), r: .25, rs: .2 }; };
     const T = size(a), base = this.baseFov(), fovEnd = clamp(+Z.fovEnd || base, base - 10, base + 10), d1 = T.r / Math.tan(rad(fovEnd / 2)) * 1.4;
     const reduced = this.reduced(), wide = !reduced && (Z.from !== 'current' || (this.last && this.last.kind === 'push') || cam.position.distanceTo(T.c) < d1 * 3);   // never right after a push
     const go = () => {
+      v.scene.updateMatrixWorld(true); this.subjPos(a, T.c);   // where the subject is NOW (the cut may have taken a moment)
       const axis = cam.position.clone().sub(T.c); let d0 = axis.length(); if (d0 < 1e-6) { axis.set(0, .35, 1); d0 = R; } axis.normalize(); d0 = Math.max(d0, d1 * 1.5);
       const st = (Z.stations || []).filter(s => s && s.a && s.a !== a).map(s => { const S = size(s.a); return { a: s.a, hold: clamp(+s.hold || 2, .5, 8), d: S.r / Math.tan(rad(base / 2)) * 1.4 }; }).filter(s => s.d < d0 * .92 && s.d > d1 * 1.08).sort((p, q) => q.d - p.d);
       const fin = (Z.stations || []).find(s => s && s.a === a), segs = []; let da = d0;
@@ -178,18 +198,55 @@ export class Director {
       segs.forEach(g => { g.T = clamp((+Z.perDecade || 3) * Math.log10(g.da / g.db), segs.length > 1 ? 1.2 : 2.5, 14); });
       const qT = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(cam.position, T.c, UP));
       this.saveLens();
-      this.zoom = { phase: reduced ? 'done' : 'ring', t: 0, a, c: T.c, r: T.r, d0, d1, d: d0, axis, fov0: cam.fov, fovEnd, segs, si: 0, q0: cam.quaternion.clone(), qT, back: !!Z.back, perDecade: +Z.perDecade || 3, n: segs.length, k: -1 };
+      // the approach: the axis the dolly arrives along is chosen so nothing opaque stands between the lens and the subject
+      // at the end (other molecules, a shelf, a frame bar), and the camera swings onto it during the first 75 % of the travel
+      const occ = this.occluders(a), ax1 = this.clearAxis(T.c, axis, d0, d1, T.rs, occ, 75);
+      this.zoom = { phase: reduced ? 'done' : 'ring', t: 0, a, c: T.c, r: T.r, rs: T.rs, d0, d1, d: d0, axis: axis.clone(), ax0: axis.clone(), ax1, qa: new THREE.Quaternion().setFromUnitVectors(axis, ax1), occ, cv: V3(), goal: V3(), follow: true, chk: 0, blockedN: 0, sw: null, fov0: cam.fov, fovEnd, segs, si: 0, q0: cam.quaternion.clone(), qT, back: !!Z.back, perDecade: +Z.perDecade || 3, n: segs.length, k: -1 };
       v.fly = null; this.move = null; this.fovTo = null; v.controls.enabled = false; v.controls.target.copy(T.c); this.hud();
-      if (reduced) { this.zoom.d = d1; cam.quaternion.copy(qT); this.zoomPose(true); this.zoomDone(); }   // reduced motion: a cut and the scale bar
+      if (reduced) { this.zoom.d = d1; this.zoom.axis.copy(ax1); this.zoomPose(true); this.zoomDone(); }   // reduced motion: a cut and the scale bar
     };
     if (wide) { const k = v.ds.overviewKey(); this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), base, true, go); }
     else { this.stopShots(); if (reduced) this.dip = { t: 0, done: false, apply: go }; else go(); }
     this.last = { kind: 'zoom', moving: true, subj: a, t: this.clock };
     return true;
   }
+  // the subject's position: the centre of its mesh (a label point sits above it), else its anchor
+  subjPos(a, out) { const bx = this._sbx || (this._sbx = new THREE.Box3()); if (a && a.obj) { bx.setFromObject(a.obj); if (!bx.isEmpty()) return bx.getCenter(out); } const q = a && a.getPos && a.getPos(); if (q) out.copy(q); return out; }
+  // opaque meshes that can stand in the way of a zoom target (not the target itself, glass, ink, labels or sprites)
+  occluders(a) {
+    const out = [], ds = this.v.ds, mine = new Set(); if (a && a.obj) a.obj.traverse(o => mine.add(o));
+    const shown = o => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
+    [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o)) return; const ms = [].concat(o.material); if (ms.some(m => !m || m.transmission > 0 || (m.transparent && m.opacity < .6) || m.visible === false)) return; out.push(o); }));
+    return out;
+  }
+  // how blocked the view of a target at c is from direction ax: five rays (centre and four around the target's rim) up to
+  // the final distance d1 (heavy), and the centre ray up to the start distance d0 (light: the dolly passes through it)
+  blockCost(c, ax, d0, d1, r, occ) {
+    const rc = this._rc || (this._rc = new THREE.Raycaster()), u = V3(), w = V3(), o = V3(); let cost = 0;
+    u.crossVectors(ax, Math.abs(ax.y) > .9 ? V3(1, 0, 0) : UP).normalize(); w.crossVectors(ax, u);
+    const offs = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [i, j] of offs) {
+      o.copy(c).addScaledVector(u, i * r * .7).addScaledVector(w, j * r * .7); rc.set(o, ax); rc.near = r * .5; rc.far = d1 * 1.05;   // r: the subject's own radius; from inside its surface, so a neighbour pressed against it counts
+      if (rc.intersectObjects(occ, false).length) cost += i || j ? 120 : 260;
+    }
+    if (d0 > d1 * 1.1) { rc.set(c, ax); rc.near = d1 * 1.05; rc.far = d0; cost += rc.intersectObjects(occ, false).length * 3; }
+    return cost;
+  }
+  // the clearest approach direction near ax0 (azimuth ±25°/50°/75°, a little above or below), never far below the horizon
+  clearAxis(c, ax0, d0, d1, r, occ, maxAz = 75) {
+    if (!occ || !occ.length) return ax0.clone();
+    const base = this.blockCost(c, ax0, d0, d1, r, occ); if (base === 0) return ax0.clone();
+    let best = ax0.clone(), bc = base; const az = [0, 25, -25, 50, -50, 75, -75].filter(x => Math.abs(x) <= maxAz), el = [0, 18, -12], t = V3(), side = V3();
+    for (const a of az) for (const e of el) {
+      if (!a && !e) continue; t.copy(ax0).applyAxisAngle(UP, rad(a)); side.crossVectors(t, UP); if (side.lengthSq() > 1e-6) t.applyAxisAngle(side.normalize(), rad(e));
+      if (t.y < -.17 || t.y > .94) continue;
+      const k = this.blockCost(c, t, d0, d1, r, occ) + (Math.abs(a) + Math.abs(e)) * .4; if (k < bc) { bc = k; best = t.clone(); }
+    }
+    return best;
+  }
   zoomPose(final) {
     const Z = this.zoom, cam = this.v.camera, R = this.v.ds.orb ? this.v.ds.orb.r : 10;
-    cam.position.copy(Z.c).addScaledVector(Z.axis, Z.d); cam.quaternion.copy(Z.qT);
+    cam.position.copy(Z.c).addScaledVector(Z.axis, Z.d); cam.lookAt(Z.c);
     const uT = final ? 1 : Math.log(Z.d0 / Z.d) / Math.log(Z.d0 / Z.d1), f = clamp((uT - .7) / .3, 0, 1);
     cam.fov = Z.fov0 + (Z.fovEnd - Z.fov0) * f * f * (3 - 2 * f);
     const far = Math.max(Z.d * 100, Z.d + R * 3), near = Math.max(1e-5, Z.d * .01, far / 1e4); cam.near = near; cam.far = far; cam.updateProjectionMatrix();
@@ -209,10 +266,27 @@ export class Director {
     const Z = this.zoom, v = this.v, cam = v.camera; if (!Z) return;
     if (this.dip && !this.dip.done) return;   // the cut to the starting view comes first
     Z.t += dt;
+    // the subject moves (a molecule in a running gas): the aim follows it on a critically damped spring (no jerk when it
+    // bounces), so the view never ends on the empty space it has left; the learner taking the camera stops the follow
+    const c0x = Z.c.x, c0y = Z.c.y, c0z = Z.c.z;
+    if (Z.follow && Z.phase !== 'back') { this.subjPos(Z.a, Z.goal); const w = 7, ax = this._f.copy(Z.goal).sub(Z.c).multiplyScalar(w * w).addScaledVector(Z.cv, -2 * w); Z.cv.addScaledVector(ax, dt); Z.c.addScaledVector(Z.cv, dt); }
+    // while held, keep the line of sight clear: other molecules drift in front; a blocked view (for over 0.5 s) swings the
+    // camera round the subject to the clearest nearby direction, in 1.4 s (at most 50°)
+    if ((Z.phase === 'hold' || (Z.phase === 'done' && Z.follow)) && this.timeScale > .05) {
+      Z.chk += dt; if (Z.chk > .25 && !Z.sw) { Z.chk = 0; const k = this.blockCost(Z.c, Z.axis, Z.d, Z.d, Z.rs, Z.occ); Z.blockedN = k >= 240 ? Z.blockedN + 1 : 0;
+        if (Z.blockedN >= 2) { Z.blockedN = 0; const nx = this.clearAxis(Z.c, Z.axis, Z.d, Z.d, Z.rs, Z.occ, 50); if (nx.angleTo(Z.axis) > .05) Z.sw = { a0: Z.axis.clone(), q: new THREE.Quaternion().setFromUnitVectors(Z.axis, nx), t: 0 }; } }
+      if (Z.sw) { const S = Z.sw; S.t += dt; const k = Math.min(1, S.t / 1.4); Z.axis.copy(S.a0).applyQuaternion(this._qI.identity().slerp(S.q, smoother(k))); if (k >= 1) Z.sw = null; }
+    }
+    if (Z.phase === 'done') {
+      // after arrival the learner may orbit; until they grab the camera it keeps following (and swinging clear of) the subject
+      if (Z.follow && v.running != null && this.hold <= 0) { const dx = Z.c.x - c0x, dy = Z.c.y - c0y, dz = Z.c.z - c0z; v.controls.target.copy(Z.c); if (Z.sw) { cam.position.copy(Z.c).addScaledVector(Z.axis, cam.position.distanceTo(Z.c) || Z.d); cam.lookAt(Z.c); } else { cam.position.x += dx; cam.position.y += dy; cam.position.z += dz; } }
+    } else if (Z.phase === 'hold') this.zoomPose(true);
     if (Z.phase === 'ring') { if (Z.t >= .5) { Z.phase = 'centre'; Z.t = 0; } }
-    else if (Z.phase === 'centre') { const k = Math.min(1, Z.t / .6); cam.quaternion.slerpQuaternions(Z.q0, Z.qT, k * k * (3 - 2 * k)); if (k >= 1) { Z.phase = 'travel'; Z.t = 0; } }
+    else if (Z.phase === 'centre') { const k = Math.min(1, Z.t / .6); this._m4.lookAt(cam.position, Z.c, UP); Z.qT.setFromRotationMatrix(this._m4); cam.quaternion.slerpQuaternions(Z.q0, Z.qT, k * k * (3 - 2 * k)); if (k >= 1) { Z.phase = 'travel'; Z.t = 0; } }
     else if (Z.phase === 'travel') {
-      const g = Z.segs[Z.si], u = Math.min(1, Z.t / g.T); Z.d = g.da * Math.pow(g.db / g.da, smoother(u)); this.zoomPose();
+      const g = Z.segs[Z.si], u = Math.min(1, Z.t / g.T); Z.d = g.da * Math.pow(g.db / g.da, smoother(u));
+      const uT = Math.log(Z.d0 / Z.d) / Math.log(Z.d0 / Z.d1), e = clamp(uT / .75, 0, 1); Z.axis.copy(Z.ax0).applyQuaternion(this._qI.identity().slerp(Z.qa, e * e * (3 - 2 * e)));   // swing onto the clear axis
+      this.zoomPose();
       if (u >= 1) { Z.phase = 'hold'; Z.t = 0; Z.k = Z.si; const nm = g.st.a.name.split(' · ')[0]; if (Z.n > 1 || g.st.final) this.chip(`<b>Station ${Z.si + 1} of ${Z.n}</b> · ${mathHTML(nm)}`); v.touchLabels && v.touchLabels([g.st.a]); }
     } else if (Z.phase === 'hold') {
       const g = Z.segs[Z.si];
@@ -250,23 +324,30 @@ export class Director {
   // ahead along the rail; the rail is previewed from the overview for 1 s before departure
   startTrack(b) {
     const v = this.v, T = b.track; if (!T || !Array.isArray(T.points) || T.points.length < 2) return false;
-    const pts = T.points.map(p => V3(+p[0] || 0, +p[1] || 0, +p[2] || 0)), curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    // both rails are reparametrised by arc length finely enough that the speed stays even through tight control points
+    const mk = arr => { const c = new THREE.CatmullRomCurve3(arr.map(p => V3(+p[0] || 0, +p[1] || 0, +p[2] || 0)), false, 'centripetal'); c.arcLengthDivisions = Math.max(600, arr.length * 160); c.updateArcLengths(); return c; };
+    const curve = mk(T.points), look = Array.isArray(T.look) && T.look.length >= 2 ? mk(T.look) : null;   // look: the subject's own path, framed from the rail at the same fraction
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getSpacedPoints(96)), new THREE.LineBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
     line.renderOrder = 40; line.userData.isInk = true; line.raycast = () => { }; line.name = 'track preview';
-    const k = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10; this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), true);
-    v.scene.add(line);
-    this.track = { phase: 'pre', t: 0, curve, line, dur: clamp(+T.dur || 8, 3, 20), la: clamp(T.lookAhead ?? .08, 0, .3), ls: clamp(T.lookAtSubject ?? 0, 0, 1), preview: T.preview !== false, subj: b.host, rate: 0, q: new THREE.Quaternion(), m: new THREE.Matrix4(), e: V3(), l: V3() };
+    // a marker on the subject's path (the parcel of air you follow): a small bright bead, so the ride has a subject in frame
+    let marker = null; if (look && T.marker) { marker = new THREE.Mesh(new THREE.SphereGeometry(+T.markerR || .1, 18, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(T.marker === true ? '#ffe7b0' : T.marker).multiplyScalar(1.6), toneMapped: false, depthTest: false, transparent: true, opacity: .95 })); marker.renderOrder = 41; marker.userData.isInk = true; marker.raycast = () => { }; marker.name = 'track marker'; marker.visible = false; }
+    const k = this.wideKey(); this.cutTo(k.target, k.pos, this.baseFov(), true);
+    v.scene.add(line); if (marker) v.scene.add(marker);
+    this.track = { phase: 'pre', t: 0, curve, look, line, marker, fov: clamp(+T.fov || 55, 30, 75), dur: clamp(+T.dur || 8, 3, 20), la: clamp(T.lookAhead ?? .08, 0, .3), ls: clamp(T.lookAtSubject ?? 0, 0, 1), preview: T.preview !== false, aim: Array.isArray(T.aim) ? V3(+T.aim[0] || 0, +T.aim[1] || 0, +T.aim[2] || 0) : null, subj: b.host, rate: 0, q: new THREE.Quaternion(), m: new THREE.Matrix4(), e: V3(), l: V3() };
     this.hud(); this.chip(`You will ride <b>${esc(T.label || T.name || 'the track')}</b> · the rail shows the way`);
     this.last = { kind: 'track', moving: true, subj: b.host, t: this.clock };
     return true;
   }
   endTrack(now) {
     const K = this.track; if (!K) return; const v = this.v;
-    if (now || !this.cinematic) { K.line.removeFromParent(); K.line.geometry.dispose(); K.line.material.dispose(); this.track = null; v.controls.enabled = v.stage === 'explore' && !v.pov; return; }
+    if (now || !this.cinematic) { K.line.removeFromParent(); K.line.geometry.dispose(); K.line.material.dispose(); if (K.marker) { K.marker.removeFromParent(); K.marker.geometry.dispose(); K.marker.material.dispose(); } this.track = null; if (!this.move) v.controls.enabled = v.stage === 'explore' && !v.pov; return; }
+    if (K.phase !== 'ride') { this.endTrack(true); return; }   // ended before the ride began (a new step): nothing to pull out from
     // the pull-out: back to a medium of the subject (or the overview), the rail stays as the trail of where you were
     const pose = K.subj ? this.frame({ anchor: () => K.subj.getPos(), focus: K.subj.obj, host: K.subj, names: [], kind: 'explain', shot: 'medium', poseOnly: true }) : null;
-    const ok = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10, tgt = pose ? pose.target : ok.target.clone(), to = pose ? pose.pos : ok.target.clone().addScaledVector(ok.dir, R);
-    this.restoreLens(); v.controls.target.copy(tgt); this.move = { from: v.camera.position.clone(), to, t0: tgt, k: 0, dur: 2 }; if (pose) this.fovTo = pose.fov;
+    const ok = this.wideKey(), tgt = pose ? pose.target : ok.target, to = pose ? pose.pos : ok.pos, cam = v.camera;
+    // the heading turns from the ride's toward the subject over the whole move (a slerp, never a snap); a bigger turn takes longer
+    this._m4.lookAt(to, tgt, UP); this._qL.setFromRotationMatrix(this._m4); const turn = cam.quaternion.angleTo(this._qL);
+    this.restoreLens(); v.controls.target.copy(tgt); this.move = { from: cam.position.clone(), to, t0: tgt, k: 0, dur: clamp(2 + turn / Math.PI * 1.6, 2, 3.6), q0: cam.quaternion.clone() }; if (pose) this.fovTo = pose.fov;
     K.phase = 'post'; K.t = 0; this.chip('You were here', 2200); this.last = { kind: 'medium', moving: true, subj: K.subj, t: this.clock };
   }
   // turn toward a goal at most 60°/s with ≤ 120°/s² acceleration, roll locked to 0 (S6.1)
@@ -280,17 +361,28 @@ export class Director {
     K.t += dt;
     K.line.material.opacity = K.phase === 'pre' ? (K.preview ? Math.min(.6, K.t * 1.5) : 0) : K.phase === 'ride' ? Math.max(0, .45 - K.t * .45) : Math.min(.6, K.t * 2) * clamp(1 - (K.t - 1.4) / .8, 0, 1);
     if (K.phase === 'pre') {
-      if (K.t >= (K.preview ? 1.5 : .5)) { K.phase = 'ride'; K.t = 0; this.chip(null); this.move = null; v.fly = null; v.controls.enabled = false; this.saveLens(); cam.near = .02; cam.far = 400; cam.fov = 60; cam.updateProjectionMatrix(); this.fovTo = null;
-        const s0 = this.reduced() ? .5 : 0; K.curve.getPointAt(s0, K.e); K.curve.getPointAt(Math.min(1, s0 + K.la), K.l); cam.position.copy(K.e); cam.lookAt(K.l); }
+      // departure: the lens change and the jump onto the rail happen under a dip (like entering a POV), never as a visible cut
+      if (!K.go && K.t >= (K.preview ? 1.5 : .5)) { K.go = true; this.chip(null); this.move = null; v.fly = null; v.controls.enabled = false;
+        this.dip = { t: 0, done: false, apply: () => { if (this.track !== K) return; this.saveLens(); cam.near = .02; cam.far = 400; cam.fov = K.fov; cam.updateProjectionMatrix(); this.fovTo = null; K.phase = 'ride'; K.t = 0; K.rate = 0;
+          this.trackPose(K, this.reduced() ? .5 : 0); cam.position.copy(K.e); cam.lookAt(K.l); if (K.marker) K.marker.visible = true; if (this.beat && this.beat.kind === 'lesson') this.beat.thawed = true; } };
+        v.app && v.app.sfx && v.app.sfx.play('whoosh'); }
     } else if (K.phase === 'ride') {
       const tau = Math.min(1, K.t / K.dur), f = .15, vm = 1 / (1 - f);
       const s = this.reduced() ? .5 : tau < f ? vm * tau * tau / (2 * f) : tau < 1 - f ? vm * (f / 2 + tau - f) : 1 - vm * (1 - tau) * (1 - tau) / (2 * f);
-      K.curve.getPointAt(clamp(s, 0, 1), K.e); K.curve.getPointAt(Math.min(1, s + K.la), K.l);
-      if (K.ls > 0 && K.subj && K.subj.getPos) { const q = K.subj.getPos(); if (q) K.l.lerp(q, K.ls); }
+      this.trackPose(K, clamp(s, 0, 1));
       if (K.l.distanceToSquared(K.e) < 1e-8) K.l.add(this._f);
       cam.position.copy(K.e); if (!this.reduced()) this.turn(K, K.e, K.l, dt);
       if (tau >= 1) this.endTrack();
     } else if (K.phase === 'post' && K.t > 2.3) this.endTrack(true);
+  }
+  // the eye on the rail at fraction s, and where it looks: the subject's path a little ahead (or the rail ahead), blended
+  // toward the subject itself by lookAtSubject
+  trackPose(K, s) {
+    K.curve.getPointAt(s, K.e);
+    if (K.look) { K.look.getPointAt(Math.min(1, s + K.la), K.l); if (K.marker) K.look.getPointAt(s, K.marker.position); }
+    else K.curve.getPointAt(Math.min(1, s + K.la), K.l);
+    if (K.aim) K.l.add(K.aim);   // aim: an offset of the look point (a little below the subject keeps the ground in frame)
+    if (K.ls > 0 && K.subj) { const q = this.subjPos(K.subj, this._b || (this._b = V3())); if (q) K.l.lerp(q, K.ls); }
   }
   // S6.4 bracketing: a medium of the actor in context with "You will see as …" for 1.5 s before the ride, and a 2 s
   // pull-out with a fading trail of where the actor went ("You were here") after it
@@ -336,7 +428,8 @@ export class Director {
   }
   updateShots(dt) { this.updateZoom(dt); this.updateTrack(dt); this.updateBracket(dt); this.drawScale(); this.drawEdge(); }
   baseFov() { return this.v.baseFov || 40; }
-  freeFrame(W) { const v = this.v, P = v.panel, Rp = v.readPanel; const L = P && !P.hidden && !P.classList.contains('folded') ? P.getBoundingClientRect().right + 12 : 70; const R = Rp && !Rp.hidden ? Rp.getBoundingClientRect().left - 12 : W - 24; return R - L > W * .35 ? [L, R] : [0, W]; }
+  // the free part of the frame, from the panels' final layout (offsets ignore the slide/fold transforms in progress)
+  freeFrame(W) { const v = this.v, P = v.panel, Rp = v.readPanel, ox = P && P.offsetParent ? P.offsetParent.getBoundingClientRect().left : 0; const L = P && !P.hidden && !P.classList.contains('folded') ? ox + P.offsetLeft + P.offsetWidth + 12 : 70; const R = Rp && !Rp.hidden && Rp.offsetWidth ? ox + Rp.offsetLeft - 12 : W - 24; return R - L > W * .35 ? [L, R] : [0, W]; }
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {
@@ -362,42 +455,78 @@ export class Director {
   // ---------- per frame ----------
   update(dt, cam, w, h) {
     this.hold = Math.max(0, this.hold - dt);
-    this.timeScale += ((this.targetScale ?? 1) - this.timeScale) * Math.min(1, dt * 4);
     const v = this.v;
+    // a ride is the step's experience, not something to read before: the process runs (slowed) while you ride, so something
+    // happens on the way (an instruction still being read would otherwise hold it at 0)
+    const riding = ((this.track && this.track.phase === 'ride') || (this.beat && this.beat.thawed)) && v.running != null;   // (once the ride has begun its instruction no longer freezes the model)
+    if (riding) this.targetScale = Math.max(this.targetScale ?? 1, .6);
+    // time scale: a critically damped ease (settles in ~0.4 s, no step in speed or in acceleration)
+    if (dt > 0) { const goal = this.targetScale ?? 1, w = 10, acc = w * w * (goal - this.timeScale) - 2 * w * this.tsV; this.tsV += acc * dt; this.timeScale += this.tsV * dt; if (this.timeScale < 0) { this.timeScale = 0; if (this.tsV < 0) this.tsV = 0; } }
     this.clock = (this.clock || 0) + dt;
     { const L = v.accentLight; if (L) { const goal = this.beat && this.cinematic ? (L.userData.goal || 0) : 0; L.intensity += (goal - L.intensity) * Math.min(1, dt * 2); } }
     // cut dip (≈0.18 s down, 0.3 s up through a dark grade)
     const g = v.gfx && v.gfx.grade && v.gfx.grade.uniforms;
     if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
     // a push: slow dolly, eased, then it simply holds
-    if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e); v.camera.lookAt(m.t0); v.controls.enabled = false; if (m.k >= 1) { this.move = null; v.controls.enabled = v.stage === 'explore' && !v.pov; } }
+    if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e);
+      if (m.q0) { this._m4.lookAt(v.camera.position, m.t0, UP); this._qL.setFromRotationMatrix(this._m4); v.camera.quaternion.slerpQuaternions(m.q0, this._qL, e); } else v.camera.lookAt(m.t0);   // q0: turn from the previous heading over the move
+      v.controls.enabled = false; if (m.k >= 1) { this.move = null; v.controls.enabled = v.stage === 'explore' && !v.pov; } }
+    // the director's chip sits at the top of the FREE frame (not over the instruction panel or the readouts)
+    if (this.chipEl && !this.chipEl.hidden && (this._chipLT == null || this.clock - this._chipLT > .25)) { this._chipLT = this.clock; const fr = this.freeFrame(w), lx = ((fr[0] + fr[1]) / 2).toFixed(0) + 'px', mw = Math.max(200, fr[1] - fr[0] - 16).toFixed(0) + 'px'; if (this.chipEl.style.left !== lx) this.chipEl.style.left = lx; if (this.chipEl.style.maxWidth !== mw) this.chipEl.style.maxWidth = mw; }
     // lens: ease the field of view toward the shot's focal length (or back to the base lens after the learner takes over)
     if (this.fovTo && Math.abs(v.camera.fov - this.fovTo) > .05 && !v.pov) { v.camera.fov += (this.fovTo - v.camera.fov) * Math.min(1, dt * 2.5); v.camera.updateProjectionMatrix(); }
     this.updateShots(dt);
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
-    if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = this.queue.length ? .12 : .3;   // more waiting → slower, so text never lags far behind the process
+    if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = Math.max(riding ? .6 : 0, this.queue.length ? .12 : .3);   // more waiting → slower, so text never lags far behind the process
     if (b.bar === undefined) b.bar = (b.el || b.capBar) ? (b.el || b.capBar).querySelector('.co-time i') : null; if (b.bar) b.bar.style.width = Math.min(100, b.t / b.dur * 100).toFixed(1) + '%';
     // anchor on screen
     const p = b.anchor && b.anchor(); let sx = w * .5, sy = h * .42, on = false;
     if (p) { const q = p.clone().project(cam); if (q.z < 1) { sx = (q.x * .5 + .5) * w; sy = (-q.y * .5 + .5) * h; on = sx > 6 && sx < w - 6 && sy > 6 && sy < h - 6; if (!on) { sx = clamp(sx, 6, w - 6); sy = clamp(sy, 6, h - 6); } } }   // anchor off screen (POV): no dot or leader line
-    // callout placement: on the emptier side of the anchor, kept inside the safe frame
+    // callout placement: on the emptier side of the anchor, kept inside the safe frame and OFF the hard HUD (readouts, the
+    // right-hand button column, the action bar, the POV bar, the inset, the chips); it changes side only when the other side
+    // is much better for over 0.6 s, and then glides there (0.35 s) instead of teleporting
     const e = b.el; if (e) {
-      const panel = v.panel && !v.panel.hidden && !v.panel.classList.contains('folded') ? 380 : 24;
-      // layout is read at most every 0.25 s (callout size, pins), never between this frame's writes
-      if (!b.rects || b.t - (b.rectT || -1) > .25) { b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top; }
+      const panel = v.panel && !v.panel.hidden ? (v.panel.classList.contains('folded') ? 74 : 380) : 24, phone = w < 760;   // (right of the folded panel's tab too)
+      // layout is read at most every 0.25 s (callout size, pins, panels), never between this frame's writes
+      if (!b.rects || b.t - (b.rectT || -1) > .25) {
+        b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
+        const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height }; };
+        const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
+        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip].map(R).filter(Boolean);
+        const ch0 = R(this.chipEl); b.chipR = ch0;
+      }
       const cw = b.cw, ch = b.ch;
-      const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; x = clamp(x, panel, w - cw - 24); y = clamp(y, 84, h - ch - 120); return [x, y]; };
+      // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
+      const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h + 8) : 84;
+      const bounds = y => [panel, y < 176 ? w - cw - 66 : w - cw - 24];
+      const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
         b.avoidT = b.t; b.avoid = [];
         if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < 8; k++) { const q = V3(k & 1 ? bx.max.x : bx.min.x, k & 2 ? bx.max.y : bx.min.y, k & 4 ? bx.max.z : bx.min.z).project(cam); const qx = (q.x * .5 + .5) * w, qy = (-q.y * .5 + .5) * h; x0 = Math.min(x0, qx); y0 = Math.min(y0, qy); x1 = Math.max(x1, qx); y1 = Math.max(y1, qy); } b.avoid.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, k: 6 }); } }
-        [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn')].forEach(P => { if (P && !P.hidden && P.getBoundingClientRect) { const r = P.getBoundingClientRect(); if (r.width) b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
+        [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].forEach(P => { if (P && !P.hidden && P.getBoundingClientRect && !(P === v.panel && P.classList.contains('folded'))) { const r = P.getBoundingClientRect(); if (r.width) b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
+        (b.hard || []).forEach(A => b.avoid.push(Object.assign({ k: 8 }, A)));
+        if (this.track && this.track.phase === 'ride') b.avoid.push({ x: w * .3, y: h * .25, w: w * .4, h: h * .5, k: 6 });   // during a ride the middle of the frame is the view itself: text goes to the side
       }
       const cost = ([x, y]) => { let o = 0; for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
       const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
-      const right0 = sx < w * .58; if (b.side == null) b.side = right0 ? 0 : 1;
-      let best = b.side, bc = cost(place(C[b.side])); C.forEach((c, i) => { const k = cost(place(c)); if (k < bc * .7) { bc = k; best = i; } }); b.side = best;
-      let [x, y] = place(C[best]); if (w < 760) { x = 10; y = h - ch - 128; }   // phones: a bottom sheet above the time bar
+      const right0 = sx < w * .58; const first = b.side == null; if (first) b.side = right0 ? 0 : 1;
+      // hysteresis: the side changes only when another is far better (less than half the cost, by a real margin) for 0.6 s
+      { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
+        if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
+      let [x, y] = place(C[b.side]);
+      if (phone) { x = 10; y = h - ch - 128; }   // phones: a bottom sheet above the time bar
+      else {
+        // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
+        for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {
+          if (!(x < A.x + A.w && x + cw > A.x && y < A.y + A.h && y + ch > A.y)) continue;
+          const opts = [[A.x - cw - 8, y], [A.x + A.w + 8, y], [x, A.y - ch - 8], [x, A.y + A.h + 8]].filter(([px, py]) => { const [xa, xb] = bounds(py); return px >= xa - .5 && px <= xb + .5 && py >= topAt(px) - .5 && py <= h - ch - 16; });
+          if (opts.length) { opts.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y)); [x, y] = opts[0]; }
+        }
+      }
+      // the glide after a change of side: from where it was drawn toward where it now belongs
+      if (b.tw) { b.tw.t += dt; const k = Math.min(1, b.tw.t / .35), s = k * k * (3 - 2 * k); x = b.tw.x0 + (x - b.tw.x0) * s; y = b.tw.y0 + (y - b.tw.y0) * s; if (k >= 1) b.tw = null; }
+      b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
       const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
