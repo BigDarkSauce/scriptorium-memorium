@@ -3,11 +3,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, SHELF_KINDS, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const TOUCH = () => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
+// the bottom hint, worded for the device in hand (touch screens have no WASD / V keys)
+const HINTS = {
+  look: () => TOUCH() ? 'Drag to look · pinch to zoom · tap a scroll to open it' : 'Drag to look · WASD walks (Shift: faster) · V: first person · click a scroll to open it',
+  build: () => TOUCH() ? 'Tap a bookcase to select it · drag it along the floor · it snaps to walls' : 'Click a bookcase to select it · drag it along the floor · it snaps to walls'
+};
 const SUBJECT_COLORS = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f6f', '#7a2a4a'];
 
 export class Hub {
@@ -34,7 +40,7 @@ export class Hub {
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => this.obstacles() });
     this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children.filter(o => o.visible) : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
-    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') this.selectShelf(null); if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else this.selectShelf(null); } if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
@@ -100,7 +106,7 @@ export class Hub {
     this.lib.shelves.forEach(s => this.addShelfObj(s));
     if (this.repairSlots()) this.app.saveLib();
     this.lib.books.forEach(b => this.addScrollObj(b));
-    this.glowDirty = true;
+    this.refill(); this.glowDirty = true;
   }
   // Libraries saved while several PDFs were imported at once can hold books sharing one shelf+tier+slot (or a slot the
   // bookcase does not have): the first keeps its place, later ones move to the nearest free eye-level slot, on the same
@@ -121,8 +127,14 @@ export class Hub {
     if (bad.length) console.info(`Scriptorium: ${bad.length} scroll(s) shared a shelf slot and were moved to free slots`);
     return bad.length;
   }
-  // (the user's bookcases hold scrolls only: their empty slots keep their velvet cradles, see props.scrollRests)
-  refill() { }
+  // The user's bookcases hold scrolls only. Their cradles (props.scrollRests) are shown on the tiers that hold scrolls
+  // and on the tier the next scroll will go to; the other tiers stay plain lined shelves, ready but quiet.
+  refill(id) {
+    if (id == null) { this.lib.shelves.forEach(s => this.refill(s.id)); return; }
+    const s = this.lib.shelves.find(x => x.id === id), so = this.shelfObjs.get(id); if (!s || !so) return;
+    const tiers = new Set(this.lib.books.filter(b => b.shelf === id).map(b => b.tier || 0)), fs = this.freeSlot(s); if (fs) tiers.add(fs.tier);
+    setRestTiers(so, tiers);
+  }
   caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
   // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
@@ -201,7 +213,7 @@ export class Hub {
     const add = el('button', { class: 'btn primary', text: '+ Add PDF scroll', onclick: () => this.pickPDF() });
     const more = el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog() });
     u.append(el('div', { class: 'hub-actions glass' }, [add, this.buildBtn, more]));
-    this.hint = el('div', { class: 'hint glass', text: 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk (Space jumps) · click a scroll to open it' }); u.append(this.hint);
+    this.hint = el('div', { class: 'hint glass', text: HINTS.look() }); u.append(this.hint);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
     this.fileIn = el('input', { type: 'file', accept: 'application/pdf', multiple: true, hidden: true }); u.append(this.fileIn);
@@ -209,7 +221,7 @@ export class Hub {
   }
   toggleBuild(on = !this.build) {
     this.build = on; this.buildBtn.classList.toggle('on', on); this.buildBtn.textContent = on ? 'Done arranging' : 'Arrange library';
-    this.buildPanel.hidden = !on; this.hint.textContent = on ? 'Click a bookcase to select it · drag it along the floor · it snaps to walls' : 'Drag to look · WASD to walk (Shift hurries) · V: first-person walk (Space jumps) · click a scroll to open it';
+    this.buildPanel.hidden = !on; this.hint.textContent = on ? HINTS.build() : HINTS.look();
     if (!on) this.selectShelf(null); this.renderBuildPanel();
   }
   renderBuildPanel() {
