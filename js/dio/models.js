@@ -10,6 +10,7 @@ import { useEnvironment } from './environments.js';
 import { clamp, fmt, lerp, mod, mulberry, compile } from '../util.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
 import { aaaMaterial } from '../gfx/aaa.js';
+import { treeForest } from './trees.js';
 import { alignUV, cloudDensity, hillRidge, softDisc, relief, variation } from '../gfx/proc.js';
 // Lights: v2 ran with legacy light units; scale to physically based units so scenes keep their look.
 const PI = Math.PI;
@@ -85,10 +86,10 @@ function satin(m){const c=m.clone();c.clearcoat=Math.min(c.clearcoat||0,.3);c.cl
 function countryside(W,seed=3,camTh=null){const skip=camTh==null?null:a=>Math.abs(Math.atan2(Math.sin(a-camTh),Math.cos(a-camTh)))<1.35; // keep trees out of the camera's side
   const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=aaaMaterial('meadow',{tile:2.4,depth:.05,moss:1,bound:{type:'ring',x:0,z:0,rIn:7.6,rOut:120}}); // meadow soil + grass with relief (js/gfx/aaa.js)
   const field=new T.Mesh(new T.RingGeometry(7.6,120,96,3).rotateX(-Math.PI/2),grass);field.position.y=-1.02;field.receiveShadow=true;g.add(field);
-  const crown=new T.IcosahedronGeometry(1,1),trunk=new T.CylinderGeometry(.08,.12,1,6),NT=34,cr=new T.InstancedMesh(crown,leaf,NT*3),tr=new T.InstancedMesh(trunk,bark,NT),m4=new T.Matrix4(),q=new T.Quaternion(),sv=V3(1,1,1),pv=V3(0,0,0);let nt=0,nc=0;
-  for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1,x=Math.sin(a)*d,z=Math.cos(a)*d;m4.compose(pv.set(x,-1+s*.7,z),q,sv.set(s,s*1.4,s));tr.setMatrixAt(nt++,m4);
-   for(let k=0;k<3;k++){const c=s*(.8+r()*.5);m4.compose(pv.set(x+(r()-.5)*s,-1+s*(1.7+r()*.8),z+(r()-.5)*s),q,sv.set(c,c,c));cr.setMatrixAt(nc++,m4)}}
-  tr.count=nt;cr.count=nc;tr.computeBoundingSphere();cr.computeBoundingSphere();tr.castShadow=cr.castShadow=true;cr.receiveShadow=true;g.add(tr,cr); // shadows land in the sun's outer cascades
+  // procedural broadleaf + pine forest (js/dio/trees.js): instanced, 2 draw calls per variant; shadows land in the sun's outer cascades
+  const NT=34,broad=[],pines=[];
+  for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1;(r()<.33?pines:broad).push({x:Math.sin(a)*d,y:-1,z:Math.cos(a)*d,h:s*2.6,ry:r()*6.28})}
+  if(broad.length)g.add(treeForest('tree',broad,{color:'#3d5a2c',seed}));if(pines.length)g.add(treeForest('pine',pines,{seed:seed+7}));
   const hill=new T.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),hm=new T.MeshStandardMaterial({color:0x4a6040,roughness:1});
   for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.castShadow=h.receiveShadow=true;h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
   g.traverse(o=>{o.userData.noInk=true;o.userData.noContact=true});W.add(g);return g}
@@ -564,7 +565,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
   let bx=2.2,by=1.6,vx=0,vy=0,rest=false,still=0;const grad=(x,y,o)=>{const e=1e-3;o[0]=(F(x+e,y)-F(x-e,y))/(2*e);o[1]=(F(x,y+e)-F(x,y-e))/(2*e);return o},G=[0,0],tmp=V3(0,0,0);
   const height=(x,y)=>Y0+(F(x,y)-lo)*sc;
   SUR.ball=()=>V3(bx,height(bx,by)+.2,by);SUR.Y0=Y0;
-  D.label('ball',at(v=>v.set(bx,height(bx,by)+.55,by)),BL);D.label('−∇f',at(v=>gA.visible?v.copy(gA.position).setY(gA.position.y+.25):null),true);D.label('z = '+ex,at(v=>v.set(-R_,Y0+2.9,-R_)),RM);
+  D.label('ball',at(v=>v.set(bx,height(bx,by)+.55,by)),BL);D.label('−∇f',at(v=>gA.visible?v.copy(gA.position).setY(gA.position.y+.25):null),true);D.label('surface · z = '+ex,at(v=>v.set(-R_,Y0+2.9,-R_)),RM);
   ev('ball placed — click the surface to drop it elsewhere',V3(bx,height(bx,by)+.2,by));D.seriesName='height f(ball) — falls toward a minimum';
   return{orbit,
    click(rc){const hit=rc.intersectObject(surf)[0];if(hit){bx=hit.point.x;by=hit.point.z;vx=vy=0;rest=false;still=0;tr.userData.count=0;ev('ball dropped at ('+fx(bx,2)+', '+fx(by,2)+')',hit.point,{sound:'clack'})}},
@@ -713,10 +714,9 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const inMeadow=()=>rng()*AL;
   {const GN=1600,blade=new THREE.ConeGeometry(.012,.16,3);blade.translate(0,.08,0);const gm=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.8,sheen:.5,sheenColor:new THREE.Color(0xc8e090)});const tufts=put(new THREE.InstancedMesh(blade,gm,GN),'grass tufts',MW);tufts.userData.noInk=true;tufts.receiveShadow=true;const mm=new THREE.Matrix4(),qq=new THREE.Quaternion(),cc=new THREE.Color();
    for(let i=0;i<GN;i++){const a=inMeadow(),r=4.72+Math.pow(rng(),2.2)*1.75,h=.5+rng()*1.1;qq.setFromEuler(new THREE.Euler((rng()-.5)*.6,rng()*6,(rng()-.5)*.6));mm.compose(V3(Math.sin(a)*r,.02,Math.cos(a)*r),qq,V3(1,h,1));tufts.setMatrixAt(i,mm);tufts.setColorAt(i,cc.setHSL(.2+rng()*.08,.45+rng()*.2,.16+rng()*.14))}tufts.computeBoundingBox();tufts.computeBoundingSphere()}
-  const leaf=makeMaterial({preset:'foliage',color:'#34502a'});leaf.flatShading=false;leaf.normalMap=relief('leather').normalMap;leaf.normalScale.set(1.5,1.5);const fenceM=makeMaterial('darkwood');
-  const bushG=(()=>{const g=mergeVertices(new THREE.IcosahedronGeometry(1,4).deleteAttribute('normal').deleteAttribute('uv')),P=g.attributes.position,v=V3();for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);const n=1+.22*Math.sin(v.x*7.1+v.y*3.3)*Math.cos(v.z*6.7-v.y*2.1)+.12*Math.sin(v.x*17+v.z*13);v.multiplyScalar(n);if(v.y<-.3)v.y=-.3-(v.y+.3)*.2;P.setXYZ(i,v.x,v.y,v.z)}g.computeVertexNormals();const uv=[];for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);uv.push(Math.atan2(v.z,v.x)/6.283+.5,v.y*.5+.5)}g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));return g})();
+  const fenceM=makeMaterial('darkwood');
   const hedges=part('hedges',MW),fence=part('fence',MW);
-  for(let i=0;i<26;i++){const a=(i+rng()*.5)/26*AL,r=5.0+rng()*.25,s=.16+rng()*.16;const b=new THREE.Mesh(bushG,leaf);b.position.set(Math.sin(a)*r,s*.3,Math.cos(a)*r);b.scale.set(s*(1+rng()*.5),s*.8,s);b.rotation.y=rng()*6;b.castShadow=true;b.receiveShadow=true;b.userData.noInk=true;hedges.add(b)}
+  {const items=[];for(let i=0;i<26;i++){const a=(i+rng()*.5)/26*AL,r=5.0+rng()*.25,s=.16+rng()*.16;items.push({x:Math.sin(a)*r,y:0,z:Math.cos(a)*r,h:s*2.4,ry:rng()*6.28})}const hf=treeForest('bush',items,{color:'#34502a',seed:5});hf.traverse(o=>{o.userData.noInk=true});hedges.add(hf)} // procedural hedge bushes (js/dio/trees.js)
   {const postG=new THREE.BoxGeometry(.05,.42,.05);for(let i=0;i<36;i++){const a=i/36*AL,r=5.55;const post=new THREE.Mesh(postG,fenceM);post.position.set(Math.sin(a)*r,.21,Math.cos(a)*r);post.rotation.y=a;post.castShadow=true;post.userData.noInk=true;fence.add(post)}}
   [.18,.34].forEach(y=>{const rail=new THREE.Mesh(new THREE.TorusGeometry(5.55,.016,5,192),fenceM);rail.rotation.x=Math.PI/2;rail.position.y=y;rail.userData.noInk=true;fence.add(rail)});
   // rain: streaks of varied length, speed and opacity (RGBA vertex colours; the tail fades), splash rings on the meadow

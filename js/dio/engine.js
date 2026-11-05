@@ -623,7 +623,7 @@ export class DioramaView {
     this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
-    if (!this._pr || t - this._pr > .5) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, this.dir.beat && this.dir.beat.el].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
+    if (!this._pr || t - this._pr > .5) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, this.dir.beat && this.dir.beat.el].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; this.labels.childNodes.forEach(p => { p._w = 0; }); }   // re-measure widths: labels grow/shrink (full label ↔ numbered dot), so a stale width let them overflow the right edge
     const placed = [], items = [], vis = (p, x) => { if (p._vis !== x) { p._vis = x; p.style.visibility = x; } };   // style writes only when something changed
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;

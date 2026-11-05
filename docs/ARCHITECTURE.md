@@ -65,6 +65,13 @@ The scroll illustration (`renderSketch`) renders the same scene at `t = 0` into 
   4. **explore**: a foldable left panel with step-by-step lessons (each needs Play before the next appears, and finished ones stay readable), variables, and objects.
 - The **edit tool** raycasts any object and climbs to its root. It shows an OutlinePass and TransformControls, with actions to move, rotate, scale, hide, remove, replace or ask AI. Edits persist into the spec: as body fields for scene specs, or as `overrides` keyed by object path for built-in and code-made objects. Positions on moving objects are applied as offsets after the simulation's own update, so the dynamics keep working.
 
+### Trees (`js/dio/trees.js`)
+- `tree`, `pine` and `bush` scene shapes call `buildTree(kind, h, seed)`: a bent, tapered trunk with branches in the AAA `bark` material, and a crown of noise-displaced clumps plus alpha-tested leaf cards (one canvas leaf atlas). Pines are whorled drooping tiers with needle ribbons.
+- Foliage shading: wrapped diffuse plus a back-lit translucency lobe; specular uses true N·L (wrapping it made bloom speckles).
+- 4 geometry variants per kind, chosen by seed, plus mirror/yaw/±8 % height jitter. Geometry is shared and cached; materials are cached per scene (the materialize patch ties a material to one scene).
+- Cost: 2 draw calls per tree (wood + foliage), about 1.5–2k triangles.
+- `treeForest(kind, items, {color, seed})` builds instanced forests (2 draw calls per variant). Built-in models use it for background trees (countryside) and hedges (weather glass).
+
 ### Explainer cues (`js/dio/focus.js`, `js/dio/director.js`)
 The specs and the evidence are in `research/explainer-animation.md` (§6); the lesson fields are in `SCENE_SPEC.md`, "Explainer cues".
 - **Ownership.** The director owns *shots*: `zoom` (S4, exponential dolly with stations, target ring, scale bar, near/far scaling, `back`), `track` (S9, a ride on a centripetal Catmull–Rom rail) and the POV *bracket* (S6.4: establishing medium before, pull-out with a trail after). `zoom` and `track` count as moving shots in the grammar (the next shot is static; a zoom never follows a push: it starts with a cut to the overview). `Director.busy()` is true while a moving shot, a bracket or a cut is under way. `Cues` (one per `DioramaView`, `view.cues`) owns *beat overlays and step states*: `chain` (S1), `isolate` (S2), `peel` (S3).

@@ -380,7 +380,7 @@ export class Director {
     if (b.bar === undefined) b.bar = (b.el || b.capBar) ? (b.el || b.capBar).querySelector('.co-time i') : null; if (b.bar) b.bar.style.width = Math.min(100, b.t / b.dur * 100).toFixed(1) + '%';
     // anchor on screen
     const p = b.anchor && b.anchor(); let sx = w * .5, sy = h * .42, on = false;
-    if (p) { const q = p.clone().project(cam); if (q.z < 1) { sx = (q.x * .5 + .5) * w; sy = (-q.y * .5 + .5) * h; on = true; } }
+    if (p) { const q = p.clone().project(cam); if (q.z < 1) { sx = (q.x * .5 + .5) * w; sy = (-q.y * .5 + .5) * h; on = sx > 6 && sx < w - 6 && sy > 6 && sy < h - 6; if (!on) { sx = clamp(sx, 6, w - 6); sy = clamp(sy, 6, h - 6); } } }   // anchor off screen (POV): no dot or leader line
     // callout placement: on the emptier side of the anchor, kept inside the safe frame
     const e = b.el; if (e) {
       const panel = v.panel && !v.panel.hidden && !v.panel.classList.contains('folded') ? 380 : 24;

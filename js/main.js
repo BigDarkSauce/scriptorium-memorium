@@ -97,7 +97,7 @@ class App {
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
     // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
-    if (b && b.example && (r.threadV || 0) < 2) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 2; store.set('room:' + id, r); }
+    if (b && b.example && (r.threadV || 0) < 3) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 3; store.set('room:' + id, r); }
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
@@ -249,7 +249,11 @@ class App {
         fill(st, ss, ['section', 'answers', 'opens']); n++;
         (st.demos || []).forEach(d => {
           const sd = (ss.demos || []).find(x => x.type === d.type && (x.title || '') === (d.title || '')); if (!sd) return;
-          fill(d, sd, ['purpose', 'scale']);
+          fill(d, sd, ['purpose', 'scale', 'tracks']);
+          // lessons the learner never rewrote (every title is still a seed title) are replaced by the current seed lessons,
+          // so lessons inserted or re-cued since (zooms, chains, tracks) reach saved example rooms; edited ones are only filled
+          const sl0 = sd.lessons || [], titles = new Set(sl0.map(x => x && x.title));
+          if (sl0.length && (d.lessons || []).every(l => l && titles.has(l.title))) { d.lessons = C(sl0); return; }
           (d.lessons || []).forEach(l => { const sl = l && l.title && (sd.lessons || []).find(x => x.title === l.title); if (sl) fill(l, sl, ['question', 'opens', 'shot', 'pov', 'chain', 'chainPace', 'chainOn', 'isolate', 'peel', 'zoom', 'track']); });
         });
       }
