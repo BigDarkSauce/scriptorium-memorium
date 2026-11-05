@@ -366,45 +366,86 @@ export class Hub {
     if (sc) this.openScroll(sc);
   }
   // ---------- the opening: fly → lift → unroll in light → dive into the page ----------
-  // The camera flies (1.4 s) to stand 1.05 m before the point where the middle of the unrolled sheet will be, looking at
-  // that point from the first frame to the last (its target never jumps); the scroll rises from its slot and turns to
-  // face it; the sheet then unrolls downward from the roll (1.5 s) with a weighted rod on its lower edge, and only then
-  // does the light swell (sheet glow, a warm point light, a touch of bloom) in step with it; fully open it holds a beat,
-  // and the camera moves in toward the sheet as the screen fades (1 s); the room opens when the fade is complete.
+  // The interface fades away first (body.cine: the action pill, the hint, the walk panel and the corner buttons), so the
+  // opening is a clean shot; Escape before the dive cancels it (the scroll goes back to its slot, the interface returns).
+  // The camera flies to stand 1.22 m before the sheet, aimed a little above the sheet's middle so the roll sits in the
+  // upper third, well clear of the top edge. The flight lasts 1.4 s + 0.01 s per degree the view has to turn (an 85°
+  // turn takes 2.25 s, never a whip-pan), quintic in-out (smootherstep: zero speed and acceleration at both ends, peak
+  // 1.875 × the mean rate) on an angle-uniform turn of the view direction; the scroll rises
+  // from its slot and turns to face the camera during the flight's second half; the sheet then unrolls downward from the
+  // roll (1.5 s) with a weighted rod on its lower edge. The light that comes with it is a warm, restrained halo behind
+  // the sheet and a back light on the bookcase behind it: the sheet itself only gains a faint glow, so its parchment
+  // and title stay readable and below the bloom threshold. Fully open it holds a beat, then the camera moves in as the
+  // screen fades (1.05 s); the room opens when the fade is complete.
   openScroll(sc) {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null); this.gfx.canvas.style.cursor = '';
     if (this.hover) { this.hover.userData.paper.emissiveIntensity = 0; this.hover = null; }
     const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
     if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }
-    const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() };
+    const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() }; O.so = so; O.slotP = sc.position.clone(); O.slotQ = sc.quaternion.clone();
     O.liftTo = wp.clone().addScaledVector(outward, .6).setY(Math.max(1.62, wp.y));
-    O.look = O.liftTo.clone().add(V3(0, -.3, 0));                        // the middle of the unrolled sheet
-    O.camTo = O.look.clone().addScaledVector(outward, 1.05).add(V3(0, .08, 0));
+    O.look = O.liftTo.clone().add(V3(0, -.22, 0));                       // a little above the middle of the unrolled sheet
+    O.camTo = O.look.clone().addScaledVector(outward, 1.22).add(V3(0, .04, 0));
     O.into = O.look.clone().addScaledVector(outward, .3);
     O.start = wp.clone(); O.q0 = sc.getWorldQuaternion(new THREE.Quaternion());
+    // the flight's length grows with the turn: the view direction at the start and at the end
+    O.d0 = O.from.t.clone().sub(O.from.p).normalize(); O.d1 = O.look.clone().sub(O.camTo).normalize(); O.dist0 = O.from.t.distanceTo(O.from.p);
+    const deg = THREE.MathUtils.radToDeg(O.d0.angleTo(O.d1)); O.tFly = 1.4 + .01 * deg;
+    O.qd = new THREE.Quaternion().setFromUnitVectors(O.d0, O.d1);
     this.scene.attach(sc);   // reparent to the hall so it can float free
     // facing: the scroll's axis (local z) across the view, its front (local −x) toward the viewer, kept level
     O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.liftTo.clone().add(outward), O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
     O.sheet = makeSheet(.42, .6, b.title); sc.add(O.sheet);
-    O.light = new THREE.PointLight(0xffe2a8, 0, 4, 2); sc.add(O.light); O.light.position.set(-.45, -.3, 0);
+    // the back light: behind the sheet's middle (the viewer is toward local −x), it warms the bookcase behind it into a
+    // soft halo round the sheet's edges
+    O.light = new THREE.PointLight(0xffd59a, 0, 2.6, 2); sc.add(O.light); O.light.position.set(.28, -.32, 0);
     this.hint.textContent = 'Opening "' + b.title + '"…';
+    document.body.classList.add('cine');
+  }
+  // Escape during the opening (before the dive): the camera and the scroll ease back (0.7 s), then the interface returns
+  cancelOpening() {
+    const O = this.opening; if (!O || O.done || O.cancel || O.t > O.tFly + 1.6 + .3) return;
+    O.cancel = { t: 0, p: this.camera.position.clone(), tg: this.controls.target.clone(), sp: O.sc.position.clone(), sq: O.sc.quaternion.clone(), k3: O.k3 || 0 };
+  }
+  stepCancel(dt) {
+    const O = this.opening, C = O.cancel, c = this.camera, sc = O.sc, S = O.sheet.userData; C.t += dt;
+    const k = ease(Math.min(1, C.t / .7)), e3 = C.k3 * (1 - k);
+    c.position.lerpVectors(C.p, O.from.p, k); this.controls.target.lerpVectors(C.tg, O.from.t, k); c.lookAt(this.controls.target);
+    sc.position.lerpVectors(C.sp, O.start, k); sc.quaternion.slerpQuaternions(C.sq, O.q0, k);
+    S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = e3 > .002; this.glowAt(O, e3);
+    if (C.t < .7) return;
+    O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ);
+    sc.remove(O.sheet, O.light); this.trash([O.sheet]); O.light.dispose();
+    sc.userData.paper.emissiveIntensity = 0; this.gfx.bloom.strength = this.scene.userData.look.bloom;
+    this.opening = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update();
+    this.hint.textContent = this.build ? HINTS.build() : HINTS.look(); document.body.classList.remove('cine'); this.shadowsDirty = true;
+  }
+  // the unroll's light at strength e (0..1): a faint glow in the sheet, the halo behind it, the back light, a touch of bloom
+  glowAt(O, e) {
+    const S = O.sheet.userData; S.sheet.material.emissiveIntensity = e * .16; if (S.halo) S.halo.material.opacity = e * .55;
+    O.light.intensity = e * 1.1; O.sc.userData.paper.emissiveIntensity = e * .12;
+    this.gfx.bloom.strength = this.scene.userData.look.bloom + e * .05;
   }
   stepOpening(dt) {
-    const O = this.opening, T_FLY = 1.4, T_UN = 1.5, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
+    const O = this.opening; if (O.cancel) { this.stepCancel(dt); return; }
+    const T_FLY = O.tFly, T_UN = T_FLY + .1, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
     O.t += dt; const t = O.t, c = this.camera, sc = O.sc, S = O.sheet.userData;
-    const k1 = ease(Math.min(1, t / T_FLY));   // (cubic in-out: the turn toward the scroll never exceeds ~5° a frame at 30 fps)
-    this.controls.target.lerpVectors(O.from.t, O.look, k1);
-    const k2 = easeOut(clamp((t - .3) / 1.05, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
+    // the flight: position along a straight line; the view direction turns by an angle-uniform slerp under a quintic
+    // in-out (peak 1.875 × the mean rate: an 85° turn peaks at ~71°/s), its aim distance blending from start to end
+    const u1 = Math.min(1, t / T_FLY), k1 = u1 * u1 * u1 * (u1 * (u1 * 6 - 15) + 10);
+    const dir = O.d0.clone().applyQuaternion(new THREE.Quaternion().slerp(O.qd, k1)), camP = V3().lerpVectors(O.from.p, O.camTo, k1);
+    const aim = THREE.MathUtils.lerp(O.dist0, O.camTo.distanceTo(O.look), k1);
+    this.controls.target.copy(camP).addScaledVector(dir, aim);
+    const k2 = easeOut(clamp((t - (T_FLY - 1.1)) / 1.05, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
     // the unroll, and the light with it (nothing glows before the sheet moves)
-    const k3 = clamp((t - T_UN) / D_UN, 0, 1), e3 = ease(k3);
+    const k3 = clamp((t - T_UN) / D_UN, 0, 1), e3 = ease(k3); O.k3 = e3;
     if (k3 > 0 && !O.sound) { O.sound = true; this.sfx('unroll'); }
     S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = k3 > 0;
-    S.sheet.material.emissiveIntensity = e3 * 1.1; O.light.intensity = e3 * 5; sc.userData.paper.emissiveIntensity = e3 * .5;
-    this.gfx.bloom.strength = this.scene.userData.look.bloom + e3 * .35;
+    this.glowAt(O, e3);
     // the dive: only once the sheet is fully open (and has held a beat)
     const k4 = clamp((t - T_DIVE) / D_DIVE, 0, 1), e4 = ease(k4);
-    if (k4 > 0) c.position.lerpVectors(O.camTo, O.into, e4); else c.position.lerpVectors(O.from.p, O.camTo, k1);
+    if (k4 > 0) { c.position.lerpVectors(O.camTo, O.into, e4); this.controls.target.copy(O.look); } else c.position.copy(camP);
     c.lookAt(this.controls.target);
     this.gfx.grade.uniforms.uFade.value = ease(clamp((k4 - .25) / .75, 0, 1));
     if (k4 >= 1 && !O.done) { O.done = true; this.app.openRoom(O.b.id, { fromHub: true }); }
@@ -422,7 +463,7 @@ export class Hub {
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { this._arriving = true; o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
   }
   dispose() {
-    if (this.disposed) return; this.disposed = true;
+    if (this.disposed) return; this.disposed = true; document.body.classList.remove('cine');
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
     this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = ''; this.gfx.renderer.shadowMap.autoUpdate = true;

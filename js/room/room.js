@@ -10,7 +10,7 @@ import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { canvasTex, parchment, radialGlow, labelTex } from '../gfx/textures.js';
 import { bmat } from '../gfx/baroque.js';
-import { addInk, addOutlines, PAPER } from '../gfx/materialize.js';
+import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
 import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree } from '../util.js';
@@ -47,12 +47,13 @@ function fitBox(world, ds) {
   const c = box.getCenter(V3()), rXZ = Math.max(.01, Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2), h = Math.max(.01, box.max.y - box.min.y);
   return { box, c, rXZ, h, n: keep.size, hide: hide.filter(o => !hide.includes(o.parent)) };
 }
-// Chronophotograph for a mini (Marey's stroboscopic photographs): a frozen frame of a motion demo often says little (a
-// bouncing ball is a ball in mid-air over a flat floor; a pendulum a bob at rest). The demo is run for ~3.5 s of model
-// time while the small parts are sampled; every part that really moves leaves up to 12 fading paper "ghosts" along its
-// path (shared geometry, one material per mini). Instanced meshes and the large scenery are left alone. CPU budget:
-// stops after ~180 ms of simulation per mini. Returns the ghost meshes, in the world's frame, for the caller to add.
-const GHOST_MAX = 12, STROBE_T = 3.5, STROBE_DT = 1 / 30;
+// Chronophotograph for a mini (after Marey's stroboscopic photographs), only where motion is the point: a frozen frame
+// of a pendulum or a bouncing ball says little. The demo is run for up to ~3.5 s of model time (CPU budget ~180 ms per
+// mini) while its small parts are sampled; at most the two parts that really travel (more than 10 % of the model's
+// size) get a trail of at most four translucent poses, evenly spaced along the last sweep that ends where the real
+// part now stands (walking back from the end until the path turns back), oldest faintest. Each pose is a copy of the
+// part in its own colour (one material per pose index). Returns the ghost meshes, in the world's frame.
+const GHOST_MAX = 4, GHOST_PARTS = 2, STROBE_T = 3.5, STROBE_DT = 1 / 30;
 function strobe(ds) {
   const w = ds.world; w.updateMatrixWorld(true);
   const inv = w.matrixWorld.clone().invert(), all = new THREE.Box3(), cands = [];
@@ -64,21 +65,54 @@ function strobe(ds) {
   const n = Math.round(STROBE_T / STROBE_DT);
   for (let i = 1; i <= n && performance.now() - t0 < 180; i++) {
     try { ds.step(STROBE_DT); } catch (e) { break; }
-    if (i % 3 === 0) { w.updateMatrixWorld(true); track.forEach(t => t.m.push(rel(t.o))); }
+    if (i % 2 === 0) { w.updateMatrixWorld(true); track.forEach(t => t.m.push(rel(t.o))); }
   }
   w.updateMatrixWorld(true);
-  const p = V3(), q = V3(), moving = track.filter(t => { if (!t.o.visible) return false; t.m[0].decompose(p, new THREE.Quaternion(), V3()); let d = 0; t.m.forEach(m => { q.setFromMatrixPosition(m); d = Math.max(d, q.distanceTo(p)); }); t.d = d; return d > ext * .06; })
-    .sort((a, b) => b.d - a.d).slice(0, 4);
+  const pos = m => V3().setFromMatrixPosition(m);
+  const moving = track.filter(t => { if (!t.o.visible || t.m.length < 4) return false; const p0 = pos(t.m[0]); t.d = Math.max(...t.m.map(m => pos(m).distanceTo(p0))); return t.d > ext * .1; })
+    .sort((a, b) => b.d - a.d).slice(0, GHOST_PARTS);
   if (!moving.length) return [];
-  const mat = new THREE.MeshStandardMaterial({ color: PAPER, roughness: .92, transparent: true, opacity: .55, depthWrite: false }), out = [];
+  const out = [];
   moving.forEach(t => {
-    const ms = t.m.slice(0, -1), k = Math.min(GHOST_MAX, ms.length);   // the last sample is where the real part now stands
+    // the last sweep: back from the end while the distance from the final pose keeps growing
+    const P = t.m.map(pos), end = P[P.length - 1]; let i0 = P.length - 1, best = 0;
+    for (let i = P.length - 2; i >= 0; i--) { const d = P[i].distanceTo(end); if (d >= best) { best = d; i0 = i; } else if (d < best * .9) break; }
+    if (best < ext * .08) return;
+    const seg = P.slice(i0), cum = [0]; for (let i = 1; i < seg.length; i++) cum.push(cum[i - 1] + seg[i].distanceTo(seg[i - 1]));
+    const L = cum[cum.length - 1], col = (t.o.material && t.o.material.color) ? t.o.material.color : PAPER, k = GHOST_MAX;
+    const mats = [...Array(k)].map((_, j) => new THREE.MeshStandardMaterial({ color: col.clone(), roughness: .7, transparent: true, opacity: .14 + .32 * (j + 1) / k, depthWrite: false }));
     for (let j = 0; j < k; j++) {
-      const m = ms[Math.round(j * (ms.length - 1) / Math.max(1, k - 1))], gm = new THREE.Mesh(t.o.geometry, mat);
-      gm.matrixAutoUpdate = false; gm.matrix.copy(m); gm.userData.ghost = true; gm.userData.noInk = true; gm.raycast = () => { }; gm.renderOrder = 1; out.push(gm);
+      const target = L * j / k; let q = 0; while (q < cum.length - 1 && cum[q] < target) q++;   // poses at 0, ¼, ½, ¾ of the sweep (the real part is at its end)
+      const gm = new THREE.Mesh(t.o.geometry, mats[j]);
+      gm.matrixAutoUpdate = false; gm.matrix.copy(t.m[i0 + q]); gm.userData.ghost = true; gm.userData.noInk = true; gm.raycast = () => { }; gm.renderOrder = 1; out.push(gm);
     }
   });
   return out;
+}
+// The engraved brass label of a bay: "n · title" as large as fits on one line (44 → 34 px on a 640 px plate), else on
+// two balanced lines (40 → 32 px), else two lines with the end abbreviated (the full title is in the bay's tooltip).
+function plateTex(text, aspect) {
+  const W = 640, H = Math.round(W / aspect);
+  return canvasTex(null, W, H, g => {
+    g.fillStyle = '#cfa95a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#7d5a22'; g.lineWidth = 4; g.strokeRect(5, 5, W - 10, H - 10);
+    g.fillStyle = '#2a1a0a'; g.textAlign = 'center'; g.textBaseline = 'middle'; const F = fs => `600 ${fs}px "IM Fell English SC", Georgia, serif`, maxW = W - 36;
+    for (let fs = 44; fs >= 34; fs -= 2) { g.font = F(fs); if (g.measureText(text).width <= maxW) { g.fillText(text, W / 2, H / 2 + 2); return; } }
+    const words = text.split(/\s+/);
+    for (let fs = 40; fs >= 32; fs -= 2) {
+      g.font = F(fs); let best = null;
+      for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(g.measureText(a).width, g.measureText(b).width); if (m <= maxW && (!best || m < best.m)) best = { a, b, m }; }
+      if (best && fs * 2.1 <= H - 10) { const lh = fs * 1.05; g.fillText(best.a, W / 2, H / 2 - lh / 2 + 2); g.fillText(best.b, W / 2, H / 2 + lh / 2 + 2); return; }
+    }
+    g.font = F(32); const lh = 33.6; let a = '', i = 0; for (; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (g.measureText(t).width > maxW && a) break; a = t; }
+    let b = words.slice(i).join(' '); while (b.length > 1 && g.measureText(b + '…').width > maxW) b = b.slice(0, -1).trimEnd();
+    g.fillText(a, W / 2, H / 2 - lh / 2 + 2); g.fillText(b + (i < words.length && b !== words.slice(i).join(' ') ? '…' : ''), W / 2, H / 2 + lh / 2 + 2);
+  }, { aniso: 8 });
+}
+// the visible extent of a mini (meshes and lines; hidden parts and their children left out), in `frame`'s coordinates
+function visibleBox(root, frame) {
+  root.updateWorldMatrix(true, true); const inv = frame.matrixWorld.clone().invert(), box = new THREE.Box3(), b = new THREE.Box3();
+  const walk = o => { if (!o.visible) return; if ((o.isMesh || o.isLine || o.isSprite) && o.geometry) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld).applyMatrix4(inv); if (isFinite(b.min.x)) box.union(b); } o.children.forEach(walk); };
+  walk(root); return box;
 }
 // The emblem a bay shows when its diorama cannot be built: a sealed scroll and a small title card on an easel.
 function miniEmblem(title) {
@@ -262,24 +296,30 @@ export class BookRoom {
     const inlay = (w, d, x, z) => box(gilt, w, .005, d, x, PED_TOP + .0025 - .0005, z).castShadow = false;
     for (let c = 0; c <= cols; c++) inlay(.008, Dp - .04, -W / 2 + .06 + B * c, 0);
     for (let r = 0; r <= rows; r++) inlay(W - .12 + .008, .008, 0, -Dp / 2 + .06 + B * r);
-    specs.forEach((sp, i) => { const r = Math.floor(i / cols), c = i % cols; this.makeBay(st, ped, i, sp, { x: -W / 2 + .06 + B * (c + .5), z: -Dp / 2 + .06 + B * (r + .5), card: B - .05, label: true }); });
+    // with two rows or more, the back rows' plates stand 6 cm higher and the front row's models are kept low (26 cm),
+    // so the models in front do not hide the plates behind them from a standing viewer
+    specs.forEach((sp, i) => { const r = Math.floor(i / cols), c = i % cols, back = rows > 1 && r < rows - 1, front = rows > 1 && r === rows - 1;
+      this.makeBay(st, ped, i, sp, { x: -W / 2 + .06 + B * (c + .5), z: -Dp / 2 + .06 + B * (r + .5), card: B - .05, label: true, raise: back ? .06 : 0, hMax: front ? .26 : MINI_H }); });
     st.spec = this.pedestalSpec(st.part); st.mini = st.bays[0].mini;
   }
   // one showcase place on a pedestal: card, optional label plate, the mini model; returns the bay record
-  makeBay(st, ped, i, spec, { x, z, card, round = false, label = false }) {
+  makeBay(st, ped, i, spec, { x, z, card, round = false, label = false, raise = 0, hMax = MINI_H }) {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.userData = { station: st.part.id, kind: 'pedestal', bay: i }; ped.add(g);
     const paper = new THREE.MeshStandardMaterial({ color: PAPER, roughness: .9 });
     const cm = new THREE.Mesh(round ? new THREE.CircleGeometry(card, 48) : new THREE.PlaneGeometry(card, card), paper); cm.rotation.x = -Math.PI / 2; cm.position.y = PED_TOP + (round ? 0 : .002); cm.receiveShadow = true; g.add(cm);
     let area = { r: card * MINI_FIT, dz: 0 };
-    if (label && spec) {   // an engraved brass label at the bay's front edge, tilted toward the viewer
-      const title = String(spec.d.title || spec.st.title || 'Demo'), tex = labelTex(`${i + 1} · ${title}`, { w: 640, h: 96, bg: '#cfa95a', fg: '#2a1a0a', border: '#7d5a22', font: '600 44px "IM Fell English SC", Georgia, serif' });
-      const lw = card * .86, lh = .05, plate = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshStandardMaterial({ map: tex, metalness: .55, roughness: .38, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .08 }));
-      plate.rotation.x = -Math.PI / 2 + .9; plate.position.set(0, PED_TOP + .006 + lh / 2 * Math.sin(.9) + .004, card / 2 - .045); plate.name = 'label'; g.add(plate);
-      const stand = new THREE.Mesh(new THREE.BoxGeometry(lw + .01, .012, .028), bmat('gilt')); stand.position.set(0, PED_TOP + .008, card / 2 - .045 + .006); g.add(stand);
-      area = { r: (card - .09) / 2 * MINI_FIT, dz: -.045 };
+    if (label && spec) {   // an engraved brass label at the bay's front edge, tilted toward the viewer (two lines when long)
+      const title = String(spec.d.title || spec.st.title || 'Demo'), lw = card * .86, lh = .085, pz = card / 2 - .05, tex = plateTex(`${i + 1} · ${title}`, lw / lh);
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshStandardMaterial({ map: tex, metalness: .55, roughness: .38, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .08 }));
+      plate.rotation.x = -Math.PI / 2 + .9; plate.position.set(0, PED_TOP + .006 + raise + lh / 2 * Math.sin(.9) + .004, pz); plate.name = 'label'; g.add(plate);
+      const sh = .012 + raise, stand = new THREE.Mesh(new THREE.BoxGeometry(lw + .01, sh, .028), bmat('gilt')); stand.position.set(0, PED_TOP + .002 + sh / 2, pz + .006); g.add(stand);
+      // the model's circle (it turns) stays behind the plate's back edge (pz − lh·cos .9 / 2) with 1.3 cm to spare, and
+      // 1.5 cm inside the card's back edge
+      const front = pz - lh * Math.cos(.9) / 2 - .013, back = -card / 2 + .015;
+      area = { r: (front - back) / 2, dz: (front + back) / 2 };
     }
     const mini = new THREE.Group(); mini.position.set(0, PED_TOP + .005, area.dz); mini.userData.y0 = PED_TOP + .005; g.add(mini);
-    const bay = { group: g, mini, spec, ds: null, area, i }; st.bays.push(bay);
+    const bay = { group: g, mini, spec, ds: null, area, i, hMax }; st.bays.push(bay);
     this.buildMini(bay);
     return bay;
   }
@@ -292,16 +332,22 @@ export class BookRoom {
     let ds = null;
     try {
       ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(ps.d)), { headless: true }); ds.step(0);
-      ds.U.uFrontR.value = -1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0;
-      const w = ds.world, ghosts = strobe(ds);   // motion demos: a chronophotograph of their moving parts (see strobe)
-      ghosts.forEach(gm => w.add(gm));   // noInk: the ghosts stay soft, without contour lines; they count in the fit
+      // a small painted maquette: the demo's real materials (the materialize front past everything), no card or ink
+      ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0;
+      const w = ds.world, ghosts = strobe(ds);   // motion demos: a few poses of their moving parts (see strobe)
+      ghosts.forEach(gm => w.add(gm));   // they count in the fit
       const fit = fitBox(w, ds);
       if (!fit.n) throw new Error('nothing to show');
-      addInk(w, ds.U); addOutlines(w, ds.U, .0022);
-      const s = Math.min(bay.area.r / fit.rXZ, MINI_H / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
       w.traverse(o => { if (o.isMesh) { o.castShadow = !o.userData.ghost; } if (o.isLight) o.visible = false; if (o.isPoints) o.visible = false; });
       fit.hide.forEach(o => { o.visible = false; });
-      bay.mini.add(w); bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length, shown: fit.n, ghosts: ghosts.length };
+      // lines and sprites reaching well outside the model's box (field lines, guides, labels) are left out too
+      const grow = fit.box.clone().expandByScalar(Math.max(fit.rXZ, fit.h) * .15), wb = new THREE.Box3(), winv = w.matrixWorld.clone().invert();
+      w.traverse(o => { if (!(o.isLine || o.isSprite) || !o.visible || !o.geometry) return; wb.setFromObject(o).applyMatrix4(winv); if (isFinite(wb.min.x) && !grow.containsBox(wb)) o.visible = false; });
+      let s = Math.min(bay.area.r / fit.rXZ, (bay.hMax || MINI_H) / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
+      bay.mini.add(w);
+      // never past its area: the model turns, so its farthest visible point from the turning axis must lie inside r
+      const vb = visibleBox(w, bay.mini); if (!vb.isEmpty()) { const ext = Math.max(...[vb.min.x, vb.max.x].flatMap(x => [vb.min.z, vb.max.z].map(z => Math.hypot(x, z)))); if (ext > bay.area.r) { const f = bay.area.r / ext; s *= f; w.scale.setScalar(s); w.position.set(w.position.x * f, -fit.box.min.y * s + .004, w.position.z * f); } }
+      bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length, shown: fit.n, ghosts: ghosts.length };
     } catch (e) {
       // last resort, never an empty card: an emblem (a sealed scroll with the demo's title on a small easel)
       console.warn('mini', ps.d && (ps.d.title || ps.d.type), e && e.message);
@@ -353,7 +399,8 @@ export class BookRoom {
       el('button', { class: 'btn', text: '‹ Library', onclick: () => this.app.openHub({ fromRoom: this.book.id }) }),
       el('button', { class: 'btn', text: 'Room', onclick: () => this.togglePanel() }),
       el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog(this.book.id) })]));
-    this.hint = el('div', { class: 'hint glass', text: 'The scrolls begin on the left wall · click a scroll to read it · click a model on a pedestal to enter its diorama · V: walk (Space jumps)' }); u.append(this.hint);
+    const touch = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
+    this.hint = el('div', { class: 'hint glass', text: touch ? 'Scrolls begin on the left wall · tap a scroll to read it · tap a model to enter its diorama' : 'Scrolls begin on the left wall · click a scroll to read it · click a model to enter its diorama · V: walk' }); u.append(this.hint);
     this.statusEl = el('div', { class: 'status-pill glass', hidden: true }); u.append(this.statusEl);
     this.panel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.panel);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
@@ -423,7 +470,7 @@ export class BookRoom {
     if (this.unfold) {
       const U = this.unfold; U.k += dt / 1.6; const e = easeInOutQuint(Math.min(1, U.k));
       const mi = U.bay.mini; mi.scale.setScalar(1 + e * 1.4); mi.position.y = mi.userData.y0 + e * .25; mi.rotation.y += dt * 1.2 * e;
-      if (U.bay.ds) { U.bay.ds.U.uFrontR.value = -1e5; }
+      if (U.bay.ds) { U.bay.ds.U.uFrontR.value = 1e5; }
       this.camera.position.lerp(U.c.clone().addScaledVector(U.n, .7).add(V3(0, .3, 0)), dt * 1.5); this.camera.lookAt(U.c);
       this.gfx.grade.uniforms.uFade.value = clamp((U.k - .55) * 2.2, 0, 1);
       if (U.k >= 1 && !U.done) { U.done = true; const sp = U.bay.spec; this.app.openDiorama(sp.d, { buildIn: true, autoTransition: true, title: sp.d.title || sp.st.title, subtitle: U.st.part.title + ' · ' + sp.st.id, context: `${sp.st.title}: ${sp.st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.book.id } }); }

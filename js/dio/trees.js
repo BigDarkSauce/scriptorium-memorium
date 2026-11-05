@@ -2,9 +2,11 @@
 //
 //  • Wood: a tapered, slightly bent trunk with a root flare and a few tapering branches (broadleaf) or a straight
 //    spire (pine), one merged geometry, AAA 'bark' material (js/gfx/aaa.js: world-space triplanar relief).
-//  • Foliage: noise-displaced icosphere clumps (per-vertex colour: sky-facing light, inner shade, hue jitter) fringed by
-//    alpha-tested leaf cards (sprays of leaves / needles drawn once on a canvas atlas), one merged geometry and one
-//    material per tree. Pines: whorled tiers of drooping skirts with needle ribbons; bushes: low clumps, small leaves.
+//  • Foliage: alpha-tested leaf cards (sprays of leaves / needles drawn once on a canvas atlas), one merged geometry and
+//    one material per tree. Broadleaf: no solid masses, 12 leaf clusters of ~70 small cards each with dark gaps between
+//    them plus cards through the whole crown volume, normals bent outward (each cluster shades as a soft volume), vertex
+//    colours for depth occlusion and a lighter sunlit rim. Pines: whorled tiers of drooping skirts with needle ribbons;
+//    bushes: low noise-displaced clumps wearing an open leaf-mass texture (alpha gaps), fringed by small-leaf cards.
 //  • Lighting: the foliage material wraps the diffuse term (light reaches past the terminator, as through a leaf
 //    canopy) and adds a forward-scattered translucency lobe when the sun is behind the leaves (thin-leaf transmission
 //    without three's transmission pass); shadows from the cascades are honoured (the light colour already carries them),
@@ -12,7 +14,7 @@
 //  • Cost: geometries are built once per kind × variant (4 variants, picked by the body's seed; plus a per-body mirror,
 //    yaw and ±12 % size jitter so no two look alike) and shared by every scene (userData.shared: never disposed);
 //    materials are cached per scene build (the materialize patch binds a material to its scene's uniforms).
-//    Two draw calls per tree (+ shadow passes); ~2.4k triangles broadleaf, ~1.6k pine, ~1.9k bush (see TREE_STATS).
+//    Two draw calls per tree (+ shadow passes); ~2.6k triangles broadleaf, ~1.6k pine, ~1.9k bush (see TREE_STATS).
 //    treeForest() places many trees as InstancedMeshes (two draw calls per kind × variant for a whole forest).
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -51,9 +53,14 @@ function leafAtlas() {
   // small-leaf spray (bottom right): forked twigs with many small round leaves
   { const x0 = H + H / 2, yb = S - 6; twig(x0, yb, x0 - 60, H + 40, 5); twig(x0, yb - 90, x0 + 80, H + 60, 4); twig(x0 - 10, yb - 40, x0 - 120, H + 140, 3);
     for (let i = 0; i < 120; i++) { const a = r() * Math.PI * 2, rr = 40 + r() * 190, x = x0 + Math.cos(a) * rr * .55, y = yb - 40 - Math.abs(Math.sin(a)) * rr * .9 - r() * 60; leaf(x, y, 34 + r() * 18, 15 + r() * 6, (r() - .5) * 3, .5 + r() * .5); } }
-  // opaque leaf mass (bottom left, left half) and needle mass (right half): filled, then covered with leaves / strokes
-  g.fillStyle = shade(.25); g.fillRect(0, H, H / 2, H); g.fillStyle = shade(.2); g.fillRect(H / 2, H, H / 2, H);
-  g.save(); g.beginPath(); g.rect(0, H, H / 2, H); g.clip(); for (let i = 0; i < 2600; i++) leaf(r() * H / 2, H + r() * H, 13 + r() * 9, 6 + r() * 3, r() * 6.3, .15 + r() * .85); g.restore();
+  // leaf mass (bottom left, left half): NOT filled: two layers of small leaves (a dark under-layer, then lighter ones)
+  // leave ~25 % open gaps, so a clump wearing it reads as a cluster of leaves with sky and shade between them, not a
+  // smooth green pillow (the alpha test cuts the gaps; far away the mipmaps close them). Needle mass (right half): filled.
+  g.fillStyle = shade(.2); g.fillRect(H / 2, H, H / 2, H);
+  g.save(); g.beginPath(); g.rect(0, H, H / 2, H); g.clip();
+  for (let i = 0; i < 1300; i++) leaf(r() * H / 2, H + r() * H, 15 + r() * 9, 7 + r() * 3, r() * 6.3, .05 + r() * .3);
+  for (let i = 0; i < 1100; i++) leaf(r() * H / 2, H + r() * H, 14 + r() * 9, 6 + r() * 3, r() * 6.3, .35 + r() * .65);
+  g.restore();
   g.save(); g.beginPath(); g.rect(H / 2, H, H / 2, H); g.clip(); for (let i = 0; i < 4200; i++) { const x = H / 2 + r() * H / 2, y = H + r() * H, a = r() * 6.3, L = 9 + r() * 9; g.strokeStyle = shade(.1 + r() * .9); g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke(); } g.restore();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.userData.shared = true; t.name = 'leaf-atlas';
   return (ATLAS = t);
@@ -69,9 +76,9 @@ function tube(curve, radius, seg = 8, n = 8) {
   for (let i = 0; i < n; i++) for (let j = 0; j < seg; j++) { const a = i * seg + j, b = i * seg + (j + 1) % seg, c2 = a + seg, d = b + seg; idx.push(a, c2, b, b, c2, d); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
 }
-// a displaced icosphere clump (detail 2: 320 triangles), flattened underneath
-function clump(c, r, noise, off, squash = .8) {
-  let g = new THREE.IcosahedronGeometry(1, 2); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+// a displaced icosphere clump (detail 2: 320 triangles; detail 1: 80), flattened underneath
+function clump(c, r, noise, off, squash = .8, detail = 2) {
+  let g = new THREE.IcosahedronGeometry(1, detail); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
   const P = g.attributes.position, v = V3();
   for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i);
     const n = 1 + .45 * noise.fbm(v.x * 1.9 + off, v.y * 1.9, v.z * 1.9 - off, 3) + .22 * noise(v.x * 5 + off, v.y * 5, v.z * 5);
@@ -103,6 +110,19 @@ function tint(g, crownC, crownR, hue, rng) {
     c.setRGB(L * (1 + hue * .6), L, L * (1 - hue * .5)); col.push(c.r, c.g, c.b); }
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
 }
+// broadleaf crown shading: ambient occlusion by depth in the crown (the inside and underside dark), a lighter sunlit rim
+// on the outer, sky-facing leaves, and a per-cluster hue jitter
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function tintCrown(g, crownC, crownR, hue, rng, k) {
+  const P = g.attributes.position, N = g.attributes.normal, col = [], c = new THREE.Color(), p = V3(), n = V3(), d = V3();
+  for (let i = 0; i < P.count; i++) { p.fromBufferAttribute(P, i); n.fromBufferAttribute(N, i); d.subVectors(p, crownC);
+    const depth = d.length() / crownR, up = n.y * .5 + .5, h = sstep(-1, 1, d.y / crownR), side = Math.max(0, n.dot(d.normalize()));
+    const local = k ? .6 + .4 * sstep(.2, 1, p.distanceTo(k.c) / k.r) : .75;   // inside a cluster: darker too
+    const ao = (.28 + .72 * sstep(.3, 1.0, depth)) * local, rim = sstep(.75, 1.05, depth) * (.16 + .3 * Math.max(0, up - .35) + .12 * side);
+    const L = (ao * (.7 + .3 * up) * (.78 + .22 * h) + rim) * (.93 + .14 * rng());
+    c.setRGB(L * (1 + hue * .6), L, L * (1 - hue * .5)); col.push(c.r, c.g, c.b); }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
+}
 const prep = g => { if (g.index) g = g.toNonIndexed(); if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); if (!g.attributes.color) g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3)); return g; };
 const woodPrep = g => { g = g.index ? g.toNonIndexed() : g; ['uv', 'color'].forEach(k => g.deleteAttribute(k)); return g; };
 
@@ -120,16 +140,36 @@ function buildBroadleaf(seed) {
     wood.push(tube(new THREE.CatmullRomCurve3([base, mid, end]), t => r0 * .42 * (1 - .7 * t), 6, 4)); ends.push(end);
   }
   ends.push(top.clone().add(V3(0, .1, 0)));
-  // crown clumps: one at each branch end, the top, and fill-ins
-  const cl = ends.slice(0, -1).map(e => ({ c: e.clone().add(V3(0, .05, 0)), r: .11 + r() * .04 })).slice(0, 4);
-  // the upper crown: a dome of clumps over the branch ends (a broadleaf crown is rounder than its scaffold)
-  cl.push({ c: crownC.clone().add(V3((r() - .5) * .08, .19, (r() - .5) * .08)), r: .15 + r() * .03 });
-  while (cl.length < 6) { const a = r() * 6.28; cl.push({ c: crownC.clone().add(V3(Math.cos(a) * .13, .06 + r() * .1, Math.sin(a) * .13)), r: .12 + r() * .04 }); }
-  cl.forEach((k, i) => { const hue = (r() - .5) * .14; let g = clump(k.c, k.r, noise, i * 3.7); g = massUV(g, R.mass, k.c, k.r); leaf.push(tint(g, crownC, crownR, hue, r)); k.hue = hue; });
-  // leaf cards on the clump surfaces (outward and upward), the fringe of the silhouette
-  for (let i = 0; i < 140; i++) { const k = cl[i % cl.length], d = V3(r() - .5, r() * .8 - .2, r() - .5).normalize(), p = k.c.clone().addScaledVector(d, k.r * (.6 + r() * .5));
-    const dir = d.clone().add(V3((r() - .5) * .7, .3, (r() - .5) * .7)).normalize(), s = .12 + r() * .08;
-    leaf.push(tint(card(p, dir, r() * 6.28, s * .75, s, R.broad, .25, 1), crownC, crownR, k.hue, r)); }
+  // The crown has no solid masses: 12 leaf clusters (9 on an ellipsoidal shell, upper-biased, 3 inside and on top),
+  // each a ball of ~70 small leaf-spray cards (two triangles each) on a twig from the nearest branch end, with dark
+  // gaps between the clusters; then ~200 cards anywhere in the crown volume at any angle (inward-facing too). Card
+  // normals are bent outward (from the cluster's and the crown's centre), so each cluster shades as a soft volume, lit
+  // on its sunny side, instead of as flat cards; vertex colours add depth occlusion and a lighter outer rim.
+  const cC = crownC.clone().add(V3(0, .03, 0)), aR = .25, vR = .21, clusters = [], NCL = 9, ph = r() * 6.28;
+  for (let i = 0; i < NCL; i++) {
+    const y = 1 - (i + .5) / NCL * 1.6, rr = Math.sqrt(Math.max(0, 1 - y * y)), a = ph + i * 2.39996 + (r() - .5) * .4;   // golden-angle spiral
+    clusters.push({ c: cC.clone().add(V3(Math.cos(a) * rr * aR * .82, y * vR * .82, Math.sin(a) * rr * aR * .82)), r: .085 + r() * .025, hue: (r() - .5) * .14 });
+  }
+  for (let i = 0; i < 3; i++) { const a = r() * 6.28, d = i ? .07 : 0; clusters.push({ c: cC.clone().add(V3(Math.cos(a) * d, i ? -.01 + r() * .06 : vR * .78, Math.sin(a) * d)), r: .08 + r() * .02, hue: (r() - .5) * .1 }); }
+  clusters.forEach(k => {
+    let near = ends[0]; ends.forEach(e => { if (e.distanceToSquared(k.c) < near.distanceToSquared(k.c)) near = e; });
+    wood.push(tube(new THREE.CatmullRomCurve3([near.clone(), near.clone().lerp(k.c, .5).add(V3(0, .02, 0)), k.c.clone()]), t => r0 * .2 * (1 - .6 * t), 4, 2));
+  });
+  const u = V3(), t2 = V3(), b2 = V3(), nn = V3();
+  const quad = (p, n, s2, k, hue) => {   // a leaf-spray card facing n (with a random spin), normals bent outward
+    t2.set(r() - .5, r() - .5, r() - .5).cross(n).normalize(); b2.crossVectors(n, t2);
+    const P = [], UV = [], N = []; nn.copy(p).sub(k ? k.c : cC).normalize().multiplyScalar(.65).add(u.copy(p).sub(cC).normalize().multiplyScalar(.35)).normalize();
+    [[-.5, 0], [.5, 0], [-.5, 1], [.5, 1]].forEach(([x, y]) => { const q = p.clone().addScaledVector(t2, x * s2 * .8).addScaledVector(b2, (y - .3) * s2); P.push(q.x, q.y, q.z); UV.push(...uvIn(R.broad, x + .5, y)); N.push(nn.x, nn.y, nn.z); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex([0, 1, 2, 1, 3, 2]);
+    leaf.push(tintCrown(g, cC, aR, hue, r, k));
+  };
+  clusters.forEach(k => { for (let j = 0; j < 70; j++) {
+    const d = V3(r() - .5, r() - .45, r() - .5).normalize(), p = k.c.clone().addScaledVector(d, k.r * Math.cbrt(.15 + r() * .85));
+    quad(p, d.clone().add(V3((r() - .5) * .9, .25, (r() - .5) * .9)).normalize(), .06 + r() * .045, k, k.hue); } });
+  for (let i = 0; i < 200; i++) {
+    let p; do { p = V3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); } while (p.lengthSq() > 1); p.set(cC.x + p.x * aR * .9, cC.y + p.y * vR * .9, cC.z + p.z * aR * .9);
+    quad(p, V3(r() - .5, r() - .3, r() - .5).normalize(), .06 + r() * .04, null, (r() - .5) * .1);
+  }
   return { wood: mergeGeometries(wood.map(woodPrep)), leaf: mergeGeometries(leaf.map(prep)) };
 }
 function buildPine(seed) {
@@ -194,14 +234,18 @@ const WRAP_TO = `float dotNL = saturate( dot( geometryNormal, directLight.direct
 	{ float wrapNL = saturate( ( dot( geometryNormal, directLight.direction ) + FOL_WRAP ) / ( 1.0 + FOL_WRAP ) );
 	  float back = pow( saturate( dot( geometryViewDir, - directLight.direction ) ), 3.0 ) * 0.7 + saturate( - dot( geometryNormal, directLight.direction ) ) * 0.25;
 	  reflectedLight.directDiffuse += directLight.color * ( BRDF_Lambert( material.diffuseColor ) * ( wrapNL - dotNL ) + BRDF_Lambert( material.diffuseColor * vec3( 1.0, 1.1, 0.6 ) ) * back * FOL_TRANS ); }`;
-export function foliageMaterial(color = '#4f7a3a') {
+// bent: the geometry's normals are bent outward (broadleaf crowns): both faces of a card use that normal as it is (no
+// flip for the back face), so a cluster shades as one soft volume
+export function foliageMaterial(color = '#4f7a3a', { bent = false } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(1.25), map: leafAtlas(), alphaTest: .45, side: THREE.DoubleSide, vertexColors: true, roughness: .82, metalness: 0, envMapIntensity: .6 });
   m.defines = { SM_FOLIAGE: '', FOL_WRAP: '0.45', FOL_TRANS: '0.55' };   // own defines: a distinct program key
+  if (bent) m.defines.FOL_BENT = '';
   m.onBeforeCompile = s => {
     const ch = THREE.ShaderChunk.lights_physical_pars_fragment;
     if (ch.includes(WRAP_FROM)) s.fragmentShader = s.fragmentShader.replace('#include <lights_physical_pars_fragment>', ch.replace(WRAP_FROM, WRAP_TO));
+    if (bent) s.fragmentShader = s.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
   };
-  m.customProgramCacheKey = () => 'foliage';
+  m.customProgramCacheKey = () => bent ? 'foliage-bent' : 'foliage';
   m.userData.preset = 'foliage';
   return m;
 }
@@ -217,7 +261,7 @@ export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
   const dh = kind === 'bush' ? .6 : kind === 'pine' ? 2.4 : 2, h = +shape.h > 0 ? +shape.h : dh, seed = (ctx.seed >>> 0) || 7, r = mulberry(seed);
   const variant = seed % TREE_VARIANTS, G = treeGeometry(kind, variant);
   const col = (matSpec && matSpec.color) || shape.color || DEF_COL[kind], trunkSpec = (matSpec && matSpec.trunk) || 'bark';
-  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => makeMaterial(trunkSpec)), lm = cached(ctx, 'leaf:' + col, () => foliageMaterial(col));
+  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => makeMaterial(trunkSpec)), lm = cached(ctx, 'leaf:' + col + (kind === 'tree' ? ':bent' : ''), () => foliageMaterial(col, { bent: kind === 'tree' }));
   const g = new THREE.Group(), s = h * (kind === 'bush' ? 1 / .85 : 1), j = 1 + (r() - .5) * .16, flip = r() < .5 ? -1 : 1;
   const wood = new THREE.Mesh(G.wood, wm), leaf = new THREE.Mesh(G.leaf, lm);
   [wood, leaf].forEach(m => { m.scale.set(s * flip, s * j, s); m.rotation.y = r() * Math.PI * 2; m.castShadow = true; m.receiveShadow = true; g.add(m); });
@@ -232,7 +276,7 @@ export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
 export function treeForest(kind = 'tree', items = [], { color, seed = 1, trunk = 'bark', castShadow = true } = {}) {
   const g = new THREE.Group(); g.name = kind + ' forest'; const r = mulberry(seed), byV = new Map();
   items.forEach((it, i) => { const v = Math.floor(r() * TREE_VARIANTS); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
-  const wm = makeMaterial(trunk), lm = foliageMaterial(color || DEF_COL[kind]), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+  const wm = makeMaterial(trunk), lm = foliageMaterial(color || DEF_COL[kind], { bent: kind === 'tree' }), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
   byV.forEach((list, v) => {
     const G = treeGeometry(kind, v), W = new THREE.InstancedMesh(G.wood, wm, list.length), L = new THREE.InstancedMesh(G.leaf, lm, list.length);
     list.forEach((it, i) => { const h = (it.h || 2) * (kind === 'bush' ? 1 / .85 : 1); q.setFromAxisAngle(Y, it.ry ?? r() * 6.28); m4.compose(V3(it.x || 0, it.y || 0, it.z || 0), q, V3(h, h * (.92 + r() * .16), h)); W.setMatrixAt(i, m4); L.setMatrixAt(i, m4); c.setRGB(.9 + r() * .2, .92 + r() * .16, .85 + r() * .2); L.setColorAt(i, c); });

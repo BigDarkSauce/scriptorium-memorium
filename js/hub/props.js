@@ -98,23 +98,32 @@ function globeTex() {
     g.strokeStyle = 'rgba(90,60,30,.35)'; g.lineWidth = 1; for (let i = 1; i < 12; i++) { g.beginPath(); g.moveTo(i * w / 12, 0); g.lineTo(i * w / 12, h); g.stroke(); } for (let j = 1; j < 6; j++) { g.beginPath(); g.moveTo(0, j * h / 6); g.lineTo(w, j * h / 6); g.stroke(); }
   });
 }
-// The scroll rests: for every slot of every tier two velvet cradles (a block with a hollow of radius R + 3 mm centred on
-// the scroll's axis), under the scroll at 0.16 m either side of its middle. Shared geometry and material, one draw call.
+// The scroll rests: for every slot two low cradles (a saddle 7 cm wide with a hollow of radius R + 3 mm centred on the
+// scroll's axis, 18 mm high at its horns), under the scroll at 0.16 m either side of its middle, in a dark, matte
+// walnut-brown velvet close to the tier's own tone: quiet furniture, not a row of red accents. Shared geometry and
+// material, one draw call per bookcase; setRestTiers() shows them only on chosen tiers (hub.js: the tiers holding
+// scrolls and the one the next scroll goes to), the others stay plain lined shelves.
 let _restGeo, _restMat;
 function restGeo() {
   if (_restGeo) return _restGeo;
-  const hw = .05, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
+  const hw = .035, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
     a0 = Math.atan2(-Math.sqrt(rr * rr - hw * hw), hw), yE = AXIS + rr * Math.sin(a0), s = new THREE.Shape();
   s.moveTo(-hw, -.001); s.lineTo(hw, -.001); s.lineTo(hw, yE); s.absarc(0, AXIS, rr, a0, -Math.PI - a0, true); s.lineTo(-hw, -.001);
-  const g = new THREE.ExtrudeGeometry(s, { depth: .036, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.018);
+  const g = new THREE.ExtrudeGeometry(s, { depth: .026, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.013);
   g.userData.shared = true; return (_restGeo = g);
 }
 function scrollRests(o) {
   const u = o.userData, n = u.tiers * u.slotsPerTier * 2; if (!n) return null;
-  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x5e1a24, roughness: .85, sheen: 1, sheenColor: new THREE.Color(0xd88a8a), sheenRoughness: .45 })); mat.userData.shared = true;
-  const im = new THREE.InstancedMesh(restGeo(), mat, n), M = new THREE.Matrix4(); let i = 0;
-  for (let t = 0; t < u.tiers; t++) for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-.16, .16].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); }
-  im.castShadow = false; im.receiveShadow = true; im.name = 'scroll-rests'; im.computeBoundingSphere(); o.add(im); u.rests = im; return im;
+  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x3a2420, roughness: .92, sheen: .35, sheenColor: new THREE.Color(0x8a6a58), sheenRoughness: .6 })); mat.userData.shared = true;
+  const im = new THREE.InstancedMesh(restGeo(), mat, n);
+  im.castShadow = false; im.receiveShadow = true; im.name = 'scroll-rests'; o.add(im); u.rests = im;
+  setRestTiers(o, null); return im;
+}
+// show the cradles on the given tiers only (a Set of tier indices; null: every tier)
+export function setRestTiers(o, tiers) {
+  const u = o.userData, im = u.rests; if (!im) return; const M = new THREE.Matrix4(); let i = 0;
+  for (let t = 0; t < u.tiers; t++) { if (tiers && !tiers.has(t)) continue; for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-.16, .16].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); } }
+  im.count = i; im.visible = i > 0; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.computeBoundingBox && im.computeBoundingBox();
 }
 // (kept for callers of the old API: the user's bookcases no longer get filler books)
 export function fillBookcase() { return null; }
@@ -201,7 +210,12 @@ export function makeSheet(w = .42, h = .6, title = '', R = SCROLL_R) {
   const s = new THREE.Mesh(geo, mat); s.scale.y = .001; s.position.x = -R * .98; s.castShadow = false;
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(.012, .012, w + .05, 16), makeMaterial('darkwood')); rod.rotation.x = Math.PI / 2; rod.position.set(-R * .98 - .006, 0, 0);
   [-1, 1].forEach(k => { const kn = new THREE.Mesh(new THREE.SphereGeometry(.018, 12, 8), makeMaterial('darkwood')); kn.position.y = k * (w / 2 + .03); rod.add(kn); });
-  const grp = new THREE.Group(); grp.add(s, rod); grp.userData = { sheet: s, rod, h }; grp.name = 'open-sheet';
+  // the halo: a soft warm glow behind the sheet (additive, no depth writes), a little wider and taller than the sheet and
+  // unrolled with it (a child of the sheet: same top-fixed scale); only its rim shows round the opaque sheet
+  const hg = new THREE.PlaneGeometry(w * 2.1, h * 1.5); hg.translate(0, -h / 2, 0); hg.rotateY(-Math.PI / 2);
+  const halo = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ map: radialGlow('255,196,120'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: true }));
+  halo.position.x = .03; halo.renderOrder = -1; halo.raycast = () => { }; s.add(halo);
+  const grp = new THREE.Group(); grp.add(s, rod); grp.userData = { sheet: s, rod, h, halo }; grp.name = 'open-sheet';
   return grp;
 }
 // A cabriole leg as a tube along a curve (knee forward, ankle in, a gilt pad foot)

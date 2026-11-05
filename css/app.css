@@ -62,7 +62,15 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 .brand-title::after { content: ""; display: block; height: 1px; margin-top: 8px; background: linear-gradient(90deg, rgba(255,217,138,.6), rgba(255,217,138,.18) 60%, transparent); }
 .brand-sub { margin-top: 6px; font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
 .hub-actions { position: absolute; right: calc(var(--gut) + max(0px, env(safe-area-inset-right,0px))); top: calc(var(--gut) + env(safe-area-inset-top,0px)); display: flex; gap: 6px; padding: 5px; border-radius: 999px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 32px); }
-.hint { position: absolute; left: 50%; bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; font-size: 13px; color: var(--ink-2); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; pointer-events: none !important; }
+/* the hub/room hint: bottom left, in the space left of the walk panel (.nav-box, ~290 px wide); it wraps (balanced)
+   instead of running under the panel or ending in an ellipsis. Phones: the panel stands above it, so it takes the full width. */
+.hint { position: absolute; left: calc(var(--gut) + max(0px, env(safe-area-inset-left,0px))); bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); padding: 8px 16px; border-radius: 18px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: normal; text-wrap: balance; width: max-content; max-width: calc(100vw - 3 * var(--gut) - 300px); pointer-events: none !important; }
+@media (max-width: 700px) { .hint { max-width: calc(100vw - 2 * var(--gut)); font-size: 12.5px; padding: 7px 14px; } }
+/* the hall's cinematic opening of a scroll (hub.js openScroll): the interface fades out and comes back on cancel */
+.hub-ui > *, .sound-btn, .gfx-btn { transition: opacity .45s ease; }
+body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, body.cine .gfx-card { opacity: 0 !important; pointer-events: none !important; }
+/* phones: the room title steps away while a scroll is open (it would show behind the reader's top rod) */
+@media (max-width: 760px) { body:has(.reader:not([hidden])) .room-ui .brand { display: none; } }
 .status-pill { position: absolute; left: 50%; top: calc(76px + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; font-size: 13px; }
 .tooltip { position: fixed; left: 0; top: 0; padding: 8px 11px; border-radius: 12px; background: rgba(20,18,16,.94); border: 1px solid rgba(255,246,228,.12); box-shadow: 0 12px 26px -10px rgba(0,0,0,.7); pointer-events: none !important; display: grid; gap: 2px; max-width: 280px; }
 .tooltip b { font-family: var(--f-italic); font-weight: 400; font-size: 15px; color: var(--brass); }
