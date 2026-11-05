@@ -1642,7 +1642,7 @@ DIO.efield.lessons=[
 
 // a ride along the wire with the discharge current: from the capacitor's + plate along the near wire, through the
 // resistor, along the far wire to the bypass branch (switch open to the battery); the eye rides just above the copper
-DIO.circuit.tracks={discharge:{points:[[-4.5,1.0,.9],[-4.4,1.0,2.4],[-3.0,1.0,2.5],[0,1.0,2.5],[3.0,1.0,2.5],[4.4,1.0,2.4],[4.5,1.15,1.0],[4.5,1.25,0],[4.5,1.15,-1.0],[4.4,1.0,-2.4],[3.0,1.0,-2.5],[1.7,1.0,-2.6],[1.6,1.0,-3.2],[0,1.0,-3.3],[-1.5,1.0,-3.3]],dur:11,lookAhead:.06}};
+DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',points:[[-4.5,1.0,.9],[-4.4,1.0,2.4],[-3.0,1.0,2.5],[0,1.0,2.5],[3.0,1.0,2.5],[4.4,1.0,2.4],[4.5,1.15,1.0],[4.5,1.25,0],[4.5,1.15,-1.0],[4.4,1.0,-2.4],[3.0,1.0,-2.5],[1.7,1.0,-2.6],[1.6,1.0,-3.2],[0,1.0,-3.3],[-1.5,1.0,-3.3]],dur:11,lookAhead:.06}};
 DIO.circuit.lessons=[
  {title:'How fast does it charge?',question:'How fast does a capacitor charge?',focus:'capacitor',set:{V:9,R:5,C:.6,closed:1},until:'event:t = τ',run:8,
   chain:[{a:'battery · ε',note:'ε = 9 V drives it'},{a:'switch',note:'closes the loop'},{a:'resistor · R',note:'limits the current'},{a:'capacitor · C',note:'charge piles up on its plates'},{a:'voltmeter',note:'reads V_C rising'}],chainPace:1,

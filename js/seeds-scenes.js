@@ -35,8 +35,9 @@ export const WATER_CYCLE = {
   ],
   tour: ['sun', 'lake', 'vapour', 'parcel', 'cloud', 'windsock', 'mountain', 'rain'],
   // the path of a parcel of the cloud's air over the ridge (lesson "Over the crest"): along the wind from the lake, up the
-  // windward slope, over the crest well above the rock (the ridge rises to about 3.5 units), down into the rain shadow
-  tracks: { parcel: { label: 'a parcel of air over the ridge', points: [[.8, 2.4, 1.3], [.7, 2.6, .1], [.7, 3.3, -1.1], [.7, 4.3, -2.1], [.7, 4.8, -2.9], [.7, 4.2, -3.8], [.6, 3.2, -4.6], [.5, 2.6, -5.2]], dur: 10, lookAhead: .08 } },
+  // windward slope, over the crest well above the rock (the ridge rises to about 3.5 units), down into the rain shadow;
+  // it runs just above the cloud tops (about 3.1 units) so the ride is not spent inside a cloud
+  tracks: { parcel: { label: 'a parcel of air over the ridge', points: [[.8, 3.4, 1.7], [.7, 3.5, .3], [.7, 3.9, -1.0], [.7, 4.5, -2.0], [.7, 4.9, -2.9], [.7, 4.5, -3.8], [.6, 3.9, -4.6], [.5, 3.6, -5.3]], dur: 10, lookAhead: .08 } },
   params: [
     { key: 'sun', label: 'sunshine (0 = overcast)', min: 0, max: 1.5, value: .9, unit: '' },
     { key: 'wind', label: 'wind speed', min: 0, max: 10, value: 4, unit: 'm/s' },

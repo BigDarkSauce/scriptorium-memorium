@@ -87,10 +87,12 @@ export class Inset {
   // among equals, the corner farthest from the callout (S10: "the free-frame corner opposite the callout")
   place() {
     const v = this.v, d = v.dir, W = innerWidth, H = innerHeight, [w, h] = SIZE, m = 16;
-    const blocks = [v.readPanel, v.panel && !v.panel.classList.contains('folded') ? v.panel : null, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-time'), v.ui && v.ui.querySelector('.dio-actions'), d && d.chipEl, d && d.sbar, d && d.beat && d.beat.el, document.querySelector('.sound-btn')]
+    const blocks = [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-time'), v.ui && v.ui.querySelector('.dio-actions'), d && d.chipEl, d && d.sbar, d && d.beat && d.beat.el, document.querySelector('.sound-btn')]
       .filter(P => P && !P.hidden && P.getBoundingClientRect).map(P => P.getBoundingClientRect()).filter(r => r.width && r.height);
     const co = d && d.beat && d.beat.el ? d.beat.el.getBoundingClientRect() : null;
-    const C = [[W - w - m, 78], [m, 78], [W - w - m, H - h - 112], [m, H - h - 112]];
+    // the left corners start right of the instruction panel (also when it is folded to its tab)
+    const pr = v.panel && !v.panel.hidden && v.panel.getBoundingClientRect ? v.panel.getBoundingClientRect() : null, xl = Math.min(W - w - m, Math.max(m, pr && pr.width ? pr.right + 12 : m));
+    const C = [[W - w - m, 78], [xl, 78], [W - w - m, H - h - 112], [xl, H - h - 112]];
     let best = this.corner >= 0 ? this.corner : 0, bc = 1e18;
     C.forEach(([x, y], i) => {
       let o = 0; for (const r of blocks) o += Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left)) * Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top));
