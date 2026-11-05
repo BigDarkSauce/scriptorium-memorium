@@ -489,7 +489,7 @@ i { font-style: italic; }
   .ibtn, .ibtn.tiny { width: 40px; height: 40px; }
   .ibtn.tiny { font-size: 13px; }
   input[type="range"] { min-height: 32px; touch-action: pan-x; }
-  .chip, .olist .pov, .pin { position: relative; }
+  .chip, .olist .pov { position: relative; }
   .chip::after, .olist .pov::after { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 40px; transform: translateY(-50%); }
   .hub-actions { gap: 4px; }
   .linkbtn, .reads-more { min-height: 40px; display: inline-flex; align-items: center; }

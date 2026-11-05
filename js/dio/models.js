@@ -37,7 +37,7 @@ export const DIO = {};
 // Readouts use FIXED decimals (no width jitter while a value changes) and a true minus sign.
 const fx=(v,d=2)=>{if(typeof v!=='number'||!isFinite(v))return '—';const s=(Math.abs(v)<.5*Math.pow(10,-d)?0:v).toFixed(d);return s.charAt(0)==='-'?'−'+s.slice(1):s};
 const DEG=180/Math.PI;
-function freeTree(o,keep){o.traverse(m=>{if(m.geometry)m.geometry.dispose();if(m.material)[].concat(m.material).forEach(x=>{if(!keep.has(x))x.dispose()});if(m.isInstancedMesh)m.dispose()})}
+function freeTree(o,keep){o.traverse(m=>{if(m.geometry&&!m.geometry.userData.shared)m.geometry.dispose();if(m.material)[].concat(m.material).forEach(x=>{if(!keep.has(x))x.dispose()});if(m.isInstancedMesh)m.dispose()})}
 // stage(D, preset, envOpts): picks the setting that suits the subject (unless the author chose one), frees the previous
 // build's GPU resources when the world is rebuilt, and returns small helpers:
 //  part(name, parent, actor) a named group (the Objects list reads "stand", "bob · m", …); put(o, name, parent)

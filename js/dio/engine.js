@@ -323,6 +323,7 @@ export class DioramaView {
   }
   povFade(o, on) {
     if (on) {
+      if (o.userData._peelMat || o.userData._povMat) return;   // already see-through (a peeled layer) or already faded
       o.userData._povMat = o.material; const ms = [].concat(o.material).map(m => { const k = cloneMat(m); k.transparent = true; k.opacity = Math.min(m.opacity ?? 1, .22); k.depthWrite = false; return k; });
       o.material = Array.isArray(o.material) ? ms : ms[0];
       const eg = new THREE.EdgesGeometry(o.geometry, 30), ln = new THREE.LineSegments(eg, new THREE.LineDashedMaterial({ color: 0xffe3a3, dashSize: .05, gapSize: .035, transparent: true, opacity: .85, depthTest: false }));
@@ -636,6 +637,7 @@ export class DioramaView {
     for (const it of items) {
       const W0 = it.pin._w || 120, H0 = 28; let y = it.y, ok = false;
       for (let k = 0; k < 4 && !ok; k++) { const hit = placed.find(q => it.x < q.x + q.w && it.x + W0 > q.x && y - H0 / 2 < q.y + q.h / 2 && y + H0 / 2 > q.y - q.h / 2); if (!hit) ok = true; else y = hit.y + (y >= hit.y ? H0 : -H0); }
+      if (y < 14 || y > h - 14) ok = false;   // pushed off the screen by the collision step: hide it rather than pin it outside
       const under = (this._block || []).some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + 8 > rx && it.x < rx + r.width && y > ry && y < ry + r.height; });
       vis(it.pin, ok && !under ? 'visible' : 'hidden');
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); const tf = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; if (it.pin._tf !== tf) { it.pin._tf = tf; it.pin.style.transform = tf; } }

@@ -26,6 +26,7 @@ const BIG_RE = /sky|backdrop|ground|meadow|plinth|floor|hill|cloud|haze|terrain|
 // frontPatched, is copied by clone()).
 export function cloneMat(m) {
   const k = m.clone();
+  if (m.defines) k.defines = { ...m.defines };   // copy() resets defines to STANDARD/PHYSICAL: AAA_*, FOL_*, SM_THIN would vanish
   k.onBeforeCompile = m.onBeforeCompile;
   if (Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey')) k.customProgramCacheKey = m.customProgramCacheKey;
   return k;
@@ -66,10 +67,21 @@ export class FocusPass extends Pass {
     this.mats = [...sides.map((sd, i) => [L_BG + i, maskMat(0, 0, 1, false, sd)]), ...sides.map((sd, i) => [L_CTX + i, maskMat(0, 0, 0, false, sd)]), [L_ISO, maskMat(0, 1, 0, true)], [L_PAST, maskMat(.4, 0, 0, true)], [L_FRONT, maskMat(1, 0, 0, true)]];
     this.counts = {}; this.scene = null; this.camera = null; this._cc = new THREE.Color(); this.enabled = false; this.maskMs = 0;
   }
+  // compile the mask programs ahead of the first chain/isolate (plain + instanced meshes) with 1×1 renders, off-screen
+  warm(r) {
+    const rt = new THREE.WebGLRenderTarget(1, 1), sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(), g = new THREE.BoxGeometry(.1, .1, .1);
+    const a = new THREE.Mesh(g), b = new THREE.InstancedMesh(g, undefined, 1); a.position.z = b.position.z = -1; sc.add(a, b);
+    const prev = r.getRenderTarget(); r.setRenderTarget(rt);
+    try { this.mats.forEach(([, m]) => { sc.overrideMaterial = m; r.render(sc, cam); }); } finally { r.setRenderTarget(prev); }
+    rt.dispose(); g.dispose(); b.dispose();
+  }
   setSize(w, h) { this.maskRT.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1)); }   // the focus mask at half resolution
   renderMask(r) {
     const sc = this.scene, cam = this.camera, bg = sc.background, fog = sc.fog, ov = sc.overrideMaterial, lm = cam.layers.mask, au = r.shadowMap.autoUpdate, ac = r.autoClear, ca = r.getClearAlpha();
     r.getClearColor(this._cc); sc.background = null; sc.fog = null; r.shadowMap.autoUpdate = false; r.autoClear = false;
+    // lights must sit on the mask layers too: otherwise each mask render collects 0 lights, the lights hash flips twice a
+    // frame and every lit material re-resolves its program (CPU churn). Re-checked when the scene changes and every 120 frames.
+    if (this._litScene !== sc || (this._litN = (this._litN || 0) + 1) % 120 === 0) { this._litScene = sc; sc.traverse(o => { if (o.isLight) this.mats.forEach(([L]) => o.layers.enable(L)); }); }
     r.setRenderTarget(this.maskRT); r.setClearColor(0x0000ff, 0); r.clear(true, true, false);
     for (let i = 0; i < this.mats.length; i++) { const L = this.mats[i][0]; if (!this.counts[L]) continue; cam.layers.mask = 1 << L; sc.overrideMaterial = this.mats[i][1]; r.render(sc, cam); }
     sc.overrideMaterial = ov; sc.background = bg; sc.fog = fog; cam.layers.mask = lm; r.shadowMap.autoUpdate = au; r.autoClear = ac; r.setClearColor(this._cc, ca);
@@ -88,6 +100,7 @@ export class Cues {
   constructor(view) {
     this.v = view; this.iso = { set: [], w: 0, goal: 0 }; this.chain = null; this.peel = null; this.vig = 0; this.vigGoal = 0;
     this.pass = new FocusPass(); this.pass.scene = view.scene; this.pass.camera = view.camera;
+    (window.requestIdleCallback || setTimeout)(() => { if (this.pass && view.gfx && !view.disposed) try { this.pass.warm(view.gfx.renderer); } catch (e) { console.warn(e); } }, { timeout: 2000 });
     const g = view.gfx; this.unhook = g.addPass ? g.addPass(this.pass) : (() => { const P = g.composer.passes, i = P.indexOf(g.grade); g.composer.insertPass(this.pass, i < 0 ? P.length : i); return () => g.composer.removePass(this.pass); })();
     this.layer = el('div', { class: 'cues' }); view.ui.append(this.layer);
     this.svg = document.createElementNS(NS, 'svg'); this.svg.setAttribute('class', 'cue-svg'); this.layer.append(this.svg);
@@ -193,8 +206,9 @@ export class Cues {
     const P = this.peel; if (on === l.swapped) return; l.swapped = on;
     if (P.mode === 'lift') return;
     if (on) {
-      if (P.mode === 'clip') { this.v.gfx.renderer.localClippingEnabled = true; const U = this.v.ds.U; if (P.poche0 == null) { P.poche0 = U.uPoche.value; } U.uPoche.value = 1; }
+      if (P.mode === 'clip') { const U = this.v.ds.U; if (P.poche0 == null) { P.poche0 = U.uPoche.value; } U.uPoche.value = 1; }
       l.meshes.forEach(m => {
+        if (m.userData._povMat) { this.v.povFade(m, false); this.v.pov && this.v.pov.faded && this.v.pov.faded.delete(m); }   // one material swap per mesh at a time
         m.userData._peelMat = m.material; m.userData._peelRO = m.renderOrder;
         const ms = [].concat(m.material).map(x => { const k = cloneMat(x); k.userData._op0 = x.opacity ?? 1;
           if (P.mode === 'ghost') { k.transparent = true; k.depthWrite = false; k.side = THREE.FrontSide; }
@@ -265,7 +279,7 @@ export class Cues {
   // ---------- per frame (after the simulation step) ----------
   update(dt) {
     const v = this.v, d = v.dir, U = this.pass.uniforms;
-    if (this.chain || this.iso.w > 0 || this.iso.goal > 0 || this.peel) { this.gatherT += dt; if (this.gatherT > .5) { this.gatherT = 0; if (this.stale()) { this.gather(); if (this.peel && !this.peel.L[0].a.obj.parent) this.peel = null; } } }
+    if (this.chain || this.iso.w > 0 || this.iso.goal > 0 || this.peel) { this.gatherT += dt; if (this.gatherT > .5) { this.gatherT = 0; if (this.stale()) { this.gather(); if (this.peel && !this.peel.L[0].a.obj.parent) { const P = this.peel; if (P.poche0 != null && v.ds && v.ds.U && v.ds.U.uPoche) v.ds.U.uPoche.value = P.poche0; this.peel = null; /* world rebuilt mid-peel: the meshes are gone, give the section poché back */ } } } }
     // isolate: in 0.4 s, out 0.6 s; off while the learner holds the camera, in POV and outside instructed steps
     const isoGoal = this.iso.goal > 0 && this.active && v.running != null && !(d.hold > 0) && !v.pov && !d.dip ? 1 : 0;
     const w0 = this.iso.w; this.iso.w = isoGoal ? Math.min(1, w0 + dt / .4) : Math.max(0, w0 - dt / .6);

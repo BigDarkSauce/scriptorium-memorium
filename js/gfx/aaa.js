@@ -452,7 +452,7 @@ export function setQuality(q) {
   if (!QUALITY[q]) return AAA.quality;
   const was = AAA.quality; AAA.quality = q; const Q = QUALITY[q];
   AAA.uniforms.uAaaPomSteps.value.set(Q.pom, Q.pomMin); AAA.uniforms.uAaaPomOn.value = Q.pom > 0 ? 1 : 0;
-  if (was !== q) AAA.mats.forEach(m => { const A = m.userData.aaa; const d = defsFor(A.kind, A.opts); Object.keys(m.defines).forEach(k => { if (k.startsWith('AAA')) delete m.defines[k]; }); Object.assign(m.defines, d); A.U.aTex.value = bakeTex(A.kind); m.needsUpdate = true; });
+  if (was !== q) AAA.mats.forEach(m => { const A = m.userData.aaa; const d = defsFor(A.kind, A.opts); Object.keys(m.defines).forEach(k => { if (k.startsWith('AAA') && k !== 'AAA_CASCADES') delete m.defines[k];   /* AAA_CASCADES belongs to materialize.js's patch */ }); Object.assign(m.defines, d); A.U.aTex.value = bakeTex(A.kind); m.needsUpdate = true; });
   return q;
 }
 // per-frame globals (time for ripples)

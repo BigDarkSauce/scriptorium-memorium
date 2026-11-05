@@ -29,7 +29,7 @@ export class Director {
   }
   dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
-  userGrab() { this.hold = 6; this.move = null; this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(); }
+  userGrab() { this.hold = 6; this.move = null; this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase === 'back') { this.restoreLens(); this.zoom = null; if (this.sbar) this.sbar.hidden = true; if (this.ring) this.ring.style.opacity = 0; } else if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(true); }   // grabbing ends rides at once (no delayed snap-back)
 
   // ---------- beats ----------
   // beat: {kind:'event'|'lesson'|'explain', title, text, anchor:()=>Vector3|null, focus:Object3D|null, names:[actor...]}
@@ -153,7 +153,7 @@ export class Director {
     this._a = V3(); this._b = V3(); this._f = V3();
   }
   chip(html, ms) { this.hud(); const c = this.chipEl; clearTimeout(this._chipT); if (!html) { c.hidden = true; return; } c.innerHTML = html; c.hidden = false; c.classList.remove('out'); if (ms) this._chipT = setTimeout(() => c.classList.add('out'), ms); }
-  restoreLens() { const L = this._lens; if (!L) return; const c = this.v.camera; c.near = L.near; c.far = L.far; c.updateProjectionMatrix(); this.v.controls.minDistance = L.minD; this._lens = null; }
+  restoreLens() { const L = this._lens; if (!L) return; const c = this.v.camera; const d = c.position.distanceTo(this.v.controls.target); c.near = Math.min(L.near, Math.max(1e-4, d * .05)); c.far = L.far; c.updateProjectionMatrix(); this.v.controls.minDistance = Math.min(L.minD, d * .98); this._minD0 = L.minD; this._near0 = L.near; this._lens = null; }   // never clamp the orbit radius while the camera is still close in (no snap); the old minimum returns at the next cut
   saveLens() { if (!this._lens) { const c = this.v.camera; this._lens = { near: c.near, far: c.far, minD: this.v.controls.minDistance }; } }
   stopShots() {
     if (this.zoom) { this.zoom = null; if (this.ring) this.ring.style.opacity = 0; if (this.sbar) this.sbar.hidden = true; }
@@ -341,7 +341,7 @@ export class Director {
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {
     this.stopShots();   // a new shot ends a zoom or a ride still on screen (and gives the lens back)
-    const v = this.v, apply = () => { v.fly = null; v.controls.target.copy(target); v.camera.position.copy(pos); v.camera.fov = fov; v.camera.updateProjectionMatrix(); v.camera.lookAt(target); this.fovTo = fov; then && then(); };
+    const v = this.v, apply = () => { v.fly = null; v.controls.target.copy(target); v.camera.position.copy(pos); v.camera.fov = fov; if (this._minD0 != null) { const d = pos.distanceTo(target); v.controls.minDistance = Math.min(this._minD0, d); v.camera.near = Math.min(this._near0 ?? v.camera.near, Math.max(1e-4, d * .05)); this._minD0 = null; } v.camera.updateProjectionMatrix(); v.camera.lookAt(target); this.fovTo = fov; then && then(); };
     this.move = null;
     if (!dip) { v.flyTo ? (v.fly = { from: { p: v.camera.position.clone(), t: v.controls.target.clone() }, to: { p: pos.clone(), t: target.clone() }, k: 0, dur: 1.1, lift: 0 }) : apply(); this.fovTo = fov; v.controls.enabled = false; if (then) setTimeout(then, 1100); return; }
     this.dip = { t: 0, apply, done: false };

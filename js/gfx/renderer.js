@@ -29,6 +29,13 @@ export class Gfx {
   constructor(canvas) {
     this.canvas = canvas;
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    r.localClippingEnabled = true;
+    // three.js keeps one transmission render target per (scene, camera) in a private render state and never frees it:
+    // each new diorama/room scene with glass leaked one GPU texture. Remember the target on its scene (it is the one three
+    // binds inside render() with resolveDepthBuffer === false and mipmaps), so disposeTree(scene) frees it with the rest.
+    { const render = r.render.bind(r), setRT = r.setRenderTarget.bind(r), seen = new WeakSet(); let cur = null;
+      r.render = (scene, camera) => { const prev = cur; cur = scene; try { return render(scene, camera); } finally { cur = prev; } };
+      r.setRenderTarget = (rt, ...a) => { if (rt && cur && cur.isScene && rt.resolveDepthBuffer === false && rt.texture && rt.texture.generateMipmaps && !seen.has(rt)) { seen.add(rt); (cur.userData.__trt || (cur.userData.__trt = new Set())).add(rt); } return setRT(rt, ...a); }; }   // set once: flipping it mid-scene (peel 'clip', the materialize section plane) recompiles every clipped material
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.AgXToneMapping; r.toneMappingExposure = .9;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -54,7 +61,7 @@ export class Gfx {
     this.makeStudioEnv();
     this.frameMs = 16; this._acc = 0; this._n = 0; this.lowQ = false; this._slow = 0;
     // bake the procedural surfaces and compile the atmosphere programs in idle time after boot
-    prebake(); (window.requestIdleCallback || setTimeout)(() => { try { this.atmos.warm(r); } catch (e) { console.warn(e); } }, { timeout: 2500 });
+    prebake(); (window.requestIdleCallback || setTimeout)(() => { this.warmAtmos(); }, { timeout: 2500 });
     this.resize(); addEventListener('resize', () => { cancelAnimationFrame(this._rz); this._rz = requestAnimationFrame(() => this.resize()); });
     // WebGL context loss (GPU reset, driver update, too many tabs): three.js stops drawing and restores its own state;
     // the app pauses, rebuilds the pre-filtered environments (render-target contents are lost) and reopens the place.
@@ -125,8 +132,10 @@ export class Gfx {
   // sun shadow cascades applies when the next diorama is built.
   get quality() { return AAA.quality; }
   set quality(q) { this.setQuality(q); }
-  setQuality(q) { if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.onQuality && this.onQuality(q); return q; }
+  setQuality(q) { if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.warmAtmos(); this.onQuality && this.onQuality(q); return q; }
   get qualityLevels() { return Object.keys(QUALITY); }
+  // compile the atmosphere programs for the target they really draw into (a linear composer buffer, not the screen)
+  warmAtmos() { const r = this.renderer, prev = r.getRenderTarget(); try { r.setRenderTarget(this.composer.writeBuffer); this.atmos.warm(r); } catch (e) { console.warn(e); } finally { r.setRenderTarget(prev); } }
   // bounded caches that fill over idle time (one baked AAA surface per kind and quality) - leak checks subtract these
   cachedTextures() { return AAA.bakes.size; }
   // Precompile every program a scene will need across its states (sketch → real), without rendering:

@@ -124,7 +124,7 @@ export function typeset(node) {
 export function gpuSet(roots, set = new Set()) {
   const addMat = m => { if (!m || set.has(m)) return; set.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) set.add(v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) set.add(v); } };
   [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.isLight && o.shadow) set.add(o);   /* a shadow-casting light owns its shadow-map render target */ if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
-    if (r.isScene) { if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
+    if (r.isScene) { if (r.userData.__trt) r.userData.__trt.forEach(t => set.add(t)); if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
   return set;
 }
 // Frees what `roots` use (object trees, or a Set from gpuSet), except what `keep` (object trees still on screen, or a Set from gpuSet) uses and anything
