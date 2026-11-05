@@ -117,7 +117,14 @@ export const MARBLES = {
   // not the highest-contrast thing in view (presentation-craft value check)
   dove: { base: '#bdb0a1', cloud: ['#c9bdaf', '#aea192', '#c4b8a9', '#b3a696'], vein: '#8a7d70', vein2: '#ddd3c6' },
   grey: { base: '#8e8a85', cloud: ['#a19d97', '#76726d', '#9a958e'], vein: '#55514c', vein2: '#c4bfb7' },
-  red: { base: '#a3645a', cloud: ['#b8796c', '#8a4d44', '#c58c7f', '#97564c'], vein: '#5a2a24', vein2: '#e6c2b4' }
+  red: { base: '#a3645a', cloud: ['#b8796c', '#8a4d44', '#c58c7f', '#97564c'], vein: '#5a2a24', vein2: '#e6c2b4' },
+  // the antique marbles of the columns (Roman spolia): giallo antico (Chemtou: warm yellow, rust veins), verde antico
+  // (Thessalian breccia: dark green with white and black fragments), rosso antico (Taenarum: deep oxblood, fine dark
+  // veins) and pavonazzetto (Docimium: white with violet veins and clasts)
+  giallo: { base: '#d8b878', cloud: ['#e8cd92', '#c49a52', '#f0dcaa', '#b98a48', '#dcbd80'], vein: '#8a4a22', vein2: '#f3e2b8' },
+  verde: { base: '#2c4a3b', cloud: ['#3e6550', '#1b2f26', '#5d8a70', '#24382e', '#e6eee6', '#0f1814'], vein: '#e8efe8', vein2: '#0c1410' },
+  rosso: { base: '#7a221d', cloud: ['#8d2e26', '#5e1714', '#9c3b30', '#6a1c18'], vein: '#3a0c0a', vein2: '#c46a58' },
+  pavonazzetto: { base: '#ece6df', cloud: ['#f6f2ee', '#d9cfd2', '#c9b4bf', '#efe9e4', '#b89aab'], vein: '#6e4a66', vein2: '#a17c95' }
 };
 // Draw a list of shapes 9 times (offset by ±w,±h) so the result tiles seamlessly.
 function wrapDraw(g, w, h, fn) { for (const dx of [-w, 0, w]) for (const dy of [-h, 0, h]) { g.save(); g.translate(dx, dy); fn(); g.restore(); } }
@@ -319,10 +326,11 @@ export function windowSkyTex() {
   });
 }
 // Additive light-shaft texture: bright at the window (v=1), fading to the floor, soft at the edges, faint dust streaks.
+// (falls off quickly, so the shafts read as beams near the windows instead of a golden haze over the window wall)
 export function shaftTex() {
-  return canvasTex('shaft', 64, 256, (g, w, h) => {
-    const img = g.createImageData(w, h), r = mulberry(5), streak = Array.from({ length: w }, () => .75 + r() * .25);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 1 - y / (h - 1), u = x / (w - 1), e = Math.pow(Math.sin(Math.PI * u), .8), a = Math.pow(v, 1.4) * e * streak[x]; const o = (y * w + x) * 4; img.data[o] = 255; img.data[o + 1] = 236; img.data[o + 2] = 200; img.data[o + 3] = a * 255; }
+  return canvasTex('shaft2', 64, 256, (g, w, h) => {
+    const img = g.createImageData(w, h), r = mulberry(5), streak = Array.from({ length: w }, () => .7 + r() * .3);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 1 - y / (h - 1), u = x / (w - 1), e = Math.pow(Math.sin(Math.PI * u), 1.2), a = Math.pow(v, 2.2) * e * streak[x]; const o = (y * w + x) * 4; img.data[o] = 255; img.data[o + 1] = 236; img.data[o + 2] = 200; img.data[o + 3] = a * 255; }
     g.putImageData(img, 0, 0);
   }, { aniso: 1 });
 }

@@ -1,6 +1,7 @@
 // Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
-import { el, compile, fmt, clamp, uid, mod, MATHNAMES } from '../util.js';
+import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath } from '../util.js';
+const TC = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg'];
 export function SVGDEMO(spec,host,fail){
   const NS='http://www.w3.org/2000/svg';const W=600,H=340,P=36;
@@ -8,7 +9,8 @@ export function SVGDEMO(spec,host,fail){
   const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   wrap.append(el('div',{class:'svgwrap'},[svg]));
   const ctrls=el('div',{class:'ctrls'}),reads=el('div',{class:'readouts'});wrap.append(ctrls,reads);
-  const mk=(n,a,parent=svg)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);parent.append(e);return e};
+  // every <text> typesets its maths (m2 → m₂ with a real subscript, x^2 → x², …) when its text is set
+  const mk=(n,a,parent=svg)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(n==='text')Object.defineProperty(e,'textContent',{configurable:true,get(){return TC.get.call(e)},set(v){svgMath(e,v)}});parent.append(e);return e};
   const P_=t==='customsvg'?{}:normParams(spec.params);const pv={};for(const k in P_)pv[k]=P_[k][2];
   let anim=0,alive=true,shown=false;
   // animation loops end by themselves once the diagram leaves the page (scroll closed or re-rendered without cleanup)

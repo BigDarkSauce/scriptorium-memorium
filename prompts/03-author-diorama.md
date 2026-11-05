@@ -20,7 +20,9 @@ SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (
  "params":[{"key":"L","label":"string length","min":0.5,"max":4,"value":2,"unit":"m","rebuild":false}],
  "behaviors":[{"target":"id"|"prefix*"|"kind:tree","type":"sway|spin|bob|orbit|pulse|scale|move|glow|visible|opacity","axis":"x|y|z","amount":"expr","speed":"expr","center":[x,y,z]}],
  "code":"JS function body run once per build (dynamics; see API)",
- "lessons":[{"title":str,"question":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes","opens":str,"shot":"wide|push|close|pov","pov":"actor"}],
+ "lessons":[{"title":str,"question":str,"text":str,"set":{"param":value},"focus":"bodyId","run":seconds,"until":"event:<id>","explain":"shown after the step completes","opens":str,"shot":"wide|push|medium|close|pov","pov":"actor", "chain":[...],"isolate":...,"peel":{...},"zoom":{...},"track":{...} (optional cues, see LESSON)}],
+ "scale":{"m":0.01},               // metres per world unit (only when the scene has a real size; enables the zoom's scale bar)
+ "tracks":{"name":[[x,y,z],...]},   // named camera paths a lesson can ride ("track":"name")
  "camera":{"target":[x,y,z]}
 }
 Shape kinds: box{w,h,d,round} sphere{r} cylinder{r,rt,rb,h} cone{r,h} torus{R,r} capsule{r,h} plane{w,h} disc{r} ring{ri,ro}
@@ -44,6 +46,23 @@ CODE API (spec.code is the body of function(api), no imports/DOM/network):
  api.onClick(raycaster=>{}); api.camera({target:[x,y,z], r:distance, ph:polar, th:azimuth}); api.time(); api.THREE (three.js r170); api.V3(x,y,z); api.noise(x,y,z); api.rand(); api.fmt(n); api.clamp; api.lerp
  api.trail(maxPoints, hex) -> line with .add(vec3) (add it to api.world); api.world (Group)
 RULES: physics/maths must be correct; every definition must be attached to visible bodies and to events; actors are the bodies the explanation is about (2–7 of them), decor gives place and scale and may react through behaviors (trees sway with wind, windows glow at night); lessons are 3–6 short steps, each changing something and pointing at what to watch, each settling one question and opening the next; keep code under ~200 lines.
-LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".
+LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|medium|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".
+OPTIONAL EXPLAINER CUES on a lesson (actor names spelled as in "focus"; see EXPLAINER RULES):
+ "chain":["actor",…] the actors in the ORDER OF CAUSE, 2–8 per lesson (an entry may be {"a":"actor","note":"≤ 6 words"}); a highlight travels link by link with numbered badges ("Step k of n"); "chainPace":0.5–2 (seconds per link, default 0.9) or "chainOn":"event:<substring>" (one link per such event, in step with the motion)
+ "isolate":true | ["actor",…] everything except the subject (true: the focus and the actors the text names) is dimmed and greyed while the step plays
+ "peel":{"layers":["outermost actor",…],"mode":"ghost|lift|clip","order":"out-in|in-out","dwell":2.2,"restore":"step|beat|never"} reveals an inside one named layer at a time ("Layer k of n"), at most 6 layers, restored in reverse
+ "zoom":{"to":"small actor","from":"wide|current","perDecade":3,"fovEnd":30,"stations":[{"at":"actor","hold":2}],"back":false} one continuous zoom into a small part, pausing at stations named after the levels of organisation (leave "shot" out: "zoom" is the shot); the diorama needs "scale":{"m":<metres per world unit>} for its scale bar
+ "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.
+EXPLAINER RULES (how a 3D demo's lessons show a mechanism):
+1. Start from the phenomenon or the problem (what happens without it, what you see or hear), not from the list of parts.
+2. Name the parts before the process: every actor's "describe" gives its JOB in ≤ 10 words (the tour introduces them first).
+3. Order every explanation along the causal chain and give that order as "chain" (cause first, effect last), never in the order of position.
+4. One scale per cause: when the cause moves to a smaller scale, use "zoom" with "stations" named after the levels of organisation (organ, tissue, cell, molecule).
+5. Peel ("peel") only to reveal the active part, and go back afterwards; use "isolate" for the subsystem that acts now, not on every lesson.
+6. A POV ("shot":"pov" or "track") only for what a part experiences (a squeeze, an impulse, its timing), never as the only view of the structure. Molecules move randomly, in crowds, and most collisions do nothing: in micro scenes say "random"/"diffuses", never "travels to", "heads for", "seeks" or "finds".
+7. Put a worked number with its unit on every mechanism that has one (a ratio, a period, a rate), in "explain" or a readout, e.g. 7:56 × 8:60 = 1:60.
+8. At most one counterfactual ("what if it weren't there") per diorama, marked as hypothetical.
+9. Name what is left out ("there are many parts; here are the three that matter").
+10. Keep 3–6 lessons, each with ≤ 8 chain links and on-object labels of ≤ 4 words (definitions go in the text); expand every acronym at first use.
 Return ONLY the JSON scene spec.
 ```

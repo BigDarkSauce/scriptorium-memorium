@@ -2,11 +2,13 @@
 // Every built root carries userData {bodyId, name, role} so tours, labels and the edit tool can find it.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
+import { aaaMaterial } from '../gfx/aaa.js';
 import { alignUV, relief } from '../gfx/proc.js';
 import { canvasTex, labelTex } from '../gfx/textures.js';
 import { compile, mulberry, makeNoise } from '../util.js';
+import { buildTree, treeForest } from './trees.js';
 
 const D2R = Math.PI / 180;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -64,21 +66,9 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       g.add(m); return g;
     }
     case 'group': return g;
-    case 'tree': case 'bush': {
-      const h = num(shape.h, k === 'bush' ? .6 : 2), r = mulberry(ctx.seed || 7);
-      const trunk = mesh(new THREE.CylinderGeometry(h * .04, h * .06, h * .5, 10), makeMaterial(matSpec?.trunk || 'bark'));
-      trunk.position.y = h * .25; if (k === 'tree') g.add(trunk);
-      const leaf = makeMaterial(matSpec && matSpec.preset ? matSpec : { preset: 'foliage', color: shape.color || '#4f7a3a' });
-      const n = k === 'bush' ? 4 : 6;
-      for (let i = 0; i < n; i++) { const s = h * (.22 + r() * .14); const b = mesh(new THREE.IcosahedronGeometry(s, 1), leaf); b.position.set((r() - .5) * h * .35, (k === 'bush' ? s * .7 : h * .55) + r() * h * .3, (r() - .5) * h * .35); b.rotation.set(r() * 3, r() * 3, 0); b.userData.sway = 1; b.userData.inkAngle = 70; g.add(b); }
-      g.userData.sway = true; return g;
-    }
-    case 'pine': {
-      const h = num(shape.h, 2.4); const trunk = mesh(new THREE.CylinderGeometry(h * .03, h * .05, h * .3, 8), makeMaterial('bark')); trunk.position.y = h * .15; g.add(trunk);
-      const leaf = makeMaterial({ preset: 'foliage', color: shape.color || '#2f5a3a' });
-      for (let i = 0; i < 4; i++) { const c = mesh(new THREE.ConeGeometry(h * (.28 - i * .05), h * .38, 9), leaf); c.position.y = h * (.32 + i * .17); c.userData.sway = 1; g.add(c); }
-      g.userData.sway = true; return g;
-    }
+    // believable trees (js/dio/trees.js): bent tapered trunk + branches in AAA bark, displaced leaf clumps fringed by
+    // alpha-tested leaf cards, whorled drooping tiers for pines; shared geometry (4 variants per kind), 2 draw calls each
+    case 'tree': case 'bush': case 'pine': return buildTree(k, shape, matSpec, ctx);
     case 'house': {
       const w = num(shape.w, 1.6), d = num(shape.d, 1.2), h = num(shape.h, 1);
       const wall = mesh(alignUV(new THREE.BoxGeometry(w, h, d)), makeMaterial(matSpec || { preset: 'plaster', color: '#efe3cc' })); wall.position.y = h / 2; g.add(wall);
@@ -94,8 +84,9 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     case 'mountain': case 'rock': case 'terrain': {
       const isT = k === 'terrain', R = num(shape.r, isT ? 6 : (k === 'rock' ? .5 : 3)), H = num(shape.h, isT ? .8 : (k === 'rock' ? .4 : 3));
       const noise = makeNoise(num(shape.seed, 3)), seg = isT ? 128 : 64;
-      const geo = isT ? new THREE.PlaneGeometry(num(shape.w, R * 2), num(shape.d, R * 2), seg, seg) : new THREE.IcosahedronGeometry(1, k === 'rock' ? 3 : 5);
+      let geo = isT ? new THREE.PlaneGeometry(num(shape.w, R * 2), num(shape.d, R * 2), seg, seg) : new THREE.IcosahedronGeometry(1, k === 'rock' ? 3 : 5);
       if (isT) geo.rotateX(-Math.PI / 2);
+      else { geo.deleteAttribute('uv'); geo.deleteAttribute('normal'); geo = mergeVertices(geo); }   // shared vertices: smooth normals (the relief comes from the material), same surface
       const pos = geo.attributes.position, cols = [], c = new THREE.Color();
       const low = new THREE.Color(shape.low || (isT ? '#5f7f3e' : '#5a5148')), high = new THREE.Color(shape.high || (isT ? '#9a8a5e' : '#8d847a')), snow = new THREE.Color('#f4f6fa');
       for (let i = 0; i < pos.count; i++) {
@@ -107,8 +98,14 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
         cols.push(c.r, c.g, c.b);
       }
       geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); geo.computeVertexNormals();
-      const R0 = relief(isT ? 'ground' : 'stone'), nm = R0.normalMap.clone(); nm.repeat.set(isT ? 9 : 3, isT ? 9 : 3); nm.needsUpdate = true;
-      const m = mesh(geo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .93, normalMap: nm, normalScale: new THREE.Vector2(isT ? 1.1 : .9, isT ? 1.1 : .9), sheen: isT ? .45 : 0, sheenColor: new THREE.Color(0xc8e0a0), sheenRoughness: .7 }));
+      // AAA surfaces (js/gfx/aaa.js): terrain = meadow soil with grass on the flats (low → high colours by height, a mud
+      // band along shape.shore / a water line set by the scene), mountains and rocks = craggy rock with parallax relief
+      // and fractured silhouettes; an explicit material in the spec still wins.
+      const sl = shape.snowline ?? .75, peak = k === 'mountain' ? H : H * .7;
+      const mat = matSpec && matSpec.preset ? makeMaterial(matSpec) : isT
+        ? aaaMaterial('meadow', { color: shape.low || '#5f7f3e', color2: shape.high || '#9a8a5e', yRange: [-H * .5, H * 1.5], shoreY: shape.shore != null ? num(shape.shore, 0) : undefined, moss: num(shape.grass, 1) })
+        : aaaMaterial('crag', { color: shape.low || '#5a5148', color2: shape.high || '#8d847a', yRange: [0, peak], snowY: k === 'mountain' && sl < 1.4 ? 2 * sl * H : 0, tile: Math.min(2.2, Math.max(.35, R * .9)), depth: Math.min(.09, Math.max(.012, R * .045)), moss: k === 'rock' ? .5 : .75 });
+      const m = mesh(geo, mat);
       if (isT) { m.castShadow = false; m.userData.noInk = true; } else m.userData.inkAngle = 60; return m;
     }
     case 'cloud': {
@@ -248,4 +245,4 @@ export function buildBody(b, ctx) {
   if (b.hidden) o.visible = false;
   return o;
 }
-export { V3 };
+export { V3, treeForest };

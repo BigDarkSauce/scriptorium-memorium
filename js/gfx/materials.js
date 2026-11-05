@@ -10,6 +10,10 @@
 // ('water', 'liquid', 'solidglass', 'ice', 'gel') do use transmission (ior, thickness, attenuation), so they
 // refract the opaque world behind them — including crystals or bodies submerged in them.
 //
+// AAA surfaces (js/gfx/aaa.js): 'mud', 'cobble' (wet cobblestone), 'crag' (craggy rock / cliff), 'meadow' (soil with
+// grass), 'marblefloor' (polished slabs), 'sand' and 'bark' are procedural GLSL materials with parallax-occlusion
+// relief, silhouette fracture and wetness; spec.color sets their palette base.
+//
 // Card stage: every lit material gets a small hook that, while the materialize front says "card", flattens
 // normal maps and removes clearcoat / sheen so the white card model stays matte and clean; thin glass turns into
 // a half-opaque vellum sheet. Each hook variant carries its own `defines`, which keeps three's program cache
@@ -17,8 +21,12 @@
 import * as THREE from 'three';
 import { paper, parchment, leather, stone, plaster } from './textures.js';
 import { woodSet, brushed, smudge, castIron, paperSet, feltSet, marbleSet, relief, variation } from './proc.js';
+import { aaaMaterial } from './aaa.js';
 
-export const PRESETS = ['brass', 'gold', 'copper', 'chrome', 'steel', 'iron', 'wood', 'darkwood', 'walnut', 'paper', 'parchment', 'card', 'glass', 'solidglass', 'water', 'liquid', 'ice', 'plastic', 'rubber', 'ceramic', 'stone', 'marble', 'plaster', 'fabric', 'felt', 'leather', 'cork', 'foliage', 'bark', 'grass', 'soil', 'sand', 'snow', 'skin', 'membrane', 'gel', 'crystal', 'emissive', 'neon', 'cloud', 'smoke', 'mercury', 'ink', 'chalk'];
+export const PRESETS = ['brass', 'gold', 'copper', 'chrome', 'steel', 'iron', 'wood', 'darkwood', 'walnut', 'paper', 'parchment', 'card', 'glass', 'solidglass', 'water', 'liquid', 'ice', 'plastic', 'rubber', 'ceramic', 'stone', 'marble', 'plaster', 'fabric', 'felt', 'leather', 'cork', 'foliage', 'bark', 'grass', 'soil', 'sand', 'mud', 'cobble', 'crag', 'meadow', 'marblefloor', 'snow', 'skin', 'membrane', 'gel', 'crystal', 'emissive', 'neon', 'cloud', 'smoke', 'mercury', 'ink', 'chalk'];
+// preset → AAA kind (and per-preset defaults: bark on the small trunks of the built-in trees is shallow and fine)
+const AAA_KINDS = { mud: 'mud', cobble: 'cobble', wetcobble: 'cobble', crag: 'crag', craggyrock: 'crag', cliff: 'crag', meadow: 'meadow', meadowsoil: 'meadow', marblefloor: 'marble', sand: 'sand', bark: 'bark' };
+const AAA_OPTS = { bark: { tile: .3, depth: .007 }, cliff: { tile: 3, depth: .14 } };
 const LIQUIDS = new Set(['water', 'liquid', 'gel', 'ice', 'solidglass', 'membrane']);
 
 // ---------- shader hooks ----------
@@ -80,6 +88,7 @@ function liquid({ tint = 0xffffff, dist = 2, ior = 1.333, thickness = 1, rough =
 export function makeMaterial(spec = {}, opts = {}) {
   if (typeof spec === 'string') spec = { preset: spec };
   const p = spec.preset || 'plastic', col = spec.color ? new THREE.Color(spec.color) : null;
+  if (AAA_KINDS[p]) { const m = aaaMaterial(AAA_KINDS[p], Object.assign({ color: spec.color, side: spec.side === 'double' ? THREE.DoubleSide : undefined }, AAA_OPTS[p] || {}, spec.aaa || {})); m.userData.preset = p; return m; }
   let m;
   const P = (o) => new THREE.MeshPhysicalMaterial(o);
   const metal = (color, rough, o = {}) => P(Object.assign({ color, metalness: 1, roughness: rough, roughnessMap: smudge().roughnessMap, envMapIntensity: 1.15 }, o));

@@ -9,6 +9,8 @@ import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometr
 import { useEnvironment } from './environments.js';
 import { clamp, fmt, lerp, mod, mulberry, compile } from '../util.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
+import { aaaMaterial } from '../gfx/aaa.js';
+import { treeForest } from './trees.js';
 import { alignUV, cloudDensity, hillRidge, softDisc, relief, variation } from '../gfx/proc.js';
 // Lights: v2 ran with legacy light units; scale to physically based units so scenes keep their look.
 const PI = Math.PI;
@@ -35,7 +37,7 @@ export const DIO = {};
 // Readouts use FIXED decimals (no width jitter while a value changes) and a true minus sign.
 const fx=(v,d=2)=>{if(typeof v!=='number'||!isFinite(v))return '—';const s=(Math.abs(v)<.5*Math.pow(10,-d)?0:v).toFixed(d);return s.charAt(0)==='-'?'−'+s.slice(1):s};
 const DEG=180/Math.PI;
-function freeTree(o,keep){o.traverse(m=>{if(m.geometry)m.geometry.dispose();if(m.material)[].concat(m.material).forEach(x=>{if(!keep.has(x))x.dispose()});if(m.isInstancedMesh)m.dispose()})}
+function freeTree(o,keep){o.traverse(m=>{if(m.geometry&&!m.geometry.userData.shared)m.geometry.dispose();if(m.material)[].concat(m.material).forEach(x=>{if(!keep.has(x))x.dispose()});if(m.isInstancedMesh)m.dispose()})}
 // stage(D, preset, envOpts): picks the setting that suits the subject (unless the author chose one), frees the previous
 // build's GPU resources when the world is rebuilt, and returns small helpers:
 //  part(name, parent, actor) a named group (the Objects list reads "stand", "bob · m", …); put(o, name, parent)
@@ -82,14 +84,14 @@ function satin(m){const c=m.clone();c.clearcoat=Math.min(c.clearcoat||0,.3);c.cl
 // countryside around an outdoor plinth: hedgerow trees beyond the plinth and far hills in the haze, so the frame has
 // a middle and a far plane (aerial perspective comes from the landscape fog)
 function countryside(W,seed=3,camTh=null){const skip=camTh==null?null:a=>Math.abs(Math.atan2(Math.sin(a-camTh),Math.cos(a-camTh)))<1.35; // keep trees out of the camera's side
-  const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=makeMaterial({preset:'grass',color:'#5a7a3a'});
+  const g=new T.Group();g.name='countryside (background)';const r=mulberry(seed),leaf=makeMaterial({preset:'foliage',color:'#3d5a2c'}),bark=makeMaterial('bark'),grass=aaaMaterial('meadow',{tile:2.4,depth:.05,moss:1,bound:{type:'ring',x:0,z:0,rIn:7.6,rOut:120}}); // meadow soil + grass with relief (js/gfx/aaa.js)
   const field=new T.Mesh(new T.RingGeometry(7.6,120,96,3).rotateX(-Math.PI/2),grass);field.position.y=-1.02;field.receiveShadow=true;g.add(field);
-  const crown=new T.IcosahedronGeometry(1,1),trunk=new T.CylinderGeometry(.08,.12,1,6),NT=34,cr=new T.InstancedMesh(crown,leaf,NT*3),tr=new T.InstancedMesh(trunk,bark,NT),m4=new T.Matrix4(),q=new T.Quaternion(),sv=V3(1,1,1),pv=V3(0,0,0);let nt=0,nc=0;
-  for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1,x=Math.sin(a)*d,z=Math.cos(a)*d;m4.compose(pv.set(x,-1+s*.7,z),q,sv.set(s,s*1.4,s));tr.setMatrixAt(nt++,m4);
-   for(let k=0;k<3;k++){const c=s*(.8+r()*.5);m4.compose(pv.set(x+(r()-.5)*s,-1+s*(1.7+r()*.8),z+(r()-.5)*s),q,sv.set(c,c,c));cr.setMatrixAt(nc++,m4)}}
-  tr.count=nt;cr.count=nc;tr.computeBoundingSphere();cr.computeBoundingSphere();g.add(tr,cr);
+  // procedural broadleaf + pine forest (js/dio/trees.js): instanced, 2 draw calls per variant; shadows land in the sun's outer cascades
+  const NT=34,broad=[],pines=[];
+  for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1;(r()<.33?pines:broad).push({x:Math.sin(a)*d,y:-1,z:Math.cos(a)*d,h:s*2.6,ry:r()*6.28})}
+  if(broad.length)g.add(treeForest('tree',broad,{color:'#3d5a2c',seed}));if(pines.length)g.add(treeForest('pine',pines,{seed:seed+7}));
   const hill=new T.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),hm=new T.MeshStandardMaterial({color:0x4a6040,roughness:1});
-  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
+  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.castShadow=h.receiveShadow=true;h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
   g.traverse(o=>{o.userData.noInk=true;o.userData.noContact=true});W.add(g);return g}
 // shots helper: target may be a function (moving bodies); dist is for the base lens
 const SHOT=(target,dist)=>({target,dist});
@@ -563,7 +565,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
   let bx=2.2,by=1.6,vx=0,vy=0,rest=false,still=0;const grad=(x,y,o)=>{const e=1e-3;o[0]=(F(x+e,y)-F(x-e,y))/(2*e);o[1]=(F(x,y+e)-F(x,y-e))/(2*e);return o},G=[0,0],tmp=V3(0,0,0);
   const height=(x,y)=>Y0+(F(x,y)-lo)*sc;
   SUR.ball=()=>V3(bx,height(bx,by)+.2,by);SUR.Y0=Y0;
-  D.label('ball',at(v=>v.set(bx,height(bx,by)+.55,by)),BL);D.label('−∇f',at(v=>gA.visible?v.copy(gA.position).setY(gA.position.y+.25):null),true);D.label('z = '+ex,at(v=>v.set(-R_,Y0+2.9,-R_)),RM);
+  D.label('ball',at(v=>v.set(bx,height(bx,by)+.55,by)),BL);D.label('−∇f',at(v=>gA.visible?v.copy(gA.position).setY(gA.position.y+.25):null),true);D.label('surface · z = '+ex,at(v=>v.set(-R_,Y0+2.9,-R_)),RM);
   ev('ball placed — click the surface to drop it elsewhere',V3(bx,height(bx,by)+.2,by));D.seriesName='height f(ball) — falls toward a minimum';
   return{orbit,
    click(rc){const hit=rc.intersectObject(surf)[0];if(hit){bx=hit.point.x;by=hit.point.z;vx=vy=0;rest=false;still=0;tr.userData.count=0;ev('ball dropped at ('+fx(bx,2)+', '+fx(by,2)+')',hit.point,{sound:'clack'})}},
@@ -707,15 +709,14 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   // meadow strip under the sky: grass that gets wet (darker, clearcoated) when it rains; a fence and hedges for scale
   const MW=part('meadow (grass, hedges, fence)');
   const gr=new THREE.RingGeometry(4.75,6.55,192,4);gr.rotateX(-Math.PI/2);
-  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=skyHook(new THREE.MeshPhysicalMaterial({map:rp6(variation('grass').map),normalMap:rp6(relief('ground').normalMap),normalScale:new THREE.Vector2(1.2,1.2),color:0x2c3a1c,roughness:.95,clearcoat:0,clearcoatRoughness:.08}),'albedo','ground');
+  const rp6=t=>{const c=t.clone();c.repeat.set(7,7);c.needsUpdate=true;return c};const groundM=aaaMaterial('meadow',{tile:1.25,depth:.032,moss:1,bound:{type:'ring',x:0,z:0,rIn:4.75,rOut:6.55},pdo:false}); // AAA meadow (js/gfx/aaa.js): relief, fractured edges; rain wets it (see the weather below)
   const ground=deco(put(new THREE.Mesh(gr,groundM),'meadow ground',MW));ground.position.y=.02;ground.receiveShadow=true;
   const inMeadow=()=>rng()*AL;
   {const GN=1600,blade=new THREE.ConeGeometry(.012,.16,3);blade.translate(0,.08,0);const gm=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.8,sheen:.5,sheenColor:new THREE.Color(0xc8e090)});const tufts=put(new THREE.InstancedMesh(blade,gm,GN),'grass tufts',MW);tufts.userData.noInk=true;tufts.receiveShadow=true;const mm=new THREE.Matrix4(),qq=new THREE.Quaternion(),cc=new THREE.Color();
    for(let i=0;i<GN;i++){const a=inMeadow(),r=4.72+Math.pow(rng(),2.2)*1.75,h=.5+rng()*1.1;qq.setFromEuler(new THREE.Euler((rng()-.5)*.6,rng()*6,(rng()-.5)*.6));mm.compose(V3(Math.sin(a)*r,.02,Math.cos(a)*r),qq,V3(1,h,1));tufts.setMatrixAt(i,mm);tufts.setColorAt(i,cc.setHSL(.2+rng()*.08,.45+rng()*.2,.16+rng()*.14))}tufts.computeBoundingBox();tufts.computeBoundingSphere()}
-  const leaf=makeMaterial({preset:'foliage',color:'#34502a'});leaf.flatShading=false;leaf.normalMap=relief('leather').normalMap;leaf.normalScale.set(1.5,1.5);const fenceM=makeMaterial('darkwood');
-  const bushG=(()=>{const g=mergeVertices(new THREE.IcosahedronGeometry(1,4).deleteAttribute('normal').deleteAttribute('uv')),P=g.attributes.position,v=V3();for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);const n=1+.22*Math.sin(v.x*7.1+v.y*3.3)*Math.cos(v.z*6.7-v.y*2.1)+.12*Math.sin(v.x*17+v.z*13);v.multiplyScalar(n);if(v.y<-.3)v.y=-.3-(v.y+.3)*.2;P.setXYZ(i,v.x,v.y,v.z)}g.computeVertexNormals();const uv=[];for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i);uv.push(Math.atan2(v.z,v.x)/6.283+.5,v.y*.5+.5)}g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));return g})();
+  const fenceM=makeMaterial('darkwood');
   const hedges=part('hedges',MW),fence=part('fence',MW);
-  for(let i=0;i<26;i++){const a=(i+rng()*.5)/26*AL,r=5.0+rng()*.25,s=.16+rng()*.16;const b=new THREE.Mesh(bushG,leaf);b.position.set(Math.sin(a)*r,s*.3,Math.cos(a)*r);b.scale.set(s*(1+rng()*.5),s*.8,s);b.rotation.y=rng()*6;b.castShadow=true;b.receiveShadow=true;b.userData.noInk=true;hedges.add(b)}
+  {const items=[];for(let i=0;i<26;i++){const a=(i+rng()*.5)/26*AL,r=5.0+rng()*.25,s=.16+rng()*.16;items.push({x:Math.sin(a)*r,y:0,z:Math.cos(a)*r,h:s*2.4,ry:rng()*6.28})}const hf=treeForest('bush',items,{color:'#34502a',seed:5});hf.traverse(o=>{o.userData.noInk=true});hedges.add(hf)} // procedural hedge bushes (js/dio/trees.js)
   {const postG=new THREE.BoxGeometry(.05,.42,.05);for(let i=0;i<36;i++){const a=i/36*AL,r=5.55;const post=new THREE.Mesh(postG,fenceM);post.position.set(Math.sin(a)*r,.21,Math.cos(a)*r);post.rotation.y=a;post.castShadow=true;post.userData.noInk=true;fence.add(post)}}
   [.18,.34].forEach(y=>{const rail=new THREE.Mesh(new THREE.TorusGeometry(5.55,.016,5,192),fenceM);rail.rotation.x=Math.PI/2;rail.position.y=y;rail.userData.noInk=true;fence.add(rail)});
   // rain: streaks of varied length, speed and opacity (RGBA vertex colours; the tail fades), splash rings on the meadow
@@ -872,7 +873,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   const spoutY=()=>clamp(WY+hs,.45,TOP-.02);
   DIO.weatherglass._live={spoutY,hgY:()=>yOfP(hgShown),bedY:()=>SY0+.15};
   D.label('Goethe weather glass',()=>V3(GX,5.05,GZ),GW);D.label('spout column · water level',()=>V3(SXp+.05,Math.max(1.1,spoutY())+.25,GZ),false,SPG);D.label('trapped air · P_in',()=>V3(GX,3.15,GZ),false,flask);D.label('flask water',()=>V3(GX-.45,WY-.3,GZ+.7),false,fw);
-  D.label('storm glass · sealed tube',()=>V3(SX,STOP+.65,SZ),false,SG);D.label('crystals',()=>mass()>.004?V3(SX+.05,.82,SZ+.3):null,false,CG);D.label('camphor solution',()=>V3(SX+.25,2.6,SZ+.35),false,liq);
+  D.label('storm glass · sealed tube',()=>V3(SX,STOP+.65,SZ),false,SG);D.label('crystals',()=>mass()>.004?V3(SX+.05,.82,SZ+.3):null,false,CG);D.label('camphor solution',()=>V3(SX+.25,2.6,SZ+.35),false,liq);D.label('seed bed',()=>V3(SX-.1,SY0+.22,SZ+.38),false,baseC);
   D.label('mercury barometer',()=>V3(BX,7.45,BZ),false,BG);D.label('mercury column',()=>V3(tubeX+.3,yOfP(hgShown),TZ+.15),false,HGG);D.label('thermometer',()=>V3(BX+.06,TY0+TH+.25,BZ+.17),false,THG);
   D.label('sky · cloud cover',()=>V3(-3.6,6.4,-4.7),false,deckMid);
   D.event('glass sealed at '+P0.toFixed(1)+' hPa and 15 °C; trapped air now follows P_in = (P₀ − e₀)·(T/T₀)·(V₀/V) + e(T)',V3(GX,2.4,GZ));D.seriesName='outside pressure P (hPa)';
@@ -954,7 +955,7 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
     rain.material.opacity=rainK;rain.visible=rainK>.01;
     if(rain.visible){const pa=rainG.attributes.position.array,sl=.06;for(let i=0;i<RN;i++){const d=RD[i];d.y-=dt*d.v*(.8+rainK*.4);if(d.y<0){if(rng()<.35*rainK){const s=SPL[spI%SPN]||(SPL[spI%SPN]={});Object.assign(s,{x:d.x,z:d.z,a:0});spI++}const q=rainBand();d.x=q[0];d.z=q[1];d.y+=H}pa[i*6]=d.x+sl*d.L;pa[i*6+1]=d.y+d.L;pa[i*6+2]=d.z;pa[i*6+3]=d.x;pa[i*6+4]=d.y;pa[i*6+5]=d.z}rainG.attributes.position.needsUpdate=true}
     for(let i=0;i<SPN;i++){const s=SPL[i];if(!s||s.a>1){m4.makeScale(0,0,0)}else{s.a+=dt*4;const r=.03+s.a*.1;m4.makeScale(r,1,r);m4.setPosition(s.x,.03,s.z)}splash.setMatrixAt(i,m4)}splash.instanceMatrix.needsUpdate=true;splash.material.opacity=.5*rainK;
-    groundM.clearcoat=wet*.9;groundM.roughness=.92-wet*.35;groundM.color.setRGB(.33-.12*wet,.42-.14*wet,.21-.08*wet);
+    D.scene.userData.aaaWet={g:wet,rain:rainK}; // wet ground: darker, glossier, puddles in the hollows, ripples while it rains (AAA wetness)
     // sky decks drift at different speeds (motion parallax); storm scud only shows in heavy cover
     decks.forEach(L=>{L.t.offset.x+=dt*L.speed*(1+cover*1.5)});scud.visible=cover>.45;
     flash=Math.max(0,flash-dt*5);flashL.intensity=flash*6;
@@ -1009,27 +1010,32 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   'pressure falling':hgArrow(false),
   'pressure rising':hgArrow(true),
   'rain begins':[{from:[-1.6,5.2,-4.9],to:[-1.6,1.4,-4.6],label:'rain from the thickening cloud'}]};}
+// 1 world unit = 5 cm (the storm glass is about 20 cm tall): the scale bar of the zoom into the crystals
+DIO.weatherglass.scale={m:.05};
 // Default lessons (used when a weatherglass demo brings none). Same format as the lessons at the end of this file;
 // every `until` was checked by stepping the model headlessly from its default parameters, and the numbers in
 // "explain" are the ones that run produces.
 DIO.weatherglass.lessons=[
- {title:'Read the barometer',question:'What holds the mercury column up?',focus:'mercury column',set:{auto:0,P:1013,T:15,P0:1013},run:6,shot:'close',
-  text:'Auto weather is switched off and the outside pressure is held at 1013 hPa. Look at the top of the mercury column in the brass window and read it against the scale.',
+ {title:'Read the barometer',question:'What holds the mercury column up?',focus:'mercury column',set:{auto:0,P:1013,T:15,P0:1013},run:8,shot:'close',
+  peel:{layers:['mercury barometer'],mode:'ghost',dwell:2,restore:'step'},
+  text:'Auto weather is switched off and the outside pressure is held at 1013 hPa. Look at the top of the mercury column in the brass window and read it against the scale. The walnut case of the mercury barometer fades for a moment, so you can follow the mercury down to its cistern.',
   explain:'Above the mercury there is vacuum, so only the air pressing on the open cistern holds the column up: h = P/(ρ_Hg g) = 101 325 Pa ÷ (13 595 kg/m³ × 9.81 m/s²) ≈ 760 mm. Each hPa of air pressure holds 0.75 mm of mercury, so the barometer reads the weight of the air directly, in absolute terms.',
   opens:'What does the Goethe glass do when the outside pressure falls?'},
  {title:'A deep low',question:'What does the Goethe glass do when the outside pressure falls?',focus:'spout column',set:{P:995},until:'event:spout settles',run:30,shot:'close',
-  text:'Lower the outside pressure to 995 hPa, as a low arrives. Watch the trapped air of the Goethe glass push the blue water up the spout until the column settles.',
+  chain:[{a:'trapped air',note:'pushes as hard as when sealed'},{a:'flask water',note:'pressed down'},{a:'spout column',note:'climbs until it balances'}],chainPace:1.2,
+  text:'Lower the outside pressure to 995 hPa, as a low arrives. Watch the trapped air of the Goethe glass press on the flask water and push the spout column up until it settles.',
   explain:'The trapped air keeps close to its sealing pressure while the outside air now pushes 18 hPa less, so the difference lifts water up the open spout until the weight of the raised water balances it: P_in − P = ρgΔh. The spout settles near 113 mm, well below the textbook (P₀T/T₀ − P)/ρg ≈ 184 mm, because the trapped air expands as the water climbs and its pressure falls (readout “P inside”).',
   opens:'Is a high spout always a sign of low pressure?'},
- {title:'A warm afternoon',question:'Is a high spout always a sign of low pressure?',focus:'spout column',set:{P:1013,T:20},until:'event:spout settles',run:30,shot:'medium',
+ {title:'A warm afternoon',question:'Is a high spout always a sign of low pressure?',focus:'spout column',set:{P:1013,T:20},until:'event:spout settles',run:30,shot:'medium',isolate:['Goethe weather glass','thermometer'],
   text:'Return the outside pressure to a normal 1013 hPa, but warm the air to 20 °C. Watch where the spout settles this time.',
   explain:'Warming raises the pressure of the trapped air by about 3.5 hPa per kelvin for the air itself and 1.3 hPa per kelvin from extra water vapour, so 5 K of warming imitates a fall of about 24 hPa: the spout settles near 148 mm although the pressure is normal. A Goethe glass mixes temperature and pressure; only the barometer reads pressure alone.',
   opens:'What makes crystals appear in the sealed storm glass?'},
- {title:'A cold night',question:'What makes crystals appear in the sealed storm glass?',focus:'storm glass',set:{T:12},until:'event:crystals nucleate',run:40,shot:'push',
-  text:'Cool the air to 12 °C and watch the clear liquid of the storm glass on the right. (The Goethe glass reacts too: its trapped air cools and shrinks, the spout water sinks below the bend, and outside air bubbles in.)',
+ {title:'A cold night',question:'What makes crystals appear in the sealed storm glass?',focus:'storm glass',set:{T:12},until:'event:crystals nucleate',run:40,
+  zoom:{to:'seed bed',from:'wide',perDecade:2.5,stations:[{at:'storm glass',hold:1.5},{at:'crystals',hold:1.5}]},
+  text:'Cool the air to 12 °C and watch the clear liquid of the storm glass on the right, down to the seed bed at the bottom. (The Goethe glass reacts too: its trapped air cools and shrinks, the spout water sinks below the bend, and outside air bubbles in.)',
   explain:'The sealed tube never feels the outside pressure, only the temperature. Camphor dissolves less in cold liquid (its solubility changes by about 7 % per kelvin in this model), so once the liquid has followed the air down (it lags by about an hour and a half), it holds more camphor than it can keep: the supersaturation σ = c/S − 1 passes 0.04 and fern fronds nucleate (σ was about 0.07 when they appeared in our run).',
   opens:'Do the crystals vanish again when it warms?'},
- {title:'Morning sun',question:'Do the crystals vanish again when it warms?',focus:'crystals',set:{T:20},until:'event:crystals redissolve',run:45,shot:'close',
+ {title:'Morning sun',question:'Do the crystals vanish again when it warms?',focus:'crystals',set:{T:20},until:'event:crystals redissolve',run:45,shot:'close',isolate:['storm glass','thermometer'],
   text:'Warm the air to 20 °C. Watch the fronds thin from their tips while the seed bed at the bottom stays.',
   explain:'Warming raises the solubility above the camphor in solution, so σ turns negative and the young fronds dissolve, within an hour or so in our run. The compact bed at the bottom meets the liquid only on its top face and dissolves far more slowly. The storm glass is a slow thermometer, not a barometer (Williams 2025).',
   opens:'Explore: switch auto weather back on and see which instruments follow the storm and which follow the clock.'}];
@@ -1041,7 +1047,7 @@ DIO.weatherglass.lessons=[
    Chaos: the twins' separation grows ~e^(λt) (λ estimated as ln(|Δθ₂|/ε)/t). A flip = θ₂ passes an odd multiple of π. */
 const DPN={};
 DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower mass'],L1:[.5,3,1.5,'m','upper arm'],L2:[.5,3,1.5,'m','lower arm'],theta1:[-180,180,120,'°','upper angle'],theta2:[-180,180,-10,'°','lower angle'],g:[1,25,9.81,'m/s²','gravity'],eps:[0,.01,.001,'rad','twin offset']},
- build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.07,-.83]});if(own){R.sun.intensity*=5;if(R.fill)R.fill.intensity=1.2;if(R.rim)R.rim.intensity=2;R.hemi.intensity=.5;D.scene.environmentIntensity=1.1} // moonlit key, the lantern side as warm fill
+ build(D,p){const {W,R,part,put,guides,at,ev,own}=stage(D,'night',{moon:[-.55,.07,-.83]});if(own){R.sun.intensity*=6;if(R.fill)R.fill.intensity=2.4;if(R.rim)R.rim.intensity=3.2;R.nightFloor=.3;D.scene.environmentIntensity=1.6;if(D.scene.userData.look){D.scene.userData.look.exposure=1.25;D.scene.userData.look.vignette=.34}} // the low moon behind is the key (rims every edge), the lantern side a warm front fill; moonlit skylight (hemisphere floor) and a brighter exposure lift the faces out of the dark while the frame stays nocturnal
  const piv=V3(0,6.4,0),sc=4.6/(p.L1+p.L2),oak=D.mats.wood,brass=D.mats.brass,steel=makeMaterial('steel');
   const orbit={target:V3(0,3.7,0),r:15,ph:1.32,th:.34};
   const FR=part('frame');[-3,3].forEach(x=>{const c=box(.35,6.9,.35,oak);c.position.set(x,3.45,-.7);FR.add(c);const f=box(.6,.12,1.4,oak);f.position.set(x,.06,-.7);FR.add(f)});put(box(6.6,.3,.34,oak),'cross bar',FR).position.set(0,6.75,-.7);put(box(.2,.16,.8,steel),'pivot bracket',FR).position.set(0,6.55,-.32);
@@ -1357,32 +1363,35 @@ DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,
 // Every `until` below was checked by stepping the model headlessly (see the report): the event fires within `run`.
 DIO.pendulum.lessons=[
  {title:'Time one swing',question:'How long does one swing take?',focus:'bob',set:{L:2,g:9.81,theta0:8,damping:0},until:'event:period measured',run:12,
-  text:'Pull the bob only 8° aside and let it go. Watch it swing there and back; the period is the time for one full there-and-back.',
+  chain:[{a:'pivot',note:'holds the top fixed'},{a:'string · L',note:'keeps the bob on an arc'},{a:'bob · m',note:'gravity pulls it back down'}],chainPace:1.1,
+  text:'Pull the bob only 8° aside and let it go. The pivot holds the string, and the string keeps the bob on its arc. Watch it swing there and back; the period is the time for one full there-and-back.',
   explain:'One full swing took 2.84 s. Near the bottom, the part of gravity that pulls the bob along its arc grows in step with how far it is from the bottom, just as a spring pulls harder the more it is stretched. That makes the period 2π√(L/g) = 2π√(2 m ÷ 9.81 m/s²) = 2.84 s, and it does not depend on how far you pulled it, as long as the swing is small.',
   opens:'Does a really wide swing take longer?'},
- {title:'A wide swing',question:'Does a wide swing take longer?',focus:'bob',set:{theta0:150},until:'event:period measured',run:15,
+ {title:'A wide swing',question:'Does a wide swing take longer?',focus:'bob',set:{theta0:150},until:'event:period measured',run:15,isolate:['bob · m','string · L','angle scale'],
   text:'Now release the same bob from 150°, almost upside down. Compare the measured period with the small-swing period 2π√(L/g) in the readouts.',
   explain:'The swing took 5.00 s, 1.76 times the small-swing 2.84 s. Far out on the arc, gravity\'s pull along the path grows more slowly than the distance (it goes like sin θ, not θ), so the bob is pulled back more gently and lingers near the top. The exact result 4√(L/g)·K(sin(θ₀/2)) = 5.00 s matches the measurement.',
-  opens:'Where along its path is the bob fastest?'},
+  opens:'Where is the bob fastest, and where does it stop?'},
  {title:'Ride the bob',question:'Where is the bob fastest, and where does it stop?',focus:'bob',set:{theta0:40},shot:'pov',pov:'bob',until:'event:period measured',run:12,
   text:'Sit on the bob for a full swing from 40°. Feel it rush through the bottom and pause at each end.',
   explain:'At the bottom you passed at 3.03 m/s; at each end you stopped for an instant. All the height lost on the way down, L(1 − cos 40°) = 0.47 m, became speed: v = √(2·9.81·0.47) = 3.03 m/s. On the way up the same speed is turned back into height, so the bob stops at the same 40° on the other side. The 40° swing took 2.93 s, 3 % longer than a small swing.',
   opens:'What does the length of the string do?'},
- {title:'A shorter string',question:'What does the length of the string do?',focus:'string',set:{L:.5,theta0:8},until:'event:period measured',run:12,
+ {title:'A shorter string',question:'What does the length of the string do?',focus:'string',set:{L:.5,theta0:8},until:'event:period measured',run:12,isolate:true,
   text:'Cut the string to a quarter, 0.5 m, and time one small swing again.',
   explain:'The period fell from 2.84 s to 1.42 s: a quarter of the length, half the time. The period goes as √L: a shorter pendulum has less arc to cover and is pulled back more steeply, so it swings faster. Gravity does the opposite: a stronger g also shortens the period, as √(1/g).',
-  opens:'What happens when the pivot has friction?'},
+  opens:'Where does the energy go when the swing dies away?'},
  {title:'Friction in the pivot',question:'Where does the energy go when the swing dies away?',focus:'bob',set:{L:2,theta0:40,damping:.3},until:'event:amplitude halved',run:20,
-  text:'Add a little friction (damping 0.3 per second) and watch how the swings shrink.',
+  chain:[{a:'pivot',note:'friction turns motion into heat'},{a:'bob · m',note:'each swing a little smaller'}],chainPace:1.4,
+  text:'Add a little friction in the pivot (damping 0.3 per second) and watch how the swings of the bob shrink.',
   explain:'The swing shrank from 40° to 20° in about 4.6 s, close to the small-swing estimate 2 ln 2 / c = 4.62 s. Friction takes a fixed fraction of the motion each second, so the amplitude decays exponentially, e^(−ct/2). The energy is not lost: it becomes heat in the pivot. The period hardly changes, which is why a pendulum keeps good time even as it slows.',
   opens:'Explore: try a long string on the Moon (g = 1.62 m/s²).'}];
 
 DIO.spring.lessons=[
  {title:'One bounce',question:'How long does one oscillation take?',focus:'mass',set:{k:12,m:1,c:0,x0:.7},until:'event:period measured',run:10,
-  text:'The cart is pulled 0.7 m from the rest position and released. Watch it pass through the middle and come back.',
+  chain:[{a:'spring · k',note:'pulls back, F = −kx'},{a:'mass · m',note:'speeds up toward x = 0'},{a:'metre scale',note:'overshoots x = 0, then returns'}],chainPace:1.1,
+  text:'The cart (the mass) is pulled 0.7 m from x = 0 on the metre scale and released. The stretched spring pulls it back: watch it pass through the middle and come back.',
   explain:'One oscillation took 1.81 s. The spring pulls back in proportion to the stretch (F = −kx), so a bigger stretch means a bigger pull and a faster return; the two effects cancel and every swing takes the same time, T = 2π√(m/k) = 2π√(1/12) = 1.81 s.',
   opens:'What does a heavier mass do?'},
- {title:'A heavier mass',question:'What does a heavier mass do?',focus:'mass',set:{m:4},until:'event:period measured',run:12,
+ {title:'A heavier mass',question:'What does a heavier mass do?',focus:'mass',set:{m:4},until:'event:period measured',run:12,isolate:['mass · m','spring · k'],
   text:'Make the cart four times heavier, 4 kg, with the same spring.',
   explain:'The period doubled to 3.63 s. The same spring force now has four times the mass to accelerate, so the cart picks up speed four times more slowly; the period grows as √m, and √4 = 2.',
   opens:'And a stiffer spring?'},
@@ -1394,16 +1403,17 @@ DIO.spring.lessons=[
   text:'Look closely at the cart as it rushes through the middle of the track. Watch KE and PE in the readouts.',
   explain:'At the middle the spring is relaxed (PE = 0) and the cart has its full ½mv² = 2.94 J, moving at 2.42 m/s. At the ends it stops and all 2.94 J is stored in the spring as ½kx² = ½·12·0.7². The total stays 2.94 J: the energy only changes form.',
   opens:'What happens when there is friction?'},
- {title:'Damping',question:'What happens when there is friction?',focus:'mass',set:{c:.8},until:'event:amplitude halved',run:12,
+ {title:'Damping',question:'What happens when there is friction?',focus:'mass',set:{c:.8},until:'event:amplitude halved',run:12,isolate:true,
   text:'Add damping, 0.8 kg/s, as if the cart rolled through oil.',
   explain:'The swing halved to 0.35 m after 1.73 s, exactly the prediction 2m ln 2 / c = 1.73 s. The damping force opposes the velocity, so it takes energy away on every pass and the swings shrink exponentially, while each one still takes about the same time.',
   opens:'Explore: what damping stops it without any overshoot? (critical damping c = 2√(km) ≈ 6.9 kg/s)'}];
 
 DIO.projectile.lessons=[
  {title:'How far does it fly?',question:'How far does the ball fly?',focus:'ball',set:{v0:20,angle:45,g:9.81,drag:0},until:'event:lands',run:8,
+  chain:[{a:'cannon',note:'launches it at 20 m/s'},{a:'ball',note:'falls while it flies forward'},{a:'flag',note:'the no-drag range R'}],chainPace:1.1,
   text:'Fire the cannon at 20 m/s and 45°. Watch the ball land next to the flag.',
   explain:'The ball landed 40.75 m away after 2.88 s, matching R = v₀² sin 2θ / g = 400 × 1 / 9.81 = 40.77 m. Gravity only slows the climb and then speeds the fall; the forward speed v₀ cos θ = 14.1 m/s carries the ball sideways the whole time, so range = forward speed × flight time.',
-  opens:'What is it like at the top?'},
+  opens:'Does the ball stop at the top?'},
  {title:'Ride the ball',question:'Does the ball stop at the top?',focus:'ball',set:{angle:45},shot:'pov',pov:'ball',until:'event:apex',run:6,
   text:'Ride along on the cannon ball and look ahead as it reaches the top of its arc.',
   explain:'At the top (10.18 m, after 1.44 s) the ball stopped climbing but kept moving forward at 14.14 m/s. Only the vertical speed is changed by gravity; nothing pushes it sideways, so the sideways speed never changes. The top is where vertical speed passes through zero.',
@@ -1416,17 +1426,18 @@ DIO.projectile.lessons=[
   text:'Fire at 60°, as far above 45° as 30° was below it.',
   explain:'At 60° the ball also landed at 35.3 m, but it flew higher and longer (3.53 s instead of 2.04 s). sin 2θ is the same for 30° and 60°, so complementary angles share a range: what one gains in flight time the other gains in forward speed.',
   opens:'What does the air do?'},
- {title:'Air drag',question:'What does the air do?',focus:'ball',set:{angle:45,drag:.3},until:'event:lands',run:8,
+ {title:'Air drag',question:'What does the air do?',focus:'ball',set:{angle:45,drag:.3},until:'event:lands',run:8,isolate:['ball','no-drag parabola'],
   text:'Add air drag (0.3 per second) and fire at 45° again. Compare the path with the dashed no-drag parabola.',
   explain:'With drag the ball landed at 25.2 m instead of 40.8 m, and its path is no longer symmetric: it climbs along a parabola-like curve but comes down more steeply. Drag takes speed away all the time, most at the start when the ball is fastest, so it falls short; with drag the best angle is below 45°.',
   opens:'Explore: the same shot on the Moon (g = 1.62).'}];
 
 DIO.orbit.lessons=[
  {title:'Why it does not fall in',question:'Why doesn\'t the planet fall into the star?',focus:'planet',set:{GM:12,r0:3,vfactor:.8},until:'event:perihelion',run:10,
+  chain:[{a:'star · M',note:'pulls the planet inward'},{a:'planet · m',note:'its sideways speed carries it past'}],chainPace:1.4,
   text:'The planet starts sideways at 80 % of the speed a circular orbit would need. Watch it fall toward the star.',
   explain:'It fell inward, but its sideways motion carried it past the star: at the closest point (r = 1.41) it was moving at 3.40, more than twice its start speed 1.60. Gravity pulled it inward and sped it up; the speed swings it around, and the same gravity then slows it on the way out. It keeps missing the star, which is what an orbit is.',
   opens:'Does it sweep space evenly?'},
- {title:'Equal areas in equal times',question:'Does the planet sweep out space evenly?',focus:'equal-area wedges',set:{vfactor:.8},until:'event:one orbit complete',run:12,
+ {title:'Equal areas in equal times',question:'Does the planet sweep out space evenly?',focus:'equal-area wedges',set:{vfactor:.8},until:'event:one orbit complete',run:12,isolate:['equal-area wedges','planet · m','star · M'],
   text:'Each coloured wedge is swept in the same time, one twelfth of an orbit. Watch their shapes over a full orbit.',
   explain:'One orbit took 5.94 s, as Kepler\'s third law 2π√(a³/GM) predicts for a = 2.21. The wedges near the star are short and wide, the far ones long and thin, yet each has the same area, about 1.19. Gravity always points at the star, so it can never twist the planet around it: angular momentum L = r × v stays 4.80, and the area swept per second is L/2.',
   opens:'What does the planet see?'},
@@ -1437,7 +1448,7 @@ DIO.orbit.lessons=[
  {title:'A circular orbit',question:'What speed makes a circle?',focus:'planet',set:{vfactor:1},until:'event:one orbit complete',run:12,
   text:'Launch at exactly the circular speed √(GM/r₀) = 2.00.',
   explain:'The orbit closed after 9.42 s at constant distance 3.00: gravity GM/r² = 1.33 is exactly the pull needed to bend the path into a circle at this speed (v²/r = 4/3). Kepler\'s period for a = r₀ is 2π√(27/12) = 9.42 s.',
-  opens:'What if it is launched faster still?'},
+  opens:'How fast must it go to escape?'},
  {title:'Escape',question:'How fast must it go to escape?',focus:'planet',set:{vfactor:1.45},until:'event:left the diorama',run:20,
   text:'Launch at 1.45 times the circular speed, a little above √2 ≈ 1.41.',
   explain:'Now ε = v²/2 − GM/r is positive (+0.21): the planet has more kinetic energy than gravity can take back, so it never returns and leaves along an open curve (a hyperbola). Escape speed is √2 times the circular speed.',
@@ -1445,24 +1456,25 @@ DIO.orbit.lessons=[
 
 DIO.collision.lessons=[
  {title:'What survives a crash?',question:'What stays the same in a collision?',focus:'cart 1',set:{m1:2,m2:1,v1:3,v2:-1,e:1},until:'event:collision:',run:6,
-  text:'A 2 kg glider moving at 3 m/s meets a 1 kg glider coming the other way at 1 m/s. The springs make the impact elastic.',
+  chain:[{a:'cart 1 · m₁',note:'pushes cart 2'},{a:'cart 2 · m₂',note:'pushes back just as hard'},{a:'centre of mass',note:'keeps its speed'}],chainOn:'event:collision: p',
+  text:'Cart 1, a 2 kg glider moving at 3 m/s, meets cart 2, a 1 kg glider coming the other way at 1 m/s. The springs make the impact elastic. Keep an eye on the gold centre of mass.',
   explain:'After the impact cart 1 moves at 0.33 m/s and cart 2 at 4.33 m/s. The total momentum is 5.00 kg·m/s before and after, because the two carts push on each other with equal and opposite forces for the same time. With elastic springs the kinetic energy, 9.50 J, is also kept.',
   opens:'What if the masses are equal?'},
- {title:'Equal masses',question:'What happens when equal masses collide?',focus:'cart 2',set:{m1:1,m2:1,v1:3,v2:0,e:1},until:'event:collision:',run:6,
+ {title:'Equal masses',question:'What happens when equal masses collide?',focus:'cart 2',set:{m1:1,m2:1,v1:3,v2:0,e:1},until:'event:collision:',run:6,isolate:['cart 1 · m₁','cart 2 · m₂'],
   text:'Two equal 1 kg gliders: one moving at 3 m/s, the other at rest.',
   explain:'Cart 1 stopped dead and cart 2 left at 3.00 m/s: equal masses in an elastic collision simply swap velocities. That is the only way to keep both the momentum (3 kg·m/s) and the kinetic energy (4.50 J) with equal masses.',
-  opens:'What if the carts stick together?'},
+  opens:'Where does the energy go if they stick?'},
  {title:'A sticky collision',question:'Where does the energy go if they stick?',focus:'cart 1',set:{m1:2,m2:1,v1:3,v2:-1,e:0},until:'event:collision:',run:6,
   text:'Set the restitution to 0: the carts lock together on impact.',
   explain:'They moved off together at 1.67 m/s. Momentum is still 5.00 kg·m/s, but the kinetic energy fell from 9.50 J to 4.17 J: 5.33 J went into denting, heat and sound. Momentum is always conserved in a collision; kinetic energy only when nothing is deformed for good.',
-  opens:'Is there a point that does not notice the crash at all?'},
+  opens:'What does the centre of mass do during the crash?'},
  {title:'Ride the centre of mass',question:'What does the centre of mass do during the crash?',focus:'centre of mass',set:{m1:2,m2:1,v1:3,v2:-1,e:1},shot:'pov',pov:'centre of mass',until:'event:end stops',run:8,
   text:'Ride the gold marker, the centre of mass of the two carts, through the collision.',
   explain:'The centre of mass glided at a steady 1.67 m/s from start to finish, crash or no crash. The forces in the collision are internal: equal and opposite, they cancel for the pair as a whole. Seen from this moving point, the two carts come in, bounce, and leave with their speeds reversed.',
   opens:'Explore: a very heavy cart hitting a light one at rest.'}];
 
 DIO.incline.lessons=[
- {title:'Why does it slide?',question:'Why does the block slide, and how fast?',focus:'block',set:{angle:30,mu:.2,m:2,g:9.81},until:'event:reaches the bottom',run:6,
+ {title:'Why does it slide?',question:'Why does the block slide, and how fast?',focus:'block',set:{angle:30,mu:.2,m:2,g:9.81},until:'event:reaches the bottom',run:6,isolate:['block · m','angle gauge'],
   text:'The block is let go at the top of a 30° slope with friction 0.2. Watch the force arrows.',
   explain:'It reached the bottom after 2.19 s at 7.03 m/s. Along the slope, gravity pulls with mg sin θ = 9.81 N; friction holds back with μ mg cos θ = 3.40 N. The difference accelerates it at a = g(sin θ − μ cos θ) = 3.21 m/s², so v = √(2aL) = √(2·3.21·7.7) = 7.03 m/s.',
   opens:'Would a heavier block slide faster?'},
@@ -1473,19 +1485,21 @@ DIO.incline.lessons=[
  {title:'Ride the block',question:'What does the ride feel like?',focus:'block',set:{m:2},shot:'pov',pov:'block',until:'event:reaches the bottom',run:6,
   text:'Sit on the block for the slide.',
   explain:'You gained speed evenly, 3.21 m/s every second, the whole way down: a constant net force means a constant acceleration. The block dropped 3.85 m, releasing mgh = 75.5 J: 49.4 J became speed (½mv²) and 26.2 J became heat in the sliding surfaces.',
-  opens:'Can friction stop it completely?'},
+  opens:'Can friction hold it still?'},
  {title:'A rough surface',question:'Can friction hold it still?',focus:'block',set:{mu:.7},until:'event:still at rest',run:6,
   text:'Make the surface rough: friction coefficient 0.7.',
   explain:'The block stays put. Static friction is not a fixed force: it supplies just what is needed, here mg sin θ = 9.81 N, up to a limit μN = 11.89 N. As long as tan θ (0.577) is below μ (0.7), the limit is never reached.',
   opens:'And with no friction at all?'},
  {title:'No friction',question:'And with no friction at all?',focus:'block',set:{mu:0},until:'event:reaches the bottom',run:6,
-  text:'Make the slope perfectly slippery.',
+  chain:[{a:'angle gauge',note:'θ = 30° sets the pull'},{a:'block · m',note:'speeds up 4.91 m/s every second'}],chainPace:1.4,
+  text:'Make the slope perfectly slippery. Now only the slope, 30° on the angle gauge, sets how fast the block speeds up.',
   explain:'Now a = g sin θ = 4.91 m/s² and the block arrives after 1.77 s at 8.69 m/s. Without friction no energy is turned into heat: all of mgh becomes ½mv², so v = √(2gh) = √(2·9.81·3.85), the same as falling straight down through the height of the slope.',
   opens:'Explore: find the angle where a block with μ = 0.5 just starts to slide (tan θ = μ, 26.6°).'}];
 
 DIO.wave.lessons=[
  {title:'What travels along the rope?',question:'What moves along the rope: the rope, or something else?',focus:'crest',set:{A:.6,lambda:5,f:.5,standing:0},until:'event:crest moved one wavelength',run:6,
-  text:'Watch the gold marker on a crest, and the red bead, for one period.',
+  chain:[{a:'tracked bead',note:'only moves up and down'},{a:'rope',note:'each bead pulls the next'},{a:'crest',note:'the shape travels on'}],chainPace:1.2,
+  text:'Watch the gold marker on a crest, and the red tracked bead on the rope, for one period.',
   explain:'In 2.00 s the crest moved 5.00 m along the rope, a speed of 2.50 m/s = fλ, but the red bead only went up and down. A wave carries a shape and energy, not the material: each bead pulls its neighbour, which follows a moment later.',
   opens:'What does a bead actually do?'},
  {title:'Ride a bead',question:'What does a single bead do?',focus:'tracked bead',set:{f:.5},shot:'pov',pov:'tracked bead',until:'event:period 2 complete',run:6,
@@ -1495,23 +1509,33 @@ DIO.wave.lessons=[
  {title:'Shake faster',question:'What changes if it is shaken faster?',focus:'crest',set:{f:1},until:'event:crest moved one wavelength',run:6,
   text:'Double the frequency to 1 Hz, keeping the wavelength at 5 m.',
   explain:'The crest now covers 5.00 m in 1.00 s: v = fλ = 5.00 m/s. Here we held λ fixed, so the speed doubled. On a real rope the speed is set by its tension and weight per metre, so shaking faster would instead squeeze the crests closer (λ = v/f).',
-  opens:'What if two waves run into each other?'},
- {title:'A standing wave',question:'What happens when waves reflect from both ends?',focus:'node',set:{f:.5,standing:1},until:'event:standing wave:',run:6,
-  text:'Fix both ends: the wave reflects back and forth and the two directions add up.',
+  opens:'What happens when waves reflect from both ends?'},
+ {title:'A standing wave',question:'What happens when waves reflect from both ends?',focus:'node',set:{f:.5,standing:1},until:'event:standing wave:',run:6,isolate:['tracked bead','node (never moves)','rope'],
+  text:'Fix both ends: the wave reflects back and forth and the two directions add up. Compare the tracked bead with a node.',
   explain:'The pattern stopped travelling. At the nodes (blue rings, every 2.5 m) the two waves always cancel, so those points never move; halfway between, at the antinodes, they add up to swing ±1.20 m. Only wavelengths that fit the rope, λ = 2L/n, can make a steady pattern: here n = 4.',
   opens:'Explore: set the wavelength to 6.67 m (n = 3) and count the loops.'}];
 
+// 1 world unit ≈ 3.4 nm: the box holds 70 molecules in about 76 units³, so they sit about 1 unit apart, the spacing of the
+// molecules in air at room conditions (n ≈ 2.5 × 10²⁵ m⁻³, n^(−1/3) ≈ 3.4 nm). The drawn molecules (r = 0.09) are about twice
+// real size; the burner, piston and gauge are symbols, not to scale. Used only for the scale bar of the zoom (S4).
+DIO.gas.scale={m:3.4e-9};
 DIO.gas.lessons=[
- {title:'Where does pressure come from?',question:'Where does a gas\'s pressure come from?',focus:'molecule',set:{N:70,T:1,V:1},shot:'pov',pov:'molecule',until:'event:tracked molecule strikes',run:10,
-  text:'Ride the gold molecule until it hits a wall.',
+ {title:'Into the gas',question:'Where does a gas\'s pressure come from?',focus:'molecule',set:{N:70,T:1,V:1},until:'event:tracked molecule strikes',run:12,
+  zoom:{to:'molecule · m',from:'wide',perDecade:3,stations:[{at:'glass vessel',hold:1.5}]},
+  text:'Zoom from the glass vessel down to the gold molecule. Up close the gas is a crowd: every molecule flies at random, in a straight line until it hits another molecule or a wall.',
+  explain:'The scale bar reads nanometres: these 70 molecules sit about 3.4 nm apart, the spacing of the molecules in the air of a room (about 2.5 × 10²⁵ per cubic metre), and they are drawn about twice their real size, so most of the box is empty space. In real air each one flies at about 500 m/s and changes direction at every collision. Every hit on a wall is a tiny push; the pressure is the sum of all of them.',
+  opens:'What does one molecule do to the wall it hits?'},
+ {title:'Ride a molecule',question:'What does one molecule do to the wall it hits?',focus:'molecule',shot:'pov',pov:'molecule',until:'event:tracked molecule strikes',run:10,
+  text:'Ride the gold molecule, knocked about at random by the others, until it hits a wall.',
   explain:'When you hit the wall your sideways speed reversed, and the wall received a push of 2mvₓ. A gas is millions of molecules doing this; each push is tiny but they add up to a steady force on every square centimetre: the pressure.',
   opens:'Does the measured pressure match the gas law?'},
- {title:'The gas law',question:'Does the measured pressure match the ideal gas law?',focus:'pressure gauge',set:{V:1},until:'event:first pressure reading',run:6,
+ {title:'The gas law',question:'Does the measured pressure match the ideal gas law?',focus:'pressure gauge',set:{V:1},until:'event:first pressure reading',run:6,isolate:['pressure gauge','glass vessel'],
   text:'The walls count every push for three seconds. Compare the measured pressure with N k T / V.',
   explain:'The walls measured a pressure within a few per cent of N k T / V ≈ 0.99 (70 molecules at T ≈ 1 in V = 76.3); the exact numbers differ from run to run because the molecules start at random. Kinetic theory says the pushes per second on the walls depend only on how many molecules there are per volume and on their mean kinetic energy, which is what temperature measures.',
   opens:'What does heating do?'},
  {title:'Heat it',question:'What does heating do to the pressure?',focus:'burner',set:{T:3},until:'event:new pressure reading',run:8,
-  text:'Turn up the burner: triple the temperature.',
+  chain:[{a:'burner',note:'triples the temperature'},{a:'molecule · m',note:'every speed × √3'},{a:'piston',note:'struck harder, more often'},{a:'pressure gauge',note:'reads about 3 times higher'}],chainOn:'event:tracked molecule strikes the piston',
+  text:'Turn up the burner: triple the temperature. Every molecule speeds up, strikes the piston harder and more often, and the pressure gauge climbs.',
   explain:'The pressure rose about three times, to near 2.7–3.0, again matching NkT/V. Heating multiplied every speed by √3 = 1.73, so each molecule hits the walls 1.73 times as often and 1.73 times as hard: 3 times the pressure.',
   opens:'What does squeezing do?'},
  {title:'Squeeze it',question:'What does halving the volume do?',focus:'piston',set:{T:1,V:.5},until:'event:first pressure reading',run:6,
@@ -1528,13 +1552,13 @@ DIO.surface.lessons=[
   text:'Ride the steel ball from its starting point into the valley.',
   explain:'It curved rather than heading straight for the bottom: at each moment it turns toward the local downhill direction, but its momentum carries it on. With more friction (1.2) it settled sooner, in the same hollow, f = −1.00.',
   opens:'What if there is no friction at all?'},
- {title:'No friction',question:'What if there is no friction?',focus:'ball',set:{friction:0},run:12,
+ {title:'No friction',question:'What if there is no friction?',focus:'ball',set:{friction:0},run:12,isolate:['ball'],
   text:'Remove the rolling friction and watch for 12 seconds.',
   explain:'The ball never stops. Without friction its energy (height plus speed) stays constant, so every time it rolls into a hollow it has exactly enough speed to climb out to the height it started from. Only a loss of energy lets something settle at a minimum, which is why gradient descent needs a way to shed momentum.',
   opens:'Explore: click anywhere on the surface to drop the ball there.'}];
 
 DIO.doublependulum.lessons=[
- {title:'Can we predict it?',question:'Can a simple machine be unpredictable?',focus:'twin',set:{m1:2,m2:1,L1:1.5,L2:1.5,theta1:120,theta2:-10,g:9.81,eps:.001},until:'event:chaos',run:20,
+ {title:'Can we predict it?',question:'Can a simple machine be unpredictable?',focus:'twin',set:{m1:2,m2:1,L1:1.5,L2:1.5,theta1:120,theta2:-10,g:9.81,eps:.001},until:'event:chaos',run:20,isolate:['twin (offset ε)','m₂ · lower bob'],
   text:'Two double pendulums are released together. The blue twin starts just 0.001 rad (0.06°) away from the gold one. Watch their paths.',
   explain:'For a few seconds they move as one. After 6.8 s they differ by more than 10° and soon follow completely different paths. The rules are exact and nothing is random, but each tiny difference is amplified: here the gap grows about e-fold every 1.3 s (λ ≈ 0.8 per second). That sensitivity to the starting state is chaos.',
   opens:'What is it like to ride the lower bob?'},
@@ -1543,7 +1567,8 @@ DIO.doublependulum.lessons=[
   explain:'After 3.3 s the upper arm flung you right over the top. The upper arm hands energy to the lower one and takes it back, irregularly; the total energy, 7.58 J, stays the same (its drift is below 0.00001 J), so the motion is wild but not lawless.',
   opens:'Is the double pendulum always chaotic?'},
  {title:'Small swings',question:'Is it always chaotic?',focus:'twin',set:{theta1:15,theta2:10},until:'event:still together',run:20,
-  text:'Release both from small angles, 15° and 10°.',
+  chain:[{a:'m₁ · upper bob',note:'swings gently'},{a:'m₂ · lower bob',note:'follows it, almost in step'}],chainPace:1.4,
+  text:'Release both from small angles: the upper bob m₁ at 15°, the lower bob m₂ at 10°.',
   explain:'After 15 s the twins are still within 0.03° of each other. For small swings the double pendulum is a pair of coupled, nearly linear oscillators: the motion repeats regular patterns and small differences stay small. Chaos needs the large, nonlinear swings.',
   opens:'Is the chaos randomness?'},
  {title:'No offset',question:'Is the chaos randomness?',focus:'twin',set:{theta1:120,theta2:-10,eps:0},run:12,
@@ -1553,29 +1578,34 @@ DIO.doublependulum.lessons=[
 
 DIO.lever.lessons=[
  {title:'Which way will it tip?',question:'Which way will the lever tip?',focus:'beam',set:{m1:3,x1:-2.5,m2:2,x2:3,fulcrum:0,beam:1},until:'event:strikes the ground',run:6,
-  text:'3 kg sits 2.5 m left of the fulcrum, 2 kg sits 3 m to the right. The heavier weight is closer in. Let go.',
+  chain:[{a:'mass 1 · m₁',note:'moment 3 × 2.5 = 7.5'},{a:'beam',note:'turns toward the larger moment'},{a:'fulcrum',note:'both moments act about it'},{a:'mass 2 · m₂',note:'moment 2 × 3 = 6.0'}],chainPace:1.1,
+  text:'Mass 1, 3 kg, sits 2.5 m left of the fulcrum; mass 2, 2 kg, sits 3 m to the right. The heavier weight is closer in. Let go and watch the beam.',
   explain:'The left side went down and hit the ground. What turns the beam is weight × distance (the moment): 3 kg × 2.5 m = 7.5 against 2 kg × 3 m = 6.0. The left moment is larger by 1.5 kg·m, 14.7 N·m, so the beam turns that way.',
   opens:'Where must the 2 kg go to balance?'},
- {title:'Balance it',question:'Where must the right weight go to balance?',focus:'mass 2',set:{x2:3.75},until:'event:still balanced',run:6,
+ {title:'Balance it',question:'Where must the right weight go to balance?',focus:'mass 2',set:{x2:3.75},until:'event:still balanced',run:6,isolate:true,
   text:'Move the 2 kg weight out to 3.75 m.',
   explain:'The beam stays level: 2 kg × 3.75 m = 7.5, equal to 3 kg × 2.5 m. A lever balances when the moments on both sides are equal, m₁r₁ = m₂r₂. A small weight far out balances a large one close in.',
   opens:'Can a heavier weight balance closer in?'},
  {title:'Heavier, closer',question:'Can a heavier weight balance closer in?',focus:'mass 2',set:{m2:6,x2:1.25},until:'event:still balanced',run:6,
   text:'Put 6 kg at only 1.25 m from the fulcrum.',
   explain:'Balanced again: 6 × 1.25 = 7.5. Double the weight, half the distance. This is how a crowbar works the other way round: a small force far from the pivot lifts a large load close to it.',
-  opens:'What if we move the fulcrum instead?'},
- {title:'Move the fulcrum',question:'Can moving the pivot balance the original weights?',focus:'fulcrum',set:{m2:2,x2:3,fulcrum:-.25},until:'event:still balanced',run:6,
+  opens:'Can moving the pivot balance the original weights?'},
+ {title:'Move the fulcrum',question:'Can moving the pivot balance the original weights?',focus:'fulcrum',set:{m2:2,x2:3,fulcrum:-.25},until:'event:still balanced',run:6,isolate:['fulcrum','beam'],
   text:'Put the 2 kg back at 3 m and slide the fulcrum 0.25 m toward the heavier weight.',
   explain:'Balanced: the arms are now 2.25 m and 3.25 m. 3 × 2.25 = 6.75 and 2 × 3.25 = 6.5, and the 1 kg beam, whose middle is now 0.25 m right of the pivot, adds 0.25: 6.5 + 0.25 = 6.75. A real beam\'s own weight counts as a weight at its centre.',
   opens:'Explore: make the beam heavy (5 kg) and find the new balance point.'}];
 
+// the same convention as the gas: 120 molecules in a 6.4 × 4 × 4 cell sit about 0.95 units apart; as a gas near
+// atmospheric pressure that spacing is about 3.4 nm, so 1 unit ≈ 3.6 nm (scale bar of the zoom only)
+DIO.reaction.scale={m:3.6e-9};
 DIO.reaction.lessons=[
  {title:'Why not every collision reacts',question:'Why don\'t all collisions make C?',focus:'reaction cell',set:{NA:60,NB:60,Ea:.8,Eb:2,T:1},until:'event:collision with ke',run:6,
-  text:'Red A and blue B molecules fly about and collide. Only some collisions join them into the A–B pair, C.',
-  explain:'A pair reacts only if it hits hard enough: the energy of the collision must exceed the barrier Ea = 0.8. At T = 1 collision theory predicts that a fraction (1 + Ea/kT)e^(−Ea/kT) = 0.81 of encounters qualify; over a longer run this model measures about 0.75–0.79 (the fastest pairs react first, which slightly thins out the fast molecules).',
-  opens:'What does one molecule live through?'},
+  zoom:{to:'tracked molecule',from:'wide',perDecade:3,stations:[{at:'reaction cell',hold:1.5}]},
+  text:'Zoom into the reaction cell, down to the tracked molecule in the gold halo. Red A and blue B molecules fly about at random and collide. Only some collisions join them into the A–B pair, C.',
+  explain:'A pair reacts only if it hits hard enough: the energy of the collision must exceed the barrier Ea = 0.8. At T = 1 collision theory predicts that a fraction (1 + Ea/kT)e^(−Ea/kT) = 0.81 of encounters qualify; over a longer run this model measures about 0.75–0.79 (the fastest pairs react first, which slightly thins out the fast molecules). The scale bar treats the cell as a gas near atmospheric pressure: the molecules sit about 3.4 nm apart, as in air.',
+  opens:'What happens to a single molecule?'},
  {title:'Ride a molecule',question:'What happens to a single molecule?',focus:'tracked molecule',set:{T:1},shot:'pov',pov:'tracked molecule',until:'event:the tracked molecule reacts',run:45,
-  text:'Travel with the molecule inside the gold halo until it reacts.',
+  text:'Travel with the molecule inside the gold halo, knocked about at random, until it reacts.',
   explain:'You bounced off walls and grazed past B molecules until one collision was energetic enough to cross the barrier, and you bonded into C. Every molecule\'s history is random, but the fraction that react each second is steady: that fraction is the reaction rate.',
   opens:'Does the reaction ever stop?'},
  {title:'Dynamic equilibrium',question:'Does the reaction ever stop?',focus:'reaction cell',set:{T:1},until:'event:dynamic equilibrium',run:45,
@@ -1593,7 +1623,8 @@ DIO.reaction.lessons=[
 
 DIO.efield.lessons=[
  {title:'Which way does it go?',question:'Which way is the test charge pushed?',focus:'test charge',set:{q1:3,q2:-3,d:3.5,qt:1,m:1,drag:0},until:'event:escapes',run:8,
-  text:'A small positive test charge is let go from rest beside the positive charge q₁.',
+  chain:[{a:'field lines',note:'E points away from +'},{a:'test charge',note:'F = qE pushes it'}],chainPace:1.4,
+  text:'A small positive test charge is let go from rest beside the positive charge q₁. The field lines show which way it is pushed.',
   explain:'It shot away from q₁ and left the diorama at 3.85. Like charges repel: the force F = qE points along the field, away from + charges and toward − ones. Its starting potential energy qV turned into kinetic energy, ½mv² + qV staying 7.15 the whole way.',
   opens:'What if the test charge is negative?'},
  {title:'Opposite charges',question:'What does a negative test charge do?',focus:'test charge',set:{qt:-1},until:'event:captured',run:6,
@@ -1604,39 +1635,48 @@ DIO.efield.lessons=[
   text:'Put the test charge in oil (drag 4 per second) and ride it from q₁.',
   explain:'Now it crept along a curving field line from q₁ round to q₂ and was captured after 4.3 s. In oil the drag cancels most of its inertia, so its velocity simply follows the force, and the force follows the field line. Without drag (the first step) inertia carried it off the lines: field lines show the direction of the force, not the path.',
   opens:'What do two like charges do to the field?'},
- {title:'Like charges',question:'What does the field of two like charges look like?',focus:'field lines',set:{q2:3,drag:0},until:'event:escapes',run:8,
+ {title:'Like charges',question:'What does the field of two like charges look like?',focus:'field lines',set:{q2:3,drag:0},until:'event:escapes',run:8,isolate:['field lines','test charge'],
   text:'Make both charges positive.',
   explain:'No line now joins the two charges: every line runs outward, and between them the lines bend away from each other, leaving a point where the fields cancel. The test charge is repelled by both and escapes at speed 4.3.',
   opens:'Explore: move the charges apart (separation 6) and watch the lines.'}];
 
+// a ride along the wire with the discharge current: from the capacitor's + plate along the near wire, through the
+// resistor, along the far wire and through the bypass branch beside the battery (switch open to the battery). The eye
+// rides 1.2 above the board and 1.1 outside the loop (never inside a part), and looks at the wire a little ahead on the
+// subject path ('look', the copper itself), so the wire and its drifting electrons stay framed with the parts beyond
+DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',dur:13,lookAhead:.07,fov:55,
+ points:[[-5.7,1.7,-.2],[-5.6,1.55,1.4],[-5.2,1.5,3.2],[-3.6,1.5,3.6],[0,1.5,3.6],[3.6,1.5,3.6],[5.2,1.5,3.2],[5.6,1.5,1.4],[5.6,1.5,-1.4],[5.2,1.5,-3.2],[3.6,1.5,-3.6],[2.4,1.5,-3.8],[1.4,1.5,-4.4],[0,1.5,-4.5],[-1.2,1.55,-4.4]],
+ look:[[-4.5,.6,.2],[-4.5,.45,1.4],[-4.3,.45,2.4],[-3.0,.45,2.5],[0,.45,2.5],[3.0,.45,2.5],[4.3,.45,2.4],[4.5,.45,1.0],[4.5,.45,-1.0],[4.3,.45,-2.4],[3.0,.45,-2.5],[1.8,.45,-2.6],[1.5,.45,-3.2],[0,.45,-3.3],[-1.5,.45,-3.2]]}};
 DIO.circuit.lessons=[
  {title:'How fast does it charge?',question:'How fast does a capacitor charge?',focus:'capacitor',set:{V:9,R:5,C:.6,closed:1},until:'event:t = τ',run:8,
+  chain:[{a:'battery · ε',note:'ε = 9 V drives it'},{a:'switch',note:'closes the loop'},{a:'resistor · R',note:'limits the current'},{a:'capacitor · C',note:'charge piles up on its plates'},{a:'voltmeter',note:'reads V_C rising'}],chainPace:1,
   text:'Close the switch: the 9 V battery charges the capacitor through the 5 kΩ resistor. Watch the voltmeter.',
   explain:'After τ = RC = 5 kΩ × 0.6 mF = 3.00 s the capacitor was at 5.69 V, 63.2 % of 9 V. The current is driven by the difference between the battery and the capacitor (ε − V_C)/R; as the capacitor fills, the difference shrinks, so it fills ever more slowly: V_C = ε(1 − e^(−t/RC)).',
-  opens:'How long until it is full?'},
- {title:'Ride an electron',question:'What does an electron do in the circuit?',focus:'tracked electron',set:{R:2},shot:'pov',pov:'tracked electron',until:'event:t = 5τ',run:10,
+  opens:'How long until it is full, and what does an electron do meanwhile?'},
+ {title:'Ride an electron',question:'How long until it is full, and what does an electron do meanwhile?',focus:'tracked electron',set:{R:2},shot:'pov',pov:'tracked electron',until:'event:t = 5τ',run:10,
   text:'With a 2 kΩ resistor (τ = 1.2 s), ride one electron around the wires.',
   explain:'You raced at first, slowed, and nearly stopped after 5τ = 6.0 s, when V_C reached 8.94 V, within 0.7 % of 9 V. Electrons drift opposite to the conventional current, and they never cross the gap between the plates: they pile up on one plate and leave the other, which is what charging is. (Real drift is about 0.1 mm/s; it is drawn far faster.)',
   opens:'What does a bigger resistor do?'},
- {title:'A bigger resistor',question:'What does a bigger resistor do?',focus:'resistor',set:{R:10},until:'event:t = τ',run:10,
+ {title:'A bigger resistor',question:'What does a bigger resistor do?',focus:'resistor',set:{R:10},until:'event:t = τ',run:10,isolate:['resistor · R','capacitor · C','voltmeter'],
   text:'Use 10 kΩ instead.',
   explain:'Now τ = 10 kΩ × 0.6 mF = 6.00 s: the capacitor took twice as long to reach the same 63 %. The resistor limits the current, I = (ε − V_C)/R, so the same charge takes longer to arrive.',
   opens:'What happens when the battery is switched out?'},
- {title:'Discharge',question:'What happens when the battery is switched out?',focus:'capacitor',set:{closed:0},until:'event:t = τ',run:10,
-  text:'Flip the switch to the bypass wire. The charged capacitor is now the only source in the loop.',
+ {title:'Discharge',question:'What happens when the battery is switched out?',focus:'capacitor',set:{closed:0},until:'event:t = τ',run:10,track:'discharge',
+  text:'Flip the switch to the bypass wire. The charged capacitor is now the only source in the loop: ride along the wire with the discharge current, from the capacitor back through the resistor.',
   explain:'The capacitor drove the current back through the resistor, the other way round, and after one τ = 6.00 s its voltage had fallen 63.2 % of the way to zero. With nothing to oppose it, the plates\' charge flows back until they are equal: V_C = V₀ e^(−t/RC). The stored energy ½CV² becomes heat in the resistor.',
   opens:'Explore: change C and predict τ before you run it.'}];
 
 DIO.lens.lessons=[
  {title:'Where does the image form?',question:'Where does the lens form an image of the flame?',focus:'converging lens',set:{f:2.5,do:4,ho:.8,sweep:0},until:'event:converges at the image',run:6,
-  text:'The candle stands 4 units in front of a lens of focal length 2.5. Follow the three rays from the tip of the flame.',
+  chain:[{a:'candle',note:'light leaves the flame tip'},{a:'light ray',note:'straight to the glass'},{a:'converging lens',note:'bends every ray inward'},{a:'image',note:'the rays meet again'},{a:'screen',note:'catches the inverted flame'}],chainPace:1,
+  text:'The candle stands 4 units in front of a converging lens of focal length 2.5. Follow the three light rays from the tip of the flame to the image on the screen.',
   explain:'All three rays from the flame tip met again 6.67 units behind the lens, upside down and 1.67 times larger, where the screen catches a sharp, inverted flame. The lens bends each ray by an amount that grows with its distance from the centre, which sends every ray from one point to one point: 1/f = 1/d_o + 1/d_i, 0.400 = 0.250 + 0.150.',
   opens:'What path does one ray take?'},
  {title:'Follow a ray',question:'What path does a single ray of light take?',focus:'light ray',set:{do:4},shot:'pov',pov:'light ray',until:'event:converges at the image',run:6,
   text:'Ride the light that leaves the flame tip parallel to the axis.',
   explain:'You travelled straight to the lens, were bent at the glass, and went straight on through the focal point F′ to the image point at 6.67. Light only changes direction where it meets a new material; the curved glass makes that bend steeper near the rim.',
-  opens:'What if the candle is closer than F?'},
- {title:'Closer than F',question:'What if the object is inside the focal length?',focus:'image',set:{do:1.5},until:'event:seem to come from a virtual image',run:6,
+  opens:'What if the object is inside the focal length?'},
+ {title:'Closer than F',question:'What if the object is inside the focal length?',focus:'image',set:{do:1.5},until:'event:seem to come from a virtual image',run:6,isolate:['image','converging lens','candle'],
   text:'Move the candle to 1.5 units, inside F.',
   explain:'The rays still spread after the lens, so they never meet: there is nothing for a screen to catch. Traced backward (dashed) they seem to come from an upright flame 3.75 units in front of the lens, 2.5 times larger: a virtual image. This is a magnifying glass.',
   opens:'What happens right at F?'},

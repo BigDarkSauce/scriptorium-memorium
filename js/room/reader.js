@@ -1,6 +1,6 @@
 // The reading scroll: a parchment overlay showing one part's logical chain. 3D showcases appear as 2D drawings
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
-import { el, esc, typeset, toast, uid, $, clamp, nextFrame } from '../util.js';
+import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML } from '../util.js';
 import { SVGDEMO, SVG_TYPES } from './diagrams.js';
 import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
@@ -27,14 +27,27 @@ export class Reader {
     this.render();
     this.onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal-veil')) this.close(); }; addEventListener('keydown', this.onKey);
   }
-  close() { this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
+  dock(mode, initial) {
+    if (mode !== 'full') this.lastDock = mode; this.dockMode = mode;
+    ['left', 'center', 'right', 'full'].forEach(k => this.el.classList.toggle('dock-' + k, k === mode));
+    this.el.querySelectorAll('[data-dock]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dock === mode)));
+    if (!initial || mode !== 'full') { try { localStorage.setItem('scriptorium.readerDock', mode === 'full' ? (this.lastDock || 'right') : mode); } catch (e) { } }
+  }
+  close() {
+    if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
   render() {
     const P = this.part, R = this.el; R.innerHTML = ''; this._figs = null;   // figures may have been cut since the last render
     const head = el('header', { class: 'reader-head' }, [
       el('div', { class: 'reader-title' }, [el('div', { class: 'kicker', text: (P.subOf ? 'Sub-scroll' : 'Part ' + (this.room.partIndex(P) + 1)) + (P.startPage ? ` · pages ${P.startPage}–${P.endPage}` : '') }), el('h2', { text: P.title })]),
+      // where the scroll sits (left / centre / right) and full screen; remembered in this browser
+      el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
+        el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
+    this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
+    this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !(e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };
+    addEventListener('keydown', this._dockKey);
     const body = el('div', { class: 'reader-body' }); this.body = body;
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.renderEmpty(); return; }
@@ -167,7 +180,7 @@ export class Reader {
   renderChain(A) {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
-    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: esc(A.title || this.part.title) }), A.summary ? el('p', { html: esc(A.summary) }) : null, A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + esc(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: mathHTML(A.title || this.part.title) }), A.summary ? el('p', { html: mathHTML(A.summary) }) : null, A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + mathHTML(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
     wrap.append(this.evidenceBar(A)); const cov = this.renderCoverage(A); if (cov) wrap.append(cov); this.seen3D = new Map();
     this._breaks = new Set(A.coverageReport ? A.coverageReport.threadBreaks || [] : []); this._numbers = new Map(((A.coverageReport && A.coverageReport.numbers && A.coverageReport.numbers.unmatched) || []).map(u => [u.step, u.values]));
     this._secTitle = new Map(((A.coverageReport && A.coverageReport.sections) || []).map(x => [x.id, x.title]));
@@ -181,22 +194,22 @@ export class Reader {
     const kind = String(st.kind || 'result').toLowerCase();
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
     art.append(el('div', { class: 'badge', text: KIND_ABBR[kind] || st.id }));
-    if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: esc(st.answers) })]));
-    art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: esc(st.title) }),
+    if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: mathHTML(st.answers) })]));
+    art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: mathHTML(st.title) }),
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
       st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => { const t = wrap.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } } })); }); art.append(f); }
-    if (st.statement) art.append(el('p', { class: 'stmt', html: esc(st.statement) }));
+    if (st.statement) art.append(el('p', { class: 'stmt', html: mathHTML(st.statement) }));
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
     if (st.table && st.table.rows && st.table.rows.length) art.append(renderTable(st.table));
     if (st.figures && st.figures.length) art.append(this.renderFigures(st));
     if (st.extra && st.extra.length) art.append(el('div', { class: 'extras' }, st.extra.map(x => el('div', { class: 'extra' }, [el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }), el('span', { html: ' ' + esc(x.what || '') }), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))));
     if (this._numbers && this._numbers.has(st.id)) art.append(el('div', { class: 'num-warn', text: 'Not found in the PDF text of this subsection: ' + this._numbers.get(st.id).join(', ') + '. Check these numbers against the page.' }));
-    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: esc(t.term) }), el('dd', { html: esc(t.meaning) })])));
-    if (st.intuition) art.append(el('p', { class: 'intuition', html: '<b>Picture it.</b> ' + esc(st.intuition) }));
-    if (st.misconception) art.append(el('p', { class: 'miscon', html: '<b>Common mistake.</b> ' + esc(st.misconception) }));
-    if (st.check && st.check.q) { const ans = el('div', { class: 'ans', hidden: true, html: esc(st.check.a || '') }); art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + esc(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) typeset(ans); } }), ans])); }
+    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: mathHTML(t.term) }), el('dd', { html: mathHTML(t.meaning) })])));
+    if (st.intuition) art.append(el('p', { class: 'intuition', html: '<b>Picture it.</b> ' + mathHTML(st.intuition) }));
+    if (st.misconception) art.append(el('p', { class: 'miscon', html: '<b>Common mistake.</b> ' + mathHTML(st.misconception) }));
+    if (st.check && st.check.q) { const ans = el('div', { class: 'ans', hidden: true, html: mathHTML(st.check.a || '') }); art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + mathHTML(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) typeset(ans); } }), ans])); }
     const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
     if (st.bodies && st.bodies.length) art.append(el('div', { class: 'bodies' }, ['attached to', ...st.bodies.map(b => el('span', { class: 'chip', text: b }))]));
     const demos = el('div', { class: 'demos' });
@@ -206,7 +219,7 @@ export class Reader {
       el('button', { class: 'linkbtn', text: 'More detail → sub-scroll', onclick: () => this.moreDetail(st, A) }),
       evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null]));
     art.append(demos);
-    if (st.opens) art.append(el('div', { class: 'q-out', title: 'The question this step opens (the next step settles it)' }, [el('span', { class: 'q-mark', text: '→' }), el('span', { html: esc(st.opens) })]));
+    if (st.opens) art.append(el('div', { class: 'q-out', title: 'The question this step opens (the next step settles it)' }, [el('span', { class: 'q-mark', text: '→' }), el('span', { html: mathHTML(st.opens) })]));
     return art;
   }
   // the PDF's own figures, captioned with their page; distinct from our drawings
@@ -227,7 +240,7 @@ export class Reader {
     return box;
   }
   renderDemo(d, st, i, demos) {
-    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + esc(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: esc(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + esc(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
+    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {
@@ -368,9 +381,9 @@ function normExtra(e) {
 }
 function renderTable(T) {
   const t = el('table', { class: 'src-table' });
-  if (T.caption) t.append(el('caption', { html: esc(T.caption) }));
-  if (T.columns && T.columns.length) t.append(el('thead', {}, [el('tr', {}, T.columns.map(c => el('th', { html: esc(c) })))]));
-  t.append(el('tbody', {}, T.rows.map(r => el('tr', {}, r.map(c => el('td', { html: esc(c) }))))));
+  if (T.caption) t.append(el('caption', { html: mathHTML(T.caption) }));
+  if (T.columns && T.columns.length) t.append(el('thead', {}, [el('tr', {}, T.columns.map(c => el('th', { html: mathHTML(c) })))]));
+  t.append(el('tbody', {}, T.rows.map(r => el('tr', {}, r.map(c => el('td', { html: mathHTML(c) }))))));
   return el('div', { class: 'src-table-wrap' }, [t]);
 }
 function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(b || ''); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: (h.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' }); }

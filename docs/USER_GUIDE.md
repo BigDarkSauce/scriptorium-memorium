@@ -15,6 +15,10 @@
   - The **Room size** sliders change the room's width, depth and height.
 - **+ Add PDF scroll:** pick one or more PDFs. Each becomes a folded scroll with its name tag. It goes on the selected bookcase, otherwise the first one with space.
 - **Open a scroll:** click it. It lifts out, unrolls in light, and carries you into its room.
+- **Graphics: Low · Medium · High (auto):** the chip button under the speaker (top right) opens the graphics setting.
+  - The app picks a level for your device at the start, marked *(auto)*, and lowers it by itself if frames stay slow (a step-down shows up here, again marked *(auto)*).
+  - Tap a level to keep it; your choice is remembered. **Auto** goes back to the automatic choice.
+  - *Low* turns off the surface relief, the haze and sun shafts, and uses one sun shadow; *High* adds deeper relief, self-shadowed rock and soil, and three shadow ranges. Shadow detail changes the next time a diorama opens.
 
 ## A book room
 

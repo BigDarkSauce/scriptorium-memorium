@@ -22,6 +22,10 @@
 //   demos      checkDemos(): lesson threads, built-in lessons' "until" against the model's real event texts,
 //              repeated dioramas naming their actors in "bodies"
 //   links      "from" names earlier steps that exist; step ids are unique and in order; coverage lists real steps
+//   cues       checkCues(): the explainer cues of every lesson (chain, isolate, peel, zoom, track): names must be the
+//              model's actors or the scene's bodies, enums and track points valid (faults); a chain link the lesson's
+//              text never names, a zoom without the diorama's "scale", and directed-motion wording ("travels to",
+//              "seeks", "finds") in a POV of a micro or diffusive scene are warnings
 // EXIT CODE: 0 = passes, 1 = at least one fault (numbers not found in the text are warnings only), 2 = usage error.
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -101,6 +105,7 @@ function check(A, sections, figures, label) {
   rep.numbers.unmatched.forEach(u => W('numbers', `${u.step}: ${u.values.join(', ')} not found in the PDF text (check against the page)`));
   (rep.demoIssues || []).forEach(d => F('demos', `${d.step} demo ${d.demo + 1} (${d.type}): ${d.issue}`));
   // demo data provenance: outside data needs a source
+  (P.checkCues ? P.checkCues(A) : []).forEach(c => (c.level === 'fault' ? F : W)('cues', `${c.step} demo ${c.demo + 1} (${c.type}) lesson ${c.lesson}: ${c.issue}`));
   chain.forEach(st => (st.demos || []).forEach((d, i) => { const ex = Array.isArray(d.extra) ? d.extra : []; if (ex.some(e => !e || !e.source || !(e.source.title || e.source.doi || e.source.url))) F('demos', `${st.id} demo ${i + 1}: outside data ("extra") without a source`); }));
   out.pass = !out.faults.length;
   return out;
