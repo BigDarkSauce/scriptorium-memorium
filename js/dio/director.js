@@ -94,6 +94,9 @@ export class Director {
   // Never two moving shots in a row; no floating drift; the subject sits on a third, the callout in the open side.
   frame(b) {
     const v = this.v, cam = v.camera; if (!cam || v.pov) return;
+    // the step's own moving shot keeps the camera: an event during a zoom (or at its arrival view) or a ride is read in its
+    // callout, it does not cut away (a cut would end the zoom or the ride half-way)
+    if (b.kind === 'event' && !b.poseOnly && ((this.zoom && this.zoom.phase !== 'back') || (this.track && this.track.phase !== 'post'))) return;
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
@@ -230,12 +233,16 @@ export class Director {
   // the scale bar (S4.7): a nice length (1, 2 or 5 × 10ᵏ) of 60–140 px at the target's depth; only when the scene says
   // how many metres a world unit is (spec.scale.m) — never an invented scale
   drawScale() {
-    const Z = this.zoom, m = this.v.scaleM && this.v.scaleM(); if (!this.sbar) return; if (!Z || !m) { this.sbar.hidden = true; return; }
-    const cam = this.v.camera, h = innerHeight, d = cam.position.distanceTo(Z.c), mpp = 2 * d * Math.tan(rad(cam.fov / 2)) / h * m;
+    const Z = this.zoom; let m = this.v.scaleM && this.v.scaleM(); if (!this.sbar) return; if (!Z || !m) { this.sbar.hidden = true; return; }
+    const cam = this.v.camera, h = innerHeight, d = cam.position.distanceTo(Z.c), span = 2 * d * Math.tan(rad(cam.fov / 2));
+    // a second, molecular scale (spec.scale.micro): once the view is narrower than micro.below world units, the bar measures
+    // the drawn molecules instead of the apparatus, and says so (a scene drawn at two scales never mixes them in one bar)
+    const mic = this.v.scaleMicro && this.v.scaleMicro(), micro = !!(mic && span * (cam.aspect || 1.6) < mic.below); if (micro) m = mic.m;
+    const mpp = span / h * m;
     const k0 = Math.floor(Math.log10(100 * mpp)); let N = Math.pow(10, k0), px = N / mpp, best = 1e9;
     for (let k = k0 - 1; k <= k0 + 1; k++) for (const f of [1, 2, 5]) { const n = f * Math.pow(10, k), p = n / mpp, c = (p >= 60 && p <= 140 ? 0 : 1e4) + Math.abs(Math.log(p / 100)); if (c < best) { best = c; N = n; px = p; } }
     const U = [['km', 1e3], ['m', 1], ['cm', 1e-2], ['mm', 1e-3], ['µm', 1e-6], ['nm', 1e-9]], u = U.find(x => N >= x[1] * .999) || U[U.length - 1];
-    const lab = +(N / u[1]).toPrecision(3) + ' ' + u[0], S = this.sbar; S.hidden = false;
+    const lab = +(N / u[1]).toPrecision(3) + ' ' + u[0] + (micro && mic.note ? ' · ' + mic.note : ''), S = this.sbar; S.hidden = false;
     if (S._lab !== lab) { const dec = Math.floor(Math.log10(N) + 1e-9); if (S._dec != null && S._dec !== dec) { S.classList.remove('flash'); void S.offsetWidth; S.classList.add('flash'); } S._dec = dec; S._lab = lab; S.lastChild.textContent = lab; S.dataset.m = String(N); }
     S.firstChild.style.width = px.toFixed(0) + 'px'; const fr = this.freeFrame(innerWidth), tf = `translate(${(fr[0] + 18).toFixed(0)}px,0)`; if (S._tf !== tf) { S._tf = tf; S.style.transform = tf; }
   }
@@ -249,7 +256,7 @@ export class Director {
     const k = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10; this.cutTo(k.target.clone(), k.target.clone().addScaledVector(k.dir, R), this.baseFov(), true);
     v.scene.add(line);
     this.track = { phase: 'pre', t: 0, curve, line, dur: clamp(+T.dur || 8, 3, 20), la: clamp(T.lookAhead ?? .08, 0, .3), ls: clamp(T.lookAtSubject ?? 0, 0, 1), preview: T.preview !== false, subj: b.host, rate: 0, q: new THREE.Quaternion(), m: new THREE.Matrix4(), e: V3(), l: V3() };
-    this.hud(); this.chip(`You will ride <b>${esc(T.name || 'the track')}</b> · the rail shows the way`);
+    this.hud(); this.chip(`You will ride <b>${esc(T.label || T.name || 'the track')}</b> · the rail shows the way`);
     this.last = { kind: 'track', moving: true, subj: b.host, t: this.clock };
     return true;
   }

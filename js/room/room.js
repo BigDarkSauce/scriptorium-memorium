@@ -45,7 +45,51 @@ function fitBox(world, ds) {
   // hide what is left out (never a mesh with a kept mesh below it)
   const hide = items.filter(it => !keep.has(it.o)).map(it => it.o).filter(o => { let k = false; o.traverse(q => { if (q !== o && keep.has(q)) k = true; }); return !k; });
   const c = box.getCenter(V3()), rXZ = Math.max(.01, Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2), h = Math.max(.01, box.max.y - box.min.y);
-  return { box, c, rXZ, h, hide: hide.filter(o => !hide.includes(o.parent)) };
+  return { box, c, rXZ, h, n: keep.size, hide: hide.filter(o => !hide.includes(o.parent)) };
+}
+// Chronophotograph for a mini (Marey's stroboscopic photographs): a frozen frame of a motion demo often says little (a
+// bouncing ball is a ball in mid-air over a flat floor; a pendulum a bob at rest). The demo is run for ~3.5 s of model
+// time while the small parts are sampled; every part that really moves leaves up to 12 fading paper "ghosts" along its
+// path (shared geometry, one material per mini). Instanced meshes and the large scenery are left alone. CPU budget:
+// stops after ~180 ms of simulation per mini. Returns the ghost meshes, in the world's frame, for the caller to add.
+const GHOST_MAX = 12, STROBE_T = 3.5, STROBE_DT = 1 / 30;
+function strobe(ds) {
+  const w = ds.world; w.updateMatrixWorld(true);
+  const inv = w.matrixWorld.clone().invert(), all = new THREE.Box3(), cands = [];
+  w.traverse(o => { if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || !o.geometry || !o.visible) return; const b = new THREE.Box3().setFromObject(o).applyMatrix4(inv); if (b.isEmpty() || !isFinite(b.min.x)) return; all.union(b); cands.push({ o, b }); });
+  if (!cands.length || !ds.playing) return [];
+  const ext = Math.max(.1, ...all.getSize(V3()).toArray().filter(isFinite)), small = cands.filter(c => { const s = c.b.getSize(V3()); return Math.max(s.x, s.y, s.z) <= ext * .22; }).slice(0, 60);
+  if (!small.length) return [];
+  const rel = o => inv.clone().multiply(o.matrixWorld), track = small.map(c => ({ o: c.o, m: [rel(c.o)] })), t0 = performance.now();
+  const n = Math.round(STROBE_T / STROBE_DT);
+  for (let i = 1; i <= n && performance.now() - t0 < 180; i++) {
+    try { ds.step(STROBE_DT); } catch (e) { break; }
+    if (i % 3 === 0) { w.updateMatrixWorld(true); track.forEach(t => t.m.push(rel(t.o))); }
+  }
+  w.updateMatrixWorld(true);
+  const p = V3(), q = V3(), moving = track.filter(t => { if (!t.o.visible) return false; t.m[0].decompose(p, new THREE.Quaternion(), V3()); let d = 0; t.m.forEach(m => { q.setFromMatrixPosition(m); d = Math.max(d, q.distanceTo(p)); }); t.d = d; return d > ext * .06; })
+    .sort((a, b) => b.d - a.d).slice(0, 4);
+  if (!moving.length) return [];
+  const mat = new THREE.MeshStandardMaterial({ color: PAPER, roughness: .92, transparent: true, opacity: .55, depthWrite: false }), out = [];
+  moving.forEach(t => {
+    const ms = t.m.slice(0, -1), k = Math.min(GHOST_MAX, ms.length);   // the last sample is where the real part now stands
+    for (let j = 0; j < k; j++) {
+      const m = ms[Math.round(j * (ms.length - 1) / Math.max(1, k - 1))], gm = new THREE.Mesh(t.o.geometry, mat);
+      gm.matrixAutoUpdate = false; gm.matrix.copy(m); gm.userData.ghost = true; gm.userData.noInk = true; gm.raycast = () => { }; gm.renderOrder = 1; out.push(gm);
+    }
+  });
+  return out;
+}
+// The emblem a bay shows when its diorama cannot be built: a sealed scroll and a small title card on an easel.
+function miniEmblem(title) {
+  const g = new THREE.Group(); g.name = 'emblem';
+  const scroll = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .26, 20), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 }));
+  scroll.rotation.z = Math.PI / 2; scroll.position.set(0, .035, .05); scroll.castShadow = true; g.add(scroll);
+  const seal = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .008, 18), new THREE.MeshStandardMaterial({ color: 0x9c3a28, roughness: .45 })); seal.rotation.x = Math.PI / 2; seal.position.set(0, .035, .089); g.add(seal);
+  const tex = labelTex(String(title).slice(0, 40), { w: 512, h: 256, bg: '#f3f0e8', fg: '#2a1e15', border: '#8f733a', font: '600 54px "IM Fell English SC", Georgia, serif' });
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(.22, .11), new THREE.MeshStandardMaterial({ map: tex, roughness: .9, side: THREE.DoubleSide }));
+  card.position.set(0, .085, -.04); card.rotation.x = -.25; card.castShadow = true; g.add(card);
+  return g;
 }
 // a pedestal's walk-collision box: its plinth only (the turning models must not move the box)
 const st0 = o => { o.updateMatrixWorld(true); const b = new THREE.Box3(); o.children.forEach(c => { if (c.userData.solid) b.expandByObject(c); }); return b.isEmpty() ? new THREE.Box3().setFromObject(o) : b; };
@@ -245,16 +289,24 @@ export class BookRoom {
     if (!ps) { // a closed scroll lying on the pedestal
       const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .4, 24), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 })); r.rotation.z = Math.PI / 2; r.position.y = .05; r.castShadow = true; bay.mini.add(r); return;
     }
+    let ds = null;
     try {
-      const ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(ps.d)), { headless: true }); ds.step(0);
+      ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(ps.d)), { headless: true }); ds.step(0);
       ds.U.uFrontR.value = -1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0;
-      const w = ds.world, fit = fitBox(w, ds);
+      const w = ds.world, ghosts = strobe(ds);   // motion demos: a chronophotograph of their moving parts (see strobe)
+      ghosts.forEach(gm => w.add(gm));   // noInk: the ghosts stay soft, without contour lines; they count in the fit
+      const fit = fitBox(w, ds);
+      if (!fit.n) throw new Error('nothing to show');
       addInk(w, ds.U); addOutlines(w, ds.U, .0022);
       const s = Math.min(bay.area.r / fit.rXZ, MINI_H / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
-      w.traverse(o => { if (o.isMesh) { o.castShadow = true; } if (o.isLight) o.visible = false; if (o.isPoints) o.visible = false; });
+      w.traverse(o => { if (o.isMesh) { o.castShadow = !o.userData.ghost; } if (o.isLight) o.visible = false; if (o.isPoints) o.visible = false; });
       fit.hide.forEach(o => { o.visible = false; });
-      bay.mini.add(w); bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length };
-    } catch (e) { console.warn('mini', e); }
+      bay.mini.add(w); bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length, shown: fit.n, ghosts: ghosts.length };
+    } catch (e) {
+      // last resort, never an empty card: an emblem (a sealed scroll with the demo's title on a small easel)
+      console.warn('mini', ps.d && (ps.d.title || ps.d.type), e && e.message);
+      if (ds) { this.trash([ds.scene]); } bay.ds = null; bay.mini.clear(); bay.mini.add(miniEmblem(ps.d.title || ps.st.title || 'Diorama')); bay.fit = { emblem: true };
+    }
   }
   sheetTexture(part, i) {
     const A = part.analysis, n = A ? (A.chain || []).length : 0;

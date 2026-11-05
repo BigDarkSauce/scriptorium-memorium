@@ -17,6 +17,7 @@ import { renderSource } from '../room/reader.js';
 import { evidenceTools } from '../ai/evidence.js';
 import { Director } from './director.js';
 import { Cues, cloneMat } from './focus.js';
+import { Inset } from './inset.js';
 import { DIO } from './models.js';
 const PREFS_KEY = 'scriptorium.view';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
@@ -45,6 +46,7 @@ export class DioramaView {
     this.buildHUD();
     this.dir = new Director(this, this.ui);
     this.cues = new Cues(this);   // chain / isolate / peel cues and the focus mask (js/dio/focus.js)
+    this.inset = new Inset(this);   // S10: the passive "you are here" overview during zooms, rides and deep close-ups (js/dio/inset.js)
     this.ds.listeners.event.push(ev => this.onEvent(ev));
     this.gfx.setView(this.scene, this.camera);
     this.onWheel = e => this.wheel(e); this.gfx.canvas.addEventListener('wheel', this.onWheel, { passive: false });
@@ -350,6 +352,7 @@ export class DioramaView {
   // S6.3: the learner's choice (Calm) or the system's "reduce motion"
   reducedMotion() { const m = this.prefs.motion; if (m === 'reduced') return true; if (m === 'full') return false; try { this._rmq = this._rmq || matchMedia('(prefers-reduced-motion: reduce)'); return this._rmq.matches; } catch (e) { return false; } }
   scaleM() { const s = this.spec.scale || (DIO[this.spec.type] || {}).scale; return s && +s.m > 0 ? +s.m : 0; }   // metres per world unit (no scale → no scale bar)
+  scaleMicro() { const s = this.spec.scale || (DIO[this.spec.type] || {}).scale, u = s && s.micro; return u && +u.m > 0 && +u.below > 0 ? { m: +u.m, below: +u.below, note: u.note ? String(u.note) : '' } : null; }   // the molecular scale of a scene drawn at two scales
   // S5 label rules: at most 4 full labels; older ones shrink to numbered dots that stay for the step; a label named by a
   // beat or an event comes up at once (≤ 0.3 s) and stays at least its reading time
   touchLabels(actors) { const R = this._recent || (this._recent = new Map()), now = this.dir ? this.dir.clock || 0 : 0; (actors || []).forEach(a => { if (!a || !a.name) return; const r = R.get(a.name); R.set(a.name, { t: now, min: r && now - r.t < r.min ? r.min : (this.dir ? this.dir.readTime(a.name) : 3) }); }); this._labT = -1; }
@@ -611,13 +614,13 @@ export class DioramaView {
     else if (this.pov) this.updatePOV(dt);
     else if (this.controls.enabled) this.controls.update();
     this.cues.preStep(); ds.step(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale);
-    if (this.awaitIdle) { this.awaitT = (this.awaitT || 0) + dt; if (this.dir.idle() || this.awaitT > 15) { this.awaitIdle = false; this.runT = this.runDur; } }
-    if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) this.completeLesson(); }
+    if (this.awaitIdle) { this.awaitT = (this.awaitT || 0) + dt; if ((this.dir.idle() && !this.dir.busy()) || this.awaitT > 15) { this.awaitIdle = false; this.runT = this.runDur; } }
+    if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) { this._busyT = this.dir.busy() ? (this._busyT || 0) + dt : 0; if (this._busyT === 0 || this._busyT > 12) { this._busyT = 0; this.completeLesson(); } } }   // a zoom, ride or bracket still on its way finishes first (at most 12 s more)
     this.flashes = this.flashes.filter(f => { f.a += dt; f.s.scale.setScalar(.3 + f.a * 2.4); f.s.material.opacity = Math.max(0, 1 - f.a / 1.1); if (f.a > 1.1) { f.s.removeFromParent(); f.s.material.dispose(); return false; } return true; });
     // pins
     const w = innerWidth, h = innerHeight, v = V3();
     this.dir.update(dt, this.camera, w, h);
-    this.comfort(dt); this.cues.update(dt); this.labelRule(t);
+    this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
     if (!this._pr || t - this._pr > .5) { this._pr = t; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, this.dir.beat && this.dir.beat.el].filter(P => P && !P.hidden && !P.classList.contains('folded')).map(P => P.getBoundingClientRect()); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; }
@@ -670,7 +673,7 @@ export class DioramaView {
   dispose() {
     if (this.pov) this.exitPOV(true);
     if (this.disposed) return;
-    if (this.dir) this.dir.dispose(); if (this.cues) this.cues.dispose(); this.gfx.canvas.removeEventListener('wheel', this.onWheel); removeEventListener('keydown', this.onKey);
+    if (this.dir) this.dir.dispose(); if (this.cues) this.cues.dispose(); if (this.inset) this.inset.dispose(); this.gfx.canvas.removeEventListener('wheel', this.onWheel); removeEventListener('keydown', this.onKey);
     this.gfx.canvas.removeEventListener('pointerdown', this.onPointerDown); this.gfx.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.controls.dispose(); if (this.tc) { this.tc.detach(); this.tc.dispose(); }
     this.gfx.outline.selectedObjects = []; this.gfx.outline.enabled = false; this.gfx.canvas.classList.remove('editing');

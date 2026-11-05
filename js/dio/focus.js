@@ -174,10 +174,14 @@ export class Cues {
     ds.scene.updateMatrixWorld(true);
     const all = new THREE.Box3(); layers.forEach(a => all.expandByObject(a.obj)); if (host && host.obj) all.expandByObject(host.obj);
     const C0 = all.getCenter(V3());
+    // a layer never takes the inner subject, nor another actor that sits inside it (the mercury column inside the
+    // barometer case), with it: their meshes stay as they are
+    const inside = (o, root) => { for (let q = o; q; q = q.parent) if (q === root) return true; return false; };
+    const keep = new Set((host ? this.meshesOf(host) : []).concat(...ds.actors.filter(x => x.obj && !layers.some(l => l.obj === x.obj) && layers.some(l => inside(x.obj, l.obj))).map(x => this.meshesOf(x))));
     const L = layers.map((a, i) => {
       const bx = new THREE.Box3().setFromObject(a.obj), c = bx.getCenter(V3()), r = Math.max(.05, bx.getSize(V3()).length() * .5);
       const out = c.clone().sub(C0); out.y = Math.max(out.y, 0); if (out.lengthSq() < 1e-6) out.set(0, 1, 0); out.normalize();
-      const meshes = this.meshesOf(a).filter(m => ![].concat(m.material).some(x => x && (x.transmission > 0 || (x.transparent && x.opacity < .6))));   // thin-shell glass is already see-through: skip it
+      const meshes = this.meshesOf(a).filter(m => !keep.has(m) && ![].concat(m.material).some(x => x && (x.transmission > 0 || (x.transparent && x.opacity < .6))));   // thin-shell glass is already see-through: skip it
       return { a, i, c, r, out, meshes, k: 0, goal: 0, off: V3(), lastOff: V3(), ap: V3(), has: false, plane: new THREE.Plane(V3(1, 0, 0), 1e5), swapped: false };
     });
     this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1 };
