@@ -48,7 +48,7 @@ export class Director {
     this.queue.push(beat); if (!this.beat) this.nextBeat();
   }
   static split(text, max) {
-    const sents = String(text).match(/[^.!?]+[.!?]+["”)]?\s*|[^.!?]+$/g) || [text], out = []; let cur = '';
+    const sents = String(text).match(/(?:[^.!?]|[.!?](?=\S))+(?:[.!?]+["”)]?(?:\s+|$)|$)/g) || [text], out = []; let cur = '';
     for (const x of sents) { const n = (cur + x).trim().split(/\s+/).length; if (cur && n > max) { out.push(cur.trim()); cur = x; } else cur += x; }
     if (cur.trim()) out.push(cur.trim()); return out;
   }

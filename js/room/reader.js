@@ -240,7 +240,7 @@ export class Reader {
     return box;
   }
   renderDemo(d, st, i, demos) {
-    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + esc(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: esc(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + esc(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
+    const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d); const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov]); };
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {
