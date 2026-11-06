@@ -601,7 +601,7 @@ const STY = 'mtyp-css';
 function ensureCSS() {
   if (typeof document === 'undefined' || document.getElementById(STY)) return;
   const st = document.createElement('style'); st.id = STY;
-  st.textContent = `.mx{white-space:nowrap}.mx i{font-style:italic}.mx sup,.mx sub{font-size:.72em;line-height:0}.mx sup{vertical-align:.42em}.mx sub{vertical-align:-.22em}
+  st.textContent = `.mx{white-space:nowrap}.mx.mw{white-space:normal}.mx i{font-style:italic}.mx sup,.mx sub{font-size:.72em;line-height:0}.mx sup{vertical-align:.42em}.mx sub{vertical-align:-.22em}
 .mx sup sup{vertical-align:.32em}.mx sup sub,.mx sub sub{vertical-align:-.18em}.m-ss{display:inline-flex;flex-direction:column;vertical-align:-.3em;font-size:.72em;line-height:1;margin-left:.04em}
 .m-sqrt{white-space:nowrap;display:inline-flex;align-items:flex-start}.m-sqrt>.m-idx{font-size:.6em;margin-right:-.45em;margin-top:-.1em}.m-rad{border-top:.07em solid currentColor;padding:.02em .1em 0 .05em;margin-top:.12em;display:inline-flex;align-items:baseline}
 .m-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.86em;line-height:1.05;margin:0 .1em}.m-frac>span:first-child{border-bottom:.07em solid currentColor;padding:0 .15em .04em}.m-frac>span:last-child{padding:.04em .15em 0}`;
@@ -698,7 +698,7 @@ export function mathHTML(s, target = 'html') {
 }
 function boxHTML(b) {   // math parts get a no-wrap wrapper so an expression never breaks inside a script or fraction
   if (b.k === 'h' && !b.math) return b.c.map(boxHTML).join('');
-  if (b.k === 'h' && b.math) { const inner = toHTML(b); return /<|[ ·×−=]/.test(inner) && inner.length < 400 ? `<span class="mx">${inner}</span>` : inner; }
+  if (b.k === 'h' && b.math) { const inner = toHTML(b), vis = inner.replace(/<[^>]+>/g, '').replace(/&\w+;/g, '_'); return /<|[\u2009·×−=]/.test(inner) ? `<span class="mx${vis.length > 30 ? ' mw' : ''}">${inner}</span>` : inner; }   // a short expression never breaks; a long one may break at its spaces
   return toHTML(b);
 }
 // a plain-Unicode rendering for places without markup (tooltips, aria-labels, wrapped canvas text, document titles):

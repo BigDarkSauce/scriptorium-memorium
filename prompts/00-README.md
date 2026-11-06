@@ -19,7 +19,7 @@ The formats are documented in `../docs/PROTOCOL.md`, `../docs/SCENE_SPEC.md` and
 
 ## Ids the app and any AI share
 
-- Subsections: the heading's number ("1.2", "1.2.3", "A.1"); the text of a chapter before its first heading is "<chapter number>.0" (e.g. "1.0"; "p<page>.0" when the chapter has no number); an unnumbered heading is "p<page>-<k>" (k = its position in the part's list of subsections, from 1); a part with no headings inside is cut into windows of 2 pages, "<part number>-w<k>" (e.g. "3-w1" = the part's first two pages; "p<first page>-w<k>" when the part has no number).
+- Subsections: the heading's number ("1.2", "1.2.3", "A.1"); the text of a chapter before its first heading is "<chapter number>.0" (e.g. "1.0"; "p<page>.0" when the chapter has no number); an unnumbered heading is "p<page>-<k>" (k = its position in the part's list of subsections, from 1); a part with no headings inside is cut into windows of 2 pages, "<part number>-w<k>" (e.g. "3-w1" = the part's first two pages; "p<first page>-w<k>" when the part has no number). A sheet (an infographic or handout page with its own big title, often numbered "01") is one part; its panels are its subsections: a numbered panel k on sheet n is "<n>.<k>", an unnumbered panel "p<page>-<k>", the sheet's text above its first panel "<n>.0".
 - Figures and tables: "Figure 3.2" → fig-3-2, "Fig. 2-3" → fig-2-3, "Figure 3.2a" → fig-3-2a, "Table 1.1" → tab-1-1, an unnumbered figure on page 12 → fig-p12-1, an unnumbered table on page 12 → tab-p12-1 (k counts the unnumbered figures, or tables, of that page from 1).
 
 ## Where demo data comes from
