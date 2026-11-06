@@ -129,9 +129,13 @@ export function setRestTiers(o, tiers) {
 export function fillBookcase() { return null; }
 // Slot position (local to the bookcase) for tier i, slot j: scrolls lie horizontally, ends facing out.
 export const slotX = (u, slot) => -u.w / 2 + .14 + slot * SLOT;
+// SLOT_Z: the scroll's middle 9.5 cm before the case's centre, so its back knob (0.305 m behind the middle) stays 7 mm
+// before the silk liner instead of passing through the back board; the front knob and tag stand out past the face, as
+// on a scroll rack.
+export const SLOT_Z = .095;
 export function slotPos(shelfObj, tier, slot) {
   const u = shelfObj.userData, y = .13 + tier * u.tierH + AXIS, x = slotX(u, slot);
-  return new THREE.Vector3(x, y, .02);
+  return new THREE.Vector3(x, y, SLOT_Z);
 }
 // ---------- hanging scrolls ----------
 // An important scroll can hang on two chains from the underside of the board above its tier (the top tier: from the
