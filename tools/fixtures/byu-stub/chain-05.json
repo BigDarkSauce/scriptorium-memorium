@@ -1,0 +1,992 @@
+{
+ "title": "05 · d · p · q · r",
+ "summary": "Four functions per distribution; the first letter is the question: exactly (d), at most (p), which value (q), random values (r).",
+ "question": "How do you ask R a probability question about a distribution?",
+ "chain": [
+  {
+   "section": "5.0",
+   "kind": "definition",
+   "title": "Prefix + name = function",
+   "ref": "p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "Each distribution has four functions; the prefix d, p, q or r is the question, the name (binom, pois, norm, unif) the distribution.",
+   "explain": [
+    {
+     "text": "binom counts successes in n trials (arguments size, prob; mean np); pois counts with no upper limit (lambda; variance = mean); norm describes measurements (mean, sd; the bell curve); unif gives equal chances between min and max. So dbinom, pbinom, qbinom and rbinom ask the four questions of the binomial, and the same pattern holds for the other three.",
+     "figure": {
+      "kind": "table",
+      "caption": "The 4 × 4 grid: prefix (question) × distribution.",
+      "columns": [
+       "",
+       "binom",
+       "pois",
+       "norm",
+       "unif"
+      ],
+      "rows": [
+       [
+        "d: P(exactly x)",
+        "dbinom()",
+        "dpois()",
+        "dnorm()",
+        "dunif()"
+       ],
+       [
+        "p: P(X ≤ x)",
+        "pbinom()",
+        "ppois()",
+        "pnorm()",
+        "punif()"
+       ],
+       [
+        "q: probability → x",
+        "qbinom()",
+        "qpois()",
+        "qnorm()",
+        "qunif()"
+       ],
+       [
+        "r: simulate",
+        "rbinom()",
+        "rpois()",
+        "rnorm()",
+        "runif()"
+       ]
+      ]
+     }
+    },
+    {
+     "text": "The running example (Lecture 4): about 7% of lymphocytes are natural killer (NK) cells. Take 10 cells; the number of NK cells among them is binomial with size = 10 and prob = 0.07."
+    }
+   ],
+   "terms": [
+    {
+     "term": "binomial",
+     "meaning": "successes in size independent trials, each with probability prob"
+    },
+    {
+     "term": "Poisson",
+     "meaning": "counts of events with mean lambda, no upper limit; variance = mean"
+    },
+    {
+     "term": "normal",
+     "meaning": "bell-shaped distribution of measurements with mean and sd"
+    },
+    {
+     "term": "uniform",
+     "meaning": "every value between min and max equally likely"
+    }
+   ],
+   "intuition": "The prefix is the question word, the name is the subject.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Question + distribution.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "p (how likely ≤?)"
+     },
+     {
+      "id": "n1",
+      "label": "+ binom"
+     },
+     {
+      "id": "n2",
+      "label": "= pbinom()"
+     }
+    ]
+   },
+   "misconception": "qnorm and pnorm do the same thing. They are inverses: p takes a value and gives a probability; q takes a probability and gives a value.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Inverse questions.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "pnorm = qnorm."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "pnorm(1.96) = 0.975; qnorm(0.975) = 1.96."
+    }
+   },
+   "check": {
+    "q": "Which function simulates 100 Poisson counts with mean 3?",
+    "a": "rpois(100, lambda = 3).",
+    "figure": {
+     "kind": "flow",
+     "caption": "r + pois.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "r: simulate"
+      },
+      {
+       "id": "n1",
+       "label": "pois"
+      },
+      {
+       "id": "n2",
+       "label": "rpois(100, 3)"
+      }
+     ]
+    }
+   },
+   "opens": "How likely is exactly 2 NK cells among 10?",
+   "id": "S1",
+   "answers": "How do you ask R a probability question about a distribution?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p5-1",
+   "kind": "example",
+   "title": "d: how likely is exactly this value?",
+   "ref": "d panel, p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "dbinom(2, size = 10, prob = 0.07) = 0.1233878 is the probability of exactly 2 NK cells among 10.",
+   "explain": [
+    {
+     "text": "The binomial formula counts the ways to choose which 2 of the 10 cells are NK (45 ways) and multiplies by the chance of that pattern: 0.07² for the two NK cells and 0.93⁸ for the eight others. About one sample of ten in eight holds exactly two NK cells.",
+     "figure": {
+      "kind": "distribution",
+      "dist": "binomial",
+      "params": {
+       "size": 10,
+       "prob": 0.07
+      },
+      "caption": "P(X = 2) is one bar of the binomial with size 10, prob 0.07.",
+      "xlabel": "NK cells out of 10",
+      "shade": {
+       "from": 2,
+       "to": 2,
+       "label": "P(X = 2)"
+      },
+      "marks": [
+       {
+        "x": 2,
+        "label": "0.123"
+       }
+      ]
+     }
+    }
+   ],
+   "math": "P(X=2)=\\binom{10}{2}\\,0.07^2\\,0.93^8",
+   "examples": [
+    {
+     "title": "Exactly 2 NK cells",
+     "origin": "pdf",
+     "ref": "Lecture 4 example, p. 5",
+     "problem": "7% of lymphocytes are NK cells; in 10 cells, what is P(exactly 2)?",
+     "solution": [
+      {
+       "text": "Ways to choose the two NK cells:",
+       "math": "\\binom{10}{2}=45"
+      },
+      {
+       "text": "Probability of one such pattern:",
+       "math": "0.07^2\\times0.93^8=0.0049\\times0.5596=0.002742"
+      },
+      {
+       "text": "Multiply:",
+       "math": "45\\times0.002742=0.1234"
+      }
+     ],
+     "answer": "dbinom(2, size = 10, prob = 0.07) = 0.1233878."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "dbinom(2, size = 10, prob = 0.07)",
+      "explain": "d = P(exactly x); x = 2 successes, size = 10 trials, prob = 0.07 per trial"
+     }
+    ],
+    "output": [
+     "[1] 0.1233878"
+    ],
+    "interpret": "About a 12% chance of exactly two NK cells in ten."
+   },
+   "terms": [
+    {
+     "term": "dbinom(x, size, prob)",
+     "meaning": "P(X = x) for a binomial"
+    },
+    {
+     "term": "binomial coefficient",
+     "meaning": "the number of ways to choose x items from size"
+    }
+   ],
+   "intuition": "d picks one bar of the distribution.",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "binomial",
+    "params": {
+     "size": 10,
+     "prob": 0.07
+    },
+    "caption": "One bar.",
+    "xlabel": "NK cells out of 10",
+    "shade": {
+     "from": 2,
+     "to": 2
+    }
+   },
+   "misconception": "For continuous data, dnorm() is also P(exactly x). It is the curve's height; any exact value has probability 0.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Discrete d versus continuous d.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "dnorm(x) = P(X = x)."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "dbinom gives a probability; dnorm gives a height."
+    }
+   },
+   "check": {
+    "q": "What is P(no NK cell in 10)?",
+    "a": "dbinom(0, 10, 0.07) = 0.93¹⁰ = 0.484.",
+    "figure": {
+     "kind": "distribution",
+     "dist": "binomial",
+     "params": {
+      "size": 10,
+      "prob": 0.07
+     },
+     "caption": "P(X = 0) = 0.484.",
+     "xlabel": "NK cells out of 10",
+     "shade": {
+      "from": 0,
+      "to": 0,
+      "label": "P(X = 0)"
+     }
+    }
+   },
+   "opens": "How likely is this value or fewer?",
+   "id": "S2",
+   "answers": "How likely is exactly 2 NK cells among 10?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p5-2",
+   "kind": "example",
+   "title": "p: this value or less",
+   "ref": "p panel, p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "pbinom(3, size = 10, prob = 0.07) = 0.9964239 adds the bars for 0, 1, 2 and 3: the probability of no more than 3 NK cells.",
+   "explain": [
+    {
+     "text": "p means cumulative: P(X ≤ x). Here 0.484 + 0.364 + 0.123 + 0.025 = 0.996. \"More than 3\" is the complement, so flip it: 1 − pbinom(3, …) = 0.0036, about 4 samples in 1,000.",
+     "figure": {
+      "kind": "distribution",
+      "dist": "binomial",
+      "params": {
+       "size": 10,
+       "prob": 0.07
+      },
+      "caption": "P(X ≤ 3): the bars 0 to 3 added up.",
+      "xlabel": "NK cells out of 10",
+      "shade": {
+       "to": 3,
+       "label": "P(X ≤ 3)"
+      }
+     }
+    }
+   ],
+   "examples": [
+    {
+     "title": "At most 3, and more than 3",
+     "origin": "pdf",
+     "ref": "p. 5",
+     "problem": "P(X ≤ 3) and P(X > 3) for 10 cells with prob 0.07.",
+     "solution": [
+      {
+       "text": "Add the four bars: 0.4840 + 0.3643 + 0.1234 + 0.0248 = 0.9964."
+      },
+      {
+       "text": "Complement: 1 − 0.9964 = 0.0036."
+      }
+     ],
+     "answer": "pbinom(3, 10, 0.07) = 0.9964239; 1 − pbinom(3, 10, 0.07) = 0.0036."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "pbinom(3, size = 10, prob = 0.07)",
+      "explain": "p = P(X ≤ 3): sums the probabilities of 0, 1, 2 and 3"
+     },
+     {
+      "code": "1 - pbinom(3, size = 10, prob = 0.07)",
+      "explain": "P(X > 3): everything above 3"
+     }
+    ],
+    "output": [
+     "[1] 0.9964239",
+     "[1] 0.0035761"
+    ],
+    "interpret": "Four or more NK cells in ten would be rare (0.4%)."
+   },
+   "terms": [
+    {
+     "term": "cumulative probability",
+     "meaning": "P(X ≤ x): the sum (or area) up to x"
+    },
+    {
+     "term": "complement",
+     "meaning": "P(not A) = 1 − P(A)"
+    }
+   ],
+   "intuition": "p is a running total from the left.",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "binomial",
+    "params": {
+     "size": 10,
+     "prob": 0.07
+    },
+    "caption": "A running total.",
+    "xlabel": "NK cells out of 10",
+    "shade": {
+     "to": 3
+    }
+   },
+   "misconception": "1 − pbinom(3) is P(X ≥ 3). It is P(X > 3); P(X ≥ 3) is 1 − pbinom(2).",
+   "misconceptionFigure": {
+    "kind": "numberline",
+    "caption": "X > 3 starts at 4; X ≥ 3 starts at 3.",
+    "min": 0,
+    "max": 10,
+    "step": 1,
+    "intervals": [
+     {
+      "from": 4,
+      "to": 10,
+      "label": "X > 3",
+      "closedL": true
+     },
+     {
+      "from": 3,
+      "to": 10,
+      "label": "X ≥ 3",
+      "closedL": true
+     }
+    ]
+   },
+   "check": {
+    "q": "Which call gives P(X ≥ 2)?",
+    "a": "1 − pbinom(1, 10, 0.07) = 1 − (0.484 + 0.364) = 0.152.",
+    "figure": {
+     "kind": "distribution",
+     "dist": "binomial",
+     "params": {
+      "size": 10,
+      "prob": 0.07
+     },
+     "caption": "P(X ≥ 2): everything from 2 up.",
+     "xlabel": "NK cells out of 10",
+     "shade": {
+      "from": 2,
+      "label": "P(X ≥ 2)"
+     }
+    }
+   },
+   "opens": "Which value cuts off a given probability?",
+   "id": "S3",
+   "answers": "How likely is this value or fewer?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p5-3",
+   "kind": "example",
+   "title": "q: which value cuts off this much?",
+   "ref": "q panel, p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "qnorm(0.975) = 1.959964: 97.5% of a standard normal lies below 1.96. q reverses p: pnorm(1.96) ≈ 0.975.",
+   "explain": [
+    {
+     "text": "q takes a probability and returns the value that cuts it off on the left. For the standard normal (mean 0, sd 1), 2.5% lies above 1.96 and, by symmetry, 2.5% below −1.96, so 95% lies between them. That is the 1.96 in a 95% confidence interval: mean ± 1.96 standard errors (Bradley §3).",
+     "figure": {
+      "kind": "distribution",
+      "dist": "normal",
+      "params": {
+       "mean": 0,
+       "sd": 1
+      },
+      "caption": "97.5% of the standard normal lies left of 1.96.",
+      "shade": {
+       "to": 1.96,
+       "label": "P(Z ≤ 1.96)"
+      },
+      "marks": [
+       {
+        "x": 1.96,
+        "label": "1.96"
+       }
+      ],
+      "xlabel": "z"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "qnorm(0.975)",
+      "explain": "q = the value with 97.5% of the standard normal below it"
+     },
+     {
+      "code": "pnorm(1.96)",
+      "explain": "p = the area left of 1.96; the inverse question"
+     }
+    ],
+    "output": [
+     "[1] 1.959964",
+     "[1] 0.9750021"
+    ],
+    "interpret": "Each function undoes the other."
+   },
+   "examples": [
+    {
+     "title": "95% interval for the mean sleep (added)",
+     "origin": "added",
+     "problem": "Mean sleep 10.53 h, SE 0.605 h (sheet 01). Give an approximate 95% interval.",
+     "solution": [
+      {
+       "text": "10.53 ± 1.96 × 0.605 = 10.53 ± 1.19."
+      }
+     ],
+     "answer": "About 9.3 to 11.7 hours.",
+     "source": {
+      "title": "Statistics notes: Standard deviations and standard errors",
+      "authors": "Altman D G; Bland J M",
+      "year": 2005,
+      "doi": "10.1136/bmj.331.7521.903"
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "quantile",
+     "meaning": "the value below which a given proportion of the distribution lies"
+    },
+    {
+     "term": "standard normal",
+     "meaning": "normal with mean 0 and sd 1"
+    }
+   ],
+   "intuition": "p goes from a value to an area; q goes from an area back to the value.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Inverse functions.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "1.96"
+     },
+     {
+      "id": "n1",
+      "label": "pnorm → 0.975"
+     },
+     {
+      "id": "n2",
+      "label": "qnorm → 1.96"
+     }
+    ]
+   },
+   "misconception": "qnorm(0.95) gives the 95% interval limit. That is 1.645, a one-sided cut; the two-sided 95% limit is qnorm(0.975).",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "One-sided versus two-sided.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "qnorm(0.95) = 1.96."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "qnorm(0.95) = 1.645; qnorm(0.975) = 1.96."
+    }
+   },
+   "check": {
+    "q": "What does qnorm(0.5) return, and why?",
+    "a": "0: half of a symmetric distribution centred at 0 lies below 0.",
+    "figure": {
+     "kind": "distribution",
+     "dist": "normal",
+     "params": {
+      "mean": 0,
+      "sd": 1
+     },
+     "caption": "Half lies below 0.",
+     "shade": {
+      "to": 0,
+      "label": "P(Z ≤ 0)"
+     }
+    }
+   },
+   "opens": "How do you make R generate random values from a distribution?",
+   "id": "S4",
+   "answers": "Which value cuts off a given probability?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p5-4",
+   "kind": "example",
+   "title": "r: random values",
+   "ref": "r panel, p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "rbinom(n = 10, size = 1, prob = 0.5) simulates 10 fair coin flips, e.g. 0 0 1 1 0 1 1 1 1 0: 6 heads, so the estimate is p ≈ 0.6.",
+   "explain": [
+    {
+     "text": "n is how many draws, size the trials per draw (1 = one coin flip, a 0 or a 1). Each run gives new values; set.seed(1) fixes the random generator so the same values come back. With more flips the share of heads closes in on 0.5: random variation shrinks as the sample grows.",
+     "figure": {
+      "kind": "distribution",
+      "dist": "binomial",
+      "params": {
+       "size": 10,
+       "prob": 0.5
+      },
+      "animate": true,
+      "caption": "Heads in 10 flips: random draws pile up into the binomial bars.",
+      "xlabel": "heads in 10 flips"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "set.seed(1)",
+      "explain": "fix the random generator so the run can be repeated"
+     },
+     {
+      "code": "rbinom(n = 10, size = 1, prob = 0.5)",
+      "explain": "10 draws, each one flip of a fair coin (1 = heads)"
+     },
+     {
+      "code": "mean(rbinom(1000, 1, 0.5))",
+      "explain": "share of heads in 1000 flips: close to 0.5"
+     }
+    ],
+    "output": [
+     "[1] 0 0 1 1 0 1 1 1 1 0"
+    ],
+    "interpret": "6 heads in 10 is an ordinary result for a fair coin; 1000 flips pin p down far better."
+   },
+   "terms": [
+    {
+     "term": "set.seed()",
+     "meaning": "fix the start of the random generator so results repeat"
+    },
+    {
+     "term": "simulation",
+     "meaning": "learning about a distribution by drawing from it many times"
+    }
+   ],
+   "intuition": "r is the coin; d, p and q are the maths about the coin.",
+   "intuitionFigure": {
+    "kind": "bars",
+    "caption": "The ten flips of the sheet: 6 heads, 4 tails.",
+    "categories": [
+     "heads (1)",
+     "tails (0)"
+    ],
+    "series": [
+     {
+      "name": "flips",
+      "values": [
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "misconception": "Getting 6 heads in 10 means the coin is biased. P(6 or more of 10) for a fair coin is 0.377: very common.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Small samples wobble.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "6/10 heads → biased coin."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "6/10 happens 38% of the time with a fair coin."
+    }
+   },
+   "check": {
+    "q": "Why does set.seed(1) matter in a report?",
+    "a": "Readers can rerun the code and get the same random values, so the results are reproducible.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Reproducible randomness.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "set.seed(1)"
+      },
+      {
+       "id": "n1",
+       "label": "rbinom(…)"
+      },
+      {
+       "id": "n2",
+       "label": "same values every run"
+      }
+     ]
+    }
+   },
+   "demos": [
+    {
+     "type": "scene",
+     "title": "Coin-flip machine",
+     "purpose": "How do random 0/1 draws add up to a stable share of heads?",
+     "technique": "card",
+     "request": "A coin-flipping machine that drops coins into two tubes (heads/tails) with a running share-of-heads readout; parameter n flips and prob; lessons show 10 flips (6 heads), 100, 1000 approaching 0.5."
+    }
+   ],
+   "opens": "Why do \"less than\" and \"at most\" give different answers for counts?",
+   "id": "S5",
+   "answers": "How do you make R generate random values from a distribution?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "figures": []
+  },
+  {
+   "section": "p5-5",
+   "kind": "result",
+   "title": "Discrete: \"less than\" ≠ \"at most\"",
+   "ref": "p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "For counts, X ≤ 3 is pbinom(3, …), X < 3 is pbinom(2, …), X > 3 is 1 − pbinom(3, …) and X ≥ 3 is 1 − pbinom(2, …).",
+   "explain": [
+    {
+     "text": "A count can be exactly 3, so whether 3 is included changes the answer. pbinom(k) always includes k. \"Fewer than 3\" stops at 2; \"3 or more\" removes everything up to 2. Translate the words into ≤ or < first, then into the call.",
+     "figure": {
+      "kind": "numberline",
+      "caption": "Which counts each phrase includes.",
+      "min": 0,
+      "max": 6,
+      "step": 1,
+      "intervals": [
+       {
+        "from": 0,
+        "to": 3,
+        "label": "X ≤ 3: pbinom(3)",
+        "closedR": true
+       },
+       {
+        "from": 0,
+        "to": 2,
+        "label": "X < 3: pbinom(2)",
+        "closedR": true
+       },
+       {
+        "from": 4,
+        "to": 6,
+        "label": "X > 3: 1 − pbinom(3)"
+       },
+       {
+        "from": 3,
+        "to": 6,
+        "label": "X ≥ 3: 1 − pbinom(2)"
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "pbinom(3, 10, 0.07)",
+      "explain": "3 or fewer: X ≤ 3"
+     },
+     {
+      "code": "pbinom(2, 10, 0.07)",
+      "explain": "fewer than 3: X < 3, i.e. X ≤ 2"
+     },
+     {
+      "code": "1 - pbinom(3, 10, 0.07)",
+      "explain": "more than 3: X > 3"
+     },
+     {
+      "code": "1 - pbinom(2, 10, 0.07)",
+      "explain": "3 or more: X ≥ 3"
+     }
+    ],
+    "output": [
+     "[1] 0.9964239",
+     "[1] 0.9716688",
+     "[1] 0.0035761",
+     "[1] 0.0283312"
+    ],
+    "interpret": "Including or excluding 3 changes the answer by P(X = 3) = 0.025."
+   },
+   "terms": [
+    {
+     "term": "discrete",
+     "meaning": "takes separate values (0, 1, 2 …), each with its own probability"
+    }
+   ],
+   "intuition": "On a staircase, \"up to step 3\" and \"below step 3\" are different heights.",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "binomial",
+    "params": {
+     "size": 10,
+     "prob": 0.07
+    },
+    "caption": "The difference is one bar: P(X = 3).",
+    "xlabel": "NK cells out of 10",
+    "shade": {
+     "from": 3,
+     "to": 3,
+     "label": "P(X = 3)"
+    }
+   },
+   "misconception": "P(X < 3) = pbinom(3). That includes 3; use pbinom(2).",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Strict versus not.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "fewer than 3 → pbinom(3)"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "fewer than 3 → pbinom(2)"
+    }
+   },
+   "check": {
+    "q": "How do you get P(X ≥ 1) quickly?",
+    "a": "1 − dbinom(0, 10, 0.07) = 1 − 0.484 = 0.516.",
+    "figure": {
+     "kind": "distribution",
+     "dist": "binomial",
+     "params": {
+      "size": 10,
+      "prob": 0.07
+     },
+     "caption": "Everything except 0.",
+     "xlabel": "NK cells out of 10",
+     "shade": {
+      "from": 1,
+      "label": "P(X ≥ 1)"
+     }
+    }
+   },
+   "opens": "How do you ask about a continuous variable, where no single value has a probability?",
+   "id": "S6",
+   "answers": "Why do \"less than\" and \"at most\" give different answers for counts?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p5-6",
+   "kind": "example",
+   "title": "Continuous: ask about ranges",
+   "ref": "p. 5",
+   "pages": [
+    5
+   ],
+   "statement": "Any exact value of a continuous variable has probability 0, so subtract areas: pnorm(170, 165.1, 7.07) − pnorm(165, 165.1, 7.07) = 0.26 of women are 165–170 cm tall (Lecture 6).",
+   "explain": [
+    {
+     "text": "Heights follow a normal curve with mean 165.1 cm and sd 7.07 cm. The probability of a range is the area under the curve between its ends: the area left of 170 minus the area left of 165, 0.756 − 0.494 = 0.26.",
+     "figure": {
+      "kind": "distribution",
+      "dist": "normal",
+      "params": {
+       "mean": 165.1,
+       "sd": 7.07
+      },
+      "caption": "Women between 165 and 170 cm: the shaded area.",
+      "shade": {
+       "from": 165,
+       "to": 170,
+       "label": "P(165 ≤ X ≤ 170)"
+      },
+      "xlabel": "height (cm)"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "pnorm(170, 165.1, 7.07) -",
+      "explain": "area left of 170 cm (mean 165.1, sd 7.07)"
+     },
+     {
+      "code": "  pnorm(165, 165.1, 7.07)   # 0.26",
+      "explain": "minus the area left of 165 cm"
+     }
+    ],
+    "output": [
+     "[1] 0.2615"
+    ],
+    "interpret": "About a quarter of women are between 165 and 170 cm."
+   },
+   "examples": [
+    {
+     "title": "Women 165–170 cm",
+     "origin": "pdf",
+     "ref": "Lecture 6, p. 5",
+     "problem": "Heights ~ normal(165.1, 7.07). P(165 ≤ X ≤ 170)?",
+     "solution": [
+      {
+       "text": "z for 170: (170 − 165.1)/7.07 = 0.693, area 0.756."
+      },
+      {
+       "text": "z for 165: (165 − 165.1)/7.07 = −0.014, area 0.494."
+      },
+      {
+       "text": "Subtract: 0.756 − 0.494 = 0.262."
+      }
+     ],
+     "answer": "0.26"
+    }
+   ],
+   "terms": [
+    {
+     "term": "continuous",
+     "meaning": "takes any value in a range; probabilities are areas under the curve"
+    }
+   ],
+   "intuition": "Probability is paint on the floor under the curve; a line has no area.",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "normal",
+    "params": {
+     "mean": 165.1,
+     "sd": 7.07
+    },
+    "caption": "Area between two cuts.",
+    "shade": {
+     "from": 165,
+     "to": 170
+    }
+   },
+   "misconception": "dnorm(170, 165.1, 7.07) is the share of women exactly 170 cm. It is a height of the curve (0.044 per cm), not a probability.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Height, not share.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "dnorm(170, …) = share at 170 cm."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Shares are areas: use pnorm() differences."
+    }
+   },
+   "check": {
+    "q": "What share of women is taller than 180 cm?",
+    "a": "1 − pnorm(180, 165.1, 7.07) = 1 − 0.982 = 0.018.",
+    "figure": {
+     "kind": "distribution",
+     "dist": "normal",
+     "params": {
+      "mean": 165.1,
+      "sd": 7.07
+     },
+     "caption": "The right tail above 180 cm.",
+     "shade": {
+      "from": 180,
+      "label": "P(X > 180)"
+     }
+    }
+   },
+   "opens": "Which test answers your question about the data?",
+   "id": "S7",
+   "answers": "How do you ask about a continuous variable, where no single value has a probability?",
+   "from": [
+    "S6"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "5.0",
+   "count": 0,
+   "why": "a naming grid"
+  },
+  {
+   "subsection": "p5-1",
+   "count": 0,
+   "why": "one bar: the figure shows it"
+  },
+  {
+   "subsection": "p5-2",
+   "count": 0,
+   "why": "a running total: figure"
+  },
+  {
+   "subsection": "p5-3",
+   "count": 0,
+   "why": "an area: figure"
+  },
+  {
+   "subsection": "p5-4",
+   "count": 1,
+   "why": "random draws accumulating: a dynamic process"
+  },
+  {
+   "subsection": "p5-5",
+   "count": 0,
+   "why": "inequalities on a line: figure"
+  },
+  {
+   "subsection": "p5-6",
+   "count": 0,
+   "why": "an area: figure"
+  }
+ ]
+}

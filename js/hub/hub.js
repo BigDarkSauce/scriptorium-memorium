@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, SLOT, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
-import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree } from '../util.js';
+import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const TOUCH = () => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
@@ -461,13 +461,14 @@ export class Hub {
     const b = this.lib.books.find(x => x.id === bookId); if (!b) return { ok: false, reason: 'unknown book' };
     this.dropGhost(); const r = this.moveBook(b, target); if (r.ok && r.moved) toast(`That place was taken: "${b.title}" went to row ${this.rowLabel(r.caseId, r.row)}, place ${r.slot + 1}`); return r;
   }
-  // a gentle camera move to look at a world point p on a bookcase facing n (overview: orbit target; walk: eye height)
+  // a gentle camera move to look at a world point p on a bookcase facing n (overview: orbit target; walk: eye height);
+  // the view aims 0.28 m below p, so p sits in the upper third, clear of a dialog at the bottom of the screen
   frameAt(p, n) {
     if (this.opening) return; const R = this.lib.hub, c = this.caseDepth() + .4, walk = this.nav.mode === 'walk';
     const to = p.clone().addScaledVector(n, 2.0).add(V3(n.z, 0, -n.x).multiplyScalar(.35)); to.y = walk ? this.camera.position.y : clamp(p.y + .35, 1.3, R.h - .5);
     to.x = clamp(to.x, -R.w / 2 + c, R.w / 2 - c); to.z = clamp(to.z, -R.d / 2 + c, R.d / 2 - c);
     const f = V3(); this.camera.getWorldDirection(f);
-    this.camTween = { t: 0, p0: this.camera.position.clone(), a0: this.camera.position.clone().addScaledVector(f, Math.max(.5, this.controls.target.distanceTo(this.camera.position))), p1: to, a1: p.clone(), walk };
+    this.camTween = { t: 0, p0: this.camera.position.clone(), a0: this.camera.position.clone().addScaledVector(f, Math.max(.5, this.controls.target.distanceTo(this.camera.position))), p1: to, a1: p.clone().add(V3(0, -.28, 0)), walk };
   }
   stepCamTween(dt) {
     const T = this.camTween; T.t += dt; const k = easeInOutQuint(Math.min(1, T.t / .8));
@@ -508,7 +509,7 @@ export class Hub {
     if (sc) {
       const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false;
       const st = b.hang ? `hanging on ${METALS[b.hang.metal in METALS ? b.hang.metal : 'brass'].label.toLowerCase()} chains · ` : '';
-      this.tip.innerHTML = `<b>${b.important ? '★ ' : ''}${esc(b.title)}</b><span>${st}${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span><span class="tip-more">${TOUCH() ? 'Long-press' : 'Right-click'} for options: important, hang on chains, move</span>`;
+      this.tip.innerHTML = `<b>${b.important ? '★ ' : ''}${mathHTML(b.title, 'label')}</b><span>${st}${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span><span class="tip-more">${TOUCH() ? 'Long-press' : 'Right-click'} for options: important, hang on chains, move</span>`;
       this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
     } else this.tip.hidden = true;
   }
@@ -606,8 +607,8 @@ export class Hub {
   // the sheet and a back light on the bookcase behind it: the sheet itself only gains a faint glow, so its parchment
   // and title stay readable and below the bloom threshold. Fully open it holds a beat, then the camera moves in as the
   // screen fades (1.05 s); the room opens when the fade is complete.
-  // Taking the scroll out (takeOutPath, scrollPose): it starts where it is (in its cradles or on its chains), rises a
-  // little off them (3 cm out of the cradles' hollow, 1 cm off the chain hooks), slides straight forward out of the case
+  // Taking the scroll out (takeOutPath, scrollPose): it starts where it is (in its cradles or on its chains), rises 3 cm
+  // out of the cradles' hollow (a hanging one leaves its hooks going straight forward), slides straight forward out of the case
   // until its back end is 3 cm before everything on the bookcase (case, cornice, neighbours' tags), then rises to the
   // reading height, and turns to face the viewer only once it is out (a turn about its middle never brings its ends
   // back toward the case by more than 6 mm). The flight and the unroll follow as before.
@@ -645,7 +646,7 @@ export class Hub {
   takeOutPath(sc, so, wp, outward) {
     so.updateMatrixWorld(true); const inv = so.matrixWorld.clone().invert();
     const caseBox = localBox(so, inv, o => !isUnder(o, sc) && o.name !== 'slot-ghost'), own = localBox(sc, inv), P0 = sc.position.clone();
-    const hanging = !!sc.userData.hanging, rise = hanging ? .01 : .03, zClear = caseBox.max.z + .03;
+    const hanging = !!sc.userData.hanging, rise = hanging ? 0 : .03, zClear = caseBox.max.z + .03;   // off the chain hooks: straight forward (the knob tops fall away from the hooks)
     const slide = Math.max(zClear - own.min.z + .02, .62 - P0.z), y1 = wp.y + rise, liftY = Math.max(1.62, y1), up = liftY - y1;
     const dUp = clamp(.45 + .4 * up, .5, 1.1), T = { rise: [0, .35], slide: [.25, 1.25], up: [1.1, 1.1 + dUp], turn: [1.22, Math.max(2.1, 1.22 + dUp)] };
     return { A: wp.clone(), out: outward.clone(), rise, slide, up, T, D: Math.max(T.up[1], T.turn[1]), zClear, end: wp.clone().addScaledVector(outward, slide).setY(liftY) };

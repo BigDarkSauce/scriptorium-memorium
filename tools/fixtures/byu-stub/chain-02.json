@@ -1,0 +1,1246 @@
+{
+ "title": "02 · The function checklist",
+ "summary": "The 58 functions of the course, grouped in the order an analysis uses them, with what each does and one typical call.",
+ "question": "Which R functions does a whole analysis need, and in what order are they used?",
+ "chain": [
+  {
+   "section": "2.0",
+   "kind": "remark",
+   "title": "How to use the checklist",
+   "ref": "p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "The sheet lists 58 functions in nine groups that follow an analysis from setting up to programming; tick what you can use without looking it up and circle what to practise.",
+   "explain": [
+    {
+     "text": "Tags say where each function appears in the course: CP computational practice, P practical, L lecture, and a star for a bonus function not yet in the course files. The groups run in the order of real work: set up, import, inspect, build and pick, summarise, plot, probability, test and model, program.",
+     "figure": {
+      "kind": "flow",
+      "caption": "The nine groups, in the order of an analysis.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "1 set up"
+       },
+       {
+        "id": "n1",
+        "label": "2 import"
+       },
+       {
+        "id": "n2",
+        "label": "3 inspect"
+       },
+       {
+        "id": "n3",
+        "label": "4 build & pick"
+       },
+       {
+        "id": "n4",
+        "label": "5 summarise"
+       },
+       {
+        "id": "n5",
+        "label": "6 plot"
+       },
+       {
+        "id": "n6",
+        "label": "7 probability"
+       },
+       {
+        "id": "n7",
+        "label": "8 test & model"
+       },
+       {
+        "id": "n8",
+        "label": "9 program"
+       }
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "CP / P / L / ★",
+     "meaning": "computational practice / practical / lecture / bonus, where the function is taught"
+    }
+   ],
+   "intuition": "The checklist is the route of an analysis, from opening the folder to writing your own tools.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "A route, not a dictionary.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "folder"
+     },
+     {
+      "id": "n1",
+      "label": "data"
+     },
+     {
+      "id": "n2",
+      "label": "look"
+     },
+     {
+      "id": "n3",
+      "label": "answer"
+     }
+    ]
+   },
+   "misconception": "Learning functions alphabetically is efficient. Learning them by purpose shows when to use each.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Group by purpose.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "A–Z list of functions."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Functions grouped by the step of the analysis they serve."
+    }
+   },
+   "check": {
+    "q": "Into which group does str() go, and why there?",
+    "a": "Inspect (group 3): you look at the types of the columns before testing anything.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Inspect before you test.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "import"
+      },
+      {
+       "id": "n1",
+       "label": "str()"
+      },
+      {
+       "id": "n2",
+       "label": "test"
+      }
+     ]
+    }
+   },
+   "opens": "What do you set up once per project before any analysis?",
+   "id": "S1",
+   "answers": "Which R functions does a whole analysis need, and in what order are they used?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.1",
+   "kind": "remark",
+   "title": "Set up once per project",
+   "ref": "Group 1, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "getwd() shows the folder R is in, setwd() changes it, install.packages() downloads a package once, library() loads it in every session.",
+   "explain": [
+    {
+     "text": "A package is downloaded to your computer only once with install.packages(), but it must be loaded with library() in every new R session before its functions exist. The working directory decides where read.csv() looks for files, so check it with getwd() first."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "getwd()",
+      "explain": "which folder R is in"
+     },
+     {
+      "code": "setwd(\"~/stats\")",
+      "explain": "make ~/stats the working folder"
+     },
+     {
+      "code": "install.packages(\"viridisLite\")",
+      "explain": "download a package, once only"
+     },
+     {
+      "code": "library(viridisLite)",
+      "explain": "load it, in every session"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "How do you bring a data file into R?",
+   "terms": [
+    {
+     "term": "package",
+     "meaning": "a bundle of extra functions; installed once, loaded each session"
+    },
+    {
+     "term": "working directory",
+     "meaning": "the folder R reads files from and saves files to"
+    }
+   ],
+   "intuition": "Installing buys the book; library() takes it off the shelf each day.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Install once, load each session.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "install.packages()"
+     },
+     {
+      "id": "n1",
+      "label": "on disk"
+     },
+     {
+      "id": "n2",
+      "label": "library() each session"
+     },
+     {
+      "id": "n3",
+      "label": "functions ready"
+     }
+    ]
+   },
+   "misconception": "install.packages() is needed every session. Only library() is.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Once versus every session.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "install.packages() every time I open R."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "install once; library() every session."
+    }
+   },
+   "check": {
+    "q": "R says \"could not find function viridis\". What two causes are likely?",
+    "a": "The package is not installed, or it is installed but not loaded with library().",
+    "figure": {
+     "kind": "flow",
+     "caption": "Two checks.",
+     "dir": "TB",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "installed?"
+      },
+      {
+       "id": "n1",
+       "label": "loaded with library()?"
+      }
+     ]
+    }
+   },
+   "id": "S2",
+   "answers": "What do you set up once per project before any analysis?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.2",
+   "kind": "remark",
+   "title": "Import",
+   "ref": "Group 2, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "read.csv() reads a comma-separated file into a data frame.",
+   "explain": [
+    {
+     "text": "read.csv(\"mammal_sleep_flying.csv\") looks for the file in the working directory and returns a data frame: one row per mammal, one column per variable. Store it with dat <- so that later functions can use it."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "dat <- read.csv(\"mammal_sleep_flying.csv\")",
+      "explain": "read the file into a data frame called dat"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "What should you look at before you test anything?",
+   "terms": [
+    {
+     "term": "data frame",
+     "meaning": "a table: rows are cases, columns are variables"
+    },
+    {
+     "term": ".csv",
+     "meaning": "comma-separated values: a plain-text table"
+    }
+   ],
+   "intuition": "read.csv() pours the spreadsheet into R as a table.",
+   "misconception": "read.csv() opens the file wherever it is. It only looks in the working directory unless you give a path.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Where R looks.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "R finds the file anywhere."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "R looks in getwd() unless you give the full path."
+    }
+   },
+   "check": {
+    "q": "What does dat <- read.csv(\"sleep.csv\") do if sleep.csv is in another folder?",
+    "a": "It fails with \"cannot open file … No such file or directory\".",
+    "figure": {
+     "kind": "flow",
+     "caption": "Fix the path.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "getwd()"
+      },
+      {
+       "id": "n1",
+       "label": "setwd() or full path"
+      },
+      {
+       "id": "n2",
+       "label": "read.csv()"
+      }
+     ]
+    }
+   },
+   "id": "S3",
+   "answers": "How do you bring a data file into R?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.3",
+   "kind": "remark",
+   "title": "Inspect: always look before you test",
+   "ref": "Group 3, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "View(), head(), str(), summary(), dim(), class(), table() and levels() show the data before any test.",
+   "explain": [
+    {
+     "text": "head(dat) prints the first 6 rows; str(dat) shows every column with its type; summary(dat) gives quick statistics per column, including the number of NAs; dim(dat) gives rows × columns; class() says what type an object is; table() counts each category; levels() lists a factor's categories; View() opens a spreadsheet view."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "str(dat)",
+      "explain": "types of each column"
+     },
+     {
+      "code": "summary(dat$TotalSleep)",
+      "explain": "min, quartiles, mean, max and the number of NAs"
+     },
+     {
+      "code": "dim(dat)",
+      "explain": "rows × columns, e.g. 62 rows"
+     },
+     {
+      "code": "table(dat$Danger)",
+      "explain": "how many mammals in each danger level"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "How do you build vectors and pick parts of the data?",
+   "terms": [
+    {
+     "term": "factor",
+     "meaning": "a categorical variable with a fixed set of levels"
+    }
+   ],
+   "intuition": "Look at the patient before you operate.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Look first.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "head()"
+     },
+     {
+      "id": "n1",
+      "label": "str()"
+     },
+     {
+      "id": "n2",
+      "label": "summary()"
+     },
+     {
+      "id": "n3",
+      "label": "then test"
+     }
+    ]
+   },
+   "misconception": "If R imported the file without an error, the columns are fine. A numeric column can arrive as text; str() reveals it.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "No error ≠ right types.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Imported without error → ready."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "str() first: a number column may be chr."
+    }
+   },
+   "check": {
+    "q": "Which function tells you how many NAs TotalSleep has?",
+    "a": "summary(dat$TotalSleep) (it reports NA's: 4); or sum(is.na(dat$TotalSleep)).",
+    "figure": {
+     "kind": "bars",
+     "caption": "Values present and missing in TotalSleep.",
+     "categories": [
+      "present",
+      "NA"
+     ],
+     "series": [
+      {
+       "name": "mammals",
+       "values": [
+        58,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "id": "S4",
+   "answers": "What should you look at before you test anything?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.4",
+   "kind": "remark",
+   "title": "Build & pick",
+   "ref": "Group 4, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "c(), seq() and rep() build vectors; dat[row, col] and dat$col pick parts; length(), as.factor(), as.numeric(), is.na() and which.max() describe and convert them.",
+   "explain": [
+    {
+     "text": "c(12, 15, 9) combines values into a vector. dat[2, 3] picks row 2, column 3; dat$TotalSleep picks a column by name. length() counts values; as.factor() treats numbers as categories (danger 1–5); as.numeric() converts text to numbers; is.na() marks missing values; which.max() gives the position of the largest value."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "x <- c(12, 15, 9)",
+      "explain": "a vector of three numbers"
+     },
+     {
+      "code": "dat[2, ]",
+      "explain": "all columns of row 2"
+     },
+     {
+      "code": "dat$Danger <- as.factor(dat$Danger)",
+      "explain": "danger levels as categories"
+     },
+     {
+      "code": "which.max(dat$TotalSleep)",
+      "explain": "the row of the longest sleeper"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "Which numbers summarise a column?",
+   "terms": [
+    {
+     "term": "vector",
+     "meaning": "an ordered set of values of one type"
+    },
+    {
+     "term": "dat[row, col]",
+     "meaning": "pick by position; leave a side empty for all rows or all columns"
+    }
+   ],
+   "intuition": "Rows are animals, columns are measurements: [row, col] is a grid reference.",
+   "intuitionFigure": {
+    "kind": "table",
+    "caption": "dat[2, 3]: row 2, column 3.",
+    "columns": [
+     "",
+     "col 1",
+     "col 2",
+     "col 3"
+    ],
+    "rows": [
+     [
+      "row 1",
+      "·",
+      "·",
+      "·"
+     ],
+     [
+      "row 2",
+      "·",
+      "·",
+      "here"
+     ],
+     [
+      "row 3",
+      "·",
+      "·",
+      "·"
+     ]
+    ],
+    "highlight": [
+     [
+      1,
+      3
+     ]
+    ]
+   },
+   "misconception": "dat[3] is row 3. For a data frame dat[3] is column 3; use dat[3, ] for the row.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Row or column?",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "dat[3] = third row."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "dat[3] = third column; dat[3, ] = third row."
+    }
+   },
+   "check": {
+    "q": "How do you get the TotalSleep of row 10?",
+    "a": "dat$TotalSleep[10], or dat[10, \"TotalSleep\"]."
+   },
+   "id": "S5",
+   "answers": "How do you build vectors and pick parts of the data?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.5",
+   "kind": "remark",
+   "title": "Summarise",
+   "ref": "Group 5, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "mean(), median(), sd(), min(), max(), sum(), IQR(), log() and log10() summarise a column.",
+   "explain": [
+    {
+     "text": "mean() and median() give the centre (watch the NAs: na.rm = TRUE); sd() and IQR() give the spread, IQR being the range of the middle 50%; min() and max() the extremes; sum() adds up, and on a logical vector it counts the TRUEs; log() and log10() tame skewed data such as body mass."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "median(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "the middle value"
+     },
+     {
+      "code": "IQR(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "spread of the middle 50%"
+     },
+     {
+      "code": "sum(dat$TotalSleep > 12, na.rm = TRUE)",
+      "explain": "counts mammals sleeping more than 12 h (TRUE counts as 1)"
+     },
+     {
+      "code": "log10(dat$BodyWt)",
+      "explain": "body mass on a log scale"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "How do you see the data as a picture?",
+   "terms": [
+    {
+     "term": "IQR",
+     "meaning": "interquartile range: third quartile minus first quartile"
+    },
+    {
+     "term": "log10",
+     "meaning": "logarithm base 10: 0.01 → −2, 1000 → 3"
+    }
+   ],
+   "intuition": "Centre, spread and extremes are the three questions every summary answers.",
+   "intuitionFigure": {
+    "kind": "numberline",
+    "caption": "Centre, spread and extremes on one axis (sleep, hours).",
+    "min": 0,
+    "max": 20,
+    "step": 5,
+    "points": [
+     {
+      "x": 10.5,
+      "label": "mean ≈ 10.5"
+     }
+    ],
+    "intervals": [
+     {
+      "from": 2,
+      "to": 20,
+      "label": "min … max"
+     }
+    ]
+   },
+   "misconception": "sum() only adds numbers. On TRUE/FALSE values it counts the TRUEs, which makes it a counter.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "sum() counts TRUEs.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "sum(x > 12) adds the values above 12."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "sum(x > 12) counts how many are above 12."
+    }
+   },
+   "check": {
+    "q": "Why might the median be better than the mean for body mass?",
+    "a": "Body mass is very skewed (0.005 to 6,654 kg): a few giants drag the mean up; the median is not moved by them.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Skew drags the mean.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "mean = a typical mammal."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "median = the typical mammal; the mean follows the elephants."
+     }
+    }
+   },
+   "id": "S6",
+   "answers": "Which numbers summarise a column?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.6",
+   "kind": "remark",
+   "title": "Plot (see sheet 04)",
+   "ref": "Group 6, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "plot(), hist(), boxplot(), barplot(), points(), lines(), abline(), legend() and par() draw and annotate graphs.",
+   "explain": [
+    {
+     "text": "plot(x, y) draws a scatterplot of y against x; hist() a histogram; boxplot(y ~ group) one box per group; barplot() bars. points(), lines() and abline() add dots, lines and a straight line to an existing plot; legend() adds the key of colours and symbols; par(mfrow = c(1, 2)) puts several plots side by side."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "hist(dat$TotalSleep)",
+      "explain": "histogram of sleep"
+     },
+     {
+      "code": "boxplot(TotalSleep ~ Danger, data = dat)",
+      "explain": "one box per danger level"
+     },
+     {
+      "code": "abline(h = 10.5, lty = 2)",
+      "explain": "add a dashed horizontal line at 10.5 h"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "Which functions answer probability questions?",
+   "terms": [
+    {
+     "term": "y ~ x",
+     "meaning": "formula: y as a function of x (response ~ explanatory)"
+    }
+   ],
+   "intuition": "plot() builds the canvas; points(), lines() and abline() draw on it.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Canvas, then layers.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "plot()"
+     },
+     {
+      "id": "n1",
+      "label": "points()"
+     },
+     {
+      "id": "n2",
+      "label": "abline()"
+     },
+     {
+      "id": "n3",
+      "label": "legend()"
+     }
+    ]
+   },
+   "misconception": "abline() makes a new plot. It adds to the current one.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Add, do not replace.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "abline() draws a new graph."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "abline() adds a line to the open graph."
+    }
+   },
+   "check": {
+    "q": "Which call draws one box per group?",
+    "a": "boxplot(y ~ group, data = dat).",
+    "figure": {
+     "kind": "flow",
+     "caption": "Formula to boxes.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "y ~ group"
+      },
+      {
+       "id": "n1",
+       "label": "boxplot()"
+      },
+      {
+       "id": "n2",
+       "label": "one box per group"
+      }
+     ]
+    }
+   },
+   "id": "S7",
+   "answers": "How do you see the data as a picture?",
+   "from": [
+    "S6"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.7",
+   "kind": "remark",
+   "title": "Probability (see sheet 05)",
+   "ref": "Group 7, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "dbinom(), pbinom(), rbinom(), dpois(), dnorm(), pnorm(), qnorm() and rnorm() compute probabilities, quantiles and random values.",
+   "explain": [
+    {
+     "text": "The first letter says the question: d = density or P(exactly x), p = probability of x or less, q = the value that cuts off a probability, r = random values. The rest of the name is the distribution: binom, pois, norm. Sheet 05 works through each with the natural-killer-cell example."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "dbinom(2, size = 10, prob = 0.07)",
+      "explain": "P(exactly 2 of 10)"
+     },
+     {
+      "code": "pnorm(1.96)",
+      "explain": "area left of 1.96, about 0.975"
+     },
+     {
+      "code": "rnorm(5, mean = 165.1, sd = 7.07)",
+      "explain": "five random heights"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "Which functions test hypotheses and fit models?",
+   "terms": [
+    {
+     "term": "d p q r",
+     "meaning": "density, probability (cumulative), quantile, random"
+    }
+   ],
+   "intuition": "Four questions, one family of functions per distribution.",
+   "intuitionFigure": {
+    "kind": "table",
+    "caption": "Prefix + distribution = function.",
+    "columns": [
+     "",
+     "binom",
+     "norm"
+    ],
+    "rows": [
+     [
+      "d",
+      "dbinom",
+      "dnorm"
+     ],
+     [
+      "p",
+      "pbinom",
+      "pnorm"
+     ],
+     [
+      "q",
+      "qbinom",
+      "qnorm"
+     ],
+     [
+      "r",
+      "rbinom",
+      "rnorm"
+     ]
+    ]
+   },
+   "misconception": "dnorm() gives a probability. For a continuous variable it gives the height of the curve; probabilities are areas (pnorm).",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Height versus area.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "dnorm(0) = P(X = 0)."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "dnorm(0) = 0.399 is a height; P(X = 0) = 0."
+    }
+   },
+   "check": {
+    "q": "Which function gives P(X ≤ 3) for a binomial?",
+    "a": "pbinom(3, size, prob).",
+    "figure": {
+     "kind": "distribution",
+     "dist": "binomial",
+     "params": {
+      "size": 10,
+      "prob": 0.07
+     },
+     "caption": "pbinom(3, 10, 0.07): the bars up to 3.",
+     "shade": {
+      "to": 3,
+      "label": "P(X ≤ 3)"
+     }
+    }
+   },
+   "id": "S8",
+   "answers": "Which functions answer probability questions?",
+   "from": [
+    "S7"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.8",
+   "kind": "remark",
+   "title": "Test & model (see sheet 06)",
+   "ref": "Group 8, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "shapiro.test(), t.test(), wilcox.test(), chisq.test(), lm(), summary(fit) and cor() test hypotheses and fit models.",
+   "explain": [
+    {
+     "text": "shapiro.test() asks whether data are close to normal; t.test() compares means; wilcox.test() is its rank-based version for weak or non-normal data; chisq.test() compares counts with expected counts; lm() fits a straight line y = mx + c and summary(fit) reports the slope, intercept and p-values; cor() gives the correlation r."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "shapiro.test(dat$TotalSleep)",
+      "explain": "is sleep close to normal?"
+     },
+     {
+      "code": "fit <- lm(TotalSleep ~ log10(BodyWt), data = dat)",
+      "explain": "fit a line"
+     },
+     {
+      "code": "summary(fit)",
+      "explain": "slope, intercept, p"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "How do you write your own repeated steps?",
+   "terms": [
+    {
+     "term": "lm()",
+     "meaning": "linear model: fits y = intercept + slope × x by least squares"
+    }
+   ],
+   "intuition": "Sheet 06 is the map from your data to the right one of these.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Which family?",
+    "dir": "TB",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "measured → t.test"
+     },
+     {
+      "id": "n1",
+      "label": "ranks → wilcox.test"
+     },
+     {
+      "id": "n2",
+      "label": "counts → chisq.test"
+     },
+     {
+      "id": "n3",
+      "label": "two variables → lm / cor"
+     }
+    ]
+   },
+   "misconception": "A significant shapiro.test() is good news. A small p means the data are NOT normal.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Read Shapiro the right way.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "p < 0.05 → normal."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "p > 0.05 → normal enough; p < 0.05 → not normal."
+    }
+   },
+   "check": {
+    "q": "Which function compares counts with an expected 3:1 ratio?",
+    "a": "chisq.test(obs, p = c(0.75, 0.25)).",
+    "figure": {
+     "kind": "flow",
+     "caption": "Counts against a ratio.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "observed counts"
+      },
+      {
+       "id": "n1",
+       "label": "expected 3:1"
+      },
+      {
+       "id": "n2",
+       "label": "chisq.test()"
+      }
+     ]
+    }
+   },
+   "id": "S9",
+   "answers": "Which functions test hypotheses and fit models?",
+   "from": [
+    "S8"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "2.9",
+   "kind": "remark",
+   "title": "Program",
+   "ref": "Group 9, p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "function(x) { } writes your own function, for (i in 1:n) repeats a step, if () { } else chooses a branch, sapply() applies a function to each element, ?name opens help.",
+   "explain": [
+    {
+     "text": "A for loop runs its body once for each value of i; if () { } else { } runs one of two branches depending on a TRUE/FALSE condition; sapply(x, f) applies f to every element of x and collects the results, often replacing a loop."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "for (i in 1:3) print(i^2)",
+      "explain": "prints 1, 4, 9"
+     },
+     {
+      "code": "if (mean(x) > 12) \"high\" else \"low\"",
+      "explain": "choose a branch"
+     },
+     {
+      "code": "sapply(1:3, function(i) i^2)",
+      "explain": "the same squares as a vector: 1 4 9"
+     }
+    ],
+    "output": [],
+    "interpret": "Each line is a typical use; the comment says what comes back."
+   },
+   "opens": "How many of the 58 can you use without looking them up?",
+   "terms": [
+    {
+     "term": "loop",
+     "meaning": "repeat a step for each value"
+    },
+    {
+     "term": "sapply()",
+     "meaning": "apply a function to each element and simplify the result to a vector"
+    }
+   ],
+   "intuition": "A loop is a conveyor: the same machine handles each item in turn.",
+   "intuitionFigure": {
+    "kind": "codetrace",
+    "caption": "for (i in 1:3) print(i^2)",
+    "lang": "r",
+    "lines": [
+     {
+      "code": "i = 1",
+      "note": "print 1"
+     },
+     {
+      "code": "i = 2",
+      "note": "print 4"
+     },
+     {
+      "code": "i = 3",
+      "note": "print 9"
+     }
+    ],
+    "output": [
+     "[1] 1",
+     "[1] 4",
+     "[1] 9"
+    ],
+    "animate": true
+   },
+   "misconception": "Loops are always needed to repeat work in R.",
+   "check": {
+    "q": "What does sapply(c(4, 9, 16), sqrt) return?",
+    "a": "2 3 4.",
+    "figure": {
+     "kind": "codetrace",
+     "caption": "sqrt applied to each element.",
+     "lang": "r",
+     "lines": [
+      {
+       "code": "4",
+       "note": "→ 2"
+      },
+      {
+       "code": "9",
+       "note": "→ 3"
+      },
+      {
+       "code": "16",
+       "note": "→ 4"
+      }
+     ],
+     "output": [
+      "[1] 2 3 4"
+     ],
+     "animate": false
+    }
+   },
+   "id": "S10",
+   "answers": "How do you write your own repeated steps?",
+   "from": [
+    "S9"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p2-10",
+   "kind": "remark",
+   "title": "Your score out of 58",
+   "ref": "p. 2",
+   "pages": [
+    2
+   ],
+   "statement": "Counting the ticks gives a score out of 58; the circled functions are your practice list for the next session.",
+   "explain": [
+    {
+     "text": "The score is a self-test, not a grade: retrieval practice (trying to recall before looking) is one of the most effective ways to learn. Re-take the checklist after each practical and watch the circled set shrink."
+    }
+   ],
+   "terms": [
+    {
+     "term": "retrieval practice",
+     "meaning": "learning by recalling from memory rather than re-reading"
+    }
+   ],
+   "intuition": "The score is a map of what to practise next.",
+   "intuitionFigure": {
+    "kind": "bars",
+    "caption": "Ticks and circles across the nine groups (your own counts go here).",
+    "categories": [
+     "ticked",
+     "circled"
+    ],
+    "series": [
+     {
+      "name": "functions",
+      "values": [
+       0,
+       58
+      ]
+     }
+    ]
+   },
+   "misconception": "A low score means you are behind. It means you have a precise practice list.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "A score is a plan.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Low score = failure."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Low score = a short, precise list to practise."
+    }
+   },
+   "check": {
+    "q": "Why tick before looking things up?",
+    "a": "Recalling first is the practice; looking up first only tests recognition.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Recall, then check.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "try to recall"
+      },
+      {
+       "id": "n1",
+       "label": "check"
+      },
+      {
+       "id": "n2",
+       "label": "circle the misses"
+      }
+     ]
+    }
+   },
+   "opens": "What goes wrong when you use these functions, and how do you read R's messages?",
+   "id": "S11",
+   "answers": "How many of the 58 can you use without looking them up?",
+   "from": [
+    "S10"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "figuresSkipped": [
+  {
+   "id": "fig-p2-1",
+   "why": "a crop of the Summarise list; its functions are explained in S6"
+  }
+ ],
+ "dioramaPlan": [
+  {
+   "subsection": "2.0",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.1",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.2",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.3",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.4",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.5",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.6",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.7",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.8",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "2.9",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  },
+  {
+   "subsection": "p2-10",
+   "count": 0,
+   "why": "a list of functions: tables and code traces illustrate it"
+  }
+ ]
+}

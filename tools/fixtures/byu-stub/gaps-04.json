@@ -1,0 +1,92 @@
+{
+ "steps": [
+  {
+   "basis": "source-text",
+   "figures": [],
+   "demos": [],
+   "from": [],
+   "id": "G1",
+   "section": "p4-3",
+   "kind": "example",
+   "title": "Reading the danger boxplot",
+   "ref": "Boxplot panel, p. 4",
+   "pages": [
+    4
+   ],
+   "answers": "What do the five boxes show about danger and sleep?",
+   "opens": "What is wrong with a bar of means, and how do you fix it?",
+   "statement": "Across danger levels 1 to 5 the boxes sit lower: mammals at high risk of predation sleep less, and the spread inside each level is wide.",
+   "explain": [
+    {
+     "text": "Compare the thick median lines from left to right: they fall as danger rises. Compare the boxes too: they overlap, so danger is not the whole story; body size (sheet 04, scatterplot) and diet also matter. A boxplot suggests the pattern; the test of sheet 06 (several groups, so ANOVA or a rank test) says whether it is larger than chance."
+    }
+   ],
+   "terms": [
+    {
+     "term": "Danger",
+     "meaning": "danger of predation, an index from 1 (low) to 5 (high)"
+    }
+   ],
+   "intuition": "An animal that might be eaten cannot afford long, deep sleep.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "From danger to sleep.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "high predation risk"
+     },
+     {
+      "id": "n1",
+      "label": "stay alert"
+     },
+     {
+      "id": "n2",
+      "label": "less sleep"
+     }
+    ]
+   },
+   "misconception": "Falling medians prove that danger reduces sleep.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "A pattern, not yet a cause.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Medians fall → danger causes short sleep."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Medians fall → test it, and think of body size."
+    }
+   },
+   "check": {
+    "q": "Which test from sheet 06 compares sleep across the five danger levels?",
+    "a": "ANOVA, summary(aov(TotalSleep ~ factor(Danger))), or a rank test if the boxes are skewed.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Five groups.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "3+ samples"
+      },
+      {
+       "id": "n1",
+       "label": "aov() or rank test"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "subsection": "p4-3",
+   "steps": [
+    "G1"
+   ]
+  }
+ ]
+}

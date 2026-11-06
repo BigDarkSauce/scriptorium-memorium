@@ -1,0 +1,569 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scriptorium.invalid/schema/figure.schema.json",
+  "title": "Figure spec (an explanatory drawing the reader renders)",
+  "description": "A small JSON drawing a chain carries for a text-heavy paragraph (explain[k].figure, statementFigure) or a teaching box (intuitionFigure, misconceptionFigure, check.figure). The model returns data, never pictures or SVG code; js/room/diagrams.js (renderFigure) draws it with typeset labels; js/room/figspec.js (validateFigure) checks it. Every figure has kind and caption; 'animate' makes a short loop (shown as a still with a play button under prefers-reduced-motion). Data from the PDF gives 'ref'; data from outside gives 'extra' with sources.",
+  "type": "object",
+  "required": [
+    "kind"
+  ],
+  "properties": {
+    "kind": {
+      "enum": [
+        "flow",
+        "plot",
+        "distribution",
+        "bars",
+        "hist",
+        "scatter",
+        "boxplot",
+        "numberline",
+        "tree",
+        "venn",
+        "timeline",
+        "sketch",
+        "codetrace",
+        "table",
+        "contrast",
+        "pdf"
+      ]
+    },
+    "caption": {
+      "type": "string",
+      "maxLength": 220,
+      "description": "what to see, ≤ 25 words (required except for pdf)"
+    },
+    "title": {
+      "type": "string"
+    },
+    "alt": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string"
+    },
+    "extra": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "animate": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "required": [
+            "param",
+            "from",
+            "to"
+          ],
+          "properties": {
+            "param": {
+              "type": "string"
+            },
+            "from": {
+              "type": "number"
+            },
+            "to": {
+              "type": "number"
+            },
+            "period": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "dir": {
+      "enum": [
+        "LR",
+        "TB"
+      ]
+    },
+    "x": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "y": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "xlabel": {
+      "type": "string"
+    },
+    "ylabel": {
+      "type": "string"
+    },
+    "logx": {
+      "type": "boolean"
+    },
+    "curves": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": [
+          "expr"
+        ],
+        "properties": {
+          "expr": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "dash": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "points": {
+      "type": "array"
+    },
+    "vlines": {
+      "type": "array"
+    },
+    "hlines": {
+      "type": "array"
+    },
+    "shade": {
+      "type": "object",
+      "properties": {
+        "expr": {
+          "type": "string"
+        },
+        "from": {
+          "type": "number"
+        },
+        "to": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "dist": {
+      "enum": [
+        "normal",
+        "t",
+        "chisq",
+        "binomial",
+        "poisson",
+        "uniform",
+        "exponential"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "marks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "x"
+        ],
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array"
+        },
+        "rows": {
+          "type": "array"
+        }
+      }
+    },
+    "highlight": {
+      "type": "array"
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "bins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "count"
+        ]
+      }
+    },
+    "fit": {
+      "oneOf": [
+        {
+          "const": "ols"
+        },
+        {
+          "type": "object",
+          "required": [
+            "slope",
+            "intercept"
+          ]
+        }
+      ]
+    },
+    "residuals": {
+      "type": "boolean"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "min": {
+      "type": "number"
+    },
+    "max": {
+      "type": "number"
+    },
+    "step": {
+      "type": "number"
+    },
+    "intervals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    "root": {
+      "type": "object",
+      "required": [
+        "label"
+      ]
+    },
+    "sets": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3
+    },
+    "regions": {
+      "type": "object"
+    },
+    "universe": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "w": {
+      "type": "number"
+    },
+    "h": {
+      "type": "number"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "shape"
+        ],
+        "properties": {
+          "shape": {
+            "enum": [
+              "rect",
+              "circle",
+              "ellipse",
+              "line",
+              "arrow",
+              "text",
+              "path"
+            ]
+          }
+        }
+      }
+    },
+    "lang": {
+      "type": "string"
+    },
+    "lines": {
+      "type": "array"
+    },
+    "output": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "array"
+      }
+    },
+    "wrong": {
+      "type": "object",
+      "required": [
+        "text"
+      ]
+    },
+    "right": {
+      "type": "object",
+      "required": [
+        "text"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "description": "pdf: the PDF figure id (fig-3-2, fig-p12-1)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "flow"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "nodes"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "plot"
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "curves"
+            ]
+          },
+          {
+            "required": [
+              "points"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "distribution"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "dist"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "scatter"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "points"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "numberline"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "min",
+          "max"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "tree"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "root"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "codetrace"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "lines"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "contrast"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "wrong",
+          "right"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "pdf"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "id"
+        ]
+      }
+    }
+  ]
+}

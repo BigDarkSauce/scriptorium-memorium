@@ -337,10 +337,13 @@ export function linesText(rows) {
   }
   close();
   text = text.replace(/(\p{L})-\n(\p{Ll})/gu, '$1$2').trim();
-  return text.replace(/```code\n([\s\S]*?)```/g, (m, body) => '```' + codeLang(body) + '\n' + body + '```');
+  // a lone short line in a code face (a file name, a column name) is inline code, not a code block
+  return text.replace(/```code\n([\s\S]*?)```\n?/g, (m, body) => { const L = body.trim().split('\n'); if (L.length === 1 && L[0].split(/\s+/).length <= 4 && !/[()<=$\[\]{}#~]|^\[1\]/.test(L[0])) return '`' + L[0].trim() + '`\n'; return '```' + codeLang(body) + '\n' + body + '```\n'; }).trim();
 }
 export function codeLang(body) {
   const b = String(body || '');
+  // a list of function names (a cheat sheet row: "dbinom()   dpois()   dnorm()") is names, not a program
+  if (b.trim().split('\n').every(l => /^(\s*[\w.]+\(\)\s*)+$/.test(l))) return 'names';
   if (/<-|\blibrary\(|\bc\(|\$\w|^\[1\]|\bna\.rm\b|\bdata\.frame\(|~/m.test(b)) return 'r';
   if (/^\s*(import|from\s+\S+\s+import|def |print\()|\bnp\.|\bpd\./m.test(b)) return 'python';
   return 'code';
@@ -351,7 +354,8 @@ const QTY_RE = new RegExp('(?:^|[\\s(=≈~])[−-]?\\d+(?:[.,]\\d+)?(?:\\s?[×x]
 export function inventory(text) {
   const t = String(text || ''), lines = t.split('\n');
   const uniq = a => [...new Set(a)];
-  const codeBlocks = (t.match(/```(r|python|code)\n/g) || []).length, codeLines = (t.match(/```(?:r|python|code)\n([\s\S]*?)```/g) || []).reduce((a, b) => a + b.split('\n').length - 2, 0);
+  // code blocks separated only by a label or two (an infographic interleaves code with its call-outs) count as one
+  const codeBlocks = (() => { const parts = t.split(/```(?:r|python|code)\n[\s\S]*?```/); let n = 0; for (let i = 1; i < parts.length; i++) { const gap = parts[i - 1]; if (i === 1 || gap.replace(/\[page \d+\]/g, '').trim().length > 150 || gap.trim().split('\n').filter(Boolean).length > 3) n++; } return n; })(), codeLines = (t.match(/```(?:r|python|code)\n([\s\S]*?)```/g) || []).reduce((a, b) => a + b.split('\n').length - 2, 0);
   const figs = uniq((t.match(/\b(?:Figure|Fig\.)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}[a-z]?/g) || []).map(s => s.replace(/^Fig\.\s*/, 'Figure ').replace(/\s+/, ' ')));
   const tabs = uniq((t.match(/\bTable\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}/g) || []).map(s => s.replace(/\s+/, ' ')));
   // worked examples are counted where they start (line start or after a sentence), not where they are mentioned

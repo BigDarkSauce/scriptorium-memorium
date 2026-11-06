@@ -1,6 +1,6 @@
 // Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
-import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML } from '../util.js';
+import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathText } from '../util.js';
 import { validateFigure } from './figspec.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
@@ -50,7 +50,7 @@ export function SVGDEMO(spec,host,fail){
     const legend=()=>{const rows=names.map((n,i)=>({n:n.length>34?n.slice(0,33)+'…':n,c:COLORS[i],e:exprs[i]}));if(pts.length)rows.push({n:spec.pointsLabel||'data points',dot:true});if(!rows.length)return;
       const g=mk('g',{'font-size':11,'font-family':'IBM Plex Mono, monospace'}),wid=Math.min(W/2-P,Math.max(...rows.map(r=>r.n.length))*6.6+30),x0=W-P-8-wid,y0=P+(spec.ylabel?20:6);
       mk('rect',{x:x0,y:y0,width:wid,height:rows.length*16+6,rx:3,fill:'rgba(251,246,234,.86)',stroke:'rgba(90,60,30,.25)'},g);
-      rows.forEach((r,i)=>{const y=y0+13+i*16;if(r.dot)mk('circle',{cx:x0+14,cy:y-3,r:3.4,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.5},g);else mk('rect',{x:x0+8,y:y-4.5,width:12,height:3,fill:r.c},g);const tx=mk('text',{x:x0+26,y,fill:'#2a1e15'},g);tx.textContent=r.n;if(r.e){const ti=document.createElementNS(NS,'title');ti.textContent=r.e;tx.append(ti)}})};
+      rows.forEach((r,i)=>{const y=y0+13+i*16;if(r.dot)mk('circle',{cx:x0+14,cy:y-3,r:3.4,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.5},g);else mk('rect',{x:x0+8,y:y-4.5,width:12,height:3,fill:r.c},g);const tx=mk('text',{x:x0+26,y,fill:'#2a1e15'},g);tx.textContent=r.n;if(r.e){const ti=document.createElementNS(NS,'title');ti.textContent=mathText(r.e);tx.append(ti)}})};
     draw=()=>{clear();axes();fs.forEach((f,i)=>curve(x=>f(x,...pn.map(k=>pv[k])),COLORS[i]));
       pts.forEach(p=>{mk('circle',{cx:X(p.x),cy:Y(p.y),r:3.6,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.6});if(p.label)mk('text',{x:X(p.x)+6,y:Y(p.y)-6,'font-size':10,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=p.label});
       legend();

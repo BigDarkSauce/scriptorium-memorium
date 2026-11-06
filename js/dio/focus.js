@@ -190,8 +190,8 @@ export class Cues {
     const gi = C.seg * 8 + C.k; C.gi = gi; C.badges[gi].hidden = false; C.badges[gi].classList.add('now');
     C.badges.forEach((b, i) => { if (i !== gi) b.classList.remove('now'); });
     // the chip: the step, its note, and the key of the numbers (the badges and any numbered labels) — the current one lit
-    const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' ')) : '';
-    const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0])}</i>`).join('') + '</span>';
+    const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' '), 'label') : '';
+    const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0], 'label')}</i>`).join('') + '</span>';
     this.chipBody = (note ? `<span class="cue-note">${note}</span>` : '') + key;
     this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (note ? ' · ' + note : '') + key; this.chip._w = 0;
     this.kicker(`Step ${gi + 1} of ${C.n}`);

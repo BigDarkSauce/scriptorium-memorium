@@ -13,7 +13,7 @@ import { bmat } from '../gfx/baroque.js';
 import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
-import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree } from '../util.js';
+import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree, measureMath, canvasMath, mathText, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // The part of a diorama's world a pedestal should show. The diorama's actors (the bodies it names and points at)
@@ -96,16 +96,16 @@ function plateTex(text, aspect) {
   return canvasTex(null, W, H, g => {
     g.fillStyle = '#cfa95a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#7d5a22'; g.lineWidth = 4; g.strokeRect(5, 5, W - 10, H - 10);
     g.fillStyle = '#2a1a0a'; g.textAlign = 'center'; g.textBaseline = 'middle'; const F = fs => `600 ${fs}px "IM Fell English SC", Georgia, serif`, maxW = W - 36;
-    for (let fs = 44; fs >= 34; fs -= 2) { g.font = F(fs); if (g.measureText(text).width <= maxW) { g.fillText(text, W / 2, H / 2 + 2); return; } }
+    for (let fs = 44; fs >= 34; fs -= 2) { g.font = F(fs); if (measureMath(g, text) <= maxW) { canvasMath(g, text, W / 2, H / 2 + 2); return; } }
     const words = text.split(/\s+/);
     for (let fs = 40; fs >= 32; fs -= 2) {
       g.font = F(fs); let best = null;
-      for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(g.measureText(a).width, g.measureText(b).width); if (m <= maxW && (!best || m < best.m)) best = { a, b, m }; }
-      if (best && fs * 2.1 <= H - 10) { const lh = fs * 1.05; g.fillText(best.a, W / 2, H / 2 - lh / 2 + 2); g.fillText(best.b, W / 2, H / 2 + lh / 2 + 2); return; }
+      for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(measureMath(g, a), measureMath(g, b)); if (m <= maxW && (!best || m < best.m)) best = { a, b, m }; }
+      if (best && fs * 2.1 <= H - 10) { const lh = fs * 1.05; canvasMath(g, best.a, W / 2, H / 2 - lh / 2 + 2); canvasMath(g, best.b, W / 2, H / 2 + lh / 2 + 2); return; }
     }
-    g.font = F(32); const lh = 33.6; let a = '', i = 0; for (; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (g.measureText(t).width > maxW && a) break; a = t; }
-    let b = words.slice(i).join(' '); while (b.length > 1 && g.measureText(b + '…').width > maxW) b = b.slice(0, -1).trimEnd();
-    g.fillText(a, W / 2, H / 2 - lh / 2 + 2); g.fillText(b + (i < words.length && b !== words.slice(i).join(' ') ? '…' : ''), W / 2, H / 2 + lh / 2 + 2);
+    g.font = F(32); const lh = 33.6; let a = '', i = 0; for (; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (measureMath(g, t) > maxW && a) break; a = t; }
+    let b = words.slice(i).join(' '); while (b.length > 1 && measureMath(g, b + '…') > maxW) b = b.slice(0, -1).trimEnd();
+    canvasMath(g, a, W / 2, H / 2 - lh / 2 + 2); canvasMath(g, b + (i < words.length && b !== words.slice(i).join(' ') ? '…' : ''), W / 2, H / 2 + lh / 2 + 2);
   }, { aniso: 8 });
 }
 // the visible extent of a mini (meshes and lines; hidden parts and their children left out), in `frame`'s coordinates
@@ -403,7 +403,7 @@ export class BookRoom {
       const src = parchment('roomsheet', 512, 690).image; g.drawImage(src, 0, 0, w, h);
       g.fillStyle = '#2a1e15'; g.textAlign = 'center';
       g.font = '22px "IBM Plex Mono", monospace'; g.globalAlpha = .7; g.fillText(part.subOf ? 'SUB-SCROLL' : 'PART ' + (this.partIndex(part) + 1), w / 2, 70); g.globalAlpha = 1;
-      g.font = '600 44px "IM Fell English SC", Georgia, serif'; const words = String(part.title).split(/\s+/); let line = '', y = 140; const lines = [];
+      g.font = '600 44px "IM Fell English SC", Georgia, serif'; const words = mathText(String(part.title)).split(/\s+/); let line = '', y = 140; const lines = [];
       const fitW = t => { if (g.measureText(t).width <= w - 80) return t; while (t.length > 1 && g.measureText(t + '…').width > w - 80) t = t.slice(0, -1); return t + '…'; };   // one very long word is cut, not drawn off the sheet
       words.forEach(wd => { const t = line ? line + ' ' + wd : wd; if (g.measureText(t).width > w - 80 && line) { lines.push(line); line = wd; } else line = t; }); if (line) lines.push(line);
       if (lines.length > 5) { lines.length = 5; lines[4] = lines[4] + '…'; }
@@ -412,7 +412,7 @@ export class BookRoom {
       g.font = '24px "IBM Plex Mono", monospace'; g.fillStyle = '#5b4532';
       if (part.startPage) g.fillText(`pages ${part.startPage}–${part.endPage}`, w / 2, y + 44);
       g.fillText(A ? `${n} steps · analysed` : 'sealed · click to open', w / 2, y + 84);
-      if (A && A.summary) { g.font = 'italic 24px "Alegreya", Georgia, serif'; const ws = A.summary.split(/\s+/); let L = '', yy = y + 150; ws.forEach(wd => { const t = L ? L + ' ' + wd : wd; if (g.measureText(t).width > w - 90) { g.fillText(L, w / 2, yy); yy += 32; L = wd; } else L = t; }); if (yy < h - 60) g.fillText(L, w / 2, yy); }
+      if (A && A.summary) { g.font = 'italic 24px "Alegreya", Georgia, serif'; const ws = mathText(A.summary).split(/\s+/); let L = '', yy = y + 150; ws.forEach(wd => { const t = L ? L + ' ' + wd : wd; if (g.measureText(t).width > w - 90) { g.fillText(L, w / 2, yy); yy += 32; L = wd; } else L = t; }); if (yy < h - 60) g.fillText(L, w / 2, yy); }
       g.fillStyle = A ? '#9c3a28' : '#8f733a'; g.beginPath(); g.arc(w / 2, h - 70, 26, 0, 7); g.fill(); g.fillStyle = '#efe2c2'; g.font = '600 24px "IM Fell English SC", serif'; g.fillText(A ? '✓' : String(i + 1), w / 2, h - 62);
     });
   }
@@ -476,8 +476,8 @@ export class BookRoom {
     if (this.reader || this.anim) return; const o = this.pick(e); this.gfx.canvas.style.cursor = o ? 'pointer' : '';
     if (o) {
       const p = this.data.parts.find(x => x.id === o.station), st = this.stations.get(p.id), b = st && st.bays[o.bay], many = st && st.bays.length > 1;
-      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${esc(b.spec.d.title || b.spec.st.title || 'Demo')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
-      this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(p.title)}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
+      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${mathHTML(b.spec.d.title || b.spec.st.title || 'Demo', 'label')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
+      this.tip.hidden = false; this.tip.innerHTML = `<b>${mathHTML(p.title, 'label')}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
     } else this.tip.hidden = true;
   }
   pointerUp(e) {

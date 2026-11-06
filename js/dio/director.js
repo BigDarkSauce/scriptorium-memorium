@@ -17,7 +17,8 @@ const PACE = { slow: 150, normal: 210, fast: 300 };   // words per minute
 // guides: the shortest arrow drawn (px); a label's short form (the clause before the first comma, colon, dash or
 // bracket, else its first four words); segment/segment and segment/rectangle tests for the label placement
 const GMIN = 26;
-function shortLabel(t) { t = String(t || '').trim(); if (t.length <= 22) return t; const c = t.split(/\s*[,:;(—–]\s*|\s+-\s+|…/)[0].trim(); if (c.length >= 4 && c.length <= 24) return c; const w = t.split(/\s+/); return w.slice(0, Math.min(4, w.length)).join(' ') + (w.length > 4 ? '…' : ''); }
+function shortLabel(t) { t = String(t || '').trim(); if (t.length <= 22) return t; const c = t.split(/\s*[,:;(—–]\s*|\s+-\s+|…/)[0].trim(); if (c.length >= 4 && c.length <= 24) return c;
+  const w = t.split(/\s+/), out = []; for (const x of w) { if ((out.join(' ') + ' ' + x).length > 20) break; out.push(x); } while (out.length > 1 && /^(the|a|an|of|to|and|or|in|on|at|by|for|its|is|[+\-−×=])$/i.test(out[out.length - 1])) out.pop(); return out.join(' ') + '…'; }
 function segHit(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; }
 function segRect(a, b, x, y, w, h) {   // Liang–Barsky: does segment ab enter the rectangle?
   let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -64,7 +65,7 @@ export class Director {
     for (const x of sents) { const n = (cur + x).trim().split(/\s+/).length; if (cur && n > max) { out.push(cur.trim()); cur = x; } else cur += x; }
     if (cur.trim()) out.push(cur.trim()); return out;
   }
-  setCaption(title, text) { this.caption.hidden = false; this.caption.innerHTML = `<b>${mathHTML(title || '')}</b> ${mathHTML(text || '')}`; }
+  setCaption(title, text) { this.caption.hidden = false; this.caption.innerHTML = `<b>${mathHTML(title || '', 'label')}</b> ${mathHTML(text || '', 'label')}`; }
   clearCaption() { this.caption.hidden = true; }
   idle() { return !this.beat && !this.queue.length; }
   clear() { this.queue = []; this.endBeat(true); this.bracket = null; if (this.trailEl) this.trailEl.setAttribute('points', ''); }
@@ -81,9 +82,9 @@ export class Director {
     if (this.cinematic && inStep && this.hold <= 0 && !b.noShot) this.frame(b);   // noShot: a label beat inside a move (peel layers) keeps the camera
     // the callout, beside what it describes
     b.el = el('div', { class: 'callout k-' + b.kind }, [
-      el('div', { class: 'co-kicker', text: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part : '') }),
-      b.question ? el('div', { class: 'co-q', html: '<b>Q</b> ' + mathHTML(b.question) }) : null,
-      el('div', { class: 'co-text', html: mathHTML(b.text) }),
+      el('div', { class: 'co-kicker', mathLabel: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part : '') }),
+      b.question ? el('div', { class: 'co-q' }, [el('b', { text: 'Q' }), ' ', el('span', { math: b.question })]) : null,
+      el('div', { class: 'co-text', math: b.text }),
       b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + mathHTML(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
     b.el.addEventListener('mouseenter', () => b.paused = true); b.el.addEventListener('mouseleave', () => b.paused = false);
     this.layer.append(b.el); requestAnimationFrame(() => b.el && this.beat === b && b.el.classList.add('in'));   // (a beat already ended never fades in)
@@ -300,7 +301,7 @@ export class Director {
       const g = Z.segs[Z.si], u = Math.min(1, Z.t / g.T); Z.d = g.da * Math.pow(g.db / g.da, smoother(u));
       const uT = Math.log(Z.d0 / Z.d) / Math.log(Z.d0 / Z.d1), e = clamp(uT / .75, 0, 1); Z.axis.copy(Z.ax0).applyQuaternion(this._qI.identity().slerp(Z.qa, e * e * (3 - 2 * e)));   // swing onto the clear axis
       this.zoomPose();
-      if (u >= 1) { Z.phase = 'hold'; Z.t = 0; Z.k = Z.si; const nm = g.st.a.name.split(' · ')[0]; if (Z.n > 1 || g.st.final) this.chip(`<b>Station ${Z.si + 1} of ${Z.n}</b> · ${mathHTML(nm)}`); v.touchLabels && v.touchLabels([g.st.a]); }
+      if (u >= 1) { Z.phase = 'hold'; Z.t = 0; Z.k = Z.si; const nm = g.st.a.name.split(' · ')[0]; if (Z.n > 1 || g.st.final) this.chip(`<b>Station ${Z.si + 1} of ${Z.n}</b> · ${mathHTML(nm, 'label')}`); v.touchLabels && v.touchLabels([g.st.a]); }
     } else if (Z.phase === 'hold') {
       const g = Z.segs[Z.si];
       if (Z.t >= g.st.hold) { if (g.st.final) { Z.phase = 'done'; this.zoomDone(); } else { Z.si++; Z.phase = 'travel'; Z.t = 0; this.chip(null); } }
@@ -403,7 +404,7 @@ export class Director {
     const v = this.v; this.hud();
     this.bracket = { phase: 'pre', t: 0, a, look: b.povLook, hist: Array.from({ length: 120 }, () => V3()), n: 0, hi: 0, ht: 0 };
     this.last = null; this.frame({ anchor: () => a.getPos(), focus: a.obj, host: a, names: [], kind: 'explain', shot: 'medium' });
-    this.chip(`You will see as: <b>${mathHTML(a.name.split(' · ')[0])}</b>`);
+    this.chip(`You will see as: <b>${mathHTML(a.name.split(' · ')[0], 'label')}</b>`);
     v.touchLabels && v.touchLabels([a]);
   }
   afterPOV(a) {
@@ -497,7 +498,8 @@ export class Director {
       const a0 = tr[0]; let pts = null;
       if (wp && a0 && b.t - a0[1] > .2) {
         const hq = scr(wp), dW = wp.clone().sub(a0[0]), sp = dW.length() / (b.t - a0[1]);
-        if (hq.ok && sp > R * .006 && !(b.flowEls || []).some(F => F.f.vec)) {   // (quantity arrows at the body already show how it moves) const q2 = scr(wp.clone().addScaledVector(dW.normalize(), R * .05)); pts = arrowFrom(hq.x, hq.y, q2.x - hq.x, q2.y - hq.y, clamp(gmax * sp / (R * .5), GMIN, gmax), b.rim ?? 9); }
+        // (quantity arrows at the body already show how it moves: no motion arrow then)
+        if (hq.ok && sp > R * .006 && !(b.flowEls || []).some(F => F.f.vec)) { const q2 = scr(wp.clone().addScaledVector(dW.normalize(), R * .05)); pts = arrowFrom(hq.x, hq.y, q2.x - hq.x, q2.y - hq.y, clamp(gmax * sp / (R * .5), GMIN, gmax), b.rim ?? 9); }
       }
       if (b.rimT == null || b.t - b.rimT > .5) { b.rimT = b.t; b.rim = rimOf(b.host && b.host.obj); }
       setLine(b.motion, pts); b.motion.style.opacity = pts ? 1 : 0;
@@ -546,6 +548,8 @@ export class Director {
     const LH = 17, pad = 5, placed = [], boxes = [];
     (b.rects || []).forEach(r => boxes.push([r.left - b.ox, r.top - b.oy, r.width, r.height]));
     if (b.box) boxes.push(b.box);
+    (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
+    if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
     const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 50;
       for (const s of segs) if (segRect(s[0], s[1], x - pad, y - pad, wd + 2 * pad, LH + 2 * pad)) c += 10;
       for (const B of boxes.concat(placed)) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 10; }

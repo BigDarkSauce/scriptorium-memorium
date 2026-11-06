@@ -1,6 +1,6 @@
 // Procedural textures (canvas-generated so the project ships no image files).
 import * as THREE from 'three';
-import { mulberry, makeNoise } from '../util.js';
+import { mulberry, makeNoise, measureMath, canvasMath } from '../util.js';
 
 const cache = new Map();
 export function canvasTex(key, w, h, draw, { repeat, srgb = true, aniso = 8 } = {}) {
@@ -90,8 +90,8 @@ export function labelTex(text, { w = 512, h = 128, bg = '#1a120b', fg = '#e7c477
   return canvasTex(null, w, h, (g) => {
     g.fillStyle = bg; g.fillRect(0, 0, w, h); if (border) { g.strokeStyle = border; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); }
     g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
-    let fs = parseInt(font.match(/(\d+)px/)[1]); while (g.measureText(text).width > w - 40 && fs > 14) { fs -= 2; g.font = font.replace(/\d+px/, fs + 'px'); }
-    g.fillText(text, w / 2, sub ? h * .4 : h / 2 + 2, w - 40);   // maxWidth: a very long name is condensed, never cut by the frame
+    let fs = parseInt(font.match(/(\d+)px/)[1]); while (measureMath(g, text) > w - 40 && fs > 14) { fs -= 2; g.font = font.replace(/\d+px/, fs + 'px'); }
+    canvasMath(g, text, w / 2, sub ? h * .4 : h / 2 + 2, w - 40);   // maxWidth: a very long name is condensed, never cut by the frame
     if (sub) { g.font = '400 ' + Math.round(fs * .45) + 'px "IBM Plex Mono", monospace'; g.globalAlpha = .7; g.fillText(sub, w / 2, h * .76); }
   }, { aniso: 4 });
 }

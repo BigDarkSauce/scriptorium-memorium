@@ -1,0 +1,998 @@
+{
+ "title": "03 · Bug hunt",
+ "summary": "Errors, warnings and silent bugs; eight messages R prints and what each means; a proofreading checklist and a script with six bugs.",
+ "question": "When R misbehaves, how do you tell what went wrong and fix it?",
+ "chain": [
+  {
+   "section": "3.0",
+   "kind": "definition",
+   "title": "Errors stop R",
+   "ref": "p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "An error stops R at the failing line and prints a message in red that names the problem.",
+   "explain": [
+    {
+     "text": "Nothing after the failing line runs, so the first error is the one to read and fix; later lines may only fail because of it. The message usually names the object, function or file involved, which tells you where to look.",
+     "figure": {
+      "kind": "flow",
+      "caption": "Three kinds of trouble, from loud to silent.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "Error: R stops"
+       },
+       {
+        "id": "n1",
+        "label": "Warning: R runs, check output"
+       },
+       {
+        "id": "n2",
+        "label": "Silent bug: wrong answer, no message"
+       }
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "error",
+     "meaning": "R cannot run the line and stops"
+    }
+   ],
+   "intuition": "An error is a fire alarm: loud, and it stops everything.",
+   "intuitionFigure": {
+    "kind": "timeline",
+    "caption": "R runs line by line until the first error.",
+    "events": [
+     {
+      "t": 1,
+      "label": "line 1 ok"
+     },
+     {
+      "t": 2,
+      "label": "line 2 ok"
+     },
+     {
+      "t": 3,
+      "label": "line 3: Error"
+     },
+     {
+      "t": 4,
+      "label": "line 4 never runs"
+     }
+    ]
+   },
+   "misconception": "The last error printed is the one to fix. Fix the first one: later errors often follow from it.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Fix the first error first.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Start with the last red line."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Start with the first red line; re-run."
+    }
+   },
+   "check": {
+    "q": "Line 2 fails with \"object 'dat' not found\" and line 5 fails too. Which do you fix first?",
+    "a": "Line 2: line 5 may only fail because dat was never created.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Cascade of errors.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "line 2 fails"
+      },
+      {
+       "id": "n1",
+       "label": "dat missing"
+      },
+      {
+       "id": "n2",
+       "label": "line 5 fails"
+      }
+     ]
+    }
+   },
+   "opens": "What is a warning, and why is it more dangerous than it looks?",
+   "id": "S1",
+   "answers": "When R misbehaves, how do you tell what went wrong and fix it?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-1",
+   "kind": "definition",
+   "title": "Warnings: R ran, but check",
+   "ref": "p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "A warning means R finished the line but suspects the result; the output exists and may be wrong.",
+   "explain": [
+    {
+     "text": "mean(\"ten\") from sheet 01 is the model case: R returns NA and warns that the argument is not numeric. The script goes on, so a warning can carry a bad value into everything after it unless you read it."
+    }
+   ],
+   "terms": [
+    {
+     "term": "warning",
+     "meaning": "R ran the line but flags a likely problem with the result"
+    }
+   ],
+   "intuition": "A warning is the amber light: you may go, but look first.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Error versus warning.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Warning = harmless noise."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Warning = a result exists but may be wrong."
+    }
+   },
+   "misconception": "Warnings can be ignored if the script finishes.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Finished is not right.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "No red stop → result is fine."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Read every warning; check the value it produced."
+    }
+   },
+   "check": {
+    "q": "as.numeric(c(\"1\", \"two\")) gives 1 NA with a warning. What happened?",
+    "a": "\"two\" could not be converted, so it became NA; R warns that NAs were introduced.",
+    "figure": {
+     "kind": "codetrace",
+     "caption": "Conversion with a warning.",
+     "lang": "r",
+     "lines": [
+      {
+       "code": "as.numeric(c(\"1\",\"two\"))",
+       "note": "\"two\" → NA"
+      },
+      {
+       "code": "",
+       "note": "Warning: NAs introduced by coercion"
+      }
+     ],
+     "output": [
+      "[1]  1 NA"
+     ],
+     "animate": false
+    }
+   },
+   "opens": "What is worse than an error or a warning?",
+   "id": "S2",
+   "answers": "What is a warning, and why is it more dangerous than it looks?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-2",
+   "kind": "definition",
+   "title": "Silent bugs: no message, wrong answer",
+   "ref": "p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "A silent bug runs without any message and gives a wrong answer; only checking the result reveals it.",
+   "explain": [
+    {
+     "text": "Examples: a formula written the wrong way round (TotalSleep ~ Danger versus Danger ~ TotalSleep), the wrong column picked, a filter that dropped half the rows. R cannot know your intention, so it cannot warn you; compare each result with what you expect (sign, size, n)."
+    }
+   ],
+   "terms": [
+    {
+     "term": "silent bug",
+     "meaning": "code that runs cleanly but does not do what you meant"
+    }
+   ],
+   "intuition": "A silent bug is a wrong turn with no sign: you only notice by checking the map.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "The only defence: check the result.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "run"
+     },
+     {
+      "id": "n1",
+      "label": "expected size? sign? n?"
+     },
+     {
+      "id": "n2",
+      "label": "investigate if not"
+     }
+    ]
+   },
+   "misconception": "No red text means the code is correct.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Quiet ≠ correct.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "No message → correct."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "No message → still check n, sign and size."
+    }
+   },
+   "check": {
+    "q": "mean(dat$BodyWt) gives 198.8 kg for mammals that are mostly small. Bug?",
+    "a": "Not necessarily a bug: the mean is pulled up by elephants; the median shows the typical mammal. Check before you trust it.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Check the size.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "A strange number means a bug."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "A strange number means: look at the data (skew, units)."
+     }
+    }
+   },
+   "opens": "What do the most common red messages mean?",
+   "id": "S3",
+   "answers": "What is worse than an error or a warning?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-3",
+   "kind": "remark",
+   "title": "Object or function not found",
+   "ref": "Read the red text, p. 3",
+   "pages": [
+    3
+   ],
+   "quote": [
+    {
+     "text": "Error: object 'Dat' not found",
+     "ref": "p. 3"
+    }
+   ],
+   "statement": "R found nothing with that exact name: names are case-sensitive, so Dat is not dat; and \"could not find function Mean\" means a misspelt function or a package not loaded.",
+   "explain": [
+    {
+     "text": "Check the spelling and the capitals, or run the line that creates the object first. For a function, check the name (mean, not Mean) and run library() for its package."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "str(Dat)",
+      "explain": "Dat does not exist: Error: object 'Dat' not found"
+     },
+     {
+      "code": "str(dat)",
+      "explain": "the object created by read.csv() is called dat"
+     }
+    ],
+    "output": [
+     "Error: object 'Dat' not found"
+    ],
+    "interpret": "The name must match exactly, capitals included."
+   },
+   "terms": [
+    {
+     "term": "case-sensitive",
+     "meaning": "capitals matter: dat, Dat and DAT are three different names"
+    }
+   ],
+   "intuition": "R reads names letter by letter, capitals included.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Exact names only.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Dat = dat."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Dat ≠ dat ≠ DAT."
+    }
+   },
+   "misconception": "R guesses the closest name.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "No guessing.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "R will find dat when I type Dat."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "R stops: nothing is called Dat."
+    }
+   },
+   "check": {
+    "q": "Mean(x) fails. Two possible fixes?",
+    "a": "Write mean(x) (lower case); or, if Mean comes from a package, load it with library().",
+    "figure": {
+     "kind": "flow",
+     "caption": "Function not found.",
+     "dir": "TB",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "spelling?"
+      },
+      {
+       "id": "n1",
+       "label": "package loaded?"
+      }
+     ]
+    }
+   },
+   "opens": "Why can R not open a file or a package that exists?",
+   "id": "S4",
+   "answers": "What do the most common red messages mean?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-3",
+   "kind": "remark",
+   "title": "File and package not found",
+   "ref": "Read the red text, p. 3",
+   "pages": [
+    3
+   ],
+   "quote": [
+    {
+     "text": "cannot open file 'sleep.csv': No such file or directory",
+     "ref": "p. 3"
+    }
+   ],
+   "statement": "The file is not where R is looking (the working directory); and \"there is no package called viridislite\" means not installed, or misspelt (it is viridisLite).",
+   "explain": [
+    {
+     "text": "Run getwd() to see where R looks, then setwd() or open your R Project. For a package, check the exact spelling, run install.packages() once, then library()."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "getwd()",
+      "explain": "where R is looking"
+     },
+     {
+      "code": "setwd(\"~/stats\")",
+      "explain": "move R to the folder with the file"
+     },
+     {
+      "code": "library(viridisLite)",
+      "explain": "correct capitals: viridisLite, not viridislite"
+     }
+    ],
+    "output": [],
+    "interpret": "Folder and spelling cause almost all \"not found\" messages."
+   },
+   "terms": [
+    {
+     "term": "R Project",
+     "meaning": "a folder file (.Rproj) that sets the working directory for you"
+    }
+   ],
+   "intuition": "R only searches one drawer: the working directory.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Find the file.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "getwd()"
+     },
+     {
+      "id": "n1",
+      "label": "is the file there?"
+     },
+     {
+      "id": "n2",
+      "label": "setwd() / Project"
+     }
+    ]
+   },
+   "misconception": "If the file is on my computer, R can open it.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "One drawer.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "R searches my whole computer."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "R searches the working directory only."
+    }
+   },
+   "check": {
+    "q": "library(ggplot) fails but ggplot2 is installed. Why?",
+    "a": "The package is called ggplot2: names must match exactly.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Exact package names.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "library(ggplot)"
+     },
+     "right": {
+      "title": "Instead",
+      "text": "library(ggplot2)"
+     }
+    }
+   },
+   "opens": "What do \"unexpected\" messages point at?",
+   "id": "S5",
+   "answers": "Why can R not open a file or a package that exists?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-3",
+   "kind": "remark",
+   "title": "Unexpected symbols and brackets",
+   "ref": "Read the red text, p. 3",
+   "pages": [
+    3
+   ],
+   "quote": [
+    {
+     "text": "Error: unexpected symbol in \"mean(x na.rm\"",
+     "ref": "p. 3"
+    }
+   ],
+   "statement": "An unexpected \")\" means the brackets do not pair up; an unexpected symbol means two things stand side by side with nothing between, usually a missing comma.",
+   "explain": [
+    {
+     "text": "Every ( needs exactly one ); every argument is separated by a comma. R prints the code up to the point where it got confused, so the fault is just before the end of what it shows."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "mean(x))",
+      "explain": "one bracket too many: unexpected ')'"
+     },
+     {
+      "code": "mean(x na.rm = TRUE)",
+      "explain": "missing comma between x and na.rm: unexpected symbol"
+     },
+     {
+      "code": "mean(x, na.rm = TRUE)",
+      "explain": "corrected: one closing bracket, and a comma between the arguments"
+     }
+    ],
+    "output": [
+     "Error: unexpected ')' in \"mean(x))\""
+    ],
+    "interpret": "The quoted fragment ends where R stopped understanding."
+   },
+   "terms": [
+    {
+     "term": "syntax error",
+     "meaning": "the line is not valid R, so it cannot even start"
+    }
+   ],
+   "intuition": "R reads like a strict proofreader and stops at the first mismatch.",
+   "intuitionFigure": {
+    "kind": "sketch",
+    "caption": "Brackets must pair: one ( for each ).",
+    "items": [
+     {
+      "shape": "text",
+      "x": 50,
+      "y": 22,
+      "text": "mean( x ) )"
+     },
+     {
+      "shape": "arrow",
+      "x": 74,
+      "y": 40,
+      "x2": 71,
+      "y2": 28,
+      "tone": "accent",
+      "text": "extra )"
+     }
+    ]
+   },
+   "misconception": "The error is at the end of the quoted code. It is just before: R shows where it gave up.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Where to look.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Fix the last character shown."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Look at what comes just before it: a missing comma or bracket."
+    }
+   },
+   "check": {
+    "q": "sd(x na.rm = TRUE) fails. What is missing?",
+    "a": "A comma: sd(x, na.rm = TRUE).",
+    "figure": {
+     "kind": "contrast",
+     "caption": "The missing comma.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "sd(x na.rm = TRUE)"
+     },
+     "right": {
+      "title": "Instead",
+      "text": "sd(x, na.rm = TRUE)"
+     }
+    }
+   },
+   "opens": "What does \"non-numeric argument\" mean, and what is the + prompt?",
+   "id": "S6",
+   "answers": "What do \"unexpected\" messages point at?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-3",
+   "kind": "remark",
+   "title": "Maths on text, and the waiting +",
+   "ref": "Read the red text, p. 3",
+   "pages": [
+    3
+   ],
+   "quote": [
+    {
+     "text": "Error in dat$Species + 1 : non-numeric argument to binary operator",
+     "ref": "p. 3"
+    }
+   ],
+   "statement": "Arithmetic on a text column fails: Species is chr. A + at the start of the console line means R is waiting for you to close an open ( or \".",
+   "explain": [
+    {
+     "text": "Run str(dat) to see which columns are chr. For the +, press Esc, close the bracket or quote, and run the line again."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "dat$Species + 1",
+      "explain": "Species holds names (text): arithmetic is impossible"
+     },
+     {
+      "code": "str(dat)",
+      "explain": "Species: chr, TotalSleep: num"
+     }
+    ],
+    "output": [
+     "Error in dat$Species + 1 : non-numeric argument to binary operator"
+    ],
+    "interpret": "Check types before maths."
+   },
+   "terms": [
+    {
+     "term": "binary operator",
+     "meaning": "a symbol between two values: + − * /"
+    },
+    {
+     "term": "+ prompt",
+     "meaning": "R is waiting for the rest of an unfinished line"
+    }
+   ],
+   "intuition": "You cannot add 1 to \"elephant\".",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Numbers and text.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "\"elephant\" + 1"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "10.5 + 1 = 11.5"
+    }
+   },
+   "misconception": "The + prompt means R is adding.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "The waiting +.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "+ = addition in progress."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "+ = your line is unfinished: close ( or \"."
+    }
+   },
+   "check": {
+    "q": "The console shows + after mean(x, na.rm = TRUE. What is missing?",
+    "a": "The closing bracket ).",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Close the bracket.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "mean(x, na.rm = TRUE"
+     },
+     "right": {
+      "title": "Instead",
+      "text": "mean(x, na.rm = TRUE)"
+     }
+    }
+   },
+   "opens": "What should you check before you even run a line?",
+   "id": "S7",
+   "answers": "What does \"non-numeric argument\" mean, and what is the + prompt?",
+   "from": [
+    "S6"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-4",
+   "kind": "remark",
+   "title": "Proofread before you run",
+   "ref": "p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "Ten checks catch most bugs before they happen: spelling and capitals, packages loaded, straight quotes, pairs closed, the right folder, the formula way round, commas, data types, the right function and NAs handled.",
+   "explain": [
+    {
+     "text": "TotalSleep is not totalsleep; library() runs every session; quotes copied from a PDF are often curly (“ ”) and R needs straight ones; every ( and \" has a partner; getwd() before read.csv(); a formula is response ~ group; arguments are separated by commas; str() after every import; ?name to check the function; na.rm = TRUE where NAs exist.",
+     "figure": {
+      "kind": "table",
+      "caption": "The ten checks of the proofreading list.",
+      "columns": [
+       "check",
+       "how"
+      ],
+      "rows": [
+       [
+        "spelling & capitals",
+        "TotalSleep ≠ totalsleep"
+       ],
+       [
+        "package loaded?",
+        "library() each session"
+       ],
+       [
+        "straight quotes",
+        "\" not “ ”"
+       ],
+       [
+        "pairs close",
+        "( ) and \" \""
+       ],
+       [
+        "right folder?",
+        "getwd()"
+       ],
+       [
+        "formula way round",
+        "response ~ group"
+       ],
+       [
+        "commas",
+        "between arguments"
+       ],
+       [
+        "data types",
+        "str()"
+       ],
+       [
+        "right function?",
+        "?name"
+       ],
+       [
+        "NAs handled",
+        "na.rm = TRUE"
+       ]
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "curly quotes",
+     "meaning": "typographic quotes “ ” that R does not accept as string delimiters"
+    }
+   ],
+   "intuition": "A pilot's checklist: boring, quick, and it prevents crashes.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Before running.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "spell"
+     },
+     {
+      "id": "n1",
+      "label": "pair"
+     },
+     {
+      "id": "n2",
+      "label": "type"
+     },
+     {
+      "id": "n3",
+      "label": "run"
+     }
+    ]
+   },
+   "misconception": "Code copied from a PDF will run as it is. Curly quotes and odd dashes often break it.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Copying from a PDF.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Copied code runs."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Replace “ ” with \" \" and – with -."
+    }
+   },
+   "check": {
+    "q": "boxplot(Danger ~ TotalSleep) runs but looks wrong. Which check fails?",
+    "a": "The formula is the wrong way round: it should be TotalSleep ~ Danger (response ~ group).",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Formula direction.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "Danger ~ TotalSleep"
+     },
+     "right": {
+      "title": "Instead",
+      "text": "TotalSleep ~ Danger"
+     }
+    }
+   },
+   "opens": "Can you find the six bugs in a short script?",
+   "id": "S8",
+   "answers": "What should you check before you even run a line?",
+   "from": [
+    "S7"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p3-5",
+   "kind": "example",
+   "title": "Spot the bugs: a six-line script",
+   "ref": "Spot the bugs, p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "The six-line script has six bugs: a misspelt package, a missing quote, a wrong capital, a wrong column name, missing NA handling, and a formula the wrong way round.",
+   "explain": [
+    {
+     "text": "Line 1 loads viridislite but the package is viridisLite. Line 2 lacks the closing \" after .csv. Line 3 inspects Dat, but the object is dat. Line 4 averages totalsleep, but the column is TotalSleep, and it needs na.rm = TRUE. Line 5 puts the formula backwards: sleep is the response, so TotalSleep ~ Danger.",
+     "figure": {
+      "kind": "codetrace",
+      "caption": "The script and its fixes, line by line.",
+      "lang": "r",
+      "lines": [
+       {
+        "code": "library(viridislite)",
+        "note": "viridisLite"
+       },
+       {
+        "code": "dat <- read.csv(\"mammal_sleep_flying.csv)",
+        "note": "missing \" after .csv"
+       },
+       {
+        "code": "str(Dat)",
+        "note": "dat"
+       },
+       {
+        "code": "mean(dat$totalsleep)",
+        "note": "TotalSleep, add na.rm = TRUE"
+       },
+       {
+        "code": "boxplot(dat$Danger ~ dat$TotalSleep,",
+        "note": "TotalSleep ~ Danger"
+       },
+       {
+        "code": "        ylab = \"Total sleep (h)\")",
+        "note": "fine once line 5 is fixed"
+       }
+      ],
+      "output": [],
+      "animate": true
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "library(viridisLite)",
+      "explain": "fixed: exact package name"
+     },
+     {
+      "code": "dat <- read.csv(\"mammal_sleep_flying.csv\")",
+      "explain": "fixed: closing quote"
+     },
+     {
+      "code": "str(dat)",
+      "explain": "fixed: the object is dat"
+     },
+     {
+      "code": "mean(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "fixed: column name and NAs"
+     },
+     {
+      "code": "boxplot(dat$TotalSleep ~ dat$Danger,",
+      "explain": "fixed: response ~ group"
+     },
+     {
+      "code": "        ylab = \"Total sleep (h)\")",
+      "explain": "axis label with units"
+     }
+    ],
+    "output": [
+     "[1] 10.53276"
+    ],
+    "interpret": "With all six fixes the script runs and the mean is the 10.53 h of sheet 01."
+   },
+   "terms": [
+    {
+     "term": "response ~ group",
+     "meaning": "formula order: the measured outcome on the left, the grouping on the right"
+    }
+   ],
+   "intuition": "Bugs hide in names, pairs and order.",
+   "intuitionFigure": {
+    "kind": "bars",
+    "caption": "The six bugs by kind.",
+    "categories": [
+     "names",
+     "pairs",
+     "NAs",
+     "order"
+    ],
+    "series": [
+     {
+      "name": "bugs",
+      "values": [
+       3,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   },
+   "misconception": "Fixing the first error is enough. Each fix lets R reach the next bug; re-run after every fix.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Fix, re-run, repeat.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "One fix, done."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Fix the first error, re-run, read the next message."
+    }
+   },
+   "check": {
+    "q": "Which of the six bugs would give no message at all?",
+    "a": "The backwards formula (line 5): it draws a plot, just the wrong one.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "The silent one.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "All six bugs give errors."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "Line 5 runs silently and draws the wrong plot."
+     }
+    }
+   },
+   "opens": "What do you do when you cannot see the bug?",
+   "id": "S9",
+   "answers": "Can you find the six bugs in a short script?",
+   "from": [
+    "S8"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "3.0",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-1",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-2",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-3",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-4",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-5",
+   "count": 0,
+   "why": "reading messages: figures suffice"
+  },
+  {
+   "subsection": "p3-6",
+   "count": 0,
+   "why": "a habit, not a mechanism"
+  }
+ ]
+}

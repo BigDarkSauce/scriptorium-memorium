@@ -105,7 +105,7 @@ The specs and the evidence are in `research/explainer-animation.md` (§6); the l
   - `hub.addFiles(files, place?)` / `hub.addPDF(file, place?)`: `place` = `{caseId, row, slot, hang?}` puts the first new scroll straight into the chosen place (reserved before anything is awaited). Without it, the old choice applies: the selected bookcase, then any bookcase with room.
   - Internals the menu uses: `moveBook(b, target)`, `setImportant(b, on)`, `setHang(b, on, {metal, drop})` and `setHangStyle(b, {metal, drop})`. The last one re-poses the scroll in place without rebuilding it.
 - **Taking a scroll out** (`takeOutPath`, `scrollPose`). The scroll starts from its actual pose and moves in four steps:
-  1. It rises 3 cm out of the cradles' hollow (1 cm off the chain hooks).
+  1. It rises 3 cm out of the cradles' hollow. A hanging scroll skips this: it leaves its hooks by going straight forward, since the knob tops fall away from the hooks.
   2. It slides straight forward along the case normal until its back end is 3 cm in front of everything on the bookcase: the case-frame bounds of the case without this scroll, so the cornice and the neighbours' tags count.
   3. It rises to reading height (1.62 m, or stays at its own height if higher).
   4. Only then does it turn to face the viewer. A turn about its middle brings its ends back toward the case by at most 6 mm.

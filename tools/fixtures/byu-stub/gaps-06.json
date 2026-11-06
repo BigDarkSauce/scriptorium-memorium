@@ -1,0 +1,121 @@
+{
+ "steps": [
+  {
+   "basis": "source-text",
+   "figures": [],
+   "demos": [],
+   "from": [],
+   "id": "G1",
+   "section": "p6-1",
+   "kind": "remark",
+   "title": "Check normality first",
+   "ref": "Measured data, p. 6",
+   "pages": [
+    6
+   ],
+   "answers": "How do you check that data are normal enough for a t test?",
+   "opens": "What if the data are ranks or not normal?",
+   "statement": "Before a Z or t test, look at hist() and run shapiro.test(): p > 0.05 means normal enough; a small p means use the rank tests instead.",
+   "explain": [
+    {
+     "text": "shapiro.test() asks whether the data could come from a normal distribution. Its p-value works the other way round from most tests: a small p (≤ 0.05) is evidence against normality. The histogram shows why: skew, two peaks or outliers. With large samples tiny departures become significant, so the picture matters as much as the p.",
+     "figure": {
+      "kind": "distribution",
+      "dist": "normal",
+      "params": {
+       "mean": 0,
+       "sd": 1
+      },
+      "caption": "The shape a t test assumes: one symmetric peak.",
+      "xlabel": "value"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "hist(x)",
+      "explain": "look at the shape first"
+     },
+     {
+      "code": "shapiro.test(x)",
+      "explain": "H₀: the data are normal; p > 0.05 → normal enough"
+     }
+    ],
+    "output": [],
+    "interpret": "If Shapiro rejects normality, go to the weakly measured branch (wilcox.test)."
+   },
+   "terms": [
+    {
+     "term": "shapiro.test()",
+     "meaning": "Shapiro–Wilk test of normality"
+    }
+   ],
+   "intuition": "Check that the key fits the lock before you turn it.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Check, then choose.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "hist()"
+     },
+     {
+      "id": "n1",
+      "label": "shapiro.test()"
+     },
+     {
+      "id": "n2",
+      "label": "p > 0.05: t test"
+     },
+     {
+      "id": "n3",
+      "label": "p ≤ 0.05: rank test"
+     }
+    ]
+   },
+   "misconception": "A significant Shapiro test is a good result.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Read it the other way round.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "p < 0.05 → normal, go ahead."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "p < 0.05 → not normal: use wilcox.test."
+    }
+   },
+   "check": {
+    "q": "shapiro.test() gives p = 0.002. Which test do you use for two independent groups?",
+    "a": "Mann–Whitney U, wilcox.test(y ~ group): the data are not normal.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Not normal.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "p = 0.002"
+      },
+      {
+       "id": "n1",
+       "label": "rank test"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "subsection": "p6-1",
+   "steps": [
+    "G1"
+   ]
+  }
+ ]
+}

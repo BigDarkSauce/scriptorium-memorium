@@ -9,7 +9,7 @@ import { DioramaScene, isSceneSpec } from './scene.js';
 import { SHAPES } from './builder.js';
 import { PRESETS } from '../gfx/materials.js';
 import { Materializer, addInk, addOutlines } from '../gfx/materialize.js';
-import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet , mathHTML, canvasMath } from '../util.js';
+import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet , mathHTML, canvasMath, mathText } from '../util.js';
 import { askJSON, errCopy } from '../ai/claude.js';
 import { editPrompt } from '../ai/prompts.js';
 import { radialGlow } from '../gfx/textures.js';
@@ -76,13 +76,13 @@ export class DioramaView {
   }
   showSketchCoach() {
     this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', text: this.title })]),
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', mathLabel: this.title })]),
       el('button', { class: 'btn primary', text: 'Transition', onclick: () => this.transition() }));
     this.coach.hidden = false;
   }
   transition(duration = 6.5) {
     if (this.stage !== 'sketch') return; this.stage = 'materialize'; this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', text: this.title })]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', mathLabel: this.title })]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
     this.tm = 0; this.tmDur = duration; this.ds.playing = true; this.ds.speed = .6;
   }
   endMaterialize() {
@@ -108,7 +108,7 @@ export class DioramaView {
   renderTourCoach() {
     const A = this.ds.actors, a = A[this.tourI]; this.coach.innerHTML = '';
     const dots = el('div', { class: 'coach-dots' }, A.map((_, i) => el('i', { class: i < this.tourI ? 'seen' : i === this.tourI ? 'now' : '' })));
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: `Body ${this.tourI + 1} of ${A.length}` }), el('div', { class: 'coach-text', text: a.name }), a.describe ? el('div', { class: 'coach-sub', text: a.describe }) : null, dots]),
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: `Body ${this.tourI + 1} of ${A.length}` }), el('div', { class: 'coach-text', mathLabel: a.name }), a.describe ? el('div', { class: 'coach-sub', mathLabel: a.describe }) : null, dots]),
       el('button', { class: 'ibtn', title: 'Previous (↑)', 'aria-label': 'Previous body', text: '‹', onclick: () => this.prev() }),
       el('button', { class: 'ibtn', title: 'Next (scroll down or ↓)', 'aria-label': 'Next body', text: '›', onclick: () => this.next() }),
       el('button', { class: 'btn ghost small', text: 'Skip', onclick: () => { while (this.stage === 'tour') { this.tourI = this.ds.actors.length; this.finishTour(); } } }));
@@ -131,7 +131,7 @@ export class DioramaView {
   }
   ensurePin(a, focus) {
     let pin = this.pins.get(a.name);
-    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', html: mathHTML(a.name) })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
+    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', html: mathHTML(a.name, 'label') })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
     this.pins.forEach(p => p.classList.remove('focus')); if (focus) pin.classList.add('focus');
     pin._actor = a; if (this._hot && this._hot.length) pin.classList.toggle('hot', this._hot.some(h => h.name === a.name));
   }
@@ -139,7 +139,7 @@ export class DioramaView {
   showExplore(immediate) {
     this.panel.hidden = false; requestAnimationFrame(() => this.panel.classList.add('in'));
     this.renderLessons(); this.renderParams(); this.renderObjects();
-    this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); });
+    this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', mathLabel: s.text }); p._sym = s; this.labels.append(p); });
     if (immediate) this.ds.actors.forEach(a => this.ensurePin(a, false));
     this.ds.playing = true; this.syncTimeUI(); this._wideFix = 2;   // the opening view is re-framed into the free frame once the panels are laid out
   }
@@ -207,19 +207,19 @@ export class DioramaView {
     for (const k in this.ds.ranges) {
       if ((this.spec.hidden || []).includes(k)) continue;
       const [a, b, , unit, name] = this.ds.ranges[k], v = this.ds.p[k];
-      const out = el('b', { text: fmt(v) + (unit ? ' ' + unit : '') });
+      const out = el('b', { mathLabel: fmt(v) + (unit ? ' ' + unit : '') });
       const inp = el('input', { type: 'range', min: a, max: b, step: (b - a) / 300, value: v, id: 'dp-' + k, 'aria-label': name || k });
       inp.onpointerdown = inp.onkeydown = () => { if (inp._from == null) inp._from = this.ds.p[k]; };
-      inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; out.textContent = fmt(+inp.value) + (unit ? ' ' + unit : ''); this.setParam(k, +inp.value, false, true); };   // a model that rebuilds rebuilds once per frame while dragging
+      inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; typeset(out, fmt(+inp.value) + (unit ? ' ' + unit : ''), 'label'); this.setParam(k, +inp.value, false, true); };   // a model that rebuilds rebuilds once per frame while dragging
       inp.onchange = () => { if (inp._from != null && inp._from !== this.ds.p[k]) this.pushUndo({ kind: 'param', k, v: inp._from, label: name || k }); inp._from = null; inp.blur(); };
-      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { html: mathHTML(name || k) }), out]), inp]));
+      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { html: mathHTML(name || k, 'label') }), out]), inp]));
     }
     if (!box.children.length) box.append(el('p', { class: 'dim small', text: 'No variables. Use Edit → Ask AI to add some.' }));
     // what the model is doing right now, under the sliders that cause it (newest first)
     this.dynBox = el('div', { class: 'dyn-box' }, [el('h4', { text: 'Dynamic changes' }), this.dynList = el('ul', { class: 'dyn-list' })]);
     box.append(this.dynBox); (this._dyn || []).forEach(d => this.dynList.append(this.dynItem(d)));
   }
-  dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text) })]); }
+  dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text, 'label') })]); }
   pushDyn(ev) {
     const d = { text: ev.text, clock: this.clockText(ev.t), fresh: true }; this._dyn = [d].concat(this._dyn || []).slice(0, 12);
     if (this.dynList) { const li = this.dynItem(d); this.dynList.prepend(li); setTimeout(() => { d.fresh = false; li.classList.remove('fresh'); }, 2500); while (this.dynList.children.length > 12) this.dynList.lastChild.remove(); }
@@ -375,12 +375,12 @@ export class DioramaView {
     if (pin.classList.contains('mini') !== !!on) { pin.classList.toggle('mini', !!on); pin._w = 0; pin.title = on ? pin._actor && pin._actor.name : ''; }
   }
   highlightPins(actors) { if (actors && actors.length) this.touchLabels(actors); this._hot = actors; const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
-  refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
+  refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', mathLabel: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
   // ---------- HUD ----------
   buildHUD() {
     const u = this.ui;
     this.labels = el('div', { class: 'pins' }); u.append(this.labels);
-    this.titleEl = el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', text: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', text: this.opts.subtitle }) : null]); u.append(this.titleEl);
+    this.titleEl = el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', mathLabel: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', mathLabel: this.opts.subtitle }) : null]); u.append(this.titleEl);
     this.topBar = u.querySelector('.dio-actions');
     this.editBtn = el('button', { class: 'ibtn', title: 'Edit: select any object (E)', 'aria-label': 'Edit objects', html: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>', onclick: () => this.toggleEdit() });
     u.append(el('div', { class: 'dio-actions glass' }, [this.editBtn,
@@ -444,7 +444,7 @@ export class DioramaView {
     this.pushDyn(ev);   // every change is listed under Variables → Dynamic changes (the old top-of-screen ticker is gone)
     // sound, placed left/right where the event happens
     if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } this._sndT = this._sndT || new Map(); if (now - (this._sndT.get(evKey) || -1e9) > 3000) { this._sndT.set(evKey, now); if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); } }
-    this.evlog.prepend(el('li', { html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text) })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
+    this.evlog.prepend(el('li', { html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text, 'label') })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
     if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) { if (!this.awaitIdle) this.awaitT = 0; this.awaitIdle = true; } else this.runT = this.runDur; }
   }
@@ -660,7 +660,7 @@ export class DioramaView {
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
       this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
-      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k)}</em> ${mathHTML(v)}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k, 'label')}</em> ${mathHTML(v, 'label')}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
   }
   // S6.2 comfort vignette: while a POV ride or a moving shot turns the camera faster than 30°/s (or a POV moves faster
   // than 3 actor sizes per second), the periphery darkens, at most 0.55; a cut (a jump) never counts
@@ -744,9 +744,12 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
   if (sketchCache.has(key)) return sketchCache.get(key);
   const ds = new DioramaScene(gfx, spec, { headless: true });
-  addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, ds.radius * .005); addOutlines(ds.extras, ds.U, ds.radius * .005);
-  const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   ds.step(0);
+  // the overview frames the subject (sketchSubject): its outlines are as thick as the subject is large, not the world
+  // (a landscape's radius made 30 cm hulls round a lever)
+  const subj = opts.focusText ? null : sketchSubject(ds), inkR = subj ? Math.max(.5, subj.box.getSize(V3()).length() * .5) : ds.radius;
+  addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, inkR * .005); addOutlines(ds.extras, ds.U, inkR * .005);
+  const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   // a stage plate shows the step's own state: let the model settle under the step's settings first (≈4 s of model time)
   if (opts.focusText) { const pl = ds.playing; ds.playing = true; try { const t0 = performance.now(); for (let k = 0; k < 96 && performance.now() - t0 < 8000; k++) ds.step(.5); } catch (e) { } ds.playing = pl; }   // a fixed 48 model-seconds (the time cap only guards a runaway model)   // ≈48 model-seconds: slow processes (crystals, levels) reach the step's state
   let endKey = ds.overviewKey(), focus = [], fc = ds.center, fr = ds.radius;
@@ -765,7 +768,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   // fills ~76 % of the card (the larger of its height and its width over the aspect), seen along the technique's own
   // drawing direction and lens
   if (!opts.focusText) {
-    const S = sketchSubject(ds);
+    const S = subj;
     if (S) {
       S.hide.forEach(o => { o.visible = false; }); ((ds.env && ds.env.bgObjects) || []).forEach(o => { o.visible = false; });
       const fk = m.flatKey, dir = fk.dir.clone().normalize(), up0 = Math.abs(dir.y) > .95 ? V3(0, 0, -1) : V3(0, 1, 0), right = up0.clone().cross(dir).normalize(), up = dir.clone().cross(right).normalize();
@@ -817,7 +820,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   // title block on an opaque strip; both labels fitted with an ellipsis so they never run into each other
   g.font = '13px "IBM Plex Mono", monospace'; g.textAlign = 'left';
   const fit = (t, max) => { t = String(t); if (g.measureText(t).width <= max) return t; while (t.length > 1 && g.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
-  const L0 = String(spec.title || spec.type).toUpperCase(), R0 = focus.length ? 'STAGE · ' + String(opts.label || '').toUpperCase() : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING';
+  const L0 = mathText(spec.title || spec.type).toUpperCase(), R0 = focus.length ? 'STAGE · ' + mathText(opts.label || '').toUpperCase() : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING';
   const avail = w - 52 - 24, lW = Math.min(g.measureText(L0).width, avail * .5), Lt = fit(L0, lW), Rt = fit(R0, avail - g.measureText(Lt).width);
   g.fillStyle = 'rgba(239,233,220,.94)'; g.fillRect(15, h - 44, w - 30, 29); g.strokeStyle = 'rgba(29,28,25,.35)'; g.beginPath(); g.moveTo(15, h - 44); g.lineTo(w - 15, h - 44); g.stroke();
   g.fillStyle = 'rgba(29,28,25,.85)'; g.fillText(Lt, 26, h - 25); g.textAlign = 'right'; g.fillText(Rt, w - 26, h - 25);

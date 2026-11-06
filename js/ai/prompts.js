@@ -9,13 +9,19 @@ import { EVIDENCE_RULES } from './evidence.js';
 import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY } from '../room/figspec.js';
 export { EVIDENCE_RULES };
 
+// How authors write maths in any text the app shows (titles, labels, body names, lessons, events, readouts, terms,
+// explanations). The app's typesetter (js/util.js: mathHTML) parses exactly this syntax; scroll text may also use LaTeX.
+export const MATH_NOTATION = `MATHS IN TEXT (titles, body names, labels, lessons, events, readouts, terms, explanations, examples): write every formula in ONE plain syntax the app typesets — italic variables, upright functions and units, real superscripts, subscripts, radicals and fractions:
+ * or juxtaposition for products (2*x or 2x, a*sin(x)); / for division (Ea/(k*T)); ^ for powers, with brackets round a compound exponent (x^2, x^(n+1), e^(-Ea/(k*T))); sqrt(…), cbrt(…), exp(…), abs(…), ln(…), log(…), sin cos tan(…); pi; Greek letters by name or symbol (theta, omega, Delta T, or θ ω ΔT); subscripts as x_i, T_max, v_(n+1) (or m1, v0 for a single digit); <= >= != -> +- ~= for ≤ ≥ ≠ → ± ≈; 1.2e-3 for 1.2 × 10⁻³; a number then a space then its unit (9.81 m/s^2, 2.5 kg*m^2, -286 kJ*mol^-1, 300 K); chemistry as H2O, CO2, Ca2+, SO4^2-, 2H2 + O2 -> 2H2O.
+ In scroll text ("statement", "math", "derivation", "examples", "terms") LaTeX inside $…$ is also fine; never mix the two syntaxes inside one formula. Never write **, a compound exponent without brackets (e^-Ea/kT), × or · typed between letters, or a formula in backticks (backticks are only for code).`;
 export const LESSON_FORMAT = `LESSON (one step of a 3D demo's guided tour): {"title":str,"question":"the one question this lesson settles","text":"what the learner does and exactly what to watch","focus":"actor name or id","set":{"param":value},"run":seconds | "until":"event:<substring of an api.event text>","explain":"what happened and why, with the numbers","opens":"the next question it raises (= the next lesson's question)","shot":"wide|push|medium|close|pov (optional)","pov":"actor name (only with shot pov)"}. Lessons form a thread: lesson k+1's "question" repeats lesson k's "opens".
 OPTIONAL EXPLAINER CUES on a lesson (actor names spelled as in "focus"; see EXPLAINER RULES):
  "chain":["actor",…] the actors in the ORDER OF CAUSE, 2–8 per lesson (an entry may be {"a":"actor","note":"≤ 6 words"}); a highlight travels link by link with numbered badges ("Step k of n"); "chainPace":0.5–2 (seconds per link, default 0.9) or "chainOn":"event:<substring>" (one link per such event, in step with the motion)
  "isolate":true | ["actor",…] everything except the subject (true: the focus and the actors the text names) is dimmed and greyed while the step plays
  "peel":{"layers":["outermost actor",…],"mode":"ghost|lift|clip","order":"out-in|in-out","dwell":2.2,"restore":"step|beat|never"} reveals an inside one named layer at a time ("Layer k of n"), at most 6 layers, restored in reverse
  "zoom":{"to":"small actor","from":"wide|current","perDecade":3,"fovEnd":30,"stations":[{"at":"actor","hold":2}],"back":false} one continuous zoom into a small part, pausing at stations named after the levels of organisation (leave "shot" out: "zoom" is the shot); the diorama needs "scale":{"m":<metres per world unit>} for its scale bar
- "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.`;
+ "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.
+${MATH_NOTATION}`;
 
 // Authoring rules for the explainer cues (docs/research/explainer-animation.md §7; the evidence for each is there).
 export const EXPLAINER_RULES = `EXPLAINER RULES (how a 3D demo's lessons show a mechanism):
@@ -158,7 +164,7 @@ export const EXPLAIN_RULES = `EXPLAINED STEPS (every step, at the source's resol
 - Each step answers one question ("answers") and opens the next ("opens"); the explanation actually settles the question it answers.
 - Worked examples: the PDF's own first ("examples", origin "pdf", its numbers line by line); then, where it helps, one more from outside the PDF (origin "added", with a real source found with the search tools, shown with an "Added from outside the PDF" badge).
 - Infographics, slides and posters (subsections marked as panels of a sheet): every panel is a subsection; turn its fragments (labels, arrows, call-outs, tables of functions) into connected sentences and steps; never list the panel's text as it stands.`;
-export const CODE_RULES = `CODE (R, Python, console output; the PART TEXT marks code as \`\`\`r / \`\`\`python / \`\`\`code blocks):
+export const CODE_RULES = `CODE (R, Python, console output; the PART TEXT marks code as \`\`\`r / \`\`\`python / \`\`\`code blocks, lists of function names as \`\`\`names, and a short name in a code face as \`inline\`):
 - Every code block of the source is covered by a step with "code": its lines exactly as in the source, each with "explain" (what the line does, naming every function and argument and what it returns), the printed "output" exactly, and "interpret" (what that output means for the question, with its units).
 - A long block (more than 8 lines) is split over several steps; a list of functions (a cheat sheet) becomes steps grouped by purpose, each function with what it does and a one-line usage example.
 - Statistics: name the test or model, its assumptions, the statistic and its value, the p-value or interval, and the conclusion in words; say what the number does not mean (a p-value is not the probability that H₀ is true).
@@ -526,8 +532,129 @@ export function mergeFollowUp(A, add, sections) {
   return A;
 }
 
+// ---------------------------------------------------------------- the quality gate (pure; runs after every answer)
+// Catches what made scrolls unreadable: pasted source text, the same page or figure shown again and again, steps that
+// state without explaining, code without its line-by-line explanation, paragraphs without figures and subsections the
+// outline has but the chain lost. Deterministic repairs happen here (a PDF figure cited by several steps stays with the
+// first; a page-sized crop is never shown); the rest goes back to the model as a targeted repair of only those steps.
+//   qualityGate(A, sections, figures) → { ok, issues:[{step, section, kind, detail}], fixed:[str], stats }
+//   kinds: copied, duplicate, longQuote, unexplained, codeUnexplained, noFigure, badFigure, missing, dioramas
+export const COPY_WORDS = 40;
+const wordsOf = s => String(s || '').toLowerCase().replace(/\$[^$]*\$/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+// for copy detection every character run counts ($ in dat$TotalSleep is not maths)
+const wordsRaw = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+const proseFields = st => [['statement', st.statement], ...(st.explain || []).map((p, k) => ['explain.' + k, typeof p === 'string' ? p : p && p.text]), ['intuition', st.intuition], ['misconception', st.misconception], ['check', st.check ? st.check.q + ' ' + (st.check.a || '') : ''], ...(st.examples || []).map((e, k) => ['examples.' + k, e ? [e.problem, ...(e.solution || []).map(x => x && x.text), e.answer].join(' ') : '']), ...((st.code && st.code.lines) || []).map((l, k) => ['code.' + k, l && l.explain]), ['interpret', st.code && st.code.interpret]].filter(x => x[1]);
+// how many words of `text` lie inside a run of K or more words that also occurs in the source. Panels of an infographic
+// are extracted in another order than a model pastes them, so runs are counted wherever they match, not as one block.
+function copiedWords(text, set, K = 4) { const w = wordsRaw(text), cov = new Uint8Array(w.length); for (let i = 0; i + K <= w.length; i++) if (set.has(w.slice(i, i + K).join(' '))) for (let j = i; j < i + K; j++) cov[j] = 1; return cov.reduce((a, b) => a + b, 0); }
+function shingles(text, K = 8) { const w = wordsRaw(text), S = new Set(); for (let i = 0; i + K <= w.length; i++) S.add(w.slice(i, i + K).join(' ')); return S; }
+const explainedWords = st => wordsOf([st.statement, ...(st.explain || []).map(p => typeof p === 'string' ? p : p && p.text), ...(st.derivation || []).map(d => d && d.why), ...(st.examples || []).map(e => e && [e.problem, e.answer, ...(e.solution || []).map(x => x && x.text)].join(' ')), ...((st.code && st.code.lines) || []).map(l => l && l.explain), st.code && st.code.interpret].join(' ')).length;
+export function qualityGate(A, sections = [], figures = []) {
+  const chain = A.chain || [], issues = [], fixed = [], add = (st, kind, detail) => issues.push({ step: st ? st.id : null, section: st ? st.section : null, kind, detail });
+  const src = sections.map(s => (s.text || '').replace(/```[\s\S]*?```/g, ' ')).join('\n'), S = shingles(src, 4);
+  // 1. pasted text: a run of more than COPY_WORDS words of the PDF in any prose field (quotes are checked separately)
+  chain.forEach(st => { let worst = 0, where = ''; proseFields(st).forEach(([k, t]) => { const r = copiedWords(t, S), n = wordsRaw(t).length; if (r > worst && r >= n * .5) { worst = r; where = k; } }); if (worst > COPY_WORDS) add(st, 'copied', `${worst} words copied from the PDF in "${where}": explain it in your own words (quote at most ${COPY_WORDS} words, in "quote")`); });
+  // 2. the same passage twice: two steps sharing a run of 25+ words, or a quote repeated
+  const own = chain.map(st => ({ st, sh: shingles(proseFields(st).map(x => x[1]).join(' ')) }));
+  for (let i = 0; i < own.length; i++) for (let j = i + 1; j < own.length; j++) { let n = 0; own[j].sh.forEach(x => { if (own[i].sh.has(x)) n++; }); if (n >= 18) add(own[j].st, 'duplicate', `repeats ${own[i].st.id} (${n + 7}+ shared words): this step must say something new`); }
+  const quoteSeen = new Map();
+  chain.forEach(st => (st.quote || []).forEach(q => { const w = wordsOf(q && q.text); if (w.length > COPY_WORDS) add(st, 'longQuote', `a quote of ${w.length} words (at most ${COPY_WORDS})`); const key = w.slice(0, 12).join(' '); if (key && quoteSeen.has(key)) { q.dupOf = quoteSeen.get(key); fixed.push(`${st.id}: quote already shown in ${q.dupOf}, shown as a reference`); } else if (key) quoteSeen.set(key, st.id); }));
+  // 3. PDF figures: each shown by one step only; page-sized crops never (deterministic)
+  const byId = new Map(figures.map(f => [f.id, f])), firstCite = new Map();
+  chain.forEach(st => {
+    if (!Array.isArray(st.figures)) return; const keep = [];
+    st.figures.forEach(id => { const F = byId.get(id); const big = F && F.bbox && (F.bbox[2] - F.bbox[0]) * (F.bbox[3] - F.bbox[1]) > .4; if (big) { fixed.push(`${st.id}: ${id} covers most of a page; not shown`); (st.figureRefs = st.figureRefs || []).push({ id, page: F.page, pageLike: true }); return; } if (firstCite.has(id) && firstCite.get(id) !== st.id) { fixed.push(`${st.id}: ${id} is already shown in ${firstCite.get(id)}; now a link`); (st.figureRefs = st.figureRefs || []).push({ id, in: firstCite.get(id) }); return; } firstCite.set(id, st.id); keep.push(id); });
+    st.figures = keep;
+  });
+  // 4. steps that state but do not explain
+  chain.forEach(st => { const n = explainedWords(st), hasExplain = (st.explain || []).some(p => wordsOf(typeof p === 'string' ? p : p && p.text).length >= 12); if (n < 30 || (!hasExplain && !(st.code && st.code.lines && st.code.lines.length) && !(st.derivation || []).length)) add(st, 'unexplained', `only ${n} words of explanation${hasExplain ? '' : ' and no "explain" paragraphs'}: say how and why, with the PDF's numbers, in 2–4 paragraphs`); });
+  // 5. code: every code block of a subsection explained by a step with "code", every line with its explanation
+  sections.forEach(sec => { const nb = sec.inventory && sec.inventory.code; if (!nb) return; const mine = chain.filter(st => st.section === sec.id && st.code && Array.isArray(st.code.lines) && st.code.lines.length); if (!mine.length) add(chain.filter(st => st.section === sec.id).pop() || null, 'codeUnexplained', `[${sec.id}] has ${nb} code block(s) but no step explains code line by line`); });
+  chain.forEach(st => { const L = (st.code && st.code.lines) || []; const bare = L.filter(l => !l || !l.explain || wordsOf(l.explain).length < 3).length; if (bare) add(st, 'codeUnexplained', `${bare} code line(s) without an explanation`); if (L.length && st.code.output && st.code.output.length && !st.code.interpret) add(st, 'codeUnexplained', 'the output is not interpreted ("interpret")'); });
+  // 6. figures: every text-heavy paragraph and every teaching box has a valid figure
+  chain.forEach(st => figureSlots(st).forEach(sl => { if (!sl.fig) add(st, 'noFigure', `${sl.slot}: no figure`); else { const v = validateFigure(sl.fig); if (!v.ok) add(st, 'badFigure', `${sl.slot}: ${v.errors.join('; ')}`); else if (sl.fig.kind === 'pdf' && sl.fig.id) { if (firstCite.has(sl.fig.id) && firstCite.get(sl.fig.id) !== st.id + ':' + sl.slot && firstCite.get(sl.fig.id) !== st.id) add(st, 'badFigure', `${sl.slot}: PDF figure ${sl.fig.id} is already shown in ${firstCite.get(sl.fig.id)}`); else firstCite.set(sl.fig.id, st.id + ':' + sl.slot); } } }));
+  // 7. subsections the outline has and the chain lost
+  const covered = new Set(chain.map(st => st.section));
+  sections.forEach(sec => { if (!covered.has(sec.id)) issues.push({ step: null, section: sec.id, kind: 'missing', detail: `[${sec.id}] ${sec.title}: no step covers it` }); });
+  // 8. dioramas: the plan against the 3D demos present
+  planDioramas(A, sections).forEach(p => { if (p.have < p.need) issues.push({ step: null, section: p.subsection, kind: 'dioramas', detail: `[${p.subsection}] needs ${p.need} diorama(s), has ${p.have}` }); });
+  const stats = { steps: chain.length, copied: issues.filter(i => i.kind === 'copied').length, figures: chain.reduce((a, st) => a + figureSlots(st).filter(x => x.fig).length, 0), slots: chain.reduce((a, st) => a + figureSlots(st).length, 0) };
+  return { ok: !issues.some(i => i.kind !== 'dioramas'), issues, fixed, stats };
+}
+// Which steps a repair call must rewrite (copied, duplicate, longQuote, unexplained, codeUnexplained); figure-only gaps go
+// to figuresPrompt; missing subsections to followUpPrompt; dioramas to the diorama stage.
+export const REWRITE_KINDS = ['copied', 'duplicate', 'longQuote', 'unexplained', 'codeUnexplained'];
+export function repairPrompt({ book, chapter, A, issues, sections }) {
+  const ids = [...new Set(issues.filter(i => REWRITE_KINDS.includes(i.kind) && i.step).map(i => i.step))];
+  const steps = (A.chain || []).filter(st => ids.includes(st.id));
+  const secIds = [...new Set(steps.map(st => st.section))];
+  const text = sections.filter(s => secIds.includes(s.id)).map(s => `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}`).join('\n');
+  const strip = st => { const o = { ...st }; delete o.demos; return o; };
+  return `You are repairing steps of one scroll of a study chain. The quality check found the problems listed below. Rewrite ONLY these steps, keeping each step's "id", "section", "answers" and "opens" exactly (the question thread around them stays intact), its demos (they are kept by the app) and every number of the source.
+BOOK: ${book}
+PART: ${chapter}
+PROBLEMS:
+${ids.map(id => `- ${id}: ${issues.filter(i => i.step === id && REWRITE_KINDS.includes(i.kind)).map(i => i.detail).join('; ')}`).join('\n')}
+STEPS TO REWRITE (current JSON):
+${JSON.stringify(steps.map(strip))}
+HOW: explain in your own words, never paste (at most ${COPY_WORDS} words quoted, in "quote", once). Give each step a short "statement", 2–4 "explain" paragraphs (each paragraph of ${TEXT_HEAVY}+ words with a "figure"), "terms" for every term, the worked example with the PDF's numbers ("examples"), "code" with every line explained and the output interpreted when the step is about code, and small figures for intuition, misconception and check. A step that only repeated another step must now explain what that one did not (the next idea of its subsection).
+${HARD_RULES}
+${EXPLAIN_RULES}
+${CODE_RULES}
+${FIGURE_SPEC}
+Return ONLY JSON: {"steps":[ the rewritten steps, same ids, in the chain format ]}
+Step format: ${CHAIN_FORMAT.slice(CHAIN_FORMAT.indexOf('"chain":[') + 9, CHAIN_FORMAT.indexOf('"coverage"')).trim().replace(/,$/, '').replace(/\]$/, '')}
+SOURCE TEXT OF THEIR SUBSECTIONS:
+"""
+${text.slice(0, 100000)}
+"""`;
+}
+// Replace steps by id; keep the thread fields, the demos and the figures citations the app already settled.
+export function mergeRepair(A, ans) {
+  const rep = (ans && (ans.steps || ans.chain) || []).filter(x => x && typeof x === 'object' && x.id);
+  let n = 0;
+  rep.forEach(r => { const i = (A.chain || []).findIndex(st => st.id === String(r.id)); if (i < 0) return; const old = A.chain[i]; A.chain[i] = { ...old, ...r, id: old.id, section: old.section || r.section, answers: old.answers || r.answers, opens: old.opens || r.opens, demos: (r.demos && r.demos.length ? r.demos : old.demos) || [], repaired: (old.repaired || 0) + 1 }; n++; });
+  return n;
+}
+// Figures only: for paragraphs and teaching boxes that have none (or an invalid one). Cheap; touches nothing else.
+export function figuresPrompt({ book, chapter, A, slots }) {
+  const by = new Map(); slots.forEach(x => { if (!by.has(x.step)) by.set(x.step, []); by.get(x.step).push(x); });
+  const list = [...by.entries()].map(([id, L]) => { const st = (A.chain || []).find(s => s.id === id) || {}; return `- ${id} "${st.title || ''}" (${st.section || ''}):\n` + L.map(x => `   ${x.slot}${x.small ? ' (small)' : ''}: "${String(x.text || '').slice(0, 420)}"${x.error ? ` [the current figure fails: ${x.error}]` : ''}`).join('\n'); }).join('\n');
+  return `You are illustrating one scroll of a study chain. For each paragraph or box listed, design ONE figure that shows what the text says (not decoration), using the text's own numbers.
+BOOK: ${book}
+PART: ${chapter}
+NEEDED:
+${list}
+${FIGURE_SPEC}
+Choose the kind by the idea: a process → flow; a curve or function → plot; a probability → distribution; a table → bars; one variable's shape → hist; two variables → scatter; groups → boxplot; an inequality or interval → numberline; a decision → tree; overlapping events → venn; an order → timeline; an arrangement → sketch; code → codetrace; a mistake → contrast. Small figures: few elements, large labels. Never invent data: use the numbers in the text, or draw the idea without numbers.
+Return ONLY JSON: {"figures":[{"step":"S3","slot":"explain.0","figure":FIGURE}, …]}`;
+}
+export function mergeFigures(A, ans, setter) {
+  let n = 0; (ans && ans.figures || []).forEach(x => { const st = (A.chain || []).find(s => s.id === String(x && x.step)); if (!st || !x.figure) return; const v = validateFigure(x.figure); if (!v.ok) return; setter(st, String(x.slot), v.fig); n++; }); return n;
+}
+// How many 3D dioramas each subsection needs: the model's "dioramaPlan" when it gave one, else a reading of the text
+// (dynamic or spatial words: motion, process, flow, sampling, simulation, a mechanism, a time budget …).
+const DYNAMIC = /\b(mov|motion|flow|rate|speed|accelerat|oscillat|wave|orbit|collid|fall|rolls?|spin|rotat|sampl|simulat|random|distribut|process|cycle|mechanism|pressure|force|energy|diffus|growth|decay|grows?|spread|population|predator|prey|search|handling|queue|iterat|loop|over time|dynamic|equilibri|feedback|transport|circuit|current|field|lens|ray|reaction|signal|network|map|layer|structure|shape|spatial|geometr|graph of|curve)/i;
+const isThreeD = d => d && (d.type === 'scene' || Array.isArray(d.bodies) || !!BUILTIN_MODELS[String(d.type || '').toLowerCase()]);
+export function planDioramas(A, sections = []) {
+  const plan = new Map((A.dioramaPlan || []).filter(p => p && p.subsection != null).map(p => [String(p.subsection), Math.max(0, Math.min(3, +p.count || 0))]));
+  const chain = A.chain || [];
+  return sections.map(sec => {
+    const steps = chain.filter(st => st.section === sec.id);
+    const have = steps.reduce((a, st) => a + (st.demos || []).filter(isThreeD).length, 0);
+    let need = plan.has(sec.id) ? plan.get(sec.id) : null, why = 'from the model\'s plan';
+    if (need == null) { const t = (sec.text || '') + ' ' + steps.map(st => st.title + ' ' + st.statement).join(' '); const hits = (t.match(new RegExp(DYNAMIC.source, 'gi')) || []).length; const chars = (sec.inventory && sec.inventory.chars) || t.length; need = hits === 0 ? 0 : hits >= 8 && chars > 4000 ? 2 : 1; if (hits >= 14 && chars > 8000) need = 3; why = hits ? `${hits} dynamic or spatial words` : 'no dynamic or spatial idea'; }
+    return { subsection: sec.id, title: sec.title, need, have, why, steps: steps.map(st => st.id) };
+  });
+}
+
 // ---------------------------------------------------------------- other prompts
-export function authorPrompt(req, context = '') {
+export function authorPrompt(req, context = '', { simple = false } = {}) {
+  if (simple) return `Author a SIMPLE interactive 3D diorama (a second try: the first one failed${req.failure ? ': ' + req.failure : ''}). Keep it small and robust.
+WHAT IT MUST SHOW: ${req.request || req.title}
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}LIMITS: 3–6 bodies from the basic shapes (box, sphere, cylinder, cone, arrow, text, bars, curve, plane, disc); motion through "behaviors" or at most 40 lines of "code" using only api.onFrame, api.param, api.body, api.event, api.readout; 3 lessons with question/opens; studio environment.
+${SCENE_SPEC}
+Return ONLY the JSON scene spec.`;
   return `Author a high-fidelity interactive 3D diorama that embodies an idea through bodies, events and processes.
 WHAT IT MUST SHOW: ${req.request || req.title}
 ${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT (the study step it illustrates): ' + context : ''}
