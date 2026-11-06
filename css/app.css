@@ -282,14 +282,17 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .co-time { height: 2px; margin-top: 9px; background: rgba(255,255,255,.08); border-radius: 2px; overflow: hidden; } .co-time i { display: block; height: 100%; width: 0; background: var(--brass); }
 .dir-caption { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom,0px)); transform: translateX(-50%); max-width: min(760px, calc(100vw - 32px)); padding: 9px 18px; border-radius: 12px; background: rgba(12,10,8,.7); color: var(--ink); font-size: 15px; line-height: 1.45; text-align: center; }
 .dir-caption b { color: var(--brass); font-weight: 500; margin-right: 6px; }
-.guide { fill: none; stroke: #ffd98a; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 7 6; animation: guide-dash 1.2s linear infinite; transition: opacity .3s; filter: drop-shadow(0 0 4px rgba(0,0,0,.9)); }
-.guide.link { stroke: #9fd8c6; stroke-dasharray: 3 6; }
+/* guides: one line weight and one arrowhead shape (director.js makeGuides); solid = a quantity or the motion,
+   dashed = a process, dotted = a link between named actors */
+.guide { fill: none; stroke: #ffd98a; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: opacity .3s; filter: drop-shadow(0 0 3px rgba(0,0,0,.85)); }
+.guide.vec { stroke: #9fe3ff; }
+.guide.link { stroke: #9fd8c6; stroke-dasharray: 1 6; }
 @keyframes guide-dash { to { stroke-dashoffset: -26; } }
 .guide-tag { position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 999px; background: rgba(12,10,8,.8); color: #9fd8c6; font-family: var(--f-mono); font-size: 11px; transition: opacity .3s; white-space: nowrap; }
 .dio-time .sep { width: 1px; height: 18px; background: rgba(255,246,228,.16); margin: 0 4px; }
 .tog { border: 1px solid rgba(255,246,228,.16); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 4px 10px; font-family: var(--f-mono); font-size: 11px; }
 .tog[aria-pressed="true"] { background: rgba(255,217,138,.16); border-color: rgba(255,217,138,.55); color: var(--brass-hi); }
-@media (prefers-reduced-motion: reduce) { .guide { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .guide, .guide.flow { animation: none; } }
 
 /* ---------- navigation box (hub + rooms) ---------- */
 .nav-box { position: absolute; right: calc(var(--gut) + max(0px, env(safe-area-inset-right,0px))); bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); display: grid; gap: 8px; padding: 10px 12px; border-radius: 16px; }
@@ -306,9 +309,9 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 /* director focus: the beat's objects stay bright, the other labels step back */
 .pins.dir-focus .pin.in:not(.hot) { opacity: .32; }
 .pins.dir-focus .pin.hot .pin-name { border-color: var(--brass); }
-.guide.flow { stroke: #9fe3ff; stroke-width: 2.6; fill: none; stroke-dasharray: 7 6; animation: flowdash 1s linear infinite; filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); }
-.guide-label { fill: #e8f8ff; font: italic 14px var(--f-italic, serif); paint-order: stroke; stroke: rgba(10,14,18,.85); stroke-width: 4px; }
-@keyframes flowdash { to { stroke-dashoffset: -13; } }
+.guide.flow { stroke: #9fe3ff; stroke-dasharray: 8 6; animation: flowdash 1s linear infinite; }
+.guide-label { fill: #e8f8ff; font: italic 14px var(--f-italic, serif); text-anchor: middle; paint-order: stroke; stroke: rgba(10,14,18,.85); stroke-width: 4px; pointer-events: auto; cursor: help; transition: opacity .3s; }
+@keyframes flowdash { to { stroke-dashoffset: -14; } }
 
 /* readable panels over bright skies: a more opaque glass, full-strength list text */
 .dio-panel.glass, .edit-bar.glass, .dio-reads.glass { background: linear-gradient(180deg, rgba(255,250,240,.05), rgba(0,0,0,.05)), rgba(20,16,12,.86); }
@@ -547,3 +550,30 @@ i { font-style: italic; }
 /* the director's chip wraps inside the free frame instead of running under the callout */
 .dir-chip { white-space: normal; text-align: center; border-radius: 14px; max-width: min(560px, calc(100vw - 32px)); }
 /* ---- end visual QA, round 5 ---- */
+
+/* ---------- hub: scroll menu (right-click / long-press), "Move to…" dialog ---------- */
+.tooltip .tip-more { font-family: var(--f-mono); font-size: 10px; letter-spacing: .03em; color: var(--ink-3); margin-top: 2px; }
+.scroll-menu { position: fixed; left: 0; top: 0; z-index: 30; width: 248px; padding: 10px; border-radius: 16px; display: grid; gap: 2px; }
+.scroll-menu .menu-title { font-family: var(--f-italic); font-size: 15px; color: var(--brass); padding: 2px 8px 0; line-height: 1.25; overflow-wrap: anywhere; }
+.scroll-menu .menu-sub { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); padding: 0 8px 6px; border-bottom: 1px solid rgba(255,246,228,.08); margin-bottom: 4px; }
+.scroll-menu .menu-item { text-align: left; background: transparent; border: 0; color: var(--ink); font-family: var(--f-body); font-size: 14px; padding: 7px 8px; border-radius: 9px; transition: background .15s; }
+.scroll-menu .menu-item:hover, .scroll-menu .menu-item:focus-visible { background: rgba(255,250,240,.08); outline: none; }
+.scroll-menu .menu-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding: 6px 8px 2px; }
+.scroll-menu .ctrl { padding: 4px 8px 0; }
+.scroll-menu .menu-note { font-size: 11px; line-height: 1.35; color: var(--ink-3); padding: 0 8px 4px; }
+.swatches { display: flex; gap: 8px; padding: 2px 8px 4px; }
+.swatch { width: 24px; height: 24px; border-radius: 999px; padding: 0; border: 1px solid rgba(255,246,228,.22); background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), transparent 45%), var(--c); box-shadow: inset 0 -2px 4px rgba(0,0,0,.35); transition: transform .2s var(--spring), box-shadow .2s; }
+.swatch:hover { transform: scale(1.08); }
+.swatch.on { box-shadow: inset 0 -2px 4px rgba(0,0,0,.35), 0 0 0 2px #15130f, 0 0 0 3.5px var(--brass); }
+.modal-veil.peek { background: transparent; place-items: end center; pointer-events: none; padding-bottom: calc(18px + env(safe-area-inset-bottom,0px)); }
+.modal-veil.peek > .modal { pointer-events: auto; }
+.move-dlg { width: min(560px, 100%); max-height: min(62vh, 520px); overflow: auto; }
+.slot-grid { display: grid; gap: 5px; }
+.slot-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.slot-lab { width: 46px; flex: none; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
+.slot { width: 22px; height: 18px; padding: 0; border-radius: 5px; border: 1px solid rgba(255,246,228,.2); background: rgba(255,250,240,.06); transition: background .15s, border-color .15s; }
+.slot:hover:not(:disabled) { background: rgba(255,217,138,.2); border-color: rgba(255,217,138,.5); }
+.slot:disabled { background: rgba(0,0,0,.35); border-color: rgba(255,246,228,.06); cursor: not-allowed; }
+.slot.mine { background: rgba(255,217,138,.16); border-color: rgba(255,217,138,.45); }
+.slot.on { background: var(--brass); border-color: var(--brass-hi); }
+@media (pointer: coarse) { .slot { width: 30px; height: 26px; } .scroll-menu .menu-item { padding: 10px 8px; } .swatch { width: 30px; height: 30px; } }

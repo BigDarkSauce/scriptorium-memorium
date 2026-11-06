@@ -14,6 +14,16 @@ const UP = new THREE.Vector3(0, 1, 0), rad = THREE.MathUtils.degToRad, smoother 
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const PACE = { slow: 150, normal: 210, fast: 300 };   // words per minute
+// guides: the shortest arrow drawn (px); a label's short form (the clause before the first comma, colon, dash or
+// bracket, else its first four words); segment/segment and segment/rectangle tests for the label placement
+const GMIN = 26;
+function shortLabel(t) { t = String(t || '').trim(); if (t.length <= 22) return t; const c = t.split(/\s*[,:;(—–]\s*|\s+-\s+|…/)[0].trim(); if (c.length >= 4 && c.length <= 24) return c; const w = t.split(/\s+/); return w.slice(0, Math.min(4, w.length)).join(' ') + (w.length > 4 ? '…' : ''); }
+function segHit(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; }
+function segRect(a, b, x, y, w, h) {   // Liang–Barsky: does segment ab enter the rectangle?
+  let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
+  for (const [p, q] of [[-dx, a[0] - x], [dx, x + w - a[0]], [-dy, a[1] - y], [dy, y + h - a[1]]]) { if (Math.abs(p) < 1e-9) { if (q < 0) return false; continue; } const r = q / p; if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } }
+  return true;
+}
 const MAXT = { slow: 32, normal: 24, fast: 15 };      // longest a callout stays, seconds (hover keeps it open)
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -23,7 +33,8 @@ export class Director {
     const st = view.prefs; this.cinematic = st.cinematic !== false; this.guides = !!st.guides; this.pace = st.pace || 'normal';
     this.layer = el('div', { class: 'director' }); host.append(this.layer);
     this.svg = document.createElementNS(NS, 'svg'); this.svg.setAttribute('class', 'dir-svg'); this.layer.append(this.svg);
-    this.svg.innerHTML = '<defs><marker id="dir-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffd98a"/></marker></defs>';
+    // one arrowhead shape for every guide (in stroke-width units, so heads match the one line weight), one per colour
+    this.svg.innerHTML = '<defs>' + [['dir-ah', '#ffd98a'], ['dir-ah-c', '#9fe3ff'], ['dir-ah-g', '#9fd8c6']].map(([id, c]) => `<marker id="${id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.6" markerHeight="4.6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`).join('') + '</defs>';
     this.caption = el('div', { class: 'dir-caption', hidden: true }); this.layer.append(this.caption);
     this.trail = new Map();      // object → recent screen positions (for motion arrows)
     this._f = V3(); this._qI = new THREE.Quaternion(); this._qL = new THREE.Quaternion(); this._m4 = new THREE.Matrix4(); this.tsV = 0;
@@ -442,16 +453,117 @@ export class Director {
     this.dip = { t: 0, apply, done: false };
     v.app && v.app.sfx && v.app.sfx.play('cut', { gain: .5 });
   }
-  // guides: an arrow from the callout into the subject, motion arrows for moving bodies, links between named actors
+  // Guides (the Guides toggle): screen-space SVG arrows that show the flow of the dynamics.
+  //  - one grammar: straight shafts, one line weight, one arrowhead per colour (amber motion, cyan process/quantity,
+  //    green links); solid for quantities, dashed for processes, dotted for links;
+  //  - motion: from the moving body's rim along its world velocity, length ∝ speed, clamped to [GMIN, gmax];
+  //  - quantity flows ({at, vec, ref}): anchored at the body, length ∝ |vec| / ref, clamped the same way;
+  //  - process flows ({from, to}): a straight arrow, at most gcap long (shortened toward its head); two opposite flows
+  //    between the same places (a forward and a backward process) become two parallel lanes;
+  //  - links to the other actors a sentence names: a short connector with at most one bend, trimmed off both bodies;
+  //  - labels: beside their own arrow's midpoint, offset perpendicular; placed greedily so that none crosses an arrow,
+  //    another label, a pin or the callout; a shorter text when space is tight (the full text is the hover tooltip).
+  // Hidden (display:none) while Guides is off; made on demand when it is switched on during a beat.
   makeGuides(b) {
     b.guides = [];
-    const mk = cls => { const p = document.createElementNS(NS, 'path'); p.setAttribute('class', cls); p.setAttribute('marker-end', 'url(#dir-ah)'); this.svg.append(p); b.guides.push(p); return p; };
-    b.motion = mk('guide motion'); b.wtrail = [];
-    b.links = (b.names || []).slice(0, 3).map(a => ({ a, path: mk('guide link') }));   // the named objects already carry their pins
+    const mk = (cls, mark) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('class', cls); p.setAttribute('marker-end', `url(#${mark})`); this.svg.append(p); b.guides.push(p); return p; };
+    b.motion = mk('guide motion', 'dir-ah'); b.wtrail = [];
+    b.links = (b.names || []).slice(0, 3).map(a => ({ a, path: mk('guide link', 'dir-ah-g') }));   // the named objects already carry their pins
     // process arrows supplied by the model for this event (DIO.<type>.flows): what pushes what, where
     b.flowEls = (b.flows || []).slice(0, 4).map(f => {
-      const path = mk('guide flow'), t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'guide-label'); t.textContent = f.label || ''; this.svg.append(t); b.guides.push(t);
-      return { f, path, t };
+      const path = mk(f.vec ? 'guide vec' : 'guide flow', 'dir-ah-c'), t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'guide-label');
+      const full = String(f.label || ''), short = f.short || shortLabel(full), tip = document.createElementNS(NS, 'title'), vis = document.createElementNS(NS, 'tspan');
+      tip.textContent = full; vis.textContent = full; t.append(tip, vis); this.svg.append(t); b.guides.push(t);
+      // widths measured once (one layout read per beat): the placement then works on numbers
+      const wF = t.getComputedTextLength ? t.getComputedTextLength() : full.length * 7; vis.textContent = short; const wS = short === full ? wF : (t.getComputedTextLength ? t.getComputedTextLength() : short.length * 7); vis.textContent = full;
+      return { f, path, t, vis, full, short, wF: wF || full.length * 7, wS: wS || short.length * 7 };
+    });
+  }
+  showGuides(b, on) { (b.guides || []).forEach(g => { g.style.display = on ? '' : 'none'; }); b.gOff = !on; }
+  drawGuides(b, cam, w, h, sx, sy, p) {
+    const v = this.v, R = v.ds.orb ? v.ds.orb.r : 10, gmax = clamp(Math.min(w, h) * .15, 56, 118), gcap = clamp(Math.min(w, h) * .42, 150, 340);
+    const gv = this._gv || (this._gv = V3()), scr = q => { const s = gv.copy(q).project(cam); return { x: (s.x * .5 + .5) * w, y: (-s.y * .5 + .5) * h, ok: s.z < 1 && Math.abs(s.x) < .98 && Math.abs(s.y) < .98 }; };
+    const segs = [];   // every arrow drawn this frame, for the labels to stay off
+    const setLine = (path, pts) => { if (!pts) { path.setAttribute('d', ''); return; } path.setAttribute('d', 'M' + pts.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' L')); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1], pts[i]]); };
+    // the on-screen radius of a body (arrows start at its rim, links stop short of it)
+    const sph = this._gSph || (this._gSph = new THREE.Sphere()), bx = this._gBox || (this._gBox = new THREE.Box3());
+    const bodyOf = obj => { if (!obj || !obj.isObject3D) return null; bx.setFromObject(obj); if (bx.isEmpty()) return null; bx.getBoundingSphere(sph); return sph; };
+    const rimOf = obj => { const S = bodyOf(obj); if (!S) return 9; const c = scr(S.center), e = scr(this._f.copy(S.center).addScaledVector(cam.up, S.radius)); return clamp(Math.hypot(e.x - c.x, e.y - c.y) * .8, 7, 42); };
+    const arrowFrom = (x, y, dx, dy, L, rim) => { const n = Math.hypot(dx, dy); if (n < 1e-6) return null; dx /= n; dy /= n; return [[x + dx * rim, y + dy * rim], [x + dx * (rim + L), y + dy * (rim + L)]]; };
+    const grow = Math.min(1, b.t / 1.2), ease = grow * grow * (3 - 2 * grow);
+    // motion: from how the subject moves in the WORLD (camera moves don't count), shown only when it really moves
+    {
+      const hs = bodyOf(b.host && b.host.obj), wp = hs ? hs.center.clone() : (b.host && b.host.getPos && b.host.getPos()) || p, tr = b.wtrail;   // the body itself (its label anchor floats above it) if (wp) tr.push([wp.clone(), b.t]); while (tr.length > 2 && b.t - tr[0][1] > .6) tr.shift();
+      const a0 = tr[0]; let pts = null;
+      if (wp && a0 && b.t - a0[1] > .2) {
+        const hq = scr(wp), dW = wp.clone().sub(a0[0]), sp = dW.length() / (b.t - a0[1]);
+        if (hq.ok && sp > R * .006 && !(b.flowEls || []).some(F => F.f.vec)) {   // (quantity arrows at the body already show how it moves) const q2 = scr(wp.clone().addScaledVector(dW.normalize(), R * .05)); pts = arrowFrom(hq.x, hq.y, q2.x - hq.x, q2.y - hq.y, clamp(gmax * sp / (R * .5), GMIN, gmax), b.rim ?? 9); }
+      }
+      if (b.rimT == null || b.t - b.rimT > .5) { b.rimT = b.t; b.rim = rimOf(b.host && b.host.obj); }
+      setLine(b.motion, pts); b.motion.style.opacity = pts ? 1 : 0;
+    }
+    // flows: quantities at the body, processes between places
+    const FE = b.flowEls || [], fv = q => typeof q === 'function' ? q() : V3().fromArray(q);
+    FE.forEach(F => { F.pts = null; const f = F.f;
+      try {
+        if (f.vec) {
+          const A = f.at ? fv(f.at) : (b.host && b.host.getPos && b.host.getPos()) || p; if (!A) return; const V = fv(f.vec), m = V.length(); if (m < 1e-6) return;
+          const a = scr(A), c = scr(A.clone().addScaledVector(V, R * .05 / m)); if (!a.ok) return;
+          F.pts = arrowFrom(a.x, a.y, c.x - a.x, c.y - a.y, clamp(gmax * m / ((typeof f.ref === 'function' ? f.ref() : f.ref) || 1), GMIN, gmax * 1.15) * ease, f.rim ?? (b.rim ?? 9));
+        } else {
+          const a = scr(fv(f.from)), c = scr(fv(f.to)); if (!a.ok || !c.ok) return;
+          let ax = a.x, ay = a.y, cx = c.x, cy = c.y, L = Math.hypot(cx - ax, cy - ay); if (L < 4) return;
+          if (L > gcap) { ax = cx - (cx - ax) * gcap / L; ay = cy - (cy - ay) * gcap / L; L = gcap; }   // too long: shortened toward its head
+          if (L < GMIN) { const ux = (cx - ax) / L, uy = (cy - ay) / L, mx = (ax + cx) / 2, my = (ay + cy) / 2; ax = mx - ux * GMIN / 2; ay = my - uy * GMIN / 2; cx = mx + ux * GMIN / 2; cy = my + uy * GMIN / 2; L = GMIN; }
+          F.raw = [ax, ay, cx, cy, L];
+        }
+      } catch (e) { F.pts = null; F.raw = null; }
+    });
+    // opposite processes between the same two places (A + B → C and C → A + B): two parallel lanes, 8 px either side
+    FE.forEach(F => { F.lane = F.f.lane || 0; });
+    for (let i = 0; i < FE.length; i++) for (let j = i + 1; j < FE.length; j++) { const P = FE[i].raw, Q = FE[j].raw; if (FE[i].f.vec || FE[j].f.vec || !P || !Q) continue; const near = Math.hypot(P[0] - Q[2], P[1] - Q[3]) + Math.hypot(P[2] - Q[0], P[3] - Q[1]) < .35 * (P[4] + Q[4]) + 30; if (near && !FE[i].f.lane && !FE[j].f.lane) { FE[i].lane = 1; FE[j].lane = 1; } }
+    FE.forEach(F => { if (F.f.vec || !F.raw) return; let [ax, ay, cx, cy, L] = F.raw; F.raw = null; const ux = (cx - ax) / L, uy = (cy - ay) / L;
+      if (F.lane) { const o = 8 * Math.sign(F.lane), tr = L * .1; ax += -uy * o + ux * tr; ay += ux * o + uy * tr; cx += -uy * o - ux * tr; cy += ux * o - uy * tr; }   // the left side of each direction: opposite arrows sit on opposite sides
+      F.pts = [[ax, ay], [ax + (cx - ax) * ease, ay + (cy - ay) * ease]]; });
+    FE.forEach(F => setLine(F.path, F.pts));
+    // while quantity arrows are drawn, the model's own 3D vector arrows step aside (VecArrow in models.js reads this)
+    if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts);
+    // links: subject → each named actor, one bend at most, trimmed off both bodies
+    (b.links || []).forEach(L2 => {
+      const q = L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; } const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }
+      const dx = t.x - sx, dy = t.y - sy, d = Math.hypot(dx, dy); if (d < 40) { setLine(L2.path, null); return; }
+      const r0 = 12, r1 = (L2.rimT == null || b.t - L2.rimT > .5) ? (L2.rimT = b.t, L2.rim = rimOf(L2.a.obj) + 6) : L2.rim;
+      let pts;
+      if (Math.abs(dx) < 28 || Math.abs(dy) < 28 || d < 110) pts = [[sx + dx / d * r0, sy + dy / d * r0], [t.x - dx / d * r1, t.y - dy / d * r1]];
+      else {   // an elbow: leave the subject level, then go straight up/down into the actor (or the other way when that crosses less)
+        const opt = k => k ? [[sx + Math.sign(dx) * r0, sy], [t.x, sy], [t.x, t.y - Math.sign(dy) * r1]] : [[sx, sy + Math.sign(dy) * r0], [sx, t.y], [t.x - Math.sign(dx) * r1, t.y]];
+        const hits = P => segs.reduce((n, s) => n + (segHit(P[0], P[1], s[0], s[1]) ? 1 : 0) + (segHit(P[1], P[2], s[0], s[1]) ? 1 : 0), 0);
+        if (L2.k == null || hits(opt(L2.k)) > hits(opt(1 - L2.k))) L2.k = hits(opt(1)) <= hits(opt(0)) ? 1 : 0; pts = opt(L2.k);
+      }
+      setLine(L2.path, pts);
+    });
+    // labels: greedy, in flow order; obstacles are every arrow (padded), the labels already placed, the pins, the callout and the frame
+    const LH = 17, pad = 5, placed = [], boxes = [];
+    (b.rects || []).forEach(r => boxes.push([r.left - b.ox, r.top - b.oy, r.width, r.height]));
+    if (b.box) boxes.push(b.box);
+    const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 50;
+      for (const s of segs) if (segRect(s[0], s[1], x - pad, y - pad, wd + 2 * pad, LH + 2 * pad)) c += 10;
+      for (const B of boxes.concat(placed)) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 10; }
+      return c; };
+    FE.forEach(F => {
+      if (!F.pts || !F.full) { F.t.style.opacity = 0; return; }
+      const [[ax, ay], [cx, cy]] = F.pts, L = Math.hypot(cx - ax, cy - ay) || 1, ux = (cx - ax) / L, uy = (cy - ay) / L, side0 = F.lane ? 1 : (F.side || 1);
+      const cand = [];
+      [F.full, F.short].forEach((txt, vi) => { if (vi && txt === F.full) return; const wd = vi ? F.wS : F.wF;
+        [.5, .32, .68].forEach(k => [side0, -side0].forEach(sd => { const nx = -uy * sd, ny = ux * sd, off = 9 + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi }); })); });
+      // keep last frame's choice while it is still clear (no flicker); otherwise the first clear candidate, else the least bad
+      let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd);
+      if (keep && cost(keep.x, keep.y, keep.wd) === 0) best = keep;
+      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 2 + (c.k !== .5 ? 1 : 0); if (k < bc) { bc = k; best = c; if (k === 0) break; } }
+      F.lc = { vi: best.vi, k: best.k, sd: best.sd }; if (!F.lane) F.side = best.sd;
+      if (F.vis.textContent !== best.txt) F.vis.textContent = best.txt;
+      F.t.setAttribute('x', (best.x + best.wd / 2).toFixed(0)); F.t.setAttribute('y', (best.y + LH - 4).toFixed(0)); F.t.style.opacity = ease > .6 ? 1 : 0;
+      placed.push([best.x, best.y, best.wd, LH]);
     });
   }
   // ---------- per frame ----------
@@ -478,6 +590,7 @@ export class Director {
     // lens: ease the field of view toward the shot's focal length (or back to the base lens after the learner takes over)
     if (this.fovTo && Math.abs(v.camera.fov - this.fovTo) > .05 && !v.pov) { v.camera.fov += (this.fovTo - v.camera.fov) * Math.min(1, dt * 2.5); v.camera.updateProjectionMatrix(); }
     this.updateShots(dt);
+    if (v.ds && v.ds.scene && v.ds.scene.userData.vecMute && !(this.guides && this.beat && this.beat.flowEls)) v.ds.scene.userData.vecMute = false;
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
     if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = Math.max(riding ? .6 : 0, this.queue.length ? .12 : .3);   // more waiting → slower, so text never lags far behind the process
@@ -534,33 +647,11 @@ export class Director {
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
       b.line.setAttribute('d', on ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
-      // guides
-      if (b.motion) {
-        // motion: from how the subject moves in the WORLD (camera moves don't count), shown only when it really moves
-        const wp = (b.host && b.host.getPos && b.host.getPos()) || p;
-        const tr = b.wtrail; if (wp) tr.push([wp.clone(), b.t]); while (tr.length > 2 && b.t - tr[0][1] > .6) tr.shift();
-        const R = v.ds.orb ? v.ds.orb.r : 10, a0 = tr[0];
-        const hq = wp && wp.clone().project(cam), hx = hq ? (hq.x * .5 + .5) * w : sx, hy = hq ? (-hq.y * .5 + .5) * h : sy;
-        if (hq && hq.z < 1 && a0 && b.t - a0[1] > .2) {
-          const dW = wp.clone().sub(a0[0]), sp = dW.length() / (b.t - a0[1]);
-          if (sp > R * .006) {
-            const q2 = wp.clone().add(dW.normalize().multiplyScalar(R * .05)).project(cam), ex = (q2.x * .5 + .5) * w - hx, ey = (-q2.y * .5 + .5) * h - hy, L = Math.hypot(ex, ey);
-            if (L > 1) { const k = 64 / L; b.motion.setAttribute('d', `M${hx + ex * k * .25} ${hy + ey * k * .25} q ${-ey * k * .2} ${ex * k * .2} ${ex * k} ${ey * k}`); b.motion.style.opacity = 1; } else b.motion.style.opacity = 0;
-          } else b.motion.style.opacity = 0;
-        } else b.motion.style.opacity = 0;
-        (b.links || []).forEach(L2 => {
-          const q = L2.a.getPos && L2.a.getPos(); if (!q) return; const s2 = q.clone().project(cam); if (s2.z > 1) { L2.path.setAttribute('d', ''); return; }
-          const tx = (s2.x * .5 + .5) * w, ty = (-s2.y * .5 + .5) * h; if (Math.hypot(tx - sx, ty - sy) < 30) { L2.path.setAttribute('d', ''); return; }
-          const mx = (sx + tx) / 2, my = Math.min(sy, ty) - 60; L2.path.setAttribute('d', `M${sx} ${sy} Q ${mx} ${my} ${tx} ${ty - 8}`);
-        });
-        (b.flowEls || []).forEach(F => {
-          const fv = q => typeof q === 'function' ? q() : V3().fromArray(q), a = fv(F.f.from).clone().project(cam), c = fv(F.f.to).clone().project(cam);
-          if (a.z > 1 || c.z > 1 || Math.abs(a.x) > .98 || Math.abs(a.y) > .98 || Math.abs(c.x) > .98 || Math.abs(c.y) > .98) { F.path.setAttribute('d', ''); F.t.textContent = ''; return; }
-          const ax = (a.x * .5 + .5) * w, ay = (-a.y * .5 + .5) * h, cx = (c.x * .5 + .5) * w, cy = (-c.y * .5 + .5) * h;
-          const grow = Math.min(1, b.t / 1.2), ex = ax + (cx - ax) * grow, ey = ay + (cy - ay) * grow, nx = -(cy - ay) * .18, ny = (cx - ax) * .18;
-          F.path.setAttribute('d', `M${ax} ${ay} Q ${(ax + ex) / 2 + nx} ${(ay + ey) / 2 + ny} ${ex} ${ey}`);
-          F.t.textContent = F.f.label || ''; F.t.setAttribute('x', ((ax + cx) / 2 + nx + 8).toFixed(0)); F.t.setAttribute('y', ((ay + cy) / 2 + ny).toFixed(0));
-        });
+      // guides (made when Guides is switched on mid-beat, hidden while it is off)
+      if (this.guides && !b.guides) this.makeGuides(b);
+      if (b.guides) {
+        if (!this.guides) { if (!b.gOff) this.showGuides(b, false); }
+        else { if (b.gOff) this.showGuides(b, true); this.drawGuides(b, cam, w, h, sx, sy, p); }
       }
     }
     if (b.t >= b.dur) this.endBeat();

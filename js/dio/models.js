@@ -27,7 +27,28 @@ function ball(r, mat) { const m = new T.Mesh(new T.SphereGeometry(r, 48, 32), ma
 function box(w, h, d, mat) { const m = new T.Mesh(alignUV(new T.BoxGeometry(w, h, d)), mat); m.castShadow = true; m.receiveShadow = true; return m; }
 function trail(n, color) { const g = new T.BufferGeometry(); const a = new Float32Array(n * 3); g.setAttribute('position', new T.BufferAttribute(a, 3)); g.setDrawRange(0, 0); const l = new T.Line(g, new T.LineBasicMaterial({ color, transparent: true, opacity: .85 })); l.userData = { n, count: 0, a, isTrail: true }; l.add = function (v) { const u = this.userData; if (u.count < u.n) { const o = u.count * 3; u.a[o] = v.x; u.a[o + 1] = v.y; u.a[o + 2] = v.z; u.count++; } else { u.a.copyWithin(0, 3); const o = (u.n - 1) * 3; u.a[o] = v.x; u.a[o + 1] = v.y; u.a[o + 2] = v.z; } this.geometry.setDrawRange(0, u.count); this.geometry.attributes.position.needsUpdate = true; return this; }; l.frustumCulled = false; return l; }
 function lineFrom(points, color, dashed) { const g = new T.BufferGeometry().setFromPoints(points); const m = dashed ? new T.LineDashedMaterial({ color, dashSize: .2, gapSize: .15 }) : new T.LineBasicMaterial({ color }); const l = new T.Line(g, m); if (dashed) l.computeLineDistances(); return l; }
-export const HELPERS = { THREE, V3, cyl, ball, box, trail, lineFrom, canvasTex, woodMat };
+// Vector helpers (velocity, force, gradient arrows) share one look: a solid shaft and a cone of fixed thickness and head
+// size at any length (ArrowHelper's 1 px line and per-model head sizes read as different weights), unlit, no ink outline,
+// no shadow. Same API as ArrowHelper (setDirection, setLength; the head arguments are ignored). alen(q, ref, max) maps a
+// quantity to a length proportional to q up to ref (= max), then saturating to at most 1.25 × max, never below .28.
+const ARW = { r: .026, hr: .072, hl: .2 }, ARW_SHAFT = new T.CylinderGeometry(1, 1, 1, 10).translate(0, .5, 0), ARW_HEAD = new T.ConeGeometry(1, 1, 16).translate(0, -.5, 0);
+ARW_SHAFT.userData.shared = ARW_HEAD.userData.shared = true;
+const _UP = new T.Vector3(0, 1, 0), _dn = new T.Vector3();
+class VecArrow extends T.Group {
+  constructor(dir = V3(0, 1, 0), origin = V3(0, 0, 0), len = 1, color = 0xffd27a) {
+    super(); const m = new T.MeshBasicMaterial({ color }); this.position.copy(origin);
+    this.shaft = new T.Mesh(ARW_SHAFT, m); this.head = new T.Mesh(ARW_HEAD, m);
+    [this.shaft, this.head].forEach(o => { o.userData.noInk = true; o.castShadow = false; o.receiveShadow = false; o.userData.noContact = true; this.add(o); });
+    this.setDirection(dir); this.setLength(len);
+  }
+  setDirection(d) { if (d.y > .99999) this.quaternion.set(0, 0, 0, 1); else if (d.y < -.99999) this.quaternion.set(1, 0, 0, 0); else this.quaternion.setFromUnitVectors(_UP, _dn.copy(d).normalize()); return this; }
+  setLength(L) { let r = this; while (r.parent) r = r.parent; const on = !(r.userData && r.userData.vecMute); if (this.shaft.visible !== on) this.shaft.visible = this.head.visible = on;   // muted while the director's guides draw the same quantity
+    L = Math.max(L, .05); const hl = Math.min(ARW.hl, L * .45); this.shaft.scale.set(ARW.r, Math.max(1e-3, L - hl), ARW.r); this.head.scale.set(ARW.hr, hl, ARW.hr); this.head.position.y = L; return this; }
+  setColor(c) { this.shaft.material.color.set(c); return this; }
+}
+function vecArrow(dir, origin, len, color) { return new VecArrow(dir, origin, len, color); }
+const alen = (q, ref, max = 1.3) => { const r = Math.abs(q) / Math.max(ref, 1e-9); return Math.max(.28, max * (r <= 1 ? r : 1 + .25 * Math.tanh((r - 1) / .5))); };
+export const HELPERS = { THREE, V3, cyl, ball, box, trail, lineFrom, canvasTex, woodMat, vecArrow, alen };
 export const DIO = {};
 
 
@@ -258,13 +279,13 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
   const BL=part('ball',W,true);const b=put(ball(.17,iron),'cannon ball',BL);
   const tr=put(trail(600,0xffc56b),'trail',guides);
   const ideal=[];for(let i=0;i<=80;i++){const x=Rr*i/80,y=x*Math.tan(a)-p.g*x*x/(2*p.v0*p.v0*Math.cos(a)**2);ideal.push(V3(X0+x*sc,Y0+y*sc,0))}const idealLine=put(lineFrom(ideal,0x88aadd,true),'no-drag parabola',guides);
-  const vArrow=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0xffd27a,.3,.18),'velocity arrow',guides);
+  const vArrow=put(vecArrow(V3(1,0,0),V3(0,0,0),1,0xffd27a,.3,.18),'velocity arrow',guides);
   // foreground: a pyramid of shot and a powder keg at the lower-left frame edge
   {const F=part('shot pile (foreground)'),q=inDisc(groundAt(orbit,-.8,-.86),6.1);F.position.copy(q);[[0,0],[.36,0],[.18,.31],[.18,.1,.29]].forEach(([x,z,y=0])=>{const s=ball(.17,iron);s.position.set(x,.17+y,z);F.add(s)});
    const keg=cyl(.3,.6,oak,24);keg.position.set(-.6,.3,-.25);F.add(keg);[.1,.5].forEach(y=>{const h=new T.Mesh(new T.TorusGeometry(.305,.018,6,32),iron);h.rotation.x=Math.PI/2;h.position.set(-.6,y,-.25);F.add(h)})}
   let x,y,vx,vy,state,wait,apex,tf;const reset=()=>{x=0;y=0;vx=p.v0*Math.cos(a);vy=p.v0*Math.sin(a);state=1;wait=0;apex=false;tf=0;ev('launch: v₀ = '+fx(p.v0,1)+' m/s at '+fx(p.angle,1)+'°',V3(X0,Y0,0),{sound:'thud'})};reset();
   const wp=v=>v.set(X0+x*sc,Y0+y*sc,0),tmp=V3(0,0,0);
-  PRJ.ball=()=>wp(V3(0,0,0));PRJ.X0=X0;PRJ.span=Rr*sc;PRJ.H=Hm*sc;PRJ.Y0=Y0;
+  PRJ.ball=()=>wp(V3(0,0,0));PRJ.vel=()=>V3(vx,vy,0);PRJ.v0=p.v0;PRJ.g=p.g;PRJ.a=a;PRJ.X0=X0;PRJ.span=Rr*sc;PRJ.H=Hm*sc;PRJ.Y0=Y0;
   D.label('ball',at(v=>wp(v).setY(v.y+.4)),BL);D.label('v',at(v=>{wp(v);const s=Math.hypot(vx,vy)||1;return v.set(v.x+vx/s*1.1,v.y+vy/s*1.1,0)}),true);{const ip=ideal[60].clone().setY(ideal[60].y+.3);D.label('no-drag parabola',()=>ip,idealLine)}
   D.label('cannon',at(v=>v.set(X0-.3,1.5,0)),CN);D.label('flag at the no-drag range R',at(v=>v.set(X0+Rr*sc,1.7,-.6)),FL);
   D.seriesName='height y(t) in metres';
@@ -273,13 +294,14 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
      if(!apex&&pvy>0&&vy<=0){apex=true;ev('apex: vᵧ = 0 at t = '+fx(tf,2)+' s, height '+fx(y,2)+' m (no-drag H = '+fx(Hm,2)+' m); vₓ = '+fx(vx,2)+' m/s carries on',wp(tmp),{sound:'tick'})}
      if(y<0){const u=py/(py-y);x=px+(x-px)*u;tf-=h*(1-u);y=0;state=2;ev('lands after '+fx(tf,2)+' s: range '+fx(x,2)+' m (no-drag R = '+fx(Rr,2)+' m in '+fx(Tf,2)+' s)',wp(tmp),{color:0x88c0ff,sound:'thud'})}}
     else{wait+=h;if(wait>1.6){tr.userData.count=0;reset()}}},
-   visual(){wp(b.position);if(state===1)tr.add(b.position);vArrow.position.copy(b.position);const s=Math.hypot(vx,vy)||1;vArrow.setDirection(tmp.set(vx/s,vy/s,0));vArrow.setLength(.4+s/p.v0*1.2,.25,.15);D.push(y)},
+   visual(){wp(b.position);if(state===1)tr.add(b.position);vArrow.position.copy(b.position);const s=Math.hypot(vx,vy)||1;vArrow.setDirection(tmp.set(vx/s,vy/s,0));vArrow.setLength(alen(s,p.v0,1.5));D.push(y)},
    readouts(){return[['x',fx(x,2)+' m'],['y',fx(y,2)+' m'],['vₓ',fx(vx,2)+' m/s'],['vᵧ',fx(vy,2)+' m/s'],['t',fx(tf,2)+' s'],['R no drag',fx(Rr,2)+' m'],['H no drag',fx(Hm,2)+' m']]}}}};
 {const B=()=>PRJ.ball?PRJ.ball():V3(0,1,0);
  DIO.projectile.shots={'launch':SHOT(()=>[(PRJ.X0??-5)+1.2,1.4,0],6.5),'apex':SHOT(()=>[B().x,Math.max(1.6,B().y*.6),0],12),'lands':SHOT(()=>[B().x-2,1,0],8.5)};
  DIO.projectile.flows={
-  'launch':[{from:()=>V3((PRJ.X0??-5)-.6,.9,.4),to:()=>V3((PRJ.X0??-5)+1.4,1.9,.4),label:'the charge gives the ball v₀ along the barrel'}],
-  'apex':[{from:()=>B().add(V3(-1.6,0,.3)),to:()=>B().add(V3(-.25,0,.3)),label:'sideways speed never changes (no drag)'},{from:()=>B().add(V3(.3,.1,.3)),to:()=>B().add(V3(.3,-1.2,.3)),label:'gravity only changes the vertical speed'}],
+  // quantity arrows ({at, vec, ref}) start at the ball and are as long as the quantity (vec / ref of the director's arrow length)
+  'launch':[{at:()=>V3((PRJ.X0??-5)+Math.cos(PRJ.a??.8)*1.1,(PRJ.Y0??.62)+Math.sin(PRJ.a??.8)*1.1,0),vec:()=>V3(Math.cos(PRJ.a??.8),Math.sin(PRJ.a??.8),0),ref:1,rim:4,label:'the charge gives the ball v₀ along the barrel',short:'v₀ along the barrel'}],
+  'apex':[{at:B,vec:()=>V3(PRJ.vel?PRJ.vel().x:1,0,0),ref:()=>PRJ.v0||1,label:'sideways speed never changes (no drag)',short:'vₓ constant'},{at:B,vec:()=>V3(0,-.75,0),ref:1,label:'gravity only changes the vertical speed',short:'g changes vᵧ only'}],
   'lands':[{from:()=>V3(PRJ.X0??-5,.25,.95),to:()=>B().setZ(.95).setY(.25),label:'range R'}]};}
 
 /* --- Orbit: a planet around a star in space; the star is the key light ---
@@ -308,7 +330,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
   const aS=bound?-p.GM/(2*E0):Infinity,ecc=Math.sqrt(Math.max(0,1+2*E0*L0*L0/(p.GM*p.GM))),Tk=bound?2*Math.PI*Math.sqrt(aS**3/p.GM):Infinity;
   if(bound){const pts=[],rp=aS*(1-ecc),ra=aS*(1+ecc),ap=p.vfactor<1?Math.PI:0;for(let i=0;i<=180;i++){const nu=i/180*2*Math.PI,r=aS*(1-ecc*ecc)/(1+ecc*Math.cos(nu));pts.push(V3(r*Math.cos(nu+ap)*(p.vfactor<1?1:1),Y,-r*Math.sin(nu+ap)))}put(lineFrom(pts,0x6a7fb0,true),'Kepler ellipse',guides)}
   const rline=put(lineFrom([V3(0,Y,0),V3(x,Y,z)],0x8f733a),'radius line',guides);
-  const vArrow=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0xffd27a,.22,.13),'velocity arrow',guides);
+  const vArrow=put(vecArrow(V3(1,0,0),V3(0,0,0),1,0xffd27a,.22,.13),'velocity arrow',guides);
   const NW=12,NP=48,WG=part('equal-area wedges',guides);const wedges=[];for(let i=0;i<NW;i++){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(new Float32Array(NP*9),3));g.setDrawRange(0,0);const m=new T.Mesh(g,new T.MeshBasicMaterial({color:i%2?0xcfa84f:0x2d5b8e,transparent:true,opacity:.3,side:T.DoubleSide,depthWrite:false}));m.frustumCulled=false;WG.add(m);wedges.push({m,n:0,area:0})}
   const Tg=bound?Tk/NW:2*Math.PI*Math.sqrt(p.r0**3/p.GM)/NW;let wi=0,wt=0,lx=x,lz=z,ns=0;
   // foreground: a tumbling asteroid at the lower-left frame edge, lit only by the star; a faint nebula far behind
@@ -330,7 +352,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
     if(wt>=Tg){wt-=Tg;addRim(lx,lz,x,z);lx=x;lz=z;ns=0;wi=(wi+1)%NW;const nw=wedges[wi];nw.n=0;nw.area=0;nw.m.geometry.setDrawRange(0,0)}
     if(r>14||r<SR+PR){ev(r<SR+PR?'planet falls into the star — resetting':'planet left the diorama — resetting',V3(x,Y,z),{sound:r<SR+PR?'thud':'whoosh'});x=p.r0;z=0;vx=0;vz=-p.vfactor*vc;tr.userData.count=0;lx=x;lz=z;wedges.forEach(w=>{w.n=0;w.area=0;w.m.geometry.setDrawRange(0,0)});wi=0;wt=0;lastDr=0;lastAng=0;swept=0;laps=0;lapT=D.t}},
    visual(dt){PG.position.set(x,Y,z);pl.rotation.y+=dt*1.5;star.rotation.y+=dt*.1;tr.add(PG.position);const a=rline.geometry.attributes.position;a.setXYZ(1,x,Y,z);a.needsUpdate=true;
-    const v=Math.hypot(vx,vz)||1;vArrow.position.copy(PG.position);vArrow.setDirection(tmp.set(vx/v,0,vz/v));vArrow.setLength(.3+v*.25,.2,.12);if(ORB.ast)ORB.ast.rotation.y+=dt*.05;D.push(Math.hypot(x,z))},
+    const v=Math.hypot(vx,vz)||1;vArrow.position.copy(PG.position);vArrow.setDirection(tmp.set(vx/v,0,vz/v));vArrow.setLength(alen(v,vc*1.5,1.3));if(ORB.ast)ORB.ast.rotation.y+=dt*.05;D.push(Math.hypot(x,z))},
    readouts(){const r=Math.hypot(x,z),v=Math.hypot(vx,vz),E=.5*v*v-p.GM/r,L=x*vz-z*vx,w0=wedges[(wi+NW-1)%NW];return[['r',fx(r,3)],['v',fx(v,3)],['ε = v²/2 − GM/r',fx(E,4)],['L = r×v',fx(L,4)],['a · e',bound?fx(aS,3)+' · '+fx(ecc,3):'unbound'],['T Kepler',bound?fx(Tk,3)+' s':'—'],['T measured',isFinite(Tm)?fx(Tm,3)+' s':'…'],['last wedge area',w0.n?fx(w0.area,3)+' u²':'…']]}}}};
 {const P=()=>ORB.planet?ORB.planet():V3(3,2.4,0),Y=()=>ORB.Y??2.4;
  DIO.orbit.shots={'perihelion':SHOT(()=>P().multiplyScalar(.5).setY(Y()).toArray(),6.5),'aphelion':SHOT(()=>P().multiplyScalar(.45).setY(Y()).toArray(),9),'one orbit complete':SHOT(()=>[0,Y(),0],13),'unbound':SHOT(()=>[0,Y(),0],15),'falls into the star':SHOT(()=>[0,Y(),0],5.5),'left the diorama':SHOT(()=>[0,Y(),0],16)};
@@ -362,10 +384,10 @@ DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:
   // the centre of mass, drawn as a gold marker riding above the track
   const CM=part('centre of mass',W,true);put(new T.Mesh(new T.OctahedronGeometry(.16,0),makeMaterial('gold')),'marker',CM).position.y=TOP+1.75;CM.children[0].scale.y=1.5;
   const cmLine=put(lineFrom([V3(0,TOP+.1,0),V3(0,TOP+1.55,0)],0xcfa84f,true),'centre-of-mass drop line',CM);cmLine.userData.noContact=true;
-  const a1=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0x88c0ff,.25,.15),'velocity 1',guides),a2=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0xff9a7a,.25,.15),'velocity 2',guides);
+  const a1=put(vecArrow(V3(1,0,0),V3(0,0,0),1,0x88c0ff,.25,.15),'velocity 1',guides),a2=put(vecArrow(V3(1,0,0),V3(0,0,0),1,0xff9a7a,.25,.15),'velocity 2',guides);
   // foreground: slotted brass masses on the bench at the lower-right frame edge
   {const F=part('slotted masses (foreground)'),q=inDisc(groundAt(orbit,.84,-.84),6.2);F.position.copy(q);for(let i=0;i<4;i++){const d=cyl(.34-i*.03,.09,brass,32);d.position.y=.045+i*.095;F.add(d)}const rod=cyl(.03,.6,brass,8);rod.position.y=.3;F.add(rod)}
-  const arrowAt=(a,x,v,s)=>{a.visible=Math.abs(v)>.01;a.position.set(x,TOP+s*.5+.42,0);a.setDirection(v>=0?V3X:V3NX);a.setLength(.3+Math.abs(v)*.35,.22,.14)};
+  const arrowAt=(a,x,v,s)=>{a.visible=Math.abs(v)>.01;a.position.set(x,TOP+s*.5+.42,0);a.setDirection(v>=0?V3X:V3NX);a.setLength(alen(v,Math.max(Math.abs(p.v1),Math.abs(p.v2),1),1.4))};
   const M=p.m1+p.m2,P0=p.m1*p.v1+p.m2*p.v2,K0=.5*p.m1*p.v1**2+.5*p.m2*p.v2**2,vcm=P0/M;
   let x1=-3,x2=2.5,v1=p.v1,v2=p.v2,done=false,wait=0,hits=0,K=K0;
   COL.mid=()=>V3((x1+x2)/2,TOP+.4,0);COL.cm=()=>V3((p.m1*x1+p.m2*x2)/M,TOP+1.75,0);COL.x=()=>[x1,x2];
@@ -407,7 +429,7 @@ DIO.incline={params:{angle:[5,60,30,'°','incline angle'],mu:[0,1,.2,'','frictio
    const m=new T.MeshPhysicalMaterial({map:tex,metalness:.85,roughness:.38,alphaTest:.5,side:T.DoubleSide});const q=put(new T.Mesh(new T.PlaneGeometry(1.4,1.4),m),'brass quadrant',AG);q.position.set(x0+base+.05-.7,.7,1.08);q.receiveShadow=true}
   // the block
   const BK=part('block · m',W,true);put(box(.9,.6,.9,walnut),'walnut block',BK);{const hd=new T.Mesh(new T.TorusGeometry(.14,.025,8,20,Math.PI),brass);hd.position.y=.3;BK.add(hd)}
-  const arr=(c,n)=>put(new T.ArrowHelper(V3(0,-1,0),V3(0,0,0),1,c,.25,.16),n,guides);const aG=arr(0xff8866,'weight mg'),aN=arr(0x88c0ff,'normal force N'),aF=arr(0x99dd99,'friction f'),aNet=arr(0xffd27a,'net force');
+  const arr=(c,n)=>put(vecArrow(V3(0,-1,0),V3(0,0,0),1,c,.25,.16),n,guides);const aG=arr(0xff8866,'weight mg'),aN=arr(0x88c0ff,'normal force N'),aF=arr(0x99dd99,'friction f'),aNet=arr(0xffd27a,'net force');
   // foreground: spare blocks at the lower-left frame edge
   {const F=part('spare blocks (foreground)'),q=inDisc(groundAt(orbit,-.84,-.84),6.1);F.position.copy(q);[[0,.3,0,0],[.95,.3,.1,.3],[.45,.9,.05,.15]].forEach(([x,y,z,r])=>{const b=box(.9,.6,.9,r>.2?oak:walnut);b.position.set(x,y,z);b.rotation.y=r;F.add(b)})}
   const slides=Math.tan(a)>p.mu,acc=slides?p.g*(Math.sin(a)-p.mu*Math.cos(a)):0,Ls=Lw-1.3;let s=0,v=0,wait=0,t=0,started=false;
@@ -420,8 +442,8 @@ DIO.incline={params:{angle:[5,60,30,'°','incline angle'],mu:[0,1,.2,'','frictio
    step(h){if(!slides){t+=h;if(!started&&t>2){started=true;ev('still at rest after 2 s: static friction supplies f = mg sin θ = '+fx(p.m*p.g*Math.sin(a),2)+' N (it could give up to μN = '+fx(p.mu*p.m*p.g*Math.cos(a),2)+' N)',pos(tmp),{sound:'wood',color:0x88c0ff})}return}if(!started){started=true;ev('block released at the top: a = g(sin θ − μ cos θ) = '+fx(acc,2)+' m/s²',pos(tmp),{sound:'wood'})}
     if(s<Ls){v+=acc*h;s+=v*h;t+=h;if(s>=Ls){t-=(s-Ls)/Math.max(v,1e-6);s=Ls;v=Math.sqrt(2*acc*Ls);ev('reaches the bottom after '+fx(t,2)+' s at v = '+fx(v,2)+' m/s (√(2aL) = '+fx(Math.sqrt(2*acc*Ls),2)+' m/s, √(2L/a) = '+fx(Math.sqrt(2*Ls/acc),2)+' s)',pos(tmp),{color:0x88c0ff,sound:'thud'})}}
     else{wait+=h;if(wait>1.4){s=0;v=0;t=0;wait=0;started=false}}},
-   visual(){pos(BK.position);BK.rotation.z=-a;const P=BK.position,g=p.g*p.m,N=g*Math.cos(a),f=slides?p.mu*N:g*Math.sin(a),sc=.09;
-    aG.position.copy(P);aG.setDirection(V3NY);aG.setLength(g*sc+.2,.25,.16);aN.position.copy(P);aN.setDirection(nrm);aN.setLength(N*sc+.2,.25,.16);aF.position.copy(P);aF.setDirection(tmp.copy(dir).negate());aF.visible=f>1e-3;aF.setLength(f*sc+.2,.25,.16);aNet.position.copy(P).setZ(.6);aNet.visible=acc>0;aNet.setDirection(dir);aNet.setLength(p.m*acc*sc+.2,.25,.16);D.push(v)},
+   visual(){pos(BK.position);BK.rotation.z=-a;const P=BK.position,g=p.g*p.m,N=g*Math.cos(a),f=slides?p.mu*N:g*Math.sin(a),sc=1.5/Math.max(g,1e-6);   // one scale for all four forces: mg is 1.5 long, the rest in proportion
+    aG.position.copy(P);aG.setDirection(V3NY);aG.setLength(Math.max(.28,g*sc));aN.position.copy(P);aN.setDirection(nrm);aN.setLength(Math.max(.28,N*sc));aF.position.copy(P);aF.setDirection(tmp.copy(dir).negate());aF.visible=f>1e-3;aF.setLength(Math.max(.28,f*sc));aNet.position.copy(P).setZ(.6);aNet.visible=acc>0;aNet.setDirection(dir);aNet.setLength(Math.max(.28,p.m*acc*sc));D.push(v)},
    readouts(){const g=p.g*p.m;return[['a',fx(acc,3)+' m/s²'],['v',fx(v,3)+' m/s'],['s',fx(s,2)+' m'],['mg sin θ',fx(g*Math.sin(a),2)+' N'],['N = mg cos θ',fx(g*Math.cos(a),2)+' N'],['friction',fx(slides?p.mu*g*Math.cos(a):g*Math.sin(a),2)+' N'],['heat so far μN·s',fx(slides?p.mu*g*Math.cos(a)*s:0,2)+' J']]}}}};
 const V3Y7=V3(0,.7,0),V3NY=V3(0,-1,0);
 {const B=()=>INC.block?INC.block():V3(0,1,0);
@@ -559,7 +581,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
   // walnut block under the relief: skirts follow the edge heights, so it reads as one carved solid
   {const walnut=makeMaterial('walnut'),edges=[[[-R_,-R_],[R_,-R_]],[[R_,-R_],[R_,R_]],[[R_,R_],[-R_,R_]],[[-R_,R_],[-R_,-R_]]];edges.forEach(([[ax,ay],[bx,by]])=>{const P_=[],I=[],U=[],n=N;for(let i=0;i<=n;i++){const t=i/n,x=ax+(bx-ax)*t,y=ay+(by-ay)*t;let z=F(x,y);if(!isFinite(z))z=lo;P_.push(x,0,y,x,Y0+(z-lo)*sc,y);const u=t*2*R_/2.4;U.push(u,0,u,(Y0+(z-lo)*sc)/2.4)}for(let i=0;i<n;i++){const a=i*2;I.push(a,a+2,a+1,a+1,a+2,a+3)}
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(P_,3));g.setAttribute('uv',new T.Float32BufferAttribute(U,2));g.setIndex(I);g.computeVertexNormals();const m=new T.Mesh(g,walnut);m.material.side=T.DoubleSide;m.castShadow=m.receiveShadow=true;RM.add(m)});}
-  const BL=part('ball',W,true);const bl=put(ball(.2,D.mats.chrome),'steel ball',BL);const tr=put(trail(900,0xff9a6a),'trail',guides);const gA=put(new T.ArrowHelper(V3(1,0,0),V3(0,0,0),1,0x88c0ff,.2,.12),'−∇f arrow',guides);
+  const BL=part('ball',W,true);const bl=put(ball(.2,D.mats.chrome),'steel ball',BL);const tr=put(trail(900,0xff9a6a),'trail',guides);const gA=put(vecArrow(V3(1,0,0),V3(0,0,0),1,0x88c0ff,.2,.12),'−∇f arrow',guides);
   // foreground: a pair of brass dividers lying on the plinth at the lower-right frame edge (the surveyor's tool)
   {const F=part('dividers (foreground)'),q=inDisc(groundAt(orbit,.86,-.84),6.1);F.position.copy(q);F.rotation.y=.5;[-.2,.2].forEach(a=>{const l=cyl(.03,1.6,D.mats.brass,8);l.rotation.set(Math.PI/2,0,0);l.position.set(0,.04,.8);const g=new T.Group();g.rotation.y=a;g.add(l);F.add(g)});const h=cyl(.08,.06,D.mats.brass,16);h.position.y=.05;F.add(h)}
   let bx=2.2,by=1.6,vx=0,vy=0,rest=false,still=0;const grad=(x,y,o)=>{const e=1e-3;o[0]=(F(x+e,y)-F(x-e,y))/(2*e);o[1]=(F(x,y+e)-F(x,y-e))/(2*e);return o},G=[0,0],tmp=V3(0,0,0);
@@ -572,7 +594,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
    step(h){if(rest)return;grad(bx,by,G);const gx=G[0],gy=G[1],s=sc,den=1+s*s*(gx*gx+gy*gy);vx+=(-p.gravity*s*gx/den-p.friction*vx)*h;vy+=(-p.gravity*s*gy/den-p.friction*vy)*h;bx+=vx*h;by+=vy*h;
     if(Math.abs(bx)>R_){bx=Math.sign(bx)*R_;vx=-vx*.5}if(Math.abs(by)>R_){by=Math.sign(by)*R_;vy=-vy*.5}
     if(Math.hypot(vx,vy)<.02&&Math.hypot(gx,gy)<.05){still+=h;if(still>.4){rest=true;ev('at rest: ∇f ≈ 0, a local minimum f = '+fx(F(bx,by),3)+' at ('+fx(bx,2)+', '+fx(by,2)+')',tmp.set(bx,height(bx,by)+.2,by),{color:0x88c0ff,sound:'tick'})}}else still=0},
-   visual(){bl.position.set(bx,height(bx,by)+.2,by);tr.add(bl.position);grad(bx,by,G);const m=Math.hypot(G[0],G[1]);gA.visible=m>.02;if(gA.visible){gA.position.copy(bl.position);gA.setDirection(tmp.set(-G[0],0,-G[1]).normalize());gA.setLength(.3+Math.min(1.5,m*.8),.2,.12)}D.push(F(bx,by))},
+   visual(){bl.position.set(bx,height(bx,by)+.2,by);tr.add(bl.position);grad(bx,by,G);const m=Math.hypot(G[0],G[1]);gA.visible=m>.02;if(gA.visible){gA.position.copy(bl.position);gA.setDirection(tmp.set(-G[0],0,-G[1]).normalize());gA.setLength(alen(m,1.6,1.4))}D.push(F(bx,by))},
    readouts(){grad(bx,by,G);return[['(x, y)','('+fx(bx,2)+', '+fx(by,2)+')'],['f(x,y)',fx(F(bx,by),3)],['∂f/∂x',fx(G[0],3)],['∂f/∂y',fx(G[1],3)],['|∇f|',fx(Math.hypot(G[0],G[1]),3)],['speed',fx(Math.hypot(vx,vy),3)]]}}}};
 {const B=()=>SUR.ball?SUR.ball():V3(0,2.5,0);
  DIO.surface.shots={'ball placed':SHOT([0,2.7,0],11),'ball dropped':SHOT(()=>B().toArray(),7),'at rest':SHOT(()=>B().toArray(),6)};
@@ -1102,22 +1124,22 @@ DIO.lever={params:{m1:[.2,10,3,'kg','left mass'],x1:[-4,4,-2.5,'m','left positio
   const BM=part('beam',W,true);BM.position.set(p.fulcrum,H+.1,0);const beam=put(box(9,.16,.7,oak),'oak beam',BM);beam.position.x=-p.fulcrum;
   const weight=(name,m,x)=>{const G=part(name,BM,true),sz=Math.cbrt(m)*.5;const b=box(sz,sz,sz,iron);b.position.y=.08+sz/2;G.add(b);const hd=new T.Mesh(new T.TorusGeometry(sz*.25,.03,8,20,Math.PI),iron);hd.position.y=.08+sz;G.add(hd);G.position.x=x-p.fulcrum;return G};
   const w1=weight('mass 1 · m₁',p.m1,p.x1),w2=weight('mass 2 · m₂',p.m2,p.x2);
-  const a1=put(new T.ArrowHelper(V3(0,-1,0),V3(0,0,0),1,0x88c0ff,.2,.12),'weight 1',guides),a2=put(new T.ArrowHelper(V3(0,-1,0),V3(0,0,0),1,0xff9a7a,.2,.12),'weight 2',guides);
+  const a1=put(vecArrow(V3(0,-1,0),V3(0,0,0),1,0x88c0ff,.2,.12),'weight 1',guides),a2=put(vecArrow(V3(0,-1,0),V3(0,0,0),1,0xff9a7a,.2,.12),'weight 2',guides);
   // foreground: field stones at the lower-left frame edge
   {const F=part('field stones (foreground)'),q=inDisc(groundAt(orbit,-.84,-.84),6.1);F.position.copy(q);const sm=makeMaterial('stone'),rr=mulberry(4);for(let i=0;i<4;i++){const gq=new T.IcosahedronGeometry(.25+rr()*.25,2),P=gq.attributes.position,v=V3(0,0,0);for(let j=0;j<P.count;j++){v.fromBufferAttribute(P,j);v.multiplyScalar(1+.18*Math.sin(v.x*9+i)*Math.cos(v.z*7));P.setXYZ(j,v.x,Math.max(-.05,v.y*.6),v.z)}gq.computeVertexNormals();const m=new T.Mesh(gq,sm);m.position.set((rr()-.5)*1.4,.1,(rr()-.5)*.8);m.castShadow=m.receiveShadow=true;F.add(m)}}
   const r1=p.x1-p.fulcrum,r2=p.x2-p.fulcrum,rb=-p.fulcrum,I=p.m1*r1*r1+p.m2*r2*r2+p.beam*(81/12+rb*rb)+.05,tq=th=>-g*(p.m1*r1+p.m2*r2+p.beam*rb)*Math.cos(th);
   const limL=Math.asin(Math.min(1,(H+.02)/(4.5+p.fulcrum))),limR=Math.asin(Math.min(1,(H+.02)/(4.5-p.fulcrum)));let th=0,w=0,hit=false,bal=false,told=false,tSt=0;const tmp=V3(0,0,0);
-  LEV.ful=V3(p.fulcrum,H,0);LEV.end=()=>V3(p.fulcrum+(th>0?-(4.5+p.fulcrum):4.5-p.fulcrum)*Math.cos(th),.2,0);
+  LEV.ful=V3(p.fulcrum,H,0);LEV.w1=()=>w1.getWorldPosition(V3(0,0,0));LEV.w2=()=>w2.getWorldPosition(V3(0,0,0));LEV.m=[p.m1,p.m2];LEV.end=()=>V3(p.fulcrum+(th>0?-(4.5+p.fulcrum):4.5-p.fulcrum)*Math.cos(th),.2,0);
   D.label('mass 1 · m₁',at(v=>w1.getWorldPosition(v).setY(v.y+.75)),w1);D.label('mass 2 · m₂',at(v=>w2.getWorldPosition(v).setY(v.y+.75)),w2);D.label('fulcrum',at(v=>v.set(p.fulcrum,.45,.8)),FU);D.label('beam',at(v=>v.set(p.fulcrum+3.6*Math.cos(th)*(p.x1<0?1:-1),H+.45+3.6*Math.sin(th)*(p.x1<0?1:-1),0)),BM);
   const net=tq(0);if(Math.abs(net)<.05*g){bal=true;ev('Σ moments ≈ 0: the lever balances (m₁r₁ + m₂r₂ + M·r_beam = 0)',V3(p.fulcrum,H,0),{color:0x88c0ff,sound:'wood'})}else ev('net moment '+fx(net,2)+' N·m: the lever tips '+(net>0?'left':'right'),V3(p.fulcrum,H+.1,0),{sound:'wood'});
   D.seriesName='tilt angle θ (deg)';
   return{orbit,
    step(h){tSt+=h;if(bal){if(!told&&tSt>2){told=true;ev('still balanced after 2 s: the moments m₁g·'+fx(-r1,2)+' m and m₂g·'+fx(r2,2)+' m cancel',V3(p.fulcrum,H+.3,0),{color:0x88c0ff,sound:'chime'})}return}
     const a=tq(th)/I-.6*w;w+=a*h;th+=w*h;const lim=th>0?limL:limR;if(Math.abs(th)>lim){th=Math.sign(th)*lim;if(!hit){hit=true;ev('beam strikes the ground, stopped at '+fx(th*DEG,1)+'°',LEV.end(),{sound:'thud'})}w=-w*.25}},
-   visual(){BM.rotation.z=th;w1.getWorldPosition(a1.position);a1.position.y-=.05;a1.setLength(.3+p.m1*g*.025,.2,.12);w2.getWorldPosition(a2.position);a2.position.y-=.05;a2.setLength(.3+p.m2*g*.025,.2,.12);D.push(th*DEG)},
+   visual(){BM.rotation.z=th;w1.getWorldPosition(a1.position);a1.position.y-=.05;a1.setLength(alen(p.m1,Math.max(p.m1,p.m2),1.4));w2.getWorldPosition(a2.position);a2.position.y-=.05;a2.setLength(alen(p.m2,Math.max(p.m1,p.m2),1.4));D.push(th*DEG)},
    readouts(){return[['τ₁ = −m₁g r₁',fx(-p.m1*g*r1,2)+' N·m'],['τ₂ = −m₂g r₂',fx(-p.m2*g*r2,2)+' N·m'],['τ beam',fx(-p.beam*g*rb,2)+' N·m'],['Σ τ (θ = 0)',fx(net,2)+' N·m'],['θ',fx(th*DEG,2)+'°'],['I about fulcrum',fx(I,2)+' kg·m²']]}}}};
 {DIO.lever.shots={'moments ≈ 0':SHOT([0,2.2,0],10),'net moment':SHOT([0,2.2,0],10.5),'still balanced':SHOT([0,2.2,0],10),'beam strikes the ground':SHOT(()=>LEV.end?LEV.end().setY(1).toArray():[3,1,0],7)};
- DIO.lever.flows={'net moment':[{from:[-2.4,3.6,.6],to:[-2.4,2.6,.6],label:'m₁g × r₁ turns it one way'},{from:[2.8,3.6,.6],to:[2.8,2.6,.6],label:'m₂g × r₂ the other way'}],'beam strikes the ground':[{from:()=>LEV.ful.clone().add(V3(0,.6,.5)),to:()=>LEV.end().add(V3(0,.4,.5)),label:'the larger moment wins'}],'still balanced':[{from:[-2.5,3.4,.6],to:[2.5,3.4,.6],label:'equal and opposite moments'}]};}
+ DIO.lever.flows={'net moment':[{at:()=>LEV.w1?LEV.w1().add(V3(0,-.05,.55)):V3(-2.4,2.6,.6),vec:()=>V3(0,-(LEV.m?LEV.m[0]:1),0),ref:()=>LEV.m?Math.max(...LEV.m):1,rim:2,label:'m₁g × r₁ turns it one way',short:'m₁g × r₁'},{at:()=>LEV.w2?LEV.w2().add(V3(0,-.05,.55)):V3(2.8,2.6,.6),vec:()=>V3(0,-(LEV.m?LEV.m[1]:1),0),ref:()=>LEV.m?Math.max(...LEV.m):1,rim:2,label:'m₂g × r₂ the other way',short:'m₂g × r₂'}],'beam strikes the ground':[{from:()=>LEV.ful.clone().add(V3(0,.6,.5)),to:()=>LEV.end().add(V3(0,.4,.5)),label:'the larger moment wins'}],'still balanced':[{from:[-2.5,3.4,.6],to:[2.5,3.4,.6],label:'equal and opposite moments'}]};}
 
 /* --- Reaction A + B ⇌ C in a cell, seen at molecular scale ---
    Hard-sphere gas (m = 1) in a box; an A–B encounter (centres within 0.3) reacts if its relative kinetic energy
@@ -1174,7 +1196,7 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
    readouts(){const a=cnt(0),b=cnt(1),c=cnt(2);return[['N_A · N_B · N_C',a+' · '+b+' · '+c],['Q = [C]/([A][B])',a&&b?fx(c*Vbox/(a*b),2):'—'],['encounters reacting',enc?fx(encOK/enc,3):'…'],['collision theory (1+Ea/kT)e^(−Ea/kT)',fx(theory(),3)],['kinetic T',fx(Tk,2)],['forward events',String(nf)],['reverse events',String(nb)],['k_reverse',fx(kr,3)+' /s']]}}}};
 {const M=()=>RXN.trk?RXN.trk():V3(0,2.2,0);
  DIO.reaction.shots={'collision with ke':SHOT(()=>[0,RXN.Y0??2.25,0],8),'tracked molecule reacts':SHOT(()=>M().toArray(),4),'tracked molecule splits':SHOT(()=>M().toArray(),4),'first reverse reaction':SHOT(()=>[0,RXN.Y0??2.25,0],8),'dynamic equilibrium':SHOT(()=>[0,RXN.Y0??2.25,0],10)};
- DIO.reaction.flows={'tracked molecule reacts':[{from:()=>M().add(V3(-1,.6,0)),to:()=>M().add(V3(-.2,.15,0)),label:'enough energy to cross the barrier: a bond forms'}],'dynamic equilibrium':[{from:[-2,4.6,2],to:[2,4.6,2],label:'A + B → C'},{from:[2,4.2,2],to:[-2,4.2,2],label:'C → A + B, at the same rate'}]};}
+ DIO.reaction.flows={'tracked molecule reacts':[{from:()=>M().add(V3(-1,.6,0)),to:()=>M().add(V3(-.2,.15,0)),label:'enough energy to cross the barrier: a bond forms'}],'dynamic equilibrium':[{from:[-1.7,4.55,2],to:[1.7,4.55,2],lane:1,label:'A + B → C'},{from:[1.7,4.55,2],to:[-1.7,4.55,2],lane:1,label:'C → A + B, at the same rate',short:'C → A + B'}]};}
 
 /* --- Electric field: two charges on insulating glass stands, their field lines, and a test charge ---
    Softened Coulomb field E = Σ K qᵢ (r − rᵢ)/(|r − rᵢ|² + ε)^{3/2}, V = Σ K qᵢ/√(|r − rᵢ|² + ε), K = 2, ε = 0.01, so E = −∇V

@@ -66,26 +66,33 @@ export async function pageLines(doc, i, { fonts = false } = {}) {
   const pg = await doc.getPage(i);
   if (fonts) { try { await pg.getOperatorList(); } catch (e) { } }
   const tc = await pg.getTextContent();
-  const boldOf = new Map(); const isBold = fn => { if (!fonts || !fn) return false; if (!boldOf.has(fn)) { let b = false; try { const f = pg.commonObjs.get(fn); b = !!(f && (f.bold || f.black || /bold|black|heavy|semibold|demi/i.test(f.name || ''))); } catch (e) { } boldOf.set(fn, b); } return boldOf.get(fn); };
-  return linesFromItems(tc.items, isBold);
+  const fontOf = new Map(); const font = fn => { if (!fonts || !fn) return null; if (!fontOf.has(fn)) { let f = null; try { f = pg.commonObjs.get(fn); } catch (e) { } fontOf.set(fn, f); } return fontOf.get(fn); };
+  const isBold = fn => { const f = font(fn); return !!(f && (f.bold || f.black || /bold|black|heavy|semibold|demi/i.test(f.name || ''))); };
+  // monospace faces carry code (R/Python listings, console output): Courier, Consolas, *Mono*, cmtt/lmmono (TeX)
+  const isMono = fn => { const st = tc.styles && tc.styles[fn]; if (st && st.fontFamily === 'monospace') return true; const f = font(fn); return !!(f && (f.isMonospace || MONO_RE.test(f.name || ''))); };
+  return linesFromItems(tc.items, isBold, isMono);
 }
-export function linesFromItems(items, isBold = () => false) {
+export const MONO_RE = /mono|courier|consol|menlo|inconsolata|typewriter|cmtt|lmmono|sourcecode|firacode|jetbrains|lucidaconsole|andale/i;
+export function linesFromItems(items, isBold = () => false, isMono = () => false) {
   const lines = []; let cur = null;
   const push = () => { if (cur) { lines.push(cur); cur = null; } };
   for (const it of items) {
     if (!it.str) { if (it.hasEOL) push(); continue; }
     // pdf.js fills column gaps with one wide whitespace item: treat it as a break between cells/columns
-    if (!it.str.trim()) { const sz = Math.abs(it.transform[3]) || 10; if ((it.width || 0) > sz * 2.5 || it.hasEOL) push(); else if (cur) cur.text += ' '; continue; }
+    if (!it.str.trim()) { const sz = Math.abs(it.transform[3]) || 10; if ((it.width || 0) > sz * 2.5 || it.hasEOL) push(); else if (cur) { cur.text += ' '; if (cur.leadOpen) cur.lead += ' '; } continue; }
     const size = Math.abs(it.transform[3]) || Math.abs(it.transform[0]) || 10, y = it.transform[5], x = it.transform[4], w = it.width || it.str.length * size * .5;
-    const b = isBold(it.fontName), n = it.str.replace(/\s/g, '').length;
+    const b = isBold(it.fontName), mo = isMono(it.fontName), n = it.str.replace(/\s/g, '').length;
     // same baseline and no column-sized gap → same line
     if (cur && Math.abs(cur.y - y) < size * .5 && x - cur.x1 < size * 2.5 && x >= cur.x - size) {
-      cur.text += (cur.text.endsWith(' ') || it.str.startsWith(' ') ? '' : ' ') + it.str; cur.size = Math.max(cur.size, size); cur.x1 = Math.max(cur.x1, x + w); cur.nb += b ? n : 0; cur.n += n;
-    } else { push(); cur = { text: it.str, size, y, x, x1: x + w, nb: b ? n : 0, n }; }
+      const sep = (cur.text.endsWith(' ') || it.str.startsWith(' ') ? '' : ' ');
+      cur.text += sep + it.str; cur.size = Math.max(cur.size, size); cur.x1 = Math.max(cur.x1, x + w); cur.nb += b ? n : 0; cur.nm += mo ? n : 0; cur.n += n;
+      // the lead: the opening run in the line's first face and size ("Write your own" before "A function is…")
+      if (cur.leadOpen && Math.abs(size - cur.s0) < cur.s0 * .05 && b === cur.b0) cur.lead += sep + it.str; else cur.leadOpen = false;
+    } else { push(); cur = { text: it.str, size, y, x, x1: x + w, nb: b ? n : 0, nm: mo ? n : 0, n, lead: it.str, leadOpen: true, s0: size, b0: b }; }
     if (it.hasEOL) push();
   }
   push();
-  const out = lines.map(l => ({ text: l.text.replace(/\s+/g, ' ').trim(), size: +l.size.toFixed(2), x: +l.x.toFixed(1), x1: +l.x1.toFixed(1), y: +l.y.toFixed(1), bold: l.n > 0 && l.nb / l.n >= .8 })).filter(l => l.text);
+  const out = lines.map(l => { const o = { text: l.text.replace(/\s+/g, ' ').trim(), size: +l.size.toFixed(2), x: +l.x.toFixed(1), x1: +l.x1.toFixed(1), y: +l.y.toFixed(1), bold: l.n > 0 && l.nb / l.n >= .8 }; if (l.n > 0 && l.nm / l.n >= .8) o.mono = true; const ld = l.lead.replace(/\s+/g, ' ').trim(); if (ld && ld.length < o.text.length - 2 && l.s0 >= l.size * .98) o.lead = ld; return o; }).filter(l => l.text);
   out.forEach((l, k) => { l.gap = gapAbove(out[k - 1], l); });
   return out;
 }
@@ -286,7 +293,7 @@ export function stripFurniture(pages) {
 // Cells on one baseline (a table row, an equation and its number) become one line: "0 | 2.0 | 1.5".
 export function joinRows(L) {
   const out = [];
-  L.forEach((l, i) => { const p = out[out.length - 1]; if (p && Math.abs(p.y - l.y) < Math.max(1.5, Math.min(p.size, l.size) * .35) && l.x >= p.x1 - 1) { p.text += ' | ' + l.text; p.x1 = l.x1; p.cells++; } else out.push({ text: l.text, y: l.y, x: l.x, x1: l.x1, size: l.size, li: i, cells: 1 }); });
+  L.forEach((l, i) => { const p = out[out.length - 1]; if (p && Math.abs(p.y - l.y) < Math.max(1.5, Math.min(p.size, l.size) * .35) && l.x >= p.x1 - 1) { p.text += (p.mono && l.mono ? '   ' : ' | ') + l.text; p.x1 = l.x1; p.cells++; p.mono = p.mono && !!l.mono; } else out.push({ text: l.text, y: l.y, x: l.x, x1: l.x1, size: l.size, li: i, cells: 1, mono: !!l.mono }); });
   return out;
 }
 const normT = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -294,7 +301,7 @@ const normT = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' '
 // ---------------------------------------------------------------- pure helpers: text per subsection
 // pages: cleaned line arrays for pages [from..]; subs: the part's subsections (ordered). Returns sections with text.
 export function segmentSections(pages, from, subs, { partTitle = '' } = {}) {
-  const flat = []; pages.forEach((L, k) => joinRows(L).forEach(r => flat.push({ page: from + k, li: r.li, text: r.text })));   // a table row is one line
+  const flat = []; pages.forEach((L, k) => joinRows(L).forEach(r => flat.push({ page: from + k, li: r.li, text: r.text, mono: r.mono })));   // a table row is one line
   const find = (title, page, num) => {
     const want = normT(title).slice(0, 40); if (!want) return -1;
     let idx = flat.findIndex(f => f.page === page && normT(f.text).startsWith(want));
@@ -313,12 +320,30 @@ export function segmentSections(pages, from, subs, { partTitle = '' } = {}) {
   for (let k = 1; k < starts.length; k++) if (starts[k] < starts[k - 1]) starts[k] = starts[k - 1];
   return subs.map((s, k) => {
     const a = starts[k], b = k + 1 < subs.length ? starts[k + 1] : flat.length;
-    let text = '', pg = null;
-    for (let i = a; i < b; i++) { const f = flat[i]; if (f.page !== pg) { text += `\n[page ${f.page}]\n`; pg = f.page; } text += f.text + '\n'; }
-    text = text.replace(/(\p{L})-\n(\p{Ll})/gu, '$1$2').trim();
+    const text = linesText(flat.slice(a, b));
     const lastPage = b > a ? flat[b - 1].page : s.startPage;
     return { id: s.id, num: s.num || '', title: s.title, level: s.level, startPage: s.startPage, endPage: Math.max(s.startPage, lastPage), ...(s.intro ? { intro: true } : {}), ...(s.synthetic ? { synthetic: true } : {}), text, inventory: inventory(text) };
   });
+}
+// Text of a run of lines: "[page n]" markers, and code (monospace lines) fenced as ```r / ```python / ```code blocks so the
+// prompt and the quality gate see code as code (explained line by line), never as prose or as a picture.
+export function linesText(rows) {
+  let text = '', pg = null, inCode = false;
+  const close = () => { if (inCode) { text += '```\n'; inCode = false; } };
+  for (const f of rows) {
+    if (f.page !== pg) { close(); text += `\n[page ${f.page}]\n`; pg = f.page; }
+    if (f.mono && !inCode) { text += '```code\n'; inCode = true; } else if (!f.mono) close();
+    text += f.text + '\n';
+  }
+  close();
+  text = text.replace(/(\p{L})-\n(\p{Ll})/gu, '$1$2').trim();
+  return text.replace(/```code\n([\s\S]*?)```/g, (m, body) => '```' + codeLang(body) + '\n' + body + '```');
+}
+export function codeLang(body) {
+  const b = String(body || '');
+  if (/<-|\blibrary\(|\bc\(|\$\w|^\[1\]|\bna\.rm\b|\bdata\.frame\(|~/m.test(b)) return 'r';
+  if (/^\s*(import|from\s+\S+\s+import|def |print\()|\bnp\.|\bpd\./m.test(b)) return 'python';
+  return 'code';
 }
 // What a subsection contains, counted from its text. Used as the coverage checklist and to judge resolution.
 const UNIT = '(?:m|cm|mm|km|nm|µm|s|ms|min|h|kg|g|mg|N|kN|J|kJ|eV|W|kW|MW|Pa|kPa|hPa|bar|atm|K|°C|°F|°|rad|Hz|kHz|V|mV|A|mA|Ω|C|F|T|mol|M|L|mL|%|m/s|m/s²|m/s2|km/h|N/m|kg/m³|J/K|dB|\\$|€|£|USD|EUR|years?|days?)';
@@ -326,18 +351,105 @@ const QTY_RE = new RegExp('(?:^|[\\s(=≈~])[−-]?\\d+(?:[.,]\\d+)?(?:\\s?[×x]
 export function inventory(text) {
   const t = String(text || ''), lines = t.split('\n');
   const uniq = a => [...new Set(a)];
+  const codeBlocks = (t.match(/```(r|python|code)\n/g) || []).length, codeLines = (t.match(/```(?:r|python|code)\n([\s\S]*?)```/g) || []).reduce((a, b) => a + b.split('\n').length - 2, 0);
   const figs = uniq((t.match(/\b(?:Figure|Fig\.)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}[a-z]?/g) || []).map(s => s.replace(/^Fig\.\s*/, 'Figure ').replace(/\s+/, ' ')));
   const tabs = uniq((t.match(/\bTable\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}/g) || []).map(s => s.replace(/\s+/, ' ')));
   // worked examples are counted where they start (line start or after a sentence), not where they are mentioned
   const examples = uniq((t.match(/(?:^|\n|[.!?]\s+)(?:Example|Worked example|Exercise|Problem|Sample problem|Case study|Beispiel|Exemple|Пример)\s*[A-Z]?\d{1,3}(?:[.\-–]\d{1,3}){0,2}(?=[.:\s—–-])/gi) || []).map(s => s.replace(/^[\s\S]*?(?=[A-ZП])/, '').replace(/\s+/g, ' ').replace(/[.:]$/, '')));
   const defs = (t.match(/\b(?:Definition|Theorem|Lemma|Corollary|Proposition|Axiom|Postulate|Law of|Principle of|is defined as|we define|is called)\b/gi) || []).length;
-  const eqs = lines.filter(l => l.length < 140 && /[=≈≤≥∝]/.test(l) && (/[∑∫√∂∆Δπθλμσωαβγ²³^]|\b[a-zA-Z]\s*\(/.test(l) || l.replace(/[^=]/g, '').length >= 1 && l.split(/\s+/).length <= 14)).length;
+  const eqs = t.replace(/```[\s\S]*?```/g, '').split('\n').filter(l => l.length < 140 && /[=≈≤≥∝]/.test(l) && (/[∑∫√∂∆Δπθλμσωαβγ²³^]|\b[a-zA-Z]\s*\(/.test(l) || l.replace(/[^=]/g, '').length >= 1 && l.split(/\s+/).length <= 14)).length;
   const qty = (t.match(QTY_RE) || []).length;
   const chars = t.replace(/\[page \d+\]/g, '').replace(/\s+/g, ' ').length;
   // the expected number of steps at equal or finer resolution: one per definition, example, table, figure,
   // a third of the equations, at least one per ~2,000 characters; capped so a long text is not over-split
-  const expect = Math.max(1, Math.min(14, Math.max(Math.ceil(chars / 2000), defs + examples.length + tabs.length + Math.ceil(eqs / 3) + Math.ceil(figs.length / 2))));
-  return { chars, equations: eqs, definitions: defs, examples, figures: figs, tables: tabs, quantities: qty, expectSteps: expect };
+  const expect = Math.max(1, Math.min(14, Math.max(Math.ceil(chars / 2000), defs + examples.length + tabs.length + codeBlocks + Math.ceil(eqs / 3) + Math.ceil(figs.length / 2))));
+  return { chars, equations: eqs, definitions: defs, examples, figures: figs, tables: tabs, quantities: qty, ...(codeBlocks ? { code: codeBlocks, codeLines } : {}), expectSteps: expect };
+}
+
+// ---------------------------------------------------------------- sheets (infographics, posters, handout pages)
+// A sheet is a page that stands on its own: a big title near the top (often beside a large sheet number "01"), and
+// panels or cards laid out in columns, each with a heading in a bigger or bolder face. Reading order in such a PDF is the
+// order of drawing, not of reading, so panel text is assigned by geometry: each line belongs to the nearest panel heading
+// above it whose column holds it. sheetLayout works on one page's cleaned lines (PDF space, y up).
+const letters3 = t => (String(t).match(/\p{L}/gu) || []).length >= 3, words2 = t => letters3(t) && /\p{L}{2}/u.test(t);
+const firstSentence = t => { const m = String(t).match(/^(.{6,}?[.?!])\s+\S/); return (m && m[1].length < t.length - 3 ? m[1] : t).trim(); };
+export function sheetLayout(L, body) {
+  if (!L || !L.length) return null;
+  const top = Math.max(...L.map(l => l.y + l.size));
+  // the title: the largest line with words in the top band of the page (not code, not the sheet number)
+  const cand = L.map((l, i) => ({ l, i })).filter(({ l }) => !l.mono && letters3(l.text) && l.text.length <= 80 && l.size >= body * 1.9 && l.y >= top - Math.max(140, l.size * 5));
+  if (!cand.length) return null;
+  const T = cand.sort((a, b) => b.l.size - a.l.size || b.l.y - a.l.y)[0];
+  const numLine = L.find(l => /^\d{1,3}(\s+\d{1,3})?$/.test(l.text) && l.size >= body * 2.5 && Math.abs(l.y - T.l.y) < l.size * 1.5);
+  const num = numLine ? String(+numLine.text.split(/\s+/)[0]) : '';
+  // the subtitle: up to two lines right below the title in a smaller face
+  const sub = new Set(), below = L.map((l, i) => ({ l, i })).filter(({ l }) => l.y < T.l.y && !l.mono && Math.abs(l.x - T.l.x) < 40).sort((a, b) => b.l.y - a.l.y);
+  let prevY = T.l.y, s0 = null;
+  for (const { l, i } of below) { if (sub.size >= 2 || prevY - l.y > Math.max(T.l.size * 1.4, l.size * 2.6) || l.size >= T.l.size * .6 || (s0 != null && Math.abs(l.size - s0) > .4)) break; sub.add(i); s0 = l.size; prevY = l.y; }
+  const headText = l => (l.lead && words2(l.lead) ? l.lead : l.text);
+  const isHead = (l, i) => i !== T.i && !sub.has(i) && !l.mono && l.size >= body * 1.15 && l.size <= T.l.size * .85 && words2(headText(l)) && headText(l).length <= 110 && l.y < T.l.y && !/^sources?:/i.test(l.text) && !/^[\d\s.,:%+\-−×]+$/.test(l.text);
+  const heads = [];
+  L.forEach((l, i) => { if (!isHead(l, i)) return; const raw = l.lead && letters3(l.lead) ? l.lead : firstSentence(l.text); const m = raw.match(/^(\d{1,2})[.)]?\s+(\S.*)$/); heads.push({ i, x: l.x, y: l.y, size: l.size, text: raw.replace(/\s+/g, ' ').trim(), num: m ? m[1] : '' }); });
+  // a heading set on two lines ("Measured" / "data") is one heading
+  for (let a = 0; a < heads.length; a++) for (let b = 0; b < heads.length; b++) { const A = heads[a], B = heads[b]; if (!A || !B || A === B || A.merged || B.merged) continue; if (Math.abs(A.size - B.size) < .35 && Math.abs(A.x - B.x) < 4 && A.y > B.y && A.y - B.y < A.size * 1.7 && !B.num) { A.text += ' ' + B.text; A.also = (A.also || []).concat(B.i); B.merged = true; } }
+  for (let k = heads.length - 1; k >= 0; k--) if (heads[k].merged) heads.splice(k, 1);
+  // the right edge of a heading's column: the next heading to its right on (about) the same band
+  // a heading's column: halfway to its neighbours on the same band (card text often starts left of its heading, under an icon)
+  heads.forEach(h => { const band = heads.filter(o => o !== h && Math.abs(o.y - h.y) < Math.max(h.size, o.size) * 1.6), R = band.filter(o => o.x > h.x + 20).map(o => o.x), Lx = band.filter(o => o.x < h.x - 20).map(o => o.x);
+    h.right = R.length ? (h.x + Math.min(...R)) / 2 + 14 : Infinity; h.left = Lx.length ? (h.x + Math.max(...Lx)) / 2 + 14 : h.x - 70; });
+  heads.sort((a, b) => (Math.abs(a.y - b.y) < 6 ? a.x - b.x : b.y - a.y));
+  // numbered panels (cards 1–6, checklist groups 1–9) are read in their own order, whatever the column layout
+  if (heads.filter(h => h.num).length >= 3) { const slots = heads.map((h, k) => h.num ? k : -1).filter(k => k >= 0), nums = slots.map(k => heads[k]).sort((a, b) => +a.num - +b.num); slots.forEach((k, j) => { heads[k] = nums[j]; }); }
+  const assign = L.map((l, i) => {
+    if (i === T.i || sub.has(i) || (numLine && l === numLine) || l.y > T.l.y + T.l.size * .3 || /^\d{1,3}\s*\/\s*\d{1,3}$/.test(l.text)) return -2;   // title block, running head, "05 / 07"
+    if (/^sources?:/i.test(l.text)) return -1;                                // the sheet's own source line goes with its opening
+    const k = heads.findIndex(h => h.i === i || (h.also && h.also.includes(i))); if (k >= 0) return k;
+    let best = -1, bd = Infinity;
+    heads.forEach((h, k2) => { const d = h.y - l.y; if (d >= -1 && d < bd && l.x >= h.left - 14 && l.x < h.right - 4) { bd = d; best = k2; } });
+    return best;
+  });
+  return { title: T.l.text, size: T.l.size, num, subtitle: [...sub].map(i => L[i].text).join(' '), heads, assign };
+}
+// Is this document a set of sheets? (no outline; most pages carry their own big title; titles differ)
+export function looksLikeSheets(clean, body) {
+  if (!clean.length || clean.length > 80) return null;
+  const lay = clean.map(L => sheetLayout(L, body));
+  const titled = lay.filter(Boolean), distinct = new Set(titled.map(x => normT(x.title)));
+  return titled.length >= Math.max(2, Math.ceil(clean.length * .6)) && distinct.size >= titled.length * .8 ? lay : null;
+}
+// One part per sheet (a page without a title continues the sheet before it); its panels are the subsections, in
+// reading order (top to bottom, left to right). Ids: a numbered panel k on sheet n is "<n>.<k>", an unnumbered one
+// "p<page>-<k>", the sheet's opening text (subtitle, the parts above the first panel, its source line) "<n>.0".
+export function sheetParts(lay, clean, first = 1, body = 10) {
+  const parts = [];
+  lay.forEach((S, k) => {
+    const page = first + k;
+    if (!S) { if (parts.length) parts[parts.length - 1].endPage = page; return; }
+    const num = S.num || '', base = num || 'p' + page;
+    const intro = clean[k].some((l, i) => S.assign[i] === -1) ? [{ id: base + '.0', num: '', title: S.title + ' (opening)', level: 2, startPage: page, endPage: page, intro: true, head: S.title, sheet: true }] : [];
+    const subs = S.heads.map((h, j) => ({ id: h.num && num ? `${num}.${h.num}` : `p${page}-${j + 1}`, num: h.num && num ? `${num}.${h.num}` : '', title: h.text, level: 2, startPage: page, endPage: page, sheet: true }));
+    parts.push({ title: (num ? num.padStart(2, '0') + ' · ' : '') + S.title, num, level: 1, startPage: page, endPage: page, sheet: true, body, ...(S.subtitle ? { summary: S.subtitle } : {}), subsections: [...intro, ...subs] });
+  });
+  parts.forEach(p => ensureSubsections(p));
+  return parts;
+}
+// The text of each panel of a sheet part: lines grouped by sheetLayout, each group read top to bottom, left to right.
+// Returns the sections in the part's subsection order, with each panel's bounding box (for cutting panel figures).
+export function sheetSections(pages, from, part, body) {
+  const out = new Map(); const subs = part.subsections || [];
+  pages.forEach((L, k) => {
+    const page = from + k, S = sheetLayout(L, body); if (!S) { // a continuation page: everything goes to the last subsection
+      const last = subs[subs.length - 1]; if (last) { const g = out.get(last.id) || { rows: [], box: null, page }; L.forEach(l => g.rows.push({ ...l, page })); out.set(last.id, g); } return; }
+    const pick = idx => { if (idx === -1) return subs.find(s => s.intro && s.startPage === page) || subs.find(s => s.startPage === page); const h = S.heads[idx]; const want = normT(h.text); return subs.find(s => s.startPage === page && normT(s.title) === want) || subs.filter(s => s.startPage === page && !s.intro)[idx] || null; };
+    L.forEach((l, i) => { const a = S.assign[i]; if (a === -2) return; const s = pick(a); if (!s) return; const g = out.get(s.id) || { rows: [], box: null, page }; g.rows.push({ ...l, page }); if (l.text.length <= 45) { const b = [l.x, l.y - l.size * .35, l.x1, l.y + l.size]; g.box = g.box ? union(g.box, b) : b; } out.set(s.id, g); });
+  });
+  return subs.map(s => {
+    const g = out.get(s.id) || { rows: [], box: null, page: s.startPage };
+    const rows = g.rows.slice().sort((a, b) => a.page - b.page || (Math.abs(a.y - b.y) < 2 ? a.x - b.x : b.y - a.y));
+    const joined = []; rows.forEach(r => { const p = joined[joined.length - 1]; if (p && p.page === r.page && Math.abs(p.y - r.y) < 2) { p.text += (p.mono && r.mono ? '   ' : ' | ') + r.text; p.mono = p.mono && !!r.mono; } else joined.push({ page: r.page, y: r.y, text: r.text, mono: !!r.mono }); });
+    const text = linesText(joined);
+    return { id: s.id, num: s.num || '', title: s.title, level: s.level, startPage: s.startPage, endPage: s.endPage, sheet: true, ...(s.intro ? { intro: true } : {}), ...(g.box ? { box: g.box.map(v => +v.toFixed(1)), boxPage: g.page } : {}), text, inventory: inventory(text) };
+  });
 }
 
 // ---------------------------------------------------------------- splitting the book
@@ -373,7 +485,7 @@ export async function splitBook(blob, { onProgress, maxPartPages = MAX_PART_PAGE
   const pages = await readPages(doc, 1, scanN, { fonts, onProgress });
   const clean = stripFurniture(pages);
   const heads = detectHeadings(clean);
-  let nodes = null;
+  let nodes = null, sheets = null;
   if (ol && ol.length >= 2) {
     result.method = 'outline';
     // the outline is authoritative for its levels; headings add deeper levels inside each outline entry
@@ -383,6 +495,8 @@ export async function splitBook(blob, { onProgress, maxPartPages = MAX_PART_PAGE
     // place outline entries before headings found on the same page (outline line unknown → first)
     nodes.forEach(nd => { if (nd.from === 'outline') { const h = heads.find(x => x.page === nd.page && normT(x.title).startsWith(normT(nd.title).slice(0, 30))); nd.line = h ? h.line : 0; } });
     nodes.sort((a, b) => a.page - b.page || a.line - b.line || a.level - b.level);
+  } else if (scanN === n && (sheets = looksLikeSheets(clean, bodySize(pages)))) {
+    result.method = 'sheets'; result.parts = sheetParts(sheets, clean, 1, bodySize(pages)); return result;
   } else if (heads.filter(h => h.level >= 1).length >= 2) {
     result.method = 'headings'; nodes = heads.filter(h => h.level >= 1 || h.kind === 'chapter');
   } else {
@@ -410,6 +524,11 @@ export async function partSections(blob, part, { maxChars = 180000 } = {}) {
   const ctxA = Math.max(1, from - 2), ctxB = Math.min(doc.numPages, to + 2);
   const pages = await readPages(doc, ctxA, ctxB, { fonts: to - from <= 120 });
   const clean = stripFurniture(pages).slice(from - ctxA, from - ctxA + (to - from + 1));
+  if (part.sheet) {
+    const sections = sheetSections(clean, from, part, part.body || bodySize(pages));
+    let text = ''; sections.forEach(s => { text += `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}\n`; });
+    return { sections, text: text.slice(0, maxChars), truncated: text.length > maxChars };
+  }
   let subs = part.subsections && part.subsections.length ? part.subsections.map(s => ({ ...s })) : null;
   if (!subs || subs.every(s => s.synthetic)) {
     const heads = detectHeadings(clean, { first: from, body: bodySize(pages) }).filter(h => h.level >= 1);
@@ -475,7 +594,7 @@ export function opRegions(fnArray, argsArray, OPS, view) {
   const comp = new Map();
   for (const b of P) { const [i, j] = cell((b[0] + b[2]) / 2, (b[1] + b[3]) / 2), L = lab[j * gw + i]; if (L < 0) continue; const c = comp.get(L); const thin = (b[3] - b[1] < 1.5 || b[2] - b[0] < 1.5) ? 1 : 0; if (c) { c.box = union(c.box, b); c.n++; c.thin += thin; } else comp.set(L, { box: b.slice(), n: 1, thin }); }
   const vectors = [...comp.values()].filter(c => c.n >= 6 && c.box[2] - c.box[0] >= 60 && c.box[3] - c.box[1] >= 40).map(c => ({ box: c.box, n: c.n, rules: c.thin / c.n > .9 }));
-  return { images: scanned ? [] : imgs, vectors, scanned };
+  return { images: scanned ? [] : imgs, vectors, scanned, paths: P };
 }
 // Caption lines ("Figure 2.1: …") with their continuation lines. lines: one page's lines (PDF space).
 export function findCaptions(lines) {
@@ -532,25 +651,49 @@ export function pairFigures({ images, vectors }, captions, lines, view, page) {
   }
   // large uncaptioned images and drawings are figures too (their label says so)
   // ruled grids with many text cells are uncaptioned tables (tab-p<page>-<k>)
+  // A page-sized drawing is the page, not a figure: an uncaptioned region over 40 % of the page (an infographic's merged
+  // cards, a slide template, a shaded code box) is never cut out, nor one holding many text lines (a framed text or code
+  // panel; its text is already in the text layer, where it is explained, not pasted).
+  const pageA = pw * ph, textIn = r => lines.filter(l => hits(r.box, [l.x, l.y, l.x1, l.y + l.size * .7]));
   let k = 0, kt = 0; regions.forEach((r, i) => {
     if (used.has(i) || r.texty) return;
+    if (area(r.box) > pageA * .4) return;
+    { const T = textIn(r); if (T.length >= 8 || T.reduce((a, l) => a + l.text.length, 0) >= 350 || T.filter(l => l.mono).length >= 2) return; }
     if (r.src === 'rules') { if ((r.cells || 0) >= 6 && area(r.box) >= pw * ph * .04) { kt++; figs.push({ kind: 'table', label: `Unlabelled table on p. ${page}`, num: '', caption: '', box: r.box, src: r.src, uncaptioned: true, k: kt }); } return; }
     const big = area(r.box) >= pw * ph * (r.src === 'image' ? .1 : .14); if (!big) return; k++; figs.push({ kind: 'figure', label: `Unlabelled figure on p. ${page}`, num: '', caption: '', box: r.box, src: r.src, uncaptioned: true, k });
   });
   return figs.map((f, j) => ({ ...f, page, id: f.uncaptioned ? figureId('', page, f.k, f.kind) : figureId(f.label, page, j + 1, f.kind) }));
 }
 // Browser: cut the figures of pages from..to out of the rendered pages. Returns records with JPEG data URLs.
-export async function extractFigures(blob, from, to, { maxW = 1200, quality = .82, maxPerPart = 60, onProgress } = {}) {
-  const L = lib(), doc = await openPDF(blob), out = [], seen = new Set();
+export async function extractFigures(blob, from, to, { maxW = 1200, quality = .82, maxPerPart = 60, onProgress, panels = null } = {}) {
+  const L = lib(), doc = await openPDF(blob), out = [], seen = new Set(), hashes = [];
   to = Math.min(to, doc.numPages);
-  for (let p = from; p <= to && out.length < maxPerPart; p++) {
+  // pass 1: the figure regions of every page (cheap: operator lists and text, no rendering)
+  const plan = [];
+  for (let p = from; p <= to; p++) {
     const pg = await doc.getPage(p), view = pg.view; let ops;
     try { ops = await pg.getOperatorList(); } catch (e) { continue; }
-    const tc = await pg.getTextContent(); const lines = linesFromItems(tc.items);
+    const tc = await pg.getTextContent(); const lines = linesFromItems(tc.items, () => false, fn => !!(tc.styles && tc.styles[fn] && tc.styles[fn].fontFamily === 'monospace'));
     const regions = opRegions(ops.fnArray, ops.argsArray, L.OPS, view);
-    const caps = findCaptions(lines);
-    const figs = pairFigures(regions, caps, lines, view, p).filter(f => f.box);
-    if (onProgress) onProgress((p - from + 1) / (to - from + 1));
+    const figs = pairFigures(regions, findCaptions(lines), lines, view, p).filter(f => f.box);
+    // panels of a sheet (an infographic page) that are drawings (a chart, a curve, a diagram), not text cards
+    (panels || []).filter(q => q.page === p && q.box).forEach((q, j) => {
+      const b = grow(q.box, 6), pageA = (view[2] - view[0]) * (view[3] - view[1]); if (area(b) > pageA * .4 || area(b) < pageA * .02) return;
+      const inside = regions.paths.filter(r => r[0] >= b[0] - 2 && r[2] <= b[2] + 2 && r[1] >= b[1] - 2 && r[3] <= b[3] + 2).length;
+      const words = lines.filter(l => hits(b, [l.x, l.y, l.x1, l.y + l.size * .7])).reduce((a, l) => a + l.text.split(/\s+/).length, 0);
+      if (inside >= 25 && words <= area(b) / 900) figs.push({ kind: 'figure', label: `Panel “${String(q.title).slice(0, 60)}” on p. ${p}`, num: '', caption: q.title, box: b, src: 'panel', panel: q.id, page: p, id: `fig-p${p}-${figs.filter(f => f.uncaptioned || f.src === 'panel').length + 1}` });
+    });
+    plan.push({ p, pg, figs });
+    if (onProgress) onProgress((p - from + 1) / (to - from + 1) * .5);
+  }
+  // a template graphic (a header bar, a logo) sits at the same place on many pages: furniture, never a figure
+  const boxKey = f => f.box.map(v => Math.round(v / 12)).join(',');
+  const boxCount = new Map(); plan.forEach(({ figs }) => new Set(figs.filter(f => f.uncaptioned).map(boxKey)).forEach(k => boxCount.set(k, (boxCount.get(k) || 0) + 1)));
+  const nP = plan.length;
+  // pass 2: render the pages that keep figures and cut them out; identical crops (the same picture twice) are kept once
+  for (const { p, pg, figs: all } of plan) {
+    if (out.length >= maxPerPart) break;
+    const figs = all.filter(f => !(f.uncaptioned && nP >= 3 && boxCount.get(boxKey(f)) >= Math.max(3, nP * .4)));
     if (!figs.length) continue;
     const widest = Math.max(...figs.map(f => f.box[2] - f.box[0]));
     const scale = clamp(maxW / Math.max(widest + 16, 100), 1.4, 3.2), vp = pg.getViewport({ scale });
@@ -558,17 +701,38 @@ export async function extractFigures(blob, from, to, { maxW = 1200, quality = .8
     const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
     try { await pg.render({ canvasContext: g, viewport: vp }).promise; } catch (e) { continue; }
     for (const f of figs) {
-      let id = f.id; while (seen.has(id)) id += '-b'; seen.add(id);
+      let id = f.id; while (seen.has(id)) id += '-b';
       const [x0, y0, x1, y1] = vp.convertToViewportRectangle(grow(f.box, 6));
       const sx = Math.max(0, Math.floor(Math.min(x0, x1))), sy = Math.max(0, Math.floor(Math.min(y0, y1))), sw = Math.min(c.width - sx, Math.ceil(Math.abs(x1 - x0))), sh = Math.min(c.height - sy, Math.ceil(Math.abs(y1 - y0)));
       if (sw < 24 || sh < 24) continue;
       const k = Math.min(1, maxW / sw), o = document.createElement('canvas'); o.width = Math.round(sw * k); o.height = Math.round(sh * k);
       o.getContext('2d').drawImage(c, sx, sy, sw, sh, 0, 0, o.width, o.height);
-      out.push({ id, label: f.label, kind: f.kind, caption: f.caption, page: p, bbox: [sx / c.width, sy / c.height, (sx + sw) / c.width, (sy + sh) / c.height].map(v => +v.toFixed(4)), w: o.width, h: o.height, src: f.src, dataUrl: o.toDataURL('image/jpeg', quality) });
+      const hash = aHash(o), dup = hashes.find(h => hamming(h.hash, hash) <= 3 && Math.abs(h.ar - sw / sh) < .08);
+      if (dup) continue;
+      seen.add(id); hashes.push({ hash, ar: sw / sh, id });
+      out.push({ id, label: f.label, kind: f.kind, caption: f.caption, page: p, bbox: [sx / c.width, sy / c.height, (sx + sw) / c.width, (sy + sh) / c.height].map(v => +v.toFixed(4)), w: o.width, h: o.height, src: f.src, ...(f.panel ? { panel: f.panel } : {}), hash, dataUrl: o.toDataURL('image/jpeg', quality) });
     }
     c.width = c.height = 0;
+    if (onProgress) onProgress(.5 + (p - from + 1) / (to - from + 1) * .5);
   }
   return out;
+}
+// 64-bit average hash of a canvas (16 hex digits), for spotting the same picture cut twice
+function aHash(cv) {
+  const s = document.createElement('canvas'); s.width = 8; s.height = 8; const x = s.getContext('2d'); x.drawImage(cv, 0, 0, 8, 8);
+  const d = x.getImageData(0, 0, 8, 8).data, v = []; for (let i = 0; i < 64; i++) v.push(d[i * 4] * .3 + d[i * 4 + 1] * .59 + d[i * 4 + 2] * .11);
+  const m = v.reduce((a, b) => a + b, 0) / 64; let h = ''; for (let i = 0; i < 64; i += 4) h += ((v[i] > m) << 3 | (v[i + 1] > m) << 2 | (v[i + 2] > m) << 1 | (v[i + 3] > m)).toString(16); return h;
+}
+export function hamming(a, b) { let n = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) { let x = parseInt(a[i], 16) ^ parseInt(b[i], 16); while (x) { n += x & 1; x >>= 1; } } return n; }
+// Parts restricted to a page range (the Add-PDF dialog's "pages from–to"): parts outside are dropped, the others are
+// clipped, and so are their subsections (a subsection outside the range is dropped; nothing inside is merged).
+export function restrictParts(parts, from, to, only = null) {
+  return (parts || []).filter(p => !p.front && p.endPage >= from && p.startPage <= to && (!only || only.includes(p.id || p.title))).map(p => {
+    const q = { ...p, startPage: Math.max(p.startPage, from), endPage: Math.min(p.endPage, to) };
+    q.subsections = (p.subsections || []).filter(s => s.endPage >= from && s.startPage <= to).map(s => ({ ...s, startPage: Math.max(s.startPage, from), endPage: Math.min(s.endPage, to) }));
+    if (!q.subsections.length) delete q.subsections;
+    return ensureSubsections(q);
+  });
 }
 // metadata only (what the prompt and the room file carry; images stay in IndexedDB)
 export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page }));

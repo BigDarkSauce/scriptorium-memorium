@@ -128,6 +128,17 @@ function miniEmblem(title) {
 // a pedestal's walk-collision box: its plinth only (the turning models must not move the box)
 const st0 = o => { o.updateMatrixWorld(true); const b = new THREE.Box3(); o.children.forEach(c => { if (c.userData.solid) b.expandByObject(c); }); return b.isEmpty() ? new THREE.Box3().setFromObject(o) : b; };
 const SPACING = 2.9;
+// Floor-plan margins (metres): a plinth stands WALL_GAP clear of every wall (0.9 m walkway, and 0.6 m clear of the
+// 0.42 m wall bookcases); FURN_GAP clear of other plinths, the door and stairs; scrolls at least STATION_MIN apart
+// (niche + pilaster) and CORNER_MIN from a corner; the door zone covers the double door, its frame and columns.
+const CASE_D = .42, WALL_GAP = Math.max(.9, CASE_D + .6), FURN_GAP = .6, STATION_MIN = SPACING, CORNER_MIN = 1.2, DOOR_HALF = 2, DOOR_DEPTH = 1;
+// A pedestal's size from its number of demos: one (or none) is the round marble pedestal; several make a long plinth
+// with up to 4 bays a row. W × Dp is the marble body; Wf × Df the footprint with the top slab's lip.
+function plinthDims(n) {
+  if (n <= 1) return { single: true, Wf: .76, Df: .76 };
+  const cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4)), rows = Math.ceil(n / cols), B = clamp(2.38 / cols, .5, .72), W = cols * B + .12, Dp = rows * B + .12;
+  return { single: false, cols, rows, B, W, Dp, Wf: W + .07, Df: Dp + .07 };
+}
 // Station heights: every hanging scroll's lower rod sits at SHEET_BOTTOM, above the pedestal and its turning model
 // (PED_TOP + up to ~.4 m), so from the opening view (eye ~1.9 m, ~4.5 m back) the model never hides the sheet.
 const SHEET_BOTTOM = 1.3, PED_TOP = .965, SPOTS = 8;
@@ -206,17 +217,49 @@ export class BookRoom {
   status(msg, ms) { this.statusEl.textContent = msg; this.statusEl.hidden = !msg; clearTimeout(this._st); if (ms) this._st = setTimeout(() => { this.statusEl.hidden = true; }, ms); }
   // ---------- layout along the walls, starting at the left wall ----------
   orderedParts() { const out = []; this.data.parts.filter(p => !p.subOf).forEach(p => { out.push(p); this.data.parts.filter(s => s.subOf === p.id).forEach(s => out.push(s)); }); this.data.parts.filter(s => s.subOf && !this.data.parts.some(p => p.id === s.subOf)).forEach(s => out.push(s)); return out; }
+  // Stations go round the walls in order (left wall from the front, back, right, front either side of the door). Each
+  // station's floor footprint is its plinth (bays, label plates and the top slab's lip: plinthDims) standing WALL_GAP
+  // out from its wall; a station is placed at the first spot along its wall where that footprint stays WALL_GAP from
+  // every wall, FURN_GAP from every other station's footprint, the door and the hall's stairs, and STATION_MIN from the
+  // previous scroll (niche + pilaster). Whatever does not fit makes the room grow (a fresh layout), except while the
+  // size sliders move (preview): then the stations that do not fit are hidden until the room is big enough.
   layout(preview = false) {
-    const D = this.data.dims, parts = this.orderedParts();
-    const capacity = () => { const L = Math.floor((D.d - 2.4) / SPACING) + 1, B = Math.floor((D.w - 2.4) / SPACING) + 1; return { L, B, F: Math.max(0, Math.floor((D.w - 2.4) / SPACING) - 1), total: 2 * L + B + Math.max(0, Math.floor((D.w - 2.4) / SPACING) - 1) }; };
-    let grew = false; while (!preview && capacity().total < parts.length && D.w < 80) { D.w += SPACING; D.d += SPACING * .6; grew = true; }
+    const D = this.data.dims, parts = this.orderedParts(), fps = parts.map(p => plinthDims(this.pedestalSpecs(p).length));
+    let r = this.fitStations(D, fps), grew = false;
+    while (!preview && r.slots.length < parts.length && D.w < 80) { D.w = +(D.w + SPACING).toFixed(2); D.d = +(D.d + SPACING * .6).toFixed(2); grew = true; r = this.fitStations(D, fps); }
     if (grew) { this.save(); toast('The room grew to fit every scroll'); }
-    const c = capacity(), slots = [];
-    for (let i = 0; i < c.L; i++) slots.push({ wall: 'left', p: V3(-D.w / 2, 0, D.d / 2 - 1.2 - i * SPACING), n: V3(1, 0, 0) });
-    for (let i = 0; i < c.B; i++) slots.push({ wall: 'back', p: V3(-D.w / 2 + 1.2 + i * SPACING, 0, -D.d / 2), n: V3(0, 0, 1) });
-    for (let i = 0; i < c.L; i++) slots.push({ wall: 'right', p: V3(D.w / 2, 0, -D.d / 2 + 1.2 + i * SPACING), n: V3(-1, 0, 0) });
-    for (let i = 0; i < c.F; i++) { const x = D.w / 2 - 1.2 - i * SPACING; if (Math.abs(x) < 1.4) continue; slots.push({ wall: 'front', p: V3(x, 0, D.d / 2), n: V3(0, 0, -1) }); }
-    this.slots = slots; this.placed = parts.map((p, i) => ({ part: p, slot: slots[i] })).filter(x => x.slot);
+    this.slots = r.slots; this.footprints = r.rects; this.placed = parts.map((p, i) => ({ part: p, slot: r.slots[i] })).filter(x => x.slot);
+  }
+  fitStations(D, fps) {
+    const walls = [
+      { wall: 'left', o: V3(-D.w / 2, 0, D.d / 2), u: V3(0, 0, -1), n: V3(1, 0, 0), L: D.d },
+      { wall: 'back', o: V3(-D.w / 2, 0, -D.d / 2), u: V3(1, 0, 0), n: V3(0, 0, 1), L: D.w },
+      { wall: 'right', o: V3(D.w / 2, 0, -D.d / 2), u: V3(0, 0, 1), n: V3(-1, 0, 0), L: D.d },
+      { wall: 'front', o: V3(D.w / 2, 0, D.d / 2), u: V3(-1, 0, 0), n: V3(0, 0, -1), L: D.w }];
+    // fixed furniture: the double door with its columns (front wall), and the hall's corner stairs when the shell has them
+    const fixed = [{ x0: -DOOR_HALF, x1: DOOR_HALF, z0: D.d / 2 - DOOR_DEPTH, z1: D.d / 2 }];
+    const sh = this.shell && this.shell.userData, bq = sh && sh.baroque, sd = sh && sh.dims;
+    if (bq && sd && sd.w === D.w && sd.d === D.d) (bq.obstacles || []).filter(q => q.kind === 'stair').forEach(q => fixed.push({ x0: q.x - q.r, x1: q.x + q.r, z0: q.z - q.r, z1: q.z + q.r }));
+    const rectAt = (Wl, c, f) => { const p = Wl.o.clone().addScaledVector(Wl.u, c), m = p.clone().addScaledVector(Wl.n, WALL_GAP + f.Df / 2), hu = f.Wf / 2, hn = f.Df / 2, ax = Math.abs(Wl.u.x) > .5;
+      return { x0: m.x - (ax ? hu : hn), x1: m.x + (ax ? hu : hn), z0: m.z - (ax ? hn : hu), z1: m.z + (ax ? hn : hu), p }; };
+    const gap = (a, b, g) => a.x0 < b.x1 + g && b.x0 < a.x1 + g && a.z0 < b.z1 + g && b.z0 < a.z1 + g;   // closer than g on both axes
+    const inside = q => q.x0 >= -D.w / 2 + WALL_GAP - 1e-6 && q.x1 <= D.w / 2 - WALL_GAP + 1e-6 && q.z0 >= -D.d / 2 + WALL_GAP - 1e-6 && q.z1 <= D.d / 2 - WALL_GAP + 1e-6;
+    const slots = [], rects = []; let wi = 0, prev = null;
+    for (const f of fps) {
+      let done = false;
+      while (!done && wi < walls.length) {
+        const Wl = walls[wi];
+        let c = Math.max(WALL_GAP + f.Wf / 2, CORNER_MIN, prev ? prev.c + Math.max(STATION_MIN, (prev.f.Wf + f.Wf) / 2 + FURN_GAP) : 0);
+        for (; c + f.Wf / 2 <= Wl.L - WALL_GAP + 1e-6 && c <= Wl.L - CORNER_MIN + 1e-6; c += .1) {
+          const q = rectAt(Wl, c, f); if (!inside(q)) continue;
+          if (rects.some(R => gap(q, R, FURN_GAP)) || fixed.some(R => gap(q, R, FURN_GAP))) continue;
+          slots.push({ wall: Wl.wall, p: q.p, n: Wl.n.clone() }); rects.push(q); prev = { c, f }; done = true; break;
+        }
+        if (!done) { wi++; prev = null; }
+      }
+      if (!done) break;
+    }
+    return { slots, rects };
   }
   buildShell(fast = false) {
     // Metten-like walnut-and-gilt wall bookcases; every hanging scroll gets an open, panelled niche in its bay
@@ -273,16 +316,16 @@ export class BookRoom {
     const specs = this.pedestalSpecs(st.part), single = specs.length <= 1, ped = new THREE.Group(); st.group.add(ped);
     ped.userData = { station: st.part.id, kind: 'pedestal' }; st.ped = ped; st.bays = [];
     const marble = makeMaterial('marble'), solid = o => { o.userData.solid = true; o.castShadow = true; o.receiveShadow = true; ped.add(o); return o; };
+    const P = plinthDims(specs.length);   // the same footprint the floor plan reserved (layout → fitStations)
     if (single) {
-      ped.position.set(0, 0, 1.15);
+      ped.position.set(0, 0, WALL_GAP + P.Df / 2);
       const col = solid(new THREE.Mesh(new THREE.CylinderGeometry(.24, .3, PED_TOP - .065, 32), marble)); col.position.y = (PED_TOP - .065) / 2;
       const capM = solid(new THREE.Mesh(new THREE.CylinderGeometry(.38, .34, .06, 32), marble)); capM.position.y = PED_TOP - .035; capM.castShadow = false;
       const bay = this.makeBay(st, ped, 0, specs[0] || null, { x: 0, z: 0, card: .36, round: true });
       st.spec = bay.spec; st.mini = bay.mini; return;
     }
-    const n = specs.length, cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4)), rows = Math.ceil(n / cols), B = clamp(2.38 / cols, .5, .72), W = cols * B + .12, Dp = rows * B + .12;
-    const z0 = 1.15 - B / 2 - .06;   // the back edge (row 1, nearest the scroll) where the round pedestal's back was
-    ped.position.set(0, 0, z0 + Dp / 2);
+    const { cols, rows, B, W, Dp } = P;
+    ped.position.set(0, 0, WALL_GAP + P.Df / 2);   // the slab's back lip WALL_GAP from the wall
     const gilt = bmat('gilt'), wn = bmat('walnut-dark'), body = new THREE.Group();
     const box = (mat, w, h, d, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); o.position.set(x, y, z); return solid(o); };
     // plinth, body and top slab overlap a few mm (no two faces share a plane); the gilt fillets' tops and bottoms lie inside the body
@@ -375,6 +418,9 @@ export class BookRoom {
   }
   refreshStation(part) {
     const st = this.stations.get(part.id); if (!st) { this.layout(); this.buildStations(); return; }
+    // a different number of demos changes the plinth's footprint: lay the floor out again so nothing overlaps
+    { const i = this.orderedParts().indexOf(part), f0 = this.footprints && this.footprints[i], f1 = plinthDims(this.pedestalSpecs(part).length), R = f0 && (Math.abs(f0.x1 - f0.x0) + Math.abs(f0.z1 - f0.z0)), want = f1.Wf + f1.Df;
+      if (f0 && Math.abs(R - want) > 1e-3) { const D0 = { ...this.data.dims }; this.layout(); if (D0.w !== this.data.dims.w || D0.d !== this.data.dims.d) this.buildShell(); this.buildStations(); return; } }
     const oldMap = st.sheet.material.map; st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part === part)); st.sheet.material.needsUpdate = true; if (oldMap) this.app.retire(() => oldMap.dispose()); this.buildPedestal(st);
   }
   // Live room size: each slider step stretches the built shell to the new size at once and moves every station to

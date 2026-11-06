@@ -706,6 +706,40 @@ export function matchActors(actors, text) {
   const T = new Set(toks(text)); const full = String(text || '').toLowerCase();
   return actors.map(a => { const n = a.name.split(' · ')[0].toLowerCase(); const ts = toks(n); const word = x => T.has(x) || T.has(x + 's') || T.has(x.replace(/s$/, '')); const hit = new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(full) ? 10 : ts.length && ts.every(word) ? ts.length : 0; return { a, hit }; }).filter(x => x.hit > 0).sort((p, q) => q.hit - p.hit).map(x => x.a).slice(0, 5);
 }
+// The teaching subject of a diorama, for the drawing's framing (the same rule as the room's pedestal minis): the actors'
+// boxes (leaving out any actor 8 × larger than the median actor, a ground) mark the focus; a mesh belongs to the subject
+// when its centre lies within that box grown by 30 % and it is at most 2.2 × the box's extent; lines (orbits, rays,
+// traces) when they lie within the box grown by its extent. Without actors: the meshes within 1.6 × the 80th-percentile
+// distance of all mesh centres from their median centre. Everything else (ground planes, hills, rings of trees, rocks
+// round the field) is scenery. Returns { box, hide } in world coordinates; box is what the drawing frames.
+function sketchSubject(ds) {
+  const roots = [ds.world, ds.extras], items = [], lines = [], sizeOf = b => Math.max(b.max.x - b.min.x, b.max.z - b.min.z, b.max.y - b.min.y);
+  roots.forEach(r => r.updateMatrixWorld(true));
+  roots.forEach(r => r.traverse(o => { if (!o.visible || o.userData.isInk || !o.geometry) return; const b = new THREE.Box3().setFromObject(o); if (b.isEmpty() || !isFinite(b.min.x)) return;
+    if (o.isMesh && sizeOf(b) >= 1e-4) items.push({ o, b, c: b.getCenter(V3()), size: Math.max(b.max.x - b.min.x, b.max.z - b.min.z) }); else if (o.isLine || o.isSprite || o.isPoints) lines.push({ o, b }); }));
+  const ab = []; (ds.actors || []).forEach(a => { try { if (a.obj && a.obj.isObject3D) { const b = new THREE.Box3().setFromObject(a.obj); if (!b.isEmpty() && isFinite(b.min.x)) ab.push(b); } else { const q = a.getPos && a.getPos(); if (q && isFinite(q.x)) ab.push(new THREE.Box3(q.clone(), q.clone())); } } catch (e) { } });
+  const focus = new THREE.Box3(), keep = new Set();
+  if (ab.length) { const sz = ab.map(sizeOf).filter(s => s > 1e-3).sort((x, y) => x - y), ms = sz.length ? sz[sz.length >> 1] : .05; ab.forEach(b => { if (sizeOf(b) <= 8 * Math.max(ms, .05)) focus.union(b); }); }   // (symbol pins are points: they mark the focus but do not set the median)
+  let ext = 1;
+  if (!focus.isEmpty()) {
+    const fs = focus.getSize(V3()), fc = focus.getCenter(V3()); ext = Math.max(fs.x, fs.y, fs.z, .3);
+    items.forEach(it => { if (Math.abs(it.c.x - fc.x) <= fs.x / 2 + .3 * ext && Math.abs(it.c.z - fc.z) <= fs.z / 2 + .3 * ext && Math.abs(it.c.y - fc.y) <= fs.y / 2 + .6 * ext && it.size <= 2.2 * ext) keep.add(it.o); });
+  } else if (items.length) {
+    const med = k => { const v = items.map(it => it.c[k]).sort((x, y) => x - y); return v[v.length >> 1]; }, m = V3(med('x'), med('y'), med('z'));
+    items.forEach(it => { it.d = Math.hypot(it.c.x - m.x, it.c.z - m.z); });
+    const d2 = items.map(it => it.d).sort((x, y) => x - y), szm = items.map(it => it.size).sort((x, y) => x - y)[items.length >> 1], R = Math.max(.05, szm * .5, d2[Math.min(d2.length - 1, Math.floor(d2.length * .8))]);
+    items.forEach(it => { if (it.d <= 1.6 * R + .05 && it.size <= 4 * Math.max(R, szm, .25)) keep.add(it.o); });
+    ext = Math.max(R, .3);
+  }
+  if (!keep.size) items.forEach(it => keep.add(it.o));
+  const box = new THREE.Box3(); items.forEach(it => { if (keep.has(it.o)) box.union(it.b); });
+  if (box.isEmpty()) return null;
+  // a kept mesh's ancestors and descendants stay visible; scenery is hidden at its top-most hidden node
+  const hide = items.filter(it => !keep.has(it.o)).map(it => it.o).filter(o => { let k = false; o.traverse(q => { if (q !== o && keep.has(q)) k = true; }); return !k; });
+  const grow = box.clone().expandByScalar(ext);
+  lines.forEach(L => { if (grow.containsBox(L.b)) { if (L.o.isLine) box.union(L.b); } else hide.push(L.o); });
+  return { box, hide };
+}
 export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
   if (sketchCache.has(key)) return sketchCache.get(key);
@@ -727,6 +761,23 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   m.setProgress(0); ds.step(0); m.setProgress(0);
   const paper = new THREE.Color('#efe9dc'); const keepBg = ds.scene.background, keepFog = ds.scene.fog; ds.scene.background = paper; ds.scene.fog = null;
   ds.scene.traverse(o => { if (o.isPoints || (o.userData.decorBase)) o.visible = false; });
+  // the overview drawing frames the teaching subject, not the whole world: scenery is left out and the subject's box
+  // fills ~76 % of the card (the larger of its height and its width over the aspect), seen along the technique's own
+  // drawing direction and lens
+  if (!opts.focusText) {
+    const S = sketchSubject(ds);
+    if (S) {
+      S.hide.forEach(o => { o.visible = false; }); ((ds.env && ds.env.bgObjects) || []).forEach(o => { o.visible = false; });
+      const fk = m.flatKey, dir = fk.dir.clone().normalize(), up0 = Math.abs(dir.y) > .95 ? V3(0, 0, -1) : V3(0, 1, 0), right = up0.clone().cross(dir).normalize(), up = dir.clone().cross(right).normalize();
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9; const b = S.box;
+      for (let k = 0; k < 8; k++) { const p = V3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z), x = p.dot(right), y = p.dot(up), z = p.dot(dir); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      // the title strip covers the bottom 44 px: the subject is fitted to, and centred in, the area above it
+      const hu = h - 44, FILL = .76, useH = Math.max(y1 - y0, (x1 - x0) * hu / w, .05) / FILL, fullH = useH * h / hu, th = Math.tan(fk.fov * Math.PI / 360), dist = fullH / 2 / th;
+      const tgt = right.clone().multiplyScalar((x0 + x1) / 2).addScaledVector(up, (y0 + y1) / 2 - fullH * 22 / h).addScaledVector(dir, (z0 + z1) / 2);
+      cam.fov = fk.fov; cam.up.copy(up0); cam.position.copy(tgt).addScaledVector(dir, dist); cam.lookAt(tgt);
+      const depth = Math.max(z1 - z0, .1); cam.near = Math.max(.01, dist - depth * 2); cam.far = dist + depth * 2 + 1; cam.updateProjectionMatrix();
+    }
+  }
   const rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 }); const r = gfx.renderer;
   const prevT = r.getRenderTarget(), prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
   r.setRenderTarget(rt); r.render(ds.scene, cam); r.setRenderTarget(prevT); r.toneMapping = prevTM;

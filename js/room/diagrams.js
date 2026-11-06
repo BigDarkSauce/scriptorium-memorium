@@ -1,10 +1,12 @@
 // Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
-import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath } from '../util.js';
-const TC = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
-export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg'];
+import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML } from '../util.js';
+import { validateFigure } from './figspec.js';
+const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
+export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
 export function SVGDEMO(spec,host,fail){
   const NS='http://www.w3.org/2000/svg';const W=600,H=340,P=36;
+  if(spec.type==='figure'){const w=el('div',{class:'svgdemo'});host.append(w);return renderFigure(spec.figure||spec,w,{})}
   const t=spec.type;const wrap=el('div',{class:'svgdemo'});host.append(wrap);
   const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   wrap.append(el('div',{class:'svgwrap'},[svg]));
@@ -179,3 +181,193 @@ function normParams(p){const o={};if(!p)return o;for(const k in p){if(!/^[A-Za-z
 
 
 export { normParams };
+
+// ---------------------------------------------------------------- figures (explanatory drawings in the scroll)
+// renderFigure(spec, host, {small, figStore}) draws one figure spec (js/room/figspec.js, schema/figure.schema.json) as
+// SVG on parchment: flow, plot, distribution, bars, hist, scatter, boxplot, numberline, tree, venn, timeline, sketch,
+// codetrace, table, contrast, or the PDF's own figure (pdf). Labels are typeset with svgMath (m2 → m₂, x^2 → x²).
+// "animate" makes a short loop (a token running through a flow, a curve sweeping a parameter, samples filling a
+// histogram, points arriving before the fitted line, code executing line by line); with prefers-reduced-motion or the
+// Calm preference the final frame is drawn and a ▶ button plays the loop on request. Loops stop when the figure leaves
+// the page and pause while it is scrolled out of view. Returns a cleanup function.
+const FC = { ink: '#2a1e15', soft: '#5b4532', lapis: '#2d5b8e', rubric: '#9c3a28', verd: '#3f7d6e', brass: '#8f733a', violet: '#6a4a8a', bg: '#fbf6ea', grid: 'rgba(90,60,30,.13)', fillA: 'rgba(45,91,142,.22)', fillR: 'rgba(156,58,40,.2)' };
+const SERIES = [FC.lapis, FC.rubric, FC.verd, FC.brass, FC.violet];
+export function prefersCalm() { try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return true; const v = JSON.parse(localStorage.getItem('scriptorium.view') || '{}'); return v.motion === 'calm' || v.calm === true; } catch (e) { return false; } }
+const lgamma = z => { const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, .1208650973866179e-2, -.5395239384953e-5]; let x = z, y = z, t = x + 5.5; t -= (x + .5) * Math.log(t); let s = 1.000000000190015; for (const k of c) s += k / ++y; return -t + Math.log(2.5066282746310005 * s / x); };
+export function densityOf(f) {
+  const P = f.params, d = f.dist;
+  if (d === 'normal') return { cont: true, lo: P.mean - 4 * P.sd, hi: P.mean + 4 * P.sd, f: x => Math.exp(-((x - P.mean) ** 2) / (2 * P.sd * P.sd)) / (P.sd * Math.sqrt(2 * Math.PI)), sample: () => P.mean + P.sd * Math.sqrt(-2 * Math.log(Math.random() + 1e-12)) * Math.cos(2 * Math.PI * Math.random()) };
+  if (d === 't') { const v = P.df; return { cont: true, lo: -5, hi: 5, f: x => Math.exp(lgamma((v + 1) / 2) - lgamma(v / 2)) / Math.sqrt(v * Math.PI) * Math.pow(1 + x * x / v, -(v + 1) / 2) }; }
+  if (d === 'chisq') { const k = P.df; return { cont: true, lo: 0, hi: Math.max(8, k + 4 * Math.sqrt(2 * k)), f: x => x <= 0 ? 0 : Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.log(2) - lgamma(k / 2)) }; }
+  if (d === 'uniform') return { cont: true, lo: P.min - (P.max - P.min) * .25, hi: P.max + (P.max - P.min) * .25, f: x => x >= P.min && x <= P.max ? 1 / (P.max - P.min) : 0, sample: () => P.min + Math.random() * (P.max - P.min) };
+  if (d === 'exponential') return { cont: true, lo: 0, hi: 5 / P.rate, f: x => x < 0 ? 0 : P.rate * Math.exp(-P.rate * x), sample: () => -Math.log(1 - Math.random()) / P.rate };
+  if (d === 'binomial') { const n = Math.round(P.size), p = P.prob; const lc = k => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1); const pm = k => k < 0 || k > n ? 0 : p === 0 ? (k === 0 ? 1 : 0) : p === 1 ? (k === n ? 1 : 0) : Math.exp(lc(k) + k * Math.log(p) + (n - k) * Math.log(1 - p)); let hi = n; while (hi > 6 && pm(hi) < 1e-4 && hi > n * p) hi--; return { cont: false, lo: 0, hi: Math.max(6, hi), f: pm, sample: () => { let c = 0; for (let i = 0; i < n; i++) if (Math.random() < p) c++; return c; } }; }
+  if (d === 'poisson') { const l = P.lambda; const pm = k => k < 0 ? 0 : Math.exp(k * Math.log(l) - l - lgamma(k + 1)); let hi = Math.ceil(l + 4 * Math.sqrt(l) + 3); return { cont: false, lo: 0, hi, f: pm, sample: () => { let k = 0, p = 1; const L = Math.exp(-l); do { k++; p *= Math.random(); } while (p > L); return k - 1; } }; }
+  return { cont: true, lo: -1, hi: 1, f: () => 0 };
+}
+export function renderFigure(spec, host, { small = false, figStore = null } = {}) {
+  const NS = 'http://www.w3.org/2000/svg', V = validateFigure(spec), f = V.fig;
+  const box = el('figure', { class: 'fig' + (small ? ' small' : '') + (f && f.kind ? ' fig-' + f.kind : '') }); host.append(box);
+  if (!V.ok && !(f && f.kind === 'pdf')) { box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + V.errors.join('; ') })); return () => {}; }
+  const capEl = () => f.caption ? el('figcaption', { class: 'fig-cap' }, [f.ref ? el('span', { class: 'pdf-tag', text: 'From the PDF · ' + f.ref }) : null, f.extra || (f.source && f.source.outside) ? el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }) : null, el('span', { html: ' ' + mathHTML(f.caption) })]) : null;
+  if (f.kind === 'pdf') {
+    const P = figStore && figStore.get(f.id);
+    if (P && P.dataUrl) { box.classList.add('fig-pdf'); box.append(el('img', { src: P.dataUrl, alt: (P.caption || P.label || 'Figure') + ' (from the PDF, page ' + P.page + ')', loading: 'lazy' }), el('figcaption', { class: 'fig-cap' }, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + P.page }), el('span', { text: ' ' + (f.caption || P.caption || P.label || '') })])); }
+    else box.append(el('div', { class: 'fig-bad', text: 'The PDF figure ' + f.id + ' is not stored in this browser.' }));
+    return () => {};
+  }
+  const W = small ? 340 : 600, H = small ? 190 : f.kind === 'codetrace' ? Math.max(170, 40 + f.lines.length * 22 + (f.output.length ? 16 + f.output.length * 16 : 0)) : f.kind === 'table' ? 36 + (f.rows.length + 1) * 22 : f.kind === 'contrast' ? 150 : f.kind === 'flow' && f.dir === 'TB' ? 70 + Math.min(6, f.nodes.length) * 58 : 300;
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', f.alt || f.caption || f.kind);
+  box.append(el('div', { class: 'fig-frame' }, [svg])); const c = capEl(); if (c) box.append(c);
+  const fs = small ? 10 : 11.5;
+  const mk = (n, a = {}, parent = svg) => { const e = document.createElementNS(NS, n); for (const k in a) if (a[k] != null) e.setAttribute(k, a[k]); parent.append(e); return e; };
+  const txt = (x, y, s, a = {}, parent) => { const e = mk('text', { x, y, 'font-size': fs, fill: FC.ink, 'font-family': 'Alegreya, Georgia, serif', ...a }, parent); svgMath(e, String(s)); return e; };
+  const wrapText = (s, max) => { const w = String(s).split(/\s+/), out = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > max && cur) { out.push(cur); cur = x; } else cur = (cur + ' ' + x).trim(); }); if (cur) out.push(cur); return out; };
+  const multi = (x, y, s, max, a = {}, parent, lh = fs * 1.25) => { const L = wrapText(s, max).slice(0, 4); L.forEach((l, i) => txt(x, y + (i - (L.length - 1) / 2) * lh, l, a, parent)); return L.length; };
+  const defs = mk('defs'); defs.innerHTML = `<marker id="fa${uid()}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="${FC.soft}"/></marker>`; const arrowId = defs.firstChild.id;
+  const layer = mk('g'); const clear = () => { layer.innerHTML = ''; };
+  // axes helper for the chart kinds
+  const P0 = { l: small ? 34 : 46, r: small ? 10 : 16, t: small ? 14 : 18, b: small ? 30 : 38 };
+  const axes = (xr, yr, { xlabel, ylabel, logx, cats } = {}) => {
+    const X = v => P0.l + ((logx ? Math.log10(v) : v) - (logx ? Math.log10(xr[0]) : xr[0])) / ((logx ? Math.log10(xr[1]) - Math.log10(xr[0]) : xr[1] - xr[0]) || 1) * (W - P0.l - P0.r), Y = v => H - P0.b - (v - yr[0]) / ((yr[1] - yr[0]) || 1) * (H - P0.t - P0.b);
+    const g = mk('g', {}, layer), tick = r => { const s = niceStep(r[1] - r[0]); const out = []; for (let v = Math.ceil(r[0] / s) * s; v <= r[1] + s * 1e-6; v += s) out.push(+v.toFixed(10)); return out; };
+    tick(yr).forEach(v => { mk('line', { x1: P0.l, x2: W - P0.r, y1: Y(v), y2: Y(v), stroke: FC.grid }, g); txt(P0.l - 4, Y(v) + 3, fmt(v, 3), { 'text-anchor': 'end', 'font-size': fs - 1.5, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }, g); });
+    if (!cats) (logx ? [1e-3, 1e-2, .1, 1, 10, 100, 1e3, 1e4].filter(v => v >= xr[0] && v <= xr[1]) : tick(xr)).forEach(v => txt(X(v), H - P0.b + 13, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 1.5, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }, g));
+    mk('line', { x1: P0.l, x2: W - P0.r, y1: H - P0.b, y2: H - P0.b, stroke: FC.soft }, g); mk('line', { x1: P0.l, x2: P0.l, y1: P0.t, y2: H - P0.b, stroke: FC.soft }, g);
+    if (xlabel) txt(W - P0.r, H - 4, xlabel, { 'text-anchor': 'end', 'font-style': 'italic', 'font-size': fs - .5 }, g);
+    if (ylabel) txt(P0.l + 4, P0.t + 2, ylabel, { 'font-style': 'italic', 'font-size': fs - .5 }, g);
+    return { X, Y };
+  };
+  const pathOf = (fn, xr, X, Y, yr) => { let d = '', pen = false; for (let i = 0; i <= 240; i++) { const x = xr[0] + (xr[1] - xr[0]) * i / 240, y = fn(x); if (!isFinite(y) || y < yr[0] - (yr[1] - yr[0]) || y > yr[1] + (yr[1] - yr[0])) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(x).toFixed(1) + ' ' + Y(Math.max(yr[0] - (yr[1] - yr[0]) * .02, Math.min(yr[1] + (yr[1] - yr[0]) * .02, y))).toFixed(1); pen = true; } return d; };
+  const legend = rows => { if (!rows.length) return; const g = mk('g', {}, layer), w = Math.min(W * .45, Math.max(...rows.map(r => r.n.length)) * (fs * .58) + 28), x0 = W - P0.r - w - 4, y0 = P0.t + 4; mk('rect', { x: x0, y: y0, width: w, height: rows.length * (fs + 5) + 6, rx: 3, fill: 'rgba(251,246,234,.9)', stroke: FC.grid }, g); rows.forEach((r, i) => { const y = y0 + 5 + (i + .75) * (fs + 5); if (r.dot) mk('circle', { cx: x0 + 12, cy: y - 3, r: 3.2, fill: r.c }, g); else mk('rect', { x: x0 + 6, y: y - 5, width: 12, height: 3, fill: r.c }, g); txt(x0 + 24, y, r.n, { 'font-size': fs - 1 }, g); }); };
+  let draw = () => {}, loopT = 0, animated = false;
+  const k = f.kind;
+  if (k === 'flow') {
+    const ids = f.nodes.map(n => n.id), indeg = new Map(ids.map(i => [i, 0])); f.edges.forEach(e => indeg.set(e.to, indeg.get(e.to) + 1));
+    const layerOf = new Map(); const order = [...ids]; let changed = true, guard = 0; ids.forEach(i => layerOf.set(i, 0));
+    while (changed && guard++ < 30) { changed = false; f.edges.forEach(e => { if (ids.indexOf(e.to) > ids.indexOf(e.from) || indeg.get(e.from) === 0) { const v = layerOf.get(e.from) + 1; if (v > layerOf.get(e.to) && v < 12) { layerOf.set(e.to, v); changed = true; } } }); }
+    const L = Math.max(...layerOf.values()) + 1, cols = [...Array(L)].map(() => []); order.forEach(i => cols[layerOf.get(i)].push(i));
+    const LR = f.dir !== 'TB', pos = new Map(), nw = LR ? Math.min(150, (W - 20) / L - 22) : Math.min(260, W - 60), nh = LR ? 54 : 42;
+    cols.forEach((col, li) => col.forEach((id, j) => { const n = col.length; pos.set(id, LR ? { x: 10 + (li + .5) * (W - 20) / L, y: (j + .5) * H / n } : { x: (j + .5) * W / n, y: 10 + (li + .5) * (H - 20) / L }); }));
+    const nodeW = LR ? nw : Math.min(nw, W / Math.max(...cols.map(c => c.length)) - 18);
+    const edgePath = e => { const a = pos.get(e.from), b = pos.get(e.to); if (LR) { const x1 = a.x + nodeW / 2, x2 = b.x - nodeW / 2 - 2; return `M${x1} ${a.y} C${(x1 + x2) / 2} ${a.y} ${(x1 + x2) / 2} ${b.y} ${x2} ${b.y}`; } const y1 = a.y + nh / 2, y2 = b.y - nh / 2 - 2; return `M${a.x} ${y1} C${a.x} ${(y1 + y2) / 2} ${b.x} ${(y1 + y2) / 2} ${b.x} ${y2}`; };
+    const paths = [];
+    draw = t => { clear();
+      f.edges.forEach((e, i) => { const p = mk('path', { d: edgePath(e), fill: 'none', stroke: FC.soft, 'stroke-width': 1.4, 'marker-end': `url(#${arrowId})` }, layer); paths[i] = p; if (e.label) { const a = pos.get(e.from), b = pos.get(e.to); txt((a.x + b.x) / 2, (a.y + b.y) / 2 - 5, e.label, { 'text-anchor': 'middle', 'font-size': fs - 1.5, fill: FC.rubric, 'font-style': 'italic' }); } });
+      const hot = t == null ? -1 : Math.floor(t / 1.1) % f.nodes.length;
+      f.nodes.forEach((n, i) => { const p = pos.get(n.id); mk('rect', { x: p.x - nodeW / 2, y: p.y - nh / 2, width: nodeW, height: nh, rx: 8, fill: i === hot ? '#f3e3b8' : '#fffaf0', stroke: i === hot ? FC.rubric : FC.lapis, 'stroke-width': i === hot ? 2 : 1.3 }, layer); multi(p.x, p.y + 3 - (n.note ? 6 : 0), n.label, Math.max(10, Math.floor(nodeW / (fs * .52))), { 'text-anchor': 'middle' }); if (n.note) txt(p.x, p.y + nh / 2 - 6, n.note, { 'text-anchor': 'middle', 'font-size': fs - 2, fill: FC.soft, 'font-style': 'italic' }); });
+      if (t != null && f.edges.length) { const e = f.edges[Math.floor(t / 1.1) % f.edges.length], p = paths[f.edges.indexOf(e)]; if (p && p.getTotalLength) { try { const Lp = p.getTotalLength(), q = p.getPointAtLength(Lp * ((t % 1.1) / 1.1)); mk('circle', { cx: q.x, cy: q.y, r: 4.5, fill: FC.rubric }, layer); } catch (x) { } } }
+    };
+    animated = !!f.animate;
+  } else if (k === 'plot') {
+    const pk = f.animate ? f.animate.param : null; const fns = f.curves.map(c => compile(c.expr, pk ? ['x', pk] : ['x']));
+    let yr = f.y; if (!yr) { let lo = Infinity, hi = -Infinity; const pv = pk ? [f.animate.from, f.animate.to] : [0]; fns.forEach(fn => pv.forEach(a => { for (let i = 0; i <= 120; i++) { const y = fn(f.x[0] + (f.x[1] - f.x[0]) * i / 120, a); if (isFinite(y)) { lo = Math.min(lo, y); hi = Math.max(hi, y); } } })); f.points.forEach(p => { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }); if (!isFinite(lo)) { lo = -1; hi = 1; } const pad = (hi - lo || 1) * .1; yr = [lo - pad, hi + pad]; if (lo >= 0 && lo < (hi - lo) * .3) yr[0] = 0; }
+    draw = t => { clear(); const { X, Y } = axes(f.x, yr, f); const a = pk ? f.animate.from + (f.animate.to - f.animate.from) * (t == null ? 1 : (1 - Math.cos(t / f.animate.period * 2 * Math.PI)) / 2) : 0;
+      if (f.shade) { const sf = compile(f.shade.expr, pk ? ['x', pk] : ['x']), a0 = Math.max(f.x[0], f.shade.from), b0 = Math.min(f.x[1], f.shade.to); let d = `M${X(a0)} ${Y(Math.max(yr[0], 0))}`; for (let i = 0; i <= 80; i++) { const x = a0 + (b0 - a0) * i / 80; d += `L${X(x)} ${Y(Math.max(yr[0], Math.min(yr[1], sf(x, a))))}`; } d += `L${X(b0)} ${Y(Math.max(yr[0], 0))}Z`; mk('path', { d, fill: FC.fillA }, layer); if (f.shade.label) txt(X((a0 + b0) / 2), Y((yr[0] + yr[1]) / 2), f.shade.label, { 'text-anchor': 'middle', fill: FC.lapis }); }
+      f.vlines.forEach(v => { mk('line', { x1: X(v.x), x2: X(v.x), y1: P0.t, y2: H - P0.b, stroke: FC.rubric, 'stroke-dasharray': '4 3' }, layer); if (v.label) txt(X(v.x) + 4, P0.t + 10, v.label, { fill: FC.rubric, 'font-size': fs - 1 }); });
+      f.hlines.forEach(v => { mk('line', { x1: P0.l, x2: W - P0.r, y1: Y(v.y), y2: Y(v.y), stroke: FC.rubric, 'stroke-dasharray': '4 3' }, layer); if (v.label) txt(P0.l + 6, Y(v.y) - 4, v.label, { fill: FC.rubric, 'font-size': fs - 1 }); });
+      fns.forEach((fn, i) => mk('path', { d: pathOf(x => fn(x, a), f.x, X, Y, yr), fill: 'none', stroke: SERIES[i % 5], 'stroke-width': small ? 1.8 : 2.2, 'stroke-dasharray': f.curves[i].dash ? '6 4' : null }, layer));
+      f.points.forEach(p => { mk('circle', { cx: X(p[0]), cy: Y(p[1]), r: 3.4, fill: FC.bg, stroke: FC.ink, 'stroke-width': 1.4 }, layer); if (p[2]) txt(X(p[0]) + 5, Y(p[1]) - 5, p[2], { 'font-size': fs - 1.5 }); });
+      if (pk) txt(W - P0.r - 4, H - P0.b - 6, `${pk} = ${fmt(a, 3)}`, { 'text-anchor': 'end', fill: FC.rubric, 'font-family': 'IBM Plex Mono, monospace', 'font-size': fs - 1 });
+      legend(f.curves.map((c, i) => ({ n: c.label || '', c: SERIES[i % 5] })).filter(r => r.n).concat(f.points.length && f.pointsLabel ? [{ n: f.pointsLabel, c: FC.ink, dot: true }] : []));
+    };
+    animated = !!pk;
+  } else if (k === 'distribution') {
+    const D = densityOf(f), xr = [D.lo, D.hi]; let peak = 0; if (D.cont) for (let i = 0; i <= 200; i++) peak = Math.max(peak, D.f(xr[0] + (xr[1] - xr[0]) * i / 200)); else for (let x = 0; x <= D.hi; x++) peak = Math.max(peak, D.f(x));
+    const yr = [0, peak * 1.25 || 1], inShade = x => f.shade && (f.shade.from == null || x >= f.shade.from - 1e-9) && (f.shade.to == null || x <= f.shade.to + 1e-9);
+    let samples = [];
+    draw = t => { clear(); const { X, Y } = axes(D.cont ? xr : [-.6, D.hi + .6], yr, { xlabel: f.xlabel || 'x', ylabel: D.cont ? 'density' : 'P(X = x)' });
+      let area = 0;
+      if (D.cont) { if (f.shade) { const a0 = Math.max(xr[0], f.shade.from ?? xr[0]), b0 = Math.min(xr[1], f.shade.to ?? xr[1]); let d = `M${X(a0)} ${Y(0)}`; for (let i = 0; i <= 100; i++) { const x = a0 + (b0 - a0) * i / 100; d += `L${X(x)} ${Y(D.f(x))}`; area += i ? D.f(x) * (b0 - a0) / 100 : 0; } mk('path', { d: d + `L${X(b0)} ${Y(0)}Z`, fill: FC.fillA }, layer); } mk('path', { d: pathOf(D.f, xr, X, Y, yr), fill: 'none', stroke: FC.lapis, 'stroke-width': 2.2 }, layer); }
+      else { const bw = Math.max(3, (X(1) - X(0)) * .7); for (let x = 0; x <= D.hi; x++) { const p = D.f(x), sh = inShade(x); if (sh) area += p; mk('rect', { x: X(x) - bw / 2, y: Y(p), width: bw, height: Y(0) - Y(p), fill: sh ? FC.rubric : 'rgba(45,91,142,.35)' }, layer); if (x <= 14 || x % 2 === 0) txt(X(x), H - P0.b + 13, x, { 'text-anchor': 'middle', 'font-size': fs - 1.5, fill: FC.soft }); } }
+      f.marks.forEach(m => { mk('line', { x1: X(m.x), x2: X(m.x), y1: P0.t, y2: H - P0.b, stroke: FC.rubric, 'stroke-dasharray': '4 3' }, layer); txt(X(m.x) + 4, P0.t + 12, m.label || fmt(m.x, 3), { fill: FC.rubric, 'font-size': fs - 1 }); });
+      if (f.shade) txt(W - P0.r - 6, P0.t + 14, (f.shade.label ? f.shade.label + ' = ' : 'shaded area = ') + fmt(area, 3), { 'text-anchor': 'end', fill: D.cont ? FC.lapis : FC.rubric, 'font-family': 'IBM Plex Mono, monospace', 'font-size': fs - 1 });
+      if (t != null && D.sample) { const want = Math.min(400, Math.floor(t * 30) % 420); if (want < samples.length) samples = []; while (samples.length < want) samples.push(D.sample()); const bins = new Map(); samples.forEach(v => { const b = D.cont ? Math.round(v / ((xr[1] - xr[0]) / 40)) : v; bins.set(b, (bins.get(b) || 0) + 1); }); bins.forEach((c, b) => { const x = D.cont ? b * (xr[1] - xr[0]) / 40 : b; for (let j = 0; j < c && j < 60; j++) mk('circle', { cx: X(x), cy: H - P0.b - 3 - j * 4, r: 1.7, fill: 'rgba(42,30,21,.55)' }, layer); }); txt(P0.l + 6, H - P0.b - 6, `${samples.length} random draws`, { 'font-size': fs - 2, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }); }
+    };
+    animated = !!f.animate && !!D.sample;
+  } else if (k === 'bars' || k === 'hist') {
+    let cats, series;
+    if (k === 'hist') { let bins = f.bins; if (!bins.length) { const v = f.values, lo = Math.min(...v), hi = Math.max(...v), nb = Math.max(4, Math.min(20, Math.ceil(Math.log2(v.length) + 1))), w = (hi - lo) / nb || 1; bins = [...Array(nb)].map((_, i) => ({ from: lo + i * w, to: lo + (i + 1) * w, count: v.filter(x => x >= lo + i * w && (x < lo + (i + 1) * w || i === nb - 1 && x <= hi)).length })); } cats = bins.map(b => fmt(b.from, 3)); series = [{ name: f.ylabel || 'count', values: bins.map(b => b.count) }]; }
+    else { cats = f.categories; series = f.series; }
+    const max = Math.max(1e-9, ...series.flatMap(s => s.values)), min = Math.min(0, ...series.flatMap(s => s.values));
+    draw = () => { clear(); const { X, Y } = axes([0, cats.length], [min, max * 1.12], { cats: true, xlabel: f.xlabel, ylabel: f.ylabel }); const gw = (X(1) - X(0)), bw = k === 'hist' ? gw : gw * .78 / series.length;
+      cats.forEach((cname, i) => { series.forEach((s, j) => { const v = s.values[i] ?? 0, x0 = k === 'hist' ? X(i) : X(i) + gw * .11 + j * bw; mk('rect', { x: x0, y: Y(Math.max(0, v)), width: Math.max(1, bw - (k === 'hist' ? 1 : 2)), height: Math.abs(Y(v) - Y(0)), fill: f.highlight && f.highlight.includes(i) ? FC.rubric : SERIES[j % 5], 'fill-opacity': .82 }, layer); if (k === 'bars' && cats.length <= 12 && !small) txt(x0 + bw / 2, Y(Math.max(0, v)) - 3, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 2.5, fill: FC.soft }); }); if (k === 'bars' || i % Math.ceil(cats.length / 10) === 0) txt(k === 'hist' ? X(i) : X(i + .5), H - P0.b + 13, cname, { 'text-anchor': k === 'hist' ? 'middle' : 'middle', 'font-size': fs - 2, fill: FC.soft }); });
+      if (series.length > 1) legend(series.map((s, j) => ({ n: s.name, c: SERIES[j % 5] }))); };
+  } else if (k === 'scatter') {
+    const xs = f.points.map(p => p[0]), ys = f.points.map(p => p[1]); const pad = (a, lo, hi) => [lo - (hi - lo) * .08, hi + (hi - lo) * .08];
+    const xr = f.logx ? [Math.min(...xs) / 2, Math.max(...xs) * 2] : pad(0, Math.min(...xs), Math.max(...xs)), yr = pad(0, Math.min(...ys), Math.max(...ys));
+    let fit = null; if (f.fit === 'ols' || f.fit === true) { const n = xs.length, tx = f.logx ? xs.map(Math.log10) : xs, mx = tx.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n, sxy = tx.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0), sxx = tx.reduce((a, x) => a + (x - mx) ** 2, 0); fit = { slope: sxy / (sxx || 1), intercept: my - sxy / (sxx || 1) * mx }; } else if (f.fit) fit = f.fit;
+    const yhat = x => fit.intercept + fit.slope * (f.logx ? Math.log10(x) : x);
+    draw = t => { clear(); const { X, Y } = axes(xr, yr, f); const shown = t == null ? f.points.length : Math.min(f.points.length, Math.floor(t * 4) % (f.points.length + 8));
+      f.points.slice(0, shown).forEach(p => { if (fit && f.residuals) mk('line', { x1: X(p[0]), x2: X(p[0]), y1: Y(p[1]), y2: Y(yhat(p[0])), stroke: FC.rubric, 'stroke-dasharray': '2 2' }, layer); mk('circle', { cx: X(p[0]), cy: Y(p[1]), r: 3.4, fill: FC.lapis, 'fill-opacity': .8 }, layer); if (p[2]) txt(X(p[0]) + 5, Y(p[1]) - 5, p[2], { 'font-size': fs - 2 }); });
+      if (fit && shown >= f.points.length) { mk('line', { x1: X(xr[0]), y1: Y(yhat(xr[0])), x2: X(xr[1]), y2: Y(yhat(xr[1])), stroke: FC.ink, 'stroke-width': 1.8 }, layer); txt(W - P0.r - 4, P0.t + 12, `ŷ = ${fmt(fit.intercept, 3)} + ${fmt(fit.slope, 3)}${f.logx ? '·log10 x' : 'x'}`, { 'text-anchor': 'end', 'font-family': 'IBM Plex Mono, monospace', 'font-size': fs - 1.5 }); } };
+    animated = !!f.animate;
+  } else if (k === 'boxplot') {
+    const lo = Math.min(...f.groups.map(g => Math.min(g.min, ...(g.outliers || [])))), hi = Math.max(...f.groups.map(g => Math.max(g.max, ...(g.outliers || []))));
+    draw = () => { clear(); const { X, Y } = axes([0, f.groups.length], [lo - (hi - lo) * .08, hi + (hi - lo) * .08], { cats: true, xlabel: f.xlabel, ylabel: f.ylabel }); const gw = X(1) - X(0);
+      f.groups.forEach((g, i) => { const cx = X(i + .5), w = Math.min(60, gw * .5); mk('line', { x1: cx, x2: cx, y1: Y(g.min), y2: Y(g.max), stroke: FC.soft }, layer); [g.min, g.max].forEach(v => mk('line', { x1: cx - w / 4, x2: cx + w / 4, y1: Y(v), y2: Y(v), stroke: FC.soft }, layer)); mk('rect', { x: cx - w / 2, y: Y(g.q3), width: w, height: Y(g.q1) - Y(g.q3), fill: FC.fillA, stroke: FC.lapis }, layer); mk('line', { x1: cx - w / 2, x2: cx + w / 2, y1: Y(g.median), y2: Y(g.median), stroke: FC.ink, 'stroke-width': 2.4 }, layer); (g.outliers || []).forEach(o => mk('circle', { cx, cy: Y(o), r: 2.6, fill: 'none', stroke: FC.rubric }, layer)); txt(cx, H - P0.b + 13, g.label, { 'text-anchor': 'middle', 'font-size': fs - 2, fill: FC.soft }); }); };
+  } else if (k === 'numberline') {
+    const y0 = H * .55, X = v => 30 + (v - f.min) / (f.max - f.min) * (W - 60), step = f.step || niceStep(f.max - f.min);
+    draw = t => { clear(); mk('line', { x1: 20, x2: W - 20, y1: y0, y2: y0, stroke: FC.ink, 'stroke-width': 1.4, 'marker-end': `url(#${arrowId})` }, layer);
+      for (let v = Math.ceil(f.min / step) * step; v <= f.max + 1e-9; v += step) { mk('line', { x1: X(v), x2: X(v), y1: y0 - 5, y2: y0 + 5, stroke: FC.ink }, layer); txt(X(v), y0 + 19, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 1, 'font-family': 'IBM Plex Mono, monospace' }); }
+      f.intervals.forEach((iv, i) => { const yy = y0 - 18 - i * 16, c = SERIES[i % 5]; mk('line', { x1: X(iv.from), x2: X(iv.to), y1: yy, y2: yy, stroke: c, 'stroke-width': 5, 'stroke-linecap': 'butt', opacity: .8 }, layer); [[iv.from, iv.closedL], [iv.to, iv.closedR]].forEach(([v, cl]) => mk('circle', { cx: X(v), cy: yy, r: 4.5, fill: cl ? c : FC.bg, stroke: c, 'stroke-width': 2 }, layer)); if (iv.label) txt((X(iv.from) + X(iv.to)) / 2, yy - 8, iv.label, { 'text-anchor': 'middle', fill: c, 'font-size': fs - 1 }); });
+      f.points.forEach(p => { mk('circle', { cx: X(p.x), cy: y0, r: 5, fill: p.open ? FC.bg : FC.rubric, stroke: FC.rubric, 'stroke-width': 2 }, layer); if (p.label) txt(X(p.x), y0 + 36, p.label, { 'text-anchor': 'middle', fill: FC.rubric, 'font-size': fs - 1 }); });
+      if (t != null) { const v = f.min + (f.max - f.min) * ((Math.sin(t * .8) + 1) / 2); mk('path', { d: `M${X(v)} ${y0 - 9}l-6 -10h12z`, fill: FC.verd }, layer); txt(X(v), y0 - 24 - f.intervals.length * 16, 'x = ' + fmt(v, 2) + (f.intervals.length ? '  ' + f.intervals.map(iv => (v > iv.from || iv.closedL && v === iv.from) && (v < iv.to || iv.closedR && v === iv.to) ? '✓' : '✗').join(' ') : ''), { 'text-anchor': 'middle', fill: FC.verd, 'font-size': fs - 1, 'font-family': 'IBM Plex Mono, monospace' }); } };
+    animated = !!f.animate;
+  } else if (k === 'tree') {
+    const leaves = n => n.children.length ? n.children.reduce((a, c) => a + leaves(c), 0) : 1, depth = n => 1 + Math.max(0, ...n.children.map(depth));
+    const D = depth(f.root), total = leaves(f.root), lh = (H - 30) / D;
+    draw = () => { clear(); const place = (n, d, x0, x1) => { const x = (x0 + x1) / 2, y = 22 + d * lh; let acc = x0; n.children.forEach(c => { const w = (x1 - x0) * leaves(c) / leaves(n); const cx = acc + w / 2, cy = 22 + (d + 1) * lh; mk('line', { x1: x, y1: y + 10, x2: cx, y2: cy - 12, stroke: FC.soft, 'stroke-width': 1.3 }, layer); if (c.edge) txt((x + cx) / 2 + 4, (y + cy) / 2, c.edge, { 'font-size': fs - 2, fill: FC.rubric, 'font-style': 'italic' }); place(c, d + 1, acc, acc + w); acc += w; });
+        const lw = Math.min((x1 - x0) - 6, 170); mk('rect', { x: x - lw / 2, y: y - 11, width: lw, height: 22, rx: 6, fill: n.children.length ? '#fffaf0' : '#eef4f0', stroke: n.children.length ? FC.lapis : FC.verd }, layer); txt(x, y + 4, wrapText(n.label, Math.max(6, Math.floor(lw / (fs * .55))))[0], { 'text-anchor': 'middle', 'font-size': fs - 1 }); };
+      place(f.root, 0, 4, W - 4); void total; };
+  } else if (k === 'venn') {
+    const n = f.sets.length, R = Math.min(H * .34, W * .2), cx = W / 2, cy = H / 2 + (n === 3 ? 10 : 0), C = n === 2 ? [[cx - R * .55, cy], [cx + R * .55, cy]] : [[cx - R * .55, cy - R * .35], [cx + R * .55, cy - R * .35], [cx, cy + R * .55]];
+    draw = () => { clear(); mk('rect', { x: 8, y: 8, width: W - 16, height: H - 16, rx: 8, fill: 'none', stroke: FC.grid }, layer); if (f.universe) txt(16, 24, f.universe, { 'font-style': 'italic' });
+      C.forEach((c, i) => { mk('circle', { cx: c[0], cy: c[1], r: R, fill: f.shade.includes('ABC'[i]) ? FC.fillR : 'rgba(45,91,142,.08)', stroke: SERIES[i], 'stroke-width': 1.8 }, layer); txt(c[0] + (i === 0 ? -R * .9 : i === 1 ? R * .9 : 0), c[1] + (i === 2 ? R + 16 : -R - 6), f.sets[i], { 'text-anchor': 'middle', fill: SERIES[i], 'font-weight': 600 }); });
+      const at = { A: [-R * .9, 0], B: [R * .9, 0], C: [0, R * .9], AB: [0, n === 3 ? -R * .55 : 0], AC: [-R * .5, R * .35], BC: [R * .5, R * .35], ABC: [0, 0] };
+      Object.entries(f.regions).forEach(([key, v]) => { const o = at[key]; if (!o) return; const base = n === 2 ? [cx, cy] : [cx, cy - R * .1]; multi(base[0] + o[0] * (key.length === 1 ? .62 : 1), base[1] + o[1], v, 16, { 'text-anchor': 'middle', 'font-size': fs - 1.5 }); }); };
+  } else if (k === 'timeline') {
+    const ts = f.events.map(e => e.t), lo = Math.min(...ts), hi = Math.max(...ts), X = v => 40 + (v - lo) / ((hi - lo) || 1) * (W - 80), y0 = H / 2;
+    draw = t => { clear(); mk('line', { x1: 24, x2: W - 24, y1: y0, y2: y0, stroke: FC.ink, 'stroke-width': 1.6, 'marker-end': `url(#${arrowId})` }, layer); const hot = t == null ? -1 : Math.floor(t / 1.2) % f.events.length;
+      f.events.forEach((e, i) => { const x = X(e.t), up = i % 2 === 0; mk('circle', { cx: x, cy: y0, r: i === hot ? 7 : 5, fill: i === hot ? FC.rubric : FC.lapis }, layer); mk('line', { x1: x, x2: x, y1: y0, y2: y0 + (up ? -26 : 26), stroke: FC.grid }, layer); multi(x, y0 + (up ? -46 : 46), e.label, 22, { 'text-anchor': 'middle', 'font-size': fs - 1 }); txt(x, y0 + (up ? 14 : -8), e.tl || fmt(e.t, 3), { 'text-anchor': 'middle', 'font-size': fs - 2.5, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }); }); };
+    animated = !!f.animate;
+  } else if (k === 'sketch') {
+    const sx = W / f.w, sy = H / f.h, s = Math.min(sx, sy), ox = (W - f.w * s) / 2, oy = (H - f.h * s) / 2, X = v => ox + v * s, Y = v => oy + v * s;
+    const tone = it => it.fill || ({ accent: FC.fillR, muted: 'rgba(90,60,30,.08)', warn: FC.fillR, ok: 'rgba(63,125,110,.2)' }[it.tone] || 'rgba(45,91,142,.12)');
+    draw = () => { clear(); f.items.forEach(it => { const g = mk('g', {}, layer);
+      if (it.shape === 'rect') mk('rect', { x: X(it.x || 0), y: Y(it.y || 0), width: (it.w || 10) * s, height: (it.h || 10) * s, rx: 4, fill: tone(it), stroke: FC.lapis }, g);
+      else if (it.shape === 'circle') mk('circle', { cx: X(it.x || 0), cy: Y(it.y || 0), r: (it.r || 5) * s, fill: tone(it), stroke: FC.lapis }, g);
+      else if (it.shape === 'ellipse') mk('ellipse', { cx: X(it.x || 0), cy: Y(it.y || 0), rx: (it.rx || it.r || 8) * s, ry: (it.ry || it.r || 5) * s, fill: tone(it), stroke: FC.lapis }, g);
+      else if (it.shape === 'line' || it.shape === 'arrow') mk('line', { x1: X(it.x || 0), y1: Y(it.y || 0), x2: X(it.x2 || 0), y2: Y(it.y2 || 0), stroke: it.tone === 'accent' ? FC.rubric : FC.soft, 'stroke-width': 1.6, 'marker-end': it.shape === 'arrow' ? `url(#${arrowId})` : null }, g);
+      else if (it.shape === 'path' && it.d) { const p = mk('path', { d: it.d, fill: it.fill || 'none', stroke: FC.lapis, 'stroke-width': 1.6 / s, transform: `translate(${ox} ${oy}) scale(${s})` }, g); void p; }
+      if (it.text || it.label) { const cxp = it.shape === 'line' || it.shape === 'arrow' ? (X(it.x || 0) + X(it.x2 || 0)) / 2 : it.shape === 'rect' ? X((it.x || 0) + (it.w || 10) / 2) : X(it.x || 0), cyp = it.shape === 'line' || it.shape === 'arrow' ? (Y(it.y || 0) + Y(it.y2 || 0)) / 2 - 6 : it.shape === 'rect' ? Y((it.y || 0) + (it.h || 10) / 2) + 4 : it.shape === 'text' ? Y(it.y || 0) : Y(it.y || 0) + 4; multi(cxp, cyp, it.text || it.label, 22, { 'text-anchor': 'middle', 'font-size': fs - .5 }, g); } }); };
+  } else if (k === 'codetrace') {
+    const lh = 22, x0 = 34, notesX = small ? W : W * .5;
+    draw = t => { clear(); const hot = t == null ? -1 : Math.floor(t / 1.4) % (f.lines.length + (f.output.length ? 1 : 0));
+      mk('rect', { x: 6, y: 6, width: W - 12, height: H - 12, rx: 8, fill: '#f6f1e6', stroke: FC.grid }, layer);
+      f.lines.forEach((l, i) => { const y = 28 + i * lh; if (i === hot) mk('rect', { x: 8, y: y - 15, width: W - 16, height: lh, fill: 'rgba(207,168,79,.28)' }, layer); txt(26, y, i + 1, { 'text-anchor': 'end', 'font-size': fs - 2, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }); const ct = mk('text', { x: x0, y, 'font-size': fs - 1, fill: FC.ink, 'font-family': 'IBM Plex Mono, monospace' }, layer); ct.textContent = l.code.length > (small ? 44 : 52) ? l.code.slice(0, small ? 43 : 51) + '…' : l.code;
+        if (!small && l.note) txt(notesX, y, '← ' + (l.note.length > 46 ? l.note.slice(0, 45) + '…' : l.note), { 'font-size': fs - 1.5, fill: FC.lapis, 'font-style': 'italic' });
+        if (i === hot && l.state) { const st = Object.entries(l.state).map(([a, b]) => a + ' = ' + b).join('   '); txt(W - 14, H - 14, st, { 'text-anchor': 'end', 'font-size': fs - 1.5, fill: FC.rubric, 'font-family': 'IBM Plex Mono, monospace' }); } });
+      if (f.output.length) { const y1 = 28 + f.lines.length * lh + 6; mk('line', { x1: 12, x2: W - 12, y1: y1 - 12, y2: y1 - 12, stroke: FC.grid }, layer); f.output.forEach((o, j) => { const ot = mk('text', { x: x0, y: y1 + j * 16, 'font-size': fs - 1.5, fill: hot === f.lines.length ? FC.rubric : FC.verd, 'font-family': 'IBM Plex Mono, monospace' }, layer); ot.textContent = o; }); } };
+    animated = !!f.animate;
+  } else if (k === 'table') {
+    const nc = Math.max(f.columns.length, ...f.rows.map(r => r.length)), cw = (W - 12) / nc;
+    draw = () => { clear(); const row = (cells, y, head, ri) => cells.forEach((c, j) => { const hl = !head && f.highlight.some(h => +h[0] === ri && +h[1] === j); mk('rect', { x: 6 + j * cw, y: y - 15, width: cw, height: 22, fill: head ? '#efe4c8' : hl ? 'rgba(156,58,40,.18)' : ri % 2 ? '#fbf6ea' : '#fffaf0', stroke: FC.grid }, layer); txt(10 + j * cw, y, String(c).slice(0, Math.floor(cw / (fs * .55))), { 'font-weight': head ? 600 : 400, 'font-size': fs - 1 }); });
+      if (f.columns.length) row(f.columns, 26, true, -1); f.rows.forEach((r, i) => row(r, 26 + (i + (f.columns.length ? 1 : 0)) * 22, false, i)); };
+  } else if (k === 'contrast') {
+    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 }); const L = wrapText(side.text, Math.floor(w / (fs * .53))).slice(0, small ? 5 : 6); L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); }); };
+  }
+  // ---- run: a static drawing, or a loop (paused off screen, never with reduced motion unless asked)
+  let raf = 0, alive = true, visible = true, t0 = performance.now(), playing = false;
+  const io = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(es => { visible = es.some(e => e.isIntersecting); }) : null; if (io) io.observe(box);
+  const loop = () => { if (!alive) return; if (!box.isConnected && t0 + 2000 < performance.now()) { stop(); return; } if (visible) { try { draw((performance.now() - t0) / 1000); } catch (e) { stop(); } } raf = requestAnimationFrame(loop); };
+  const stop = () => { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); };
+  try { draw(null); } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + e.message })); return () => {}; }
+  if (animated) {
+    box.classList.add('animated');
+    if (prefersCalm()) { const b = el('button', { class: 'fig-play', type: 'button', 'aria-label': 'Play the animation', title: 'Play', text: '▶' }); b.onclick = () => { if (playing) { playing = false; alive = false; cancelAnimationFrame(raf); draw(null); b.textContent = '▶'; return; } playing = true; alive = true; t0 = performance.now(); b.textContent = '❚❚'; loop(); }; box.querySelector('.fig-frame').append(b); }
+    else loop();
+  }
+  return stop;
+}
+function mathCap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
