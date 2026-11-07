@@ -1196,7 +1196,7 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
    readouts(){const a=cnt(0),b=cnt(1),c=cnt(2);return[['N_A · N_B · N_C',a+' · '+b+' · '+c],['Q = [C]/([A][B])',a&&b?fx(c*Vbox/(a*b),2):'—'],['encounters reacting',enc?fx(encOK/enc,3):'…'],['collision theory (1+Ea/kT)e^(−Ea/kT)',fx(theory(),3)],['kinetic T',fx(Tk,2)],['forward events',String(nf)],['reverse events',String(nb)],['k_reverse',fx(kr,3)+' /s']]}}}};
 {const M=()=>RXN.trk?RXN.trk():V3(0,2.2,0);
  DIO.reaction.shots={'collision with ke':SHOT(()=>[0,RXN.Y0??2.25,0],8),'tracked molecule reacts':SHOT(()=>M().toArray(),4),'tracked molecule splits':SHOT(()=>M().toArray(),4),'first reverse reaction':SHOT(()=>[0,RXN.Y0??2.25,0],8),'dynamic equilibrium':SHOT(()=>[0,RXN.Y0??2.25,0],10)};
- DIO.reaction.flows={'tracked molecule reacts':[{from:()=>M().add(V3(-1,.6,0)),to:()=>M().add(V3(-.2,.15,0)),label:'enough energy to cross the barrier: a bond forms'}],'dynamic equilibrium':[{from:[-1.7,4.55,2],to:[1.7,4.55,2],lane:1,label:'A + B → C'},{from:[1.7,4.55,2],to:[-1.7,4.55,2],lane:1,label:'C → A + B, at the same rate',short:'C → A + B'}]};}
+ DIO.reaction.flows={'tracked molecule reacts':[{from:()=>M().add(V3(-1,.6,0)),to:()=>M().add(V3(-.2,.15,0)),label:'enough energy to cross the barrier: a bond forms'}],'dynamic equilibrium':[{from:[-.8,4.6,2],to:[2.4,4.6,2],lane:1,label:'A + B → C'},{from:[2.4,4.6,2],to:[-.8,4.6,2],lane:1,label:'C → A + B, at the same rate',short:'C → A + B'}]};}
 
 /* --- Electric field: two charges on insulating glass stands, their field lines, and a test charge ---
    Softened Coulomb field E = Σ K qᵢ (r − rᵢ)/(|r − rᵢ|² + ε)^{3/2}, V = Σ K qᵢ/√(|r − rᵢ|² + ε), K = 2, ε = 0.01, so E = −∇V
