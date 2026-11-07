@@ -10,12 +10,12 @@ export const WATER_CYCLE = {
   // edge is a waterfall, a stream from the saddle into the lake, a cottage yard and a path; cut faces show the soil
   // section. Grass, flowers, reeds, rocks and trees are scattered by the field's ecology (realism-playbook §3).
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3b5326', high: '#6b6f43', block: true, bottom: -.85, lift: .05,
+    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#4b6d2f', high: '#7f8452', block: true, bottom: -.85, lift: .1,
       backRise: [-2.4, -5, .35],
       peaks: [{ x: .2, z: -2.9, r: 1.9, h: 3.5, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
         { x: -4.9, z: 1.4, r: 1.5, h: .5, rough: .15, seed: 9 }, { x: 5.0, z: -3.9, r: 1.3, h: .8, seed: 4 }],
-      terraces: [{ z0: -.55, z1: -.72, x0: -2.7, x1: .15, h: .32 }],
-      river: { points: [[-1.0, -2.3], [-1.15, -1.6], [-.95, -1.05], [-.8, -.62], [-.65, -.2], [-.3, .15], [.15, .45], [.55, .75]], width: [.08, .2], depth: .05 },
+      terraces: [{ z0: -.55, z1: -.7, x0: -2.7, x1: .15, h: .45 }],
+      river: { points: [[-1.0, -2.3], [-1.15, -1.6], [-.95, -1.05], [-.8, -.62], [-.65, -.2], [-.3, .15], [.15, .45], [.55, .75]], width: [.11, .26], depth: .05 },
       lake: { x: .9, z: 1.7, rx: 1.25, rz: 1.45, depth: .3, level: .02 },
       pads: [[3.5, 3.7, .7]], path: { points: [[3.25, 3.35], [2.7, 2.9], [2.25, 2.2]], width: .14 } } },
     { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'peak', id: 'ridge', x: .2, z: -2.9 }, position: [.2, 0, -2.9] },
@@ -171,7 +171,8 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
     a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
   const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);
   { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } if(dome) dome.visible=false; }
-  const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; api.scene.userData.wind=[w*.12,-w*.42];   // grass, reeds, trees and the lake's waves follow the wind pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
+  const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; api.scene.userData.wind=[w*.12,-w*.42];   // grass, reeds, trees and the lake's waves follow the wind
+  { const rv=api.body('stream'); if(rv&&rv.userData.river) rv.userData.river.setFlow(.35+.5*Math.min(1,rainSlope/2)); }   // runoff: rain on the ridge swells the stream and its waterfall pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
 
 const atLake=()=>C.find(c=>c&&c.over), onRidge=()=>C.filter(c=>c&&!c.over).sort((a,b)=>b.L-a.L)[0];
@@ -184,7 +185,7 @@ api.readout('cloud water over the ridge',()=>{const c=onRidge();return c?f1(c.qc
 api.readout('rain on the slope',()=>f1(rainSlope)+' mm'); api.readout('rain on the lake',()=>f1(rainLake)+' mm');
 api.readout('föhn warming in the lee',()=>{const c=onRidge();return c&&c.z<zCrest?f1(2.49*Math.max(0,c.qt0-c.qt))+' K (2.5 K per g/kg rained out)':'—';});
 api.plot('cloud water (g/kg)',()=>{const c=C[0]||C[1];return c?c.qc:0;});
-api.camera({target:[.3,.95,-.2],r:18.5,ph:1.08,th:1.2,fov:32});   // a longer lens: a miniature world, not a toy table (realism-playbook R12)`,
+api.camera({target:[.3,.8,-.1],r:15,ph:1.06,th:1.2,fov:32});   // a longer lens: a miniature world, not a toy table (realism-playbook R12)`,
   lessons: [
     { title: 'Heat the lake', question: 'What lifts water out of the lake?', text: 'Turn the sunshine up. Watch how the vapour rises faster from the lake, and watch three readouts: the lake-air temperature, the saturation vapour pressure e_s, and the evaporation rate.', set: { sun: 1.4 }, focus: 'lake', shot: 'push', isolate: ['sun', 'lake', 'vapour'], until: 'event:has warmed to', run: 30, explain: 'Stronger sunshine warms the lake air from 22.2 to 28.7 °C. The saturation vapour pressure e_s rises from 26.6 to 39.2 hPa, about 6 % per kelvin: the Clausius–Clapeyron rate (Koutsoyiannis 2012). Evaporation is driven by the gap between e_s and the vapour already in the air, so it more than doubles, from 1.4 to 3.4 mm a day. Saturation is a property of water at a given temperature. It is not a capacity of the air.', opens: 'Where does the vapour go?' },
     { title: 'Ride a parcel of air', question: 'Where does the vapour go?', text: 'You are now inside one parcel of moist lake air as it rises. Look up: the cloud base is above you. Wait until the parcel reaches its dew point.', focus: 'parcel', shot: 'pov', pov: 'Air parcel', until: 'event:parcel reaches its dew point', run: 40, explain: 'Rising air expands and cools by 9.8 K per kilometre while it is unsaturated. Its dew point falls only about 1.8 K per kilometre, so the gap between them closes by about 8 K per kilometre. The parcel therefore saturates about 125 m higher for every kelvin of gap at the ground (Espy). Here the lake air is at 28.9 °C with a dew point of 25.4 °C, a gap of 3.5 K, so condensation starts near 436 m, at 24.7 °C. There the vapour condenses on tiny aerosol particles into cloud droplets.', opens: 'Why does the rain fall on the ridge and not on the lake?' },

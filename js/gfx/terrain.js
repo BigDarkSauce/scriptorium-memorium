@@ -130,7 +130,7 @@ export function bakeField(spec = {}, quality = AAA.quality) {
       switch (kind) {
         case 'grass': if (wet < .006 || rm > .05) return 0; return clamp((1 - sstep(.5, 1.0, s)) * (1 - sstep(1.0, 1.55, h)) * sstep(path ? path.hw * .6 : 0, path ? path.hw * 1.6 : .01, pd) * sstep(.55, 1, pad), 0, 1);
         case 'flower': if (wet < .05 || rm > 0) return 0; return clamp((1 - sstep(.25, .45, s)) * (1 - sstep(.7, .9, h)) * sstep(.25, .5, pd) * sstep(.8, 1.4, pad), 0, 1);
-        case 'reed': { if (rm > .01) return clamp(1 - Math.abs(rm - .15) * 6, 0, 1) * .6; if (!lake) return 0; return clamp(1 - Math.abs(wet - .005) / .05, 0, 1) * (1 - sstep(.3, .6, s)); }
+        case 'reed': { if (!lake || rm > 0) return 0; const lm = sample(x, z, 2); if (lm <= 0 || lm > .45) return 0; return clamp(1 - Math.abs(wet - .01) / .06, 0, 1) * (1 - sstep(.3, .6, s)); }   // the shore shallows only
         case 'rock': return clamp(rock * .7 + sstep(.3, .6, s) * .3, 0, 1) * (wet < -.03 ? 0 : 1);
         case 'tree': if (wet < .06 || rm > 0) return 0; return clamp((1 - sstep(.45, .7, s)) * sstep(.35, .6, pd) * sstep(1.1, 1.6, pad), 0, 1);
         case 'pine': if (wet < .1 || rm > 0) return 0; return clamp((1 - sstep(.6, .95, s)) * sstep(.3, .6, h), 0, 1);
@@ -170,7 +170,7 @@ export function buildTerrain(field, spec = {}) {
   field.geo = geo; field.own = own;
   const hiY = Math.max(...field.peaks.map(p => p.h), .6);
   field.mats = {
-    meadow: () => aaaMaterial('meadow', { color: spec.low || '#3f5a2a', color2: spec.high || '#6d7346', color3: spec.soil, yRange: [-.1, hiY * .7], shoreY: lake ? lake.level - .008 : undefined, shoreBand: .07, moss: num(spec.grass, 1), silhouette: false, tile: 1.4 }),
+    meadow: () => aaaMaterial('meadow', { color: spec.low || '#3f5a2a', color2: spec.high || '#6d7346', color3: spec.soil, yRange: [-.1, hiY * .7], shoreY: lake ? lake.level - .006 : undefined, shoreBand: .03, moss: num(spec.grass, 1), silhouette: false, tile: 1.4 }),
     rock: () => aaaMaterial('crag', { color: spec.rock || '#4f4a42', color2: spec.rockHigh || '#8a8173', yRange: [.2, hiY], snowY: 0, tile: 1.6, depth: .06, moss: .85, silhouette: false })
   };
   const g = new THREE.Group(); g.name = 'terrain';

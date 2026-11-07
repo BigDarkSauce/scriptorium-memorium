@@ -17,7 +17,7 @@ const GradeShader = {
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
   if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*2.2;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
-  if(uPunch>0.){vec3 pc=pow(max(c.rgb,0.),vec3(1.+.35*uPunch))*(1.+.12*uPunch);float pl=dot(pc,vec3(.2126,.7152,.0722));c.rgb=max(pl+(pc-pl)*(1.+.4*uPunch),0.);}
+  if(uPunch>0.){vec3 pc=pow(max(c.rgb,0.),vec3(1.+.3*uPunch))*(1.+.1*uPunch);float pl=dot(pc,vec3(.2126,.7152,.0722));c.rgb=max(pl+(pc-pl)*(1.+.25*uPunch),0.);}
   float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,uSat);
   c.rgb=clamp(c.rgb+uLift,0.,1.);c.rgb=mix(c.rgb,c.rgb*c.rgb*(3.-2.*c.rgb),clamp((uContrast-1.)*2.5,0.,1.));
   float v=1.-uVignette*smoothstep(.25,.85,length(d*vec2(1.15,1.)));

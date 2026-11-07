@@ -47,7 +47,7 @@ ${FIELD_GLSL}
 float wN(vec2 p){ return aaaSimplex2(p)*.5+.5; }
 vec2 wRot(vec2 v, float a){ float c=cos(a), s=sin(a); return vec2(c*v.x-s*v.y, s*v.x+c*v.y); }
 float wFres(float c){ return .02 + .98*pow(1.-c, 5.); }
-vec3 wSky(vec3 R){ float up = clamp(R.y, 0., 1.); vec3 c = mix(uHorCol*1.1, uSkyCol*2.2, pow(up, .6)); return c + uSunCol * pow(max(dot(R, uSunDir), 0.), 600.) * 6.; }
+vec3 wSky(vec3 R){ float up = clamp(R.y, 0., 1.); vec3 c = mix(uHorCol*.75, uSkyCol*1.7, pow(up, .6)); return c + uSunCol * pow(max(dot(R, uSunDir), 0.), 600.) * 6.; }
 vec3 wLand(float up){ vec3 lit = uSkyCol*.5 + uSunCol*max(uSunDir.y,0.)*.3; return mix(vec3(.07,.085,.05)*lit, wSky(vec3(0.,up,0.)), .18); }
 float wShadow(vec3 p){ if (uShadowOn < .5) return 1.; vec4 c = uSunShadowM * vec4(p, 1.); vec3 s = c.xyz / c.w; if (s.x < 0. || s.x > 1. || s.y < 0. || s.y > 1. || s.z > 1.) return 1.;
   float o = 1. / 2048., v = 0.; for (int i = 0; i < 4; i++) { vec2 d = vec2(i == 1 ? 1. : i == 3 ? -1. : 0., i == 0 ? 1. : i == 2 ? -1. : 0.) * o * 1.5; v += step(s.z - .0015, unpackRGBAToDepth(texture2D(uSunShadow, s.xy + d))); } return v * .25; }
@@ -266,8 +266,8 @@ export function buildRiver(field, o = {}) {
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('aSeed', new THREE.Float32BufferAttribute(sd, 1));
     const smU = makeFrontUniforms();
     const sm = new THREE.ShaderMaterial({ uniforms: Object.assign({ uAaaTime: AAA.uniforms.uAaaTime, uSkyCol: SKY_U.uSkyCol, uSunCol: SKY_U.uSunCol, uDrop: { value: fall.drop } }, smU), transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-      vertexShader: 'attribute float aSeed; uniform float uAaaTime, uDrop; varying float vA; varying vec3 vFrontW; void main(){ float t = fract(uAaaTime*.45 + aSeed); vec3 p = position + vec3(sin(aSeed*40.)*.08*t, t*uDrop*.8, cos(aSeed*23.)*.08*t); vFrontW = p; vA = sin(t*3.1416)*.5; vec4 mv = viewMatrix*vec4(p,1.); gl_Position = projectionMatrix*mv; gl_PointSize = (14. + 26.*t) * 300. / max(-mv.z, .1) / 30.; }',
-      fragmentShader: FRONT_GLSL + 'uniform vec3 uSkyCol, uSunCol; varying float vA; void main(){ float isCard = 1.0 - step(frontD(vFrontW), uFrontR); vec2 d = gl_PointCoord - .5; float a = exp(-dot(d,d)*14.)*vA*(1.-isCard); gl_FragColor = vec4(vec3(.9,.94,.98)*(uSkyCol*.6+uSunCol*.25)*a, a); }' });
+      vertexShader: 'attribute float aSeed; uniform float uAaaTime, uDrop; varying float vA; varying vec3 vFrontW; void main(){ float t = fract(uAaaTime*.45 + aSeed); vec3 p = position + vec3(sin(aSeed*40.)*.08*t, t*uDrop*.8, cos(aSeed*23.)*.08*t); vFrontW = p; vA = sin(t*3.1416)*.5; vec4 mv = viewMatrix*vec4(p,1.); gl_Position = projectionMatrix*mv; gl_PointSize = (.02 + .045*t) * projectionMatrix[1][1] * 300. / max(-mv.z, .1); }',
+      fragmentShader: FRONT_GLSL + 'uniform vec3 uSkyCol, uSunCol; varying float vA; void main(){ float isCard = 1.0 - step(frontD(vFrontW), uFrontR); vec2 d = gl_PointCoord - .5; float a = exp(-dot(d,d)*14.)*vA*.45*(1.-isCard); gl_FragColor = vec4(vec3(.9,.94,.98)*(uSkyCol*.6+uSunCol*.25)*a, a); }' });
     sm.userData.onFront = Uf => { for (const k in Uf) if (k[0] === 'u' && sm.uniforms[k]) sm.uniforms[k] = Uf[k]; };
     const spray = new THREE.Points(sg, sm); spray.name = 'waterfall spray'; spray.frustumCulled = false; spray.renderOrder = 6; parts.push(spray);
   }

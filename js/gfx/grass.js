@@ -61,7 +61,7 @@ const VEG_BODY = {
   c = mix(c, vec3(.2, .17, .08), aTint.x * .55);
   c = mix(c, vec3(.32, .27, .13), step(.94, fract(aRoot.w * 17.9)));
   float t = position.y; vec3 tipC = c * 1.3 + vec3(.02, .025, .0);
-  vGCol = mix(c * .32, tipC, pow(t, .75)) + vec3(.05, .06, .03) * gust * t; vGT = t;`,
+  vGCol = mix(c * .45, tipC, pow(t, .6)) + vec3(.05, .06, .03) * gust * t; vGT = t;`,
   flower: /* glsl */`
   float grow = smoothstep(0., .6, uFrontR - vegFrontD(aRoot.xyz));
   float H = aShape.x * grow; float gust; vec2 B = vegWindBend(aRoot.xz, aRoot.w, 1.6, gust) * .8;
@@ -79,7 +79,7 @@ const VEG_BODY = {
   if (part < .5) { vec3 off = vegArc(B, H, position.y, T); float tw = aShape.z + position.y * .6; vec3 side = vec3(cos(tw), 0., sin(tw));
     vegPos = aRoot.xyz + off + side * position.x * aShape.y * (1. - position.y * .85); vec3 n = normalize(cross(side, T)); n *= sign(dot(n, cameraPosition - vegPos) + 1e-5); objectNormal = normalize(mix(n, vec3(0,1,0), .3));
     vGCol = mix(vec3(.05, .08, .03), vec3(.16, .19, .07), position.y) * mix(1., .8, aTint.x); }
-  else { float cat = step(.5, aTint.z); vec3 c0 = vegArc(B, H * 1.05, .78, T); vegPos = aRoot.xyz + c0 + T * position.y * H * .2 * cat + vec3(position.x, 0., position.z) * .011 * cat * grow;
+  else { float cat = step(.5, aTint.z); vec3 c0 = vegArc(B, H * 1.05, .78, T); vegPos = aRoot.xyz + c0 + T * position.y * H * .14 * cat + vec3(position.x, 0., position.z) * .0055 * cat * grow;
     objectNormal = normalize(vec3(position.x, 0.2, position.z) + 1e-4); vGCol = vec3(.18, .1, .05); }
   vGT = position.y;`
 };
@@ -146,7 +146,7 @@ export function grassField(field, o = {}) {
   const n = Math.min(o.max || Q.max, Math.round(suitArea(field, 'grass', rng) * (o.density || Q.density) * (o.amount ?? 1)));
   const pts = scatter(field, 'grass', n, rng, .45);
   const H = o.height || 1, lv = field.lake ? field.lake.level : -9;
-  const list = pts.map(p => { const r = rng(), damp = Math.max(0, 1 - (field.h(p.x, p.z) - lv) / .25); return { x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r, h: (.042 + .07 * r * r + .03 * damp) * H * (.55 + .45 * p.s), w: .009 + rng() * .008, yaw: rng() * 6.283, droop: .15 + rng() * .35, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5, damp }; });
+  const list = pts.map(p => { const r = rng(), damp = Math.max(0, 1 - (field.h(p.x, p.z) - lv) / .25); return { x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r, h: (.042 + .07 * r * r + .03 * damp) * H * (.55 + .45 * p.s), w: .011 + rng() * .009, yaw: rng() * 6.283, droop: .15 + rng() * .35, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5, damp }; });
   const g = bladeGeo(Q.seg); instAttrs(g, list);
   const m = vegMesh(g, vegMaterial('grass', { lod: o.lod || [5, 15] }), field, 'grass');
   m.userData.stats = { blades: list.length, triangles: list.length * (2 * Q.seg - 1) };
@@ -188,7 +188,7 @@ export function reedField(field, o = {}) {
   const Q = VEG_QUALITY[AAA.quality] || VEG_QUALITY.medium, rng = mulberry(o.seed || 55);
   const n = Math.round(Math.min(2400, suitArea(field, 'reed', rng) * 900 * Q.reeds * (o.amount ?? 1))); if (n < 1) return null;
   const pts = scatter(field, 'reed', n, rng, .7, [.03, .09], [4, 12]);
-  const list = pts.map(p => ({ x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r: rng(), h: .14 + rng() * .16, w: .012 + rng() * .008, yaw: rng() * 6.283, droop: .1 + rng() * .3, sp: rng() < .35 ? 1 : 0, dry: rng() * .5 }));
+  const list = pts.map(p => ({ x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r: rng(), h: .07 + rng() * .09, w: .008 + rng() * .006, yaw: rng() * 6.283, droop: .1 + rng() * .3, sp: rng() < .35 ? 1 : 0, dry: rng() * .5 }));
   const g = reedGeo(); instAttrs(g, list);
   const mat = vegMaterial('reed'); const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = s => { prev(s); s.vertexShader = 'attribute float aPart;\n' + s.vertexShader.replace('float part = aTint.w;', 'float part = aPart;'); };

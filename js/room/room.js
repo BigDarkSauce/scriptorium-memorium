@@ -10,6 +10,7 @@ import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { canvasTex, parchment, radialGlow, labelTex } from '../gfx/textures.js';
 import { bmat } from '../gfx/baroque.js';
+import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
 import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
@@ -151,6 +152,8 @@ export class BookRoom {
     this.data.dims = this.data.dims || { w: 12, d: 10, h: 5.5 }; if (this.data.dims.h === 4.4) this.data.dims.h = 5.5; this.data.parts = this.data.parts || [];
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .2; this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.65 }); // no window here: a touch more exposure than the hall
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .05, 120);
+    // the room's own reflections (surfaces.js): captured after every rebuild; GTAO at quality 'high'
+    this.probe = new RoomProbe(this.gfx); this.probeDirty = true; this.ao = new RoomAO(this.gfx, this.scene, this.camera);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 12, maxPolarAngle: Math.PI * .56, rotateSpeed: .6 });
     this.stations = new Map(); this.keys = {};
@@ -268,7 +271,7 @@ export class BookRoom {
     try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
-    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); return true;
+    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); if (!fast) this.probeDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
@@ -279,7 +282,17 @@ export class BookRoom {
     // dozens of lights; the pool follows the scrolls nearest the viewer (a spot only reaches 6 m anyway)
     const n = Math.min(SPOTS, this.stations.size); while ((this.spots || []).length > n) this.spots.pop().removeFromParent(); this.spots = this.spots || [];
     while (this.spots.length < n) { const L = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); this.scene.add(L); this.spots.push(L); }
-    this._spotT = -1; this.placeSpots(true);
+    this._spotT = -1; this.placeSpots(true); this.probeDirty = true;
+  }
+  // a probe at eye height in the middle of the room (no windows here: chandeliers, sconces and the scroll spots light it);
+  // pedestals and the hall's stairs darken the floor at their feet
+  captureProbe() {
+    this.probeDirty = false; const D = this.data.dims, sh = this.shell; if (!sh) return;
+    const info = sh.userData.baroque || {}, L = sh.userData.lights;
+    enrich(this.shell); this.stations.forEach(st => { if (st.ped) enrich(st.ped); });
+    const feet = footprints([...this.stations.values()].map(st => st.ped).filter(Boolean)).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
+    bindRoom(this.scene, this.probe, { w: D.w, d: D.d, floor: 0, cornice: info.ys || D.h * .83, ceiling: D.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.2], feet: feet.slice(0, 24) });
+    this.probe.capture(this.scene, { pos: V3(0, 1.7, 0), box: new THREE.Box3(V3(-D.w / 2, 0, -D.d / 2), V3(D.w / 2, D.h, D.d / 2)), fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .35, hide: [...this.stations.values()].flatMap(st => st.bays.map(b => b.mini)).filter(Boolean) });
   }
   makeStation(part, slot, i) {
     const g = new THREE.Group(); g.position.copy(slot.p); g.lookAt(slot.p.clone().add(slot.n)); this.scene.add(g);
@@ -506,6 +519,8 @@ export class BookRoom {
   }
   // ---------- frame ----------
   update(dt, t) {
+    if (this.probeDirty && !this.unfold) this.captureProbe();
+    this.ao.update();
     if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
       this.nav.update(dt, !!this.reader || !!this.unfold);
@@ -526,6 +541,7 @@ export class BookRoom {
     if (this.disposed) return; this.disposed = true;
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
+    this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
     this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }

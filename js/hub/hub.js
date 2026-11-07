@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, SLOT, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
+import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -32,12 +33,14 @@ export class Hub {
   constructor(app) {
     this.app = app; this.gfx = app.gfx; this.lib = app.lib;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0d0a07);
-    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;
+    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;   // until the hall's own probe is captured (first update)
+    // reflections of the hall itself (surfaces.js): captured after every rebuild; GTAO at quality 'high'
+    this.probe = new RoomProbe(this.gfx); this.probeDirty = true; this.ao = new RoomAO(this.gfx, this.scene, null);
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
     // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
     this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36, bloom: .15, bloomThreshold: 2.1 });
-    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120);
+    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120); this.ao.camera = this.camera;
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
     this.keys = {}; this.shelfObjs = new Map(); this.scrollObjs = new Map();
@@ -83,6 +86,7 @@ export class Hub {
     this.placeFurniture();
     if (gone.length) this.trash(gone);
     this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0); this.obstaclesDirty = true; this.shadowsDirty = true;
+    if (!fast) this.probeDirty = true;
     return true;
   }
   // the reading floor: two reading tables with lecterns and benches, two globes, a fauteuil, a desk, and two display
@@ -178,7 +182,7 @@ export class Hub {
   caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
   // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
-  updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
+  updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; this.probeDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
   // eye-level tiers first (scroll centres nearest 1.35 m), then the rest
   tierOrder(u) { return [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35)); }
   // walk-mode collision boxes, recomputed only when bookcases or furniture change (or a bookcase is being dragged)
@@ -706,7 +710,21 @@ export class Hub {
     if (k4 >= 1 && !O.done) { O.done = true; this.app.openRoom(O.b.id, { fromHub: true }); }
   }
   // ---------- frame ----------
+  // ---------- the hall's reflections and contact occlusion (surfaces.js) ----------
+  // A probe at eye height in the middle of the hall, windows at their HDR radiance; the furniture and bookcase
+  // footprints darken the floor beneath them. Materials built elsewhere get their companion normal/roughness maps.
+  captureProbe() {
+    this.probeDirty = false; const R = this.lib.hub, sh = this.shell; if (!sh) return;
+    const info = sh.userData.baroque || {}, L = sh.userData.lights;
+    enrich(this.scene);
+    const feet = footprints([...(this.furn ? this.furn.children : []), ...this.shelfObjs.values()]).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
+    bindRoom(this.scene, this.probe, { w: R.w, d: R.d, floor: 0, cornice: info.ys || R.h * .83, ceiling: R.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.3], feet: feet.slice(0, 24) });
+    this.probe.capture(this.scene, { pos: V3(0, 1.75, R.d * .08), box: new THREE.Box3(V3(-R.w / 2, 0, -R.d / 2), V3(R.w / 2, R.h, R.d / 2)), hide: [this.ghost], fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .3 });
+    this.shadowsDirty = true;
+  }
   update(dt) {
+    if (this.probeDirty && !this.dragging && !this.opening && !this.sdrag) this.captureProbe();
+    this.ao.update();
     // the hall is static: its 2048² sun shadow map is redrawn only while something moves (opening, dragging, arriving)
     const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false;
     if (this.shadowsDirty !== false || this.opening || this.dragging || this._arriving) { sm.needsUpdate = true; this.shadowsDirty = false; }
@@ -726,5 +744,6 @@ export class Hub {
     this.gfx.canvas.removeEventListener('contextmenu', this.onCtx, true); removeEventListener('pointerdown', this.onDocDown, true); clearTimeout(this._lpT);
     this.closeMenu(); this.closeMove(); this.dropGhost();
     this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = ''; this.gfx.renderer.shadowMap.autoUpdate = true;
+    this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
   }
 }

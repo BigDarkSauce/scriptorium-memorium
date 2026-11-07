@@ -3,59 +3,102 @@
 // Everything is procedural: canvas textures + generated geometry, merged per material to keep draw calls low.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment } from './textures.js';
+import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
+import { surface } from './surfaces.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const Mx = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), V(sx, sy, sz));
 
 // ---------- materials (cached; textures use world-metre UVs so one material serves every size) ----------
+// Every material is a full surface stack (colour + normal + roughness, metalness where it is metal), lit by the room's
+// own probe (surfaces.js RoomProbe; the scene's environmentIntensity is the one that applies, so envMapIntensity stays 1):
+//  • marble/scagliola: veins a hair recessed and duller (0.12–0.2) than the polished field (0.055–0.1), pits; a
+//    polishing coat (clearcoat 1, 0.04–0.07) over it; warm subsurface wrap on the pale stones (measured scattering
+//    radius of marble ≈ (0.85, 0.56, 0.40) mm: red travels farthest); albedo ≤ 0.8 linear (physicallybased.info: 0.83)
+//  • gilt: gold F0 (1.0, 0.77, 0.31) (physicallybased.info), leaf seams as fine raised ridges, a burnisher's
+//    anisotropy, burnished arrises and red bole where the leaf is rubbed through, matte toned hollows (column capitals)
+//  • wood: open pores and the earlywood ripple in the normal map, 0.45–0.6 wood under a varnish coat whose normal
+//    stays flat (varnish fills the pores); finish rubbed lighter on the arrises; painted wood chips at its edges
+//  • plaster: trowel waves, grit, hairline cracks, ≥ 0.86 rough; walls darken toward floor, cornice and corners
+const V2 = (x, y = x) => new THREE.Vector2(x, y);
+const lin = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
+// marble with its companions; k = roughness multiplier on the map, cc = polishing coat roughness
+function marbleMat(stone, o = {}) {
+  const M = marbleSet(stone, { size: 512, seed: o.seed ?? 2 }), pale = /statuary|cream|pavonazzetto|giallo|rose|warmgrey|dove/.test(stone);
+  const m = new THREE.MeshPhysicalMaterial({ map: M.map, normalMap: M.normalMap, normalScale: V2(M.normalScale), roughnessMap: M.roughnessMap, roughness: o.k ?? 2.2, clearcoat: o.cc == null ? 1 : o.cc ? 1 : 0, clearcoatRoughness: o.cc || .05, vertexColors: !!o.vc, envMapIntensity: 1,
+    sheen: pale ? .12 : 0, sheenRoughness: .5, sheenColor: new THREE.Color(0xfff2e6) });
+  if (/statuary|cream|pavonazzetto/.test(stone)) m.color.setScalar(.92);   // keep white marble below 0.8 linear
+  return surface(m, { sss: pale ? [.85, .56, .4, .38] : null, macro: [.8, .07, .2], detail: [3.7, .35] });
+}
+function giltMat(o = {}) {
+  const t = gildTex(), C = companions(t.map) || {};
+  const m = new THREE.MeshPhysicalMaterial({ color: o.color || lin(1.12, 1.16, 1.02), map: t.map, roughnessMap: t.rough, normalMap: C.normalMap, normalScale: V2(C.normalScale || .5), metalness: o.metal ?? 1, roughness: o.rough ?? .62,
+    anisotropy: .22, anisotropyRotation: Math.PI / 2, vertexColors: !!o.vc, envMapIntensity: 1 });
+  if (o.vc) m.defaultAttributeValues = { color: [1, 1, 1] };
+  return surface(m, { edge: .007, wear: 3, noise: 26, gilt: !!o.vc, macro: [1.4, .06, .25] });
+}
+function woodMat(tone, key, o = {}) {
+  const map = figuredWood(tone, key, o.fig || {}), C = companions(map);
+  const P = o.coat === 0 ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
+  const m = new P(Object.assign({ map, normalMap: C.normalMap, normalScale: V2(C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 }, o.coat === 0 ? {} : { clearcoat: o.coat ?? .5, clearcoatRoughness: o.ccr ?? .22 }));
+  return surface(m, { edge: o.paint ? .004 : .005, wear: o.paint ? 2 : 1, noise: o.paint ? 45 : 30, macro: [1.1, .07, .15], detail: [3.1, .3] });
+}
+function plasterMat(tone, key, amp, o = {}) {
+  const map = plaster(tone, key, amp), C = companions(map);
+  const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, map, normalMap: C.normalMap, normalScale: V2(o.ns ?? C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 });
+  return surface(m, { macro: [.45, .06, .04], detail: [5.3, .45], wallAO: !!o.wallAO });
+}
 const MATS = new Map();
 export function bmat(name) {
   if (MATS.has(name)) return MATS.get(name);
   let m;
   const S = o => new THREE.MeshStandardMaterial(o), P = o => new THREE.MeshPhysicalMaterial(o);
-  if (name.startsWith('col-')) { // polished column marble; statuary a touch softer than the coloured stones
-    const k = name.slice(4), white = k === 'statuary'; m = P({ map: marbleTex(k, { size: 512, seed: 6 }), vertexColors: true, roughness: white ? .34 : .22, clearcoat: white ? .3 : .7, clearcoatRoughness: white ? .35 : .1, envMapIntensity: white ? .9 : 1.1, sheen: white ? .2 : 0, sheenColor: new THREE.Color(0xfff4e8) });
+  if (name.startsWith('col-')) { // polished column marble (vertex-coloured: flute hollows baked darker); statuary a touch softer
+    const k = name.slice(4), white = k === 'statuary'; m = marbleMat(k, { seed: 6, vc: true, k: white ? 2.6 : 2.0, cc: white ? .07 : .045 });
   } else if (name.startsWith('scag-')) { // scagliola / polished marble
-    const k = name.slice(5); m = P({ map: marbleTex(k, { size: 512, seed: 2 }), roughness: .3, clearcoat: .75, clearcoatRoughness: .14, envMapIntensity: 1.1 }); m.userData.boxUV = .9;
+    const k = name.slice(5); m = marbleMat(k, { seed: 2, k: 2.4, cc: .07 }); m.userData.boxUV = .9;
   } else switch (name) {
-    case 'gilt': { const t = gildTex(); m = S({ color: 0xffffff, map: t.map, roughnessMap: t.rough, metalness: 1, roughness: 1, envMapIntensity: 3.4 }); m.userData.boxUV = 2.2; break; } // env kept low in the hub/rooms (renderer HOUSE look): gilt carries its own
+    case 'gilt': m = giltMat(); m.userData.boxUV = 2.2; break;
+    // gilt that carries the turned parts' cavity shade (column capitals): matte, toned hollows, burnished highs
+    case 'gilt-col': m = giltMat({ vc: true }); break;
     // thin gilt mouldings (door frames, beads): the same leaf at ~4× the size, so an 18 mm strip shows one leaf over a
     // long run instead of a dashed row of 57 mm squares that shimmers as the view moves
-    case 'gilt-fine': { const t = gildTex(); m = S({ color: 0xffffff, map: t.map, roughnessMap: t.rough, metalness: 1, roughness: .85, envMapIntensity: 3.4 }); m.userData.boxUV = .55; break; }
-    case 'gilt-dim': { const t = gildTex(); m = S({ color: 0xd8c08a, map: t.map, roughnessMap: t.rough, metalness: .85, roughness: 1.15, envMapIntensity: 2.3 }); m.userData.boxUV = 2.2; break; }
-    case 'stucco': m = S({ color: 0xf3ede2, map: plaster([240, 234, 222], 'stucco', .1), roughness: .78 }); m.userData.boxUV = .35; break;
+    case 'gilt-fine': m = giltMat({ rough: .55 }); m.userData.boxUV = .55; break;
+    case 'gilt-dim': m = giltMat({ color: lin(.7, .62, .42), rough: .85, metal: .9 }); m.userData.boxUV = 2.2; break;
+    case 'stucco': m = plasterMat([240, 234, 222], 'stucco', .1, { color: 0xf3ede2, ns: .3 }); m.userData.boxUV = .35; break;
     // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
-    case 'wall': m = S({ color: 0xffffff, map: plaster([222, 207, 182], 'bwall3', .09), roughness: .9 }); m.userData.boxUV = .22; break;
+    case 'wall': m = plasterMat([222, 207, 182], 'bwall3', .09, { wallAO: true }); m.userData.boxUV = .22; break;
     // painted wood (Admont's white cases): ivory lacquer with the grain faintly showing through
-    case 'cream': m = P({ color: 0xfbf6ec, map: figuredWood([244, 236, 220], 'ivory', { paint: 1 }), roughness: .4, clearcoat: .45, clearcoatRoughness: .28 }); m.userData.boxUV = .55; break;
+    case 'cream': m = woodMat([244, 236, 220], 'ivory', { fig: { paint: 1 }, paint: true, coat: .45, ccr: .28 }); m.color.set(0xfbf6ec); m.userData.boxUV = .55; break;
     // case interiors (backs, inner side panels) a shade deeper, as they sit in their own shadow: the shelves read as
     // hollows framed by the ivory carcass instead of one flat white block
-    case 'cream-back': m = S({ color: 0xffffff, map: figuredWood([186, 166, 134], 'ivoryb2', { paint: 1, seed: 3 }), roughness: .78 }); m.userData.boxUV = .55; break;
+    case 'cream-back': m = woodMat([186, 166, 134], 'ivoryb2', { fig: { paint: 1, seed: 3 }, paint: true, coat: 0 }); m.userData.boxUV = .55; break;
     // figured walnut (Metten) and pale rococo oak (Mafra)
-    case 'walnut': m = P({ map: figuredWood([128, 80, 46], 'walnut'), roughness: .42, clearcoat: .45, clearcoatRoughness: .22 }); m.userData.boxUV = .8; break;
-    case 'walnut-dark': m = P({ map: figuredWood([80, 49, 29], 'walnutd', { seed: 5 }), roughness: .5, clearcoat: .3, clearcoatRoughness: .3 }); m.userData.boxUV = .8; break;
-    case 'pale': m = P({ map: figuredWood([214, 186, 142], 'pale', { seed: 9 }), roughness: .5, clearcoat: .25, clearcoatRoughness: .35 }); m.userData.boxUV = .8; break;
-    case 'pale-dark': m = P({ map: figuredWood([168, 134, 94], 'paled', { seed: 11 }), roughness: .55, clearcoat: .2, clearcoatRoughness: .4 }); m.userData.boxUV = .8; break;
-    case 'boiserie-walnut': m = P({ map: figuredWood([104, 64, 36], 'walnutb', { seed: 13 }), roughness: .45, clearcoat: .4, clearcoatRoughness: .25 }); m.userData.boxUV = .8; break;
+    case 'walnut': m = woodMat([128, 80, 46], 'walnut', { coat: .5, ccr: .2 }); m.userData.boxUV = .8; break;
+    case 'walnut-dark': m = woodMat([80, 49, 29], 'walnutd', { fig: { seed: 5 }, coat: .35, ccr: .3 }); m.userData.boxUV = .8; break;
+    case 'pale': m = woodMat([214, 186, 142], 'pale', { fig: { seed: 9 }, coat: .3, ccr: .32 }); m.userData.boxUV = .8; break;
+    case 'pale-dark': m = woodMat([168, 134, 94], 'paled', { fig: { seed: 11 }, coat: .22, ccr: .4 }); m.userData.boxUV = .8; break;
+    case 'boiserie-walnut': m = woodMat([104, 64, 36], 'walnutb', { fig: { seed: 13 }, coat: .45, ccr: .24 }); m.userData.boxUV = .8; break;
     case 'spines': { // instanced books: one cell of the spine atlas per binding variant (instance attribute aVar)
-      m = S({ map: spineAtlas(), roughness: .6, metalness: .05 });
-      m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aVar;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif'); };
-      m.customProgramCacheKey = () => 'spines-atlas-1'; m.userData.noCast = true; break; }
+      const map = spineAtlas(), C = companions(map);
+      m = S({ map, normalMap: C.normalMap, normalScale: V2(C.normalScale), roughnessMap: C.roughnessMap, metalnessMap: C.roughnessMap, roughness: 1, metalness: 1, envMapIntensity: 1 });
+      m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aVar;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif\n#ifdef USE_NORMALMAP\nvNormalMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif\n#ifdef USE_ROUGHNESSMAP\nvRoughnessMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif\n#ifdef USE_METALNESSMAP\nvMetalnessMapUv.x += aVar / ' + SPINE_VARIANTS.toFixed(1) + ';\n#endif'); };
+      m.customProgramCacheKey = () => 'spines-atlas-2'; m.userData.noCast = true; surface(m, { macro: [2.3, .08, .15] }); break; }
     case 'paint': m = S({ color: 0xf0ebe0, roughness: .55 }); break;
     // antique marbles of the columns: vertex-coloured (flute hollows baked darker), UVs in metres set by the column builder
-    case 'statuary': m = P({ map: marbleTex('statuary', { size: 512, seed: 4 }), roughness: .36, clearcoat: .25, clearcoatRoughness: .4, sheen: .3, sheenColor: new THREE.Color(0xfff4e8), envMapIntensity: 1.1 }); m.userData.boxUV = 1.6; break;
+    case 'statuary': m = marbleMat('statuary', { seed: 4, k: 2.6, cc: .08 }); m.userData.boxUV = 1.6; break;
     case 'books': m = S({ map: bookSpinesTex(), roughness: .72 }); break;
-    case 'pages': m = S({ map: parchment('deskbook', 256, 256), roughness: .85 }); break;
+    case 'pages': { const map = parchment('deskbook', 256, 256), C = companions(map); m = S({ map, normalMap: C.normalMap, normalScale: V2(C.normalScale), roughnessMap: C.roughnessMap, roughness: 1 }); break; }
     case 'book-0': case 'book-1': case 'book-2': m = S({ color: [0x5a2a1e, 0x2a3a5a, 0x3a4a2a][+name.slice(5)], roughness: .62 }); break;
-    case 'candle': m = S({ color: 0xf6eedc, roughness: .5, emissive: 0xffcf8a, emissiveIntensity: .12 }); break;
+    // beeswax: light scatters a few mm into the candle, so its shadow side glows (wrap) and it is never chalky
+    case 'candle': m = surface(P({ color: 0xf6eedc, roughness: .45, emissive: 0xffcf8a, emissiveIntensity: .12, sheen: .3, sheenColor: new THREE.Color(0xfff0d8), sheenRoughness: .6 }), { sss: [1, .85, .6, .6] }); break;
     case 'flame': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 2.5, 1.1), toneMapped: false }); m.userData.noCast = true; break;
-    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; break;
-    case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .14, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
-    case 'cove': { const t = rocailleTex(3); m = S({ map: t.map, metalnessMap: t.mr, roughnessMap: t.mr, metalness: 1, roughness: 1, envMapIntensity: 2.6, emissive: 0xffffff, emissiveMap: t.map, emissiveIntensity: .06 }); break; }
-    case 'eggdart': m = S({ map: eggDartTex(), metalness: .7, roughness: .38, envMapIntensity: 2.8 }); break;
-    case 'fluted': m = P({ color: 0xf1e9d8, normalMap: fluteNormal(), normalScale: new THREE.Vector2(1, 1), roughness: .42, clearcoat: .35, clearcoatRoughness: .3 }); m.normalMap.repeat.set(3, 1); break;
+    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; m.userData.hdr = 10; break;   // ×10 inside the room probe: a window is 10–20× brighter than the walls
+    case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
+    case 'cove': { const t = rocailleTex(3); m = S({ map: t.map, metalnessMap: t.mr, roughnessMap: t.mr, metalness: 1, roughness: 1, envMapIntensity: 1, emissive: 0xffffff, emissiveMap: t.map, emissiveIntensity: .06 }); surface(m, { macro: [.7, .05, .2] }); break; }
+    case 'eggdart': m = surface(S({ map: eggDartTex(), metalness: .85, roughness: .34, envMapIntensity: 1 }), {}); break;
+    case 'fluted': m = surface(P({ color: 0xf1e9d8, normalMap: fluteNormal(), normalScale: V2(1, 1), roughness: .42, clearcoat: .35, clearcoatRoughness: .3 }), { macro: [1.2, .05, .1] }); m.normalMap.repeat.set(3, 1); break;
     default: m = S({ color: 0xcccccc });
   }
   if (name.startsWith('fresco')) { const t = frescoTex(+name.slice(6) || 1); m = S({ map: t, roughness: .95, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: .16, side: THREE.DoubleSide }); }
@@ -71,15 +114,31 @@ export function boxUV(geo, s = 1) {
   }
   uv.needsUpdate = true;
 }
+// Per-vertex distances (m) from a box face's point to that face's four edges, linear across the face, so the fragment's
+// min() is its exact distance to the nearest arris (edge wear, surfaces.js SM_EDGE). Other geometry gets 9 (no wear).
+function edgeAttr(g, src) {
+  const n = g.attributes.position.count, a = new Float32Array(n * 4).fill(9), P = src.parameters;
+  if (src.type === 'BoxGeometry' && P && g.attributes.normal) {
+    const p = g.attributes.position, nr = g.attributes.normal, hx = P.width / 2, hy = P.height / 2, hz = P.depth / 2;
+    for (let i = 0; i < n; i++) {
+      const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const [b, hb, c, hc] = ax > .5 ? [z, hz, y, hy] : ay > .5 ? [x, hx, z, hz] : [x, hx, y, hy];
+      a[i * 4] = hb - b; a[i * 4 + 1] = hb + b; a[i * 4 + 2] = hc - c; a[i * 4 + 3] = hc + c;
+    }
+  }
+  return new THREE.BufferAttribute(a, 4);
+}
 // Accumulates geometry per material, merges at the end (one draw call per material).
 export class Acc {
   constructor() { this.m = new Map(); }
   add(mat, geo, m4) {
     let g = geo.index ? geo.toNonIndexed() : geo.clone();
+    if (!g.attributes.aEdge) g.setAttribute('aEdge', edgeAttr(g, geo));   // before the transform: face-local distances
     if (m4) g.applyMatrix4(m4);
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && !(k === 'color' && mat.vertexColors)) g.deleteAttribute(k);
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && k !== 'aEdge' && !(k === 'color' && mat.vertexColors)) g.deleteAttribute(k);
     if (!g.attributes.normal) g.computeVertexNormals();
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (mat.vertexColors && !g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
     g.morphAttributes = {}; g.clearGroups();
     if (!this.m.has(mat)) this.m.set(mat, []); this.m.get(mat).push(g);
     return g;
@@ -245,7 +304,7 @@ export function addColumn(A, M, o = {}) {
 // Returns { top, D, half } (top of the topmost part, the lower diameter, the half width of the footprint).
 export function column(A, M, o = {}) {
   const ord = ORDERS[o.order] || ORDERS.ionic, H = o.H || 3, D = o.D || H / ord.h, r0 = D / 2;
-  const shaftM = bmat('col-' + (o.marble || 'giallo')), trimM = bmat('col-' + (o.trim || 'statuary')), capM = o.gilt ? bmat('gilt') : trimM, gilt = bmat('gilt');
+  const shaftM = bmat('col-' + (o.marble || 'giallo')), trimM = bmat('col-' + (o.trim || 'statuary')), capM = o.gilt ? bmat('gilt-col') : trimM, gilt = bmat('gilt');
   M = M || new THREE.Matrix4();
   const add = mat => (geo, m) => A.add(mat, geo, m ? M.clone().multiply(m) : M), T = add(trimM), S = add(shaftM), C = add(capM);
   const capH = ord.cap * D;
@@ -731,7 +790,10 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   {
     // the hall's diagonal floor: cream and dove-grey marble (close values: the floor is a ground, not a checkerboard)
     const F = marbleFloor(floor, clamp(Math.min(w, d) / 16, .5, .8), floor === 'cubes' ? ['cream', 'warmgrey', 'red'] : ['cream', 'dove']);
-    const fm = new THREE.MeshPhysicalMaterial({ map: F.map, roughnessMap: F.rough, roughness: 1, clearcoat: .6, clearcoatRoughness: .13, envMapIntensity: 1.0 });
+    // polished marble: the polish IS the surface (no clearcoat: a coat on top doubles the reflection and reads as
+    // lacquer); 0.055–0.1 on the tiles, duller along the walking paths (traffic), 0.9 in the joints; each tile tilted a
+    // fraction of a degree (lippage) so a mirrored window kinks between tiles; contact occlusion from walls/furniture
+    const fm = surface(new THREE.MeshPhysicalMaterial({ map: F.map, roughnessMap: F.rough, normalMap: F.nrm, normalScale: new THREE.Vector2(.3, .3), roughness: 1, specularIntensity: 1, envMapIntensity: 1 }), { floorAO: true, traffic: true, macro: [.35, .05, .3] });
     const geo = new THREE.PlaneGeometry(w, d); geo.rotateX(-Math.PI / 2); const p = geo.attributes.position, uv = geo.attributes.uv;
     for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / F.span[0] + .5, -p.getZ(i) / F.span[1] + .5);
     const floorM = new THREE.Mesh(geo, fm); floorM.receiveShadow = true; floorM.name = 'floor'; floorM.userData.floor = true; g.add(floorM);
@@ -865,7 +927,9 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   });
   const lights = new THREE.Group(); lights.name = 'lights'; g.add(lights); g.userData.lights = lights;
   const hasWin = !!g.userData.window;
-  lights.add(new THREE.HemisphereLight(0xfff1de, 0x4a3828, hasWin ? .36 : .5));
+  // the hemisphere light stands in for bounce light until the room probe has been captured (surfaces.js RoomProbe
+  // scales it down then: the probe's irradiance is the real bounce)
+  { const hemi = new THREE.HemisphereLight(0xfff1de, 0x4a3828, hasWin ? .36 : .5); hemi.userData.fakeGI = true; lights.add(hemi); }
   const chs = chandeliers ? domes.slice() : []; if (chs.length > 3) { const k = chs.length; chs.splice(0, k, chs[0], chs[k >> 1], chs[k - 1]); }
   const sCh = clamp(h / 6, .75, 1.35), yc = clamp(Math.min(yE - .5, h * .62), 2.5, h - 1);
   chs.forEach(D => {
@@ -894,7 +958,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       const Wp = [[x0, y0, -.05], [x1, y0, -.05], [x1, y1, -.05], [x0, y1, -.05]], Fp = Wp.map(([x, y]) => proj(x, y));
       [[0, 1], [1, 2], [2, 3], [3, 0]].forEach(([a, b]) => { [[Wp[a], 0, 1], [Wp[b], 1, 1], [Fp[b], 1, 0], [Wp[a], 0, 1], [Fp[b], 1, 0], [Fp[a], 0, 0]].forEach(([p, u, v]) => { sp.push(...p); su.push(u, v); }); });
     });
-    if (sp.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); geo.computeVertexNormals(); geo.applyMatrix4(M); const sh = new THREE.Mesh(geo, bmat('shaft')); sh.name = 'sun-shafts'; sh.renderOrder = 5; sh.castShadow = false; sh.receiveShadow = false; g.add(sh); }
+    if (sp.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); geo.computeVertexNormals(); geo.applyMatrix4(M); const sh = new THREE.Mesh(geo, bmat('shaft')); sh.name = 'sun-shafts'; sh.renderOrder = 5; sh.userData.noProbe = true; sh.userData.noAO = true; sh.castShadow = false; sh.receiveShadow = false; g.add(sh); }
   }
   // ---- merge everything ----
   A.build(g, { name: 'shell-' }).forEach(m => { if (/^gilt|^eggdart/.test(m.material.userData.bmat)) m.castShadow = false; });
@@ -902,8 +966,12 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   if (flames.length) { // one Points draw call for every candle glow, with a gentle flicker
     const pg = new THREE.BufferGeometry().setFromPoints(flames);
     const pm = new THREE.PointsMaterial({ map: radialGlow('255,196,130'), size: .55, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .55, color: 0xffd2a0 });
-    const pts = new THREE.Points(pg, pm); pts.name = 'candle-glow'; pts.renderOrder = 6; g.add(pts);
-    pts.onBeforeRender = () => { const tt = performance.now() * .001; pm.size = .55 * (1 + .05 * Math.sin(tt * 7.3) + .03 * Math.sin(tt * 13.1)); lights.children.forEach((L, i) => { if (L.isPointLight && L.userData.base) L.intensity = L.userData.base * (1 + .035 * Math.sin(tt * 8.7 + i * 2.1) + .02 * Math.sin(tt * 15.3 + i)); }); };
+    const pts = new THREE.Points(pg, pm); pts.name = 'candle-glow'; pts.renderOrder = 6; pts.userData.noProbe = true; g.add(pts);
+    // candle flicker: band-limited noise (a slow 1–2 Hz breathing, a 6–9 Hz shiver) plus a rare draught that dips the
+    // flame for ~0.3 s; each chandelier on its own phase. A chandelier of 8 candles averages its flames, so it moves less.
+    const n1 = t => { const i = Math.floor(t), f = t - i, h = k => { const x = Math.sin(k * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }; const u = f * f * (3 - 2 * f); return h(i) * (1 - u) + h(i + 1) * u - .5; };
+    const flick = (tt, k, a) => 1 + a * (1.1 * n1(tt * 1.6 + k * 17) + .55 * n1(tt * 7.3 + k * 5) + .25 * n1(tt * 13.7 + k * 3)) - a * 2.2 * Math.max(0, n1(tt * .35 + k * 9) - .38);
+    pts.onBeforeRender = () => { const tt = performance.now() * .001; pm.size = .55 * flick(tt, 0, .09); lights.children.forEach((L, i) => { if (L.isPointLight && L.userData.base) L.intensity = L.userData.base * flick(tt, i + 1, .05); }); };
   }
   g.traverse(o => { if (o.isMesh && !o.userData.floor) o.userData.shell = true; });
   g.userData.baroque = info;

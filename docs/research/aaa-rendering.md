@@ -356,3 +356,40 @@ target while compiling.
 - **Measurement**: the build machine renders with SwiftShader (software), so absolute frame times are meaningless;
   the cost table uses draw calls, triangles, programs, full-screen passes and texture reads per pixel, which carry
   over to real GPUs.
+
+## Landscape kit: the water-cycle valley at Weatherglass quality (implemented)
+
+The recipes of `realism-playbook.md` (R1–R9, R12, R13 and part of R11) are implemented as modules and exposed as
+scene-spec shape kinds (`SCENE_SPEC.md`, "Landscape kit"); `WATER_CYCLE` in `js/seeds-scenes.js` is rebuilt on them.
+
+| module | what it does | spec kinds |
+|---|---|---|
+| `js/gfx/terrain.js` | one height field on the mesh grid (fBm + terraces + smooth-max peaks + downhill river with an automatic waterfall + lake bowl + pads + path); RGBA half-float texture (height, river, lake, slope) + bilinear CPU sampler + ecology `suit(x,z,kind)`; meadow/rock meshes split by slope and height (flatter diagonal per quad); peaks with `own` are cut out as separate bodies | `terrain{…field options}`, `peak` |
+| `js/gfx/soil.js` | the four cut faces of the block with strata (turf rim, humus, loam with mottles/burrows/stones, clay, gravel, tilted bedrock beds with joints, roots), wetness soaking down, derivative-bump normals; walnut plinth | `soilBlock` (built by `terrain{block:true}`) |
+| `js/gfx/grass.js` | instanced blades (arc bend of constant length, gust crests, flutter, per-vertex colour, translucency, root AO, distance hash-culling with widening), flowers (6 species), reeds and cattails; grow out of the paper with the materialize front | `grassField`, `flowers`, `reeds` |
+| `js/gfx/water.js` | lake in two passes (multiply by Beer–Lambert transmittance, add in-scatter + Fresnel sky + glint + glitter + lapping foam + rain rings), hand-compared sun shadow, cloud shadow; river ribbon with flow-space streaks, waterfall sheet, plunge foam, spray | `lake`, `river`/`waterfall` |
+| `js/gfx/clouds.js` | raymarched puff clouds (smooth-union SDF, Perlin–Worley erosion, dual-lobe HG over three scattering octaves, powder, terrain occlusion, camera-inside mode); 32³ CPU noise; cloud-shadow splat at 15 Hz | `cloud{volume:true}`, `cloudVolume` |
+| `js/gfx/precip.js` | vapour wisps (soft stretched point sprites) and velocity-aligned rain streaks | `particles{type:vapour|streaks}` |
+| `js/dio/trees.js` | species table (tree, oak, birch, cherry; pine, bush), crown-ellipsoid normals, vertex wind (lean ∝ h², per-tree phase, leaf flutter) on foliage and bark (`TREE_WIND` define) | `oak`, `birch`, `cherry`, `tree{species}`, `forest` |
+| `js/gfx/aaa.js` | scanned CC0 micro layer (Ground103 on meadow/mud/sand, Moss002 on up-facing crag, Bark001 on bark), lazily loaded from `assets/textures`, weight 0 until loaded (no recompile, graceful fallback); two hashed offsets per noise cell against tiling; off at low quality | (automatic) |
+| `js/gfx/materialize.js` | `ShaderMaterial`s take the scene's front uniforms through `userData.onFront(U)`; cloud-shadow hook on directional light 0 of every patched material in outdoor scenes (`AAA_CLOUDSH` define, own program key) | — |
+| `js/gfx/renderer.js` | grade pass `uPunch` (AgX "Punchy" approximation: power 1 + .3k, saturation 1 + .25k); `look.punch`: landscape .9, ocean .8, studio/desk .45, hub/rooms .2, default .3 | — |
+| `js/dio/environments.js` | WG sun colour/intensity ramp from elevation; outdoor exposure raised to match the punch look | — |
+
+Measured with `gfx.stats()` (one full frame, shadow passes included; SwiftShader, so no GPU times) on the rebuilt valley:
+
+| quality | draw calls | triangles | programs | grass blades | notes |
+|---|---|---|---|---|---|
+| low | 94 | 0.32 M | 99 | 18 k (5 tris) | no flowers, POM off, scans off, clouds 20/4 steps, 151 × 116 terrain grid |
+| medium | 123 | 0.74 M | 103 | 46 k (7 tris) | 2.2 k flowers, 261 × 201 grid, clouds 30/5 steps, atmosphere pass |
+| high | ≈130 (est.) | ≈1.3 M (est.) | — | 100 k (9 tris) | 361 × 277 grid, clouds 44/6 steps |
+
+Before the rebuild the playbook counted ~444 draw calls at medium, most of them the transmission pre-pass of the old
+transmissive lake; the new lake has none. Estimated GPU cost at medium on a GTX 1660-class card (from shader arithmetic):
+grass 1.0–1.5 ms, clouds 1.5–2.5 ms (three boxes, early-out outside the puffs), lake + river 0.3–0.5 ms, soil 0.1 ms,
+scans +0.2 ms, i.e. about 3.5–5 ms on top of the existing 6–8 ms: inside 16.7 ms.
+
+Known gaps against Weatherglass: no planar mirror for the lake (sky + dark landscape band only), no contact-hardening
+shadow filter (R11.1) and no HDRI reflections (R11.4), no log cabin/jetty/smoke (R10: the cottage is the old `house`),
+pines and bushes keep the older geometry, cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
+on the slope speeds the stream and its waterfall.)

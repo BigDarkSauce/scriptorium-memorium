@@ -66,12 +66,12 @@ float heightFrac(float y){ return clamp((y - uBase)/max(uTop - uBase, .2), 0., 1
 float baseDensity(vec3 p, float sd, out float cov, out vec4 n1){
   float edge = uSize*.22; cov = smoothstep(edge, -edge*1.6, sd);
   vec3 q = p/uSize + uSeed; n1 = texture(uNoise, q*.34 + vec3(0., -uAaaTime*.012, 0.));
-  float hf = heightFrac(p.y); float d = remap01(cov, (1. - n1.r)*mix(.55, .72, hf), 1.);
+  float hf = heightFrac(p.y); float d = remap01(cov, (1. - n1.r)*mix(.66, .82, hf), 1.);
   float soft = uSize*.12; float baseY = uBase + (n1.a - .5)*soft*1.2; d *= smoothstep(baseY - soft*.4, baseY + soft, p.y);
   return d; }
 float fullDensity(vec3 p, float sd, out float cov){ vec4 n1; float d = baseDensity(p, sd, cov, n1); if (d <= 0.) return 0.;
   float hf = heightFrac(p.y); vec3 q = p/uSize + uSeed; vec3 w = (n1.aga - .5)*.3; vec4 n2 = texture(uNoise, q*.95 + w + vec3(0., -uAaaTime*.03, uAaaTime*.006));
-  float detail = mix(n2.g, n2.b, .3), billowy = smoothstep(.06, .4, hf); d = remap01(d, mix(1. - detail, detail, billowy)*mix(.45, .38, billowy), 1.);
+  float detail = mix(n2.g, n2.b, .3), billowy = smoothstep(.06, .4, hf); d = remap01(d, mix(1. - detail, detail, billowy)*mix(.6, .5, billowy), 1.);
   return pow(d, mix(1.05, .6, hf)); }
 float lightDensity(vec3 p){ float sd = shapeSD(p); if (sd > uSize*.22) return 0.; float cov; vec4 n1; return baseDensity(p, sd, cov, n1); }
 float hg(float c, float g){ float g2 = g*g; return (1. - g2)/pow(1. + g2 - 2.*g*c, 1.5); }

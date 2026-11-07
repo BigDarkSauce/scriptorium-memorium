@@ -18,6 +18,15 @@ const toolStatus = st => (name, input) => { st.textContent = `Looking it up in $
 
 export const is3D = d => d && (d.type === 'scene' || Array.isArray(d.bodies) || !!DIO[String(d.type || '').toLowerCase()]);
 export const needsAuthoring = d => d && d.type === 'scene' && !Array.isArray(d.bodies);
+// prose with code in it: `backtick spans` and R/Python tokens (dat$TotalSleep, mean(x), x <- 1) become <code> (MathJax
+// never typesets inside <code>, so the $ of R's column operator is not read as maths); the rest is typeset with mathHTML
+export function prose(t) {
+  const out = []; String(t ?? '').split(/(`[^`\n]+`)/g).forEach((seg, i) => {
+    if (i % 2) { out.push('<code>' + esc(seg.slice(1, -1)) + '</code>'); return; }
+    seg.split(/((?:\b[A-Za-z_.][\w.]*\((?:[^()$]|(?<=\w)\$|\((?:[^()$]|(?<=\w)\$)*\))*\))|(?:[A-Za-z_.][\w.]*\$[\w.$]+(?:\[[^\]\s]*\])?))/g).forEach((x, j) => out.push(j % 2 ? '<code>' + esc(x) + '</code>' : mathHTML(x)));
+  });
+  return out.join('');
+}
 const KIND_ABBR = { definition: 'DEF', axiom: 'AX', postulate: 'POST', lemma: 'LEM', theorem: 'THM', result: 'RES', derivation: '⇒', formula: 'EQ', example: 'EX', remark: 'REM' };
 
 export class Reader {
@@ -161,12 +170,12 @@ export class Reader {
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
       st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => { const t = wrap.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } } })); }); art.append(f); }
-    if (st.statement) art.append(el('p', { class: 'stmt', html: mathHTML(st.statement) }));
+    if (st.statement) art.append(el('p', { class: 'stmt', html: prose(st.statement) }));
     if (st.statementFigure) art.append(this.figure(st.statementFigure));
     // short attributed excerpts (≤ 40 words); a passage quoted before is a link, never a second copy
     (st.quote || []).filter(q => q && q.text).forEach(q => art.append(q.dupOf ? el('div', { class: 'quote-ref' }, ['Quoted in ', el('a', { text: q.dupOf, tabindex: 0, onclick: () => this.jump(q.dupOf) })]) : el('blockquote', { class: 'src-quote' }, [el('span', { html: '“' + mathHTML(q.text) + '”' }), el('cite', { text: ' — the PDF' + (q.ref ? ', ' + q.ref : '') })])));
     // the explanation: paragraphs in the step's own words, each text-heavy one with its figure
-    (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: mathHTML(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); });
+    (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: prose(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); });
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
     if (st.code && Array.isArray(st.code.lines) && st.code.lines.length) art.append(renderCode(st.code));
@@ -176,13 +185,13 @@ export class Reader {
     if (st.figureRefs && st.figureRefs.length) art.append(el('div', { class: 'fig-refs' }, st.figureRefs.map(r => r.in ? el('span', { class: 'chip' }, [`${r.id} — shown in `, el('a', { text: r.in, tabindex: 0, onclick: () => this.jump(r.in) })]) : el('span', { class: 'chip dim', text: `${r.id} (p. ${r.page}) is a whole page: explained here instead of pasted` }))));
     if (st.extra && st.extra.length) art.append(el('div', { class: 'extras' }, st.extra.map(x => el('div', { class: 'extra' }, [el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }), el('span', { html: ' ' + esc(x.what || '') }), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))));
     if (this._numbers && this._numbers.has(st.id)) art.append(el('div', { class: 'num-warn', text: 'Not found in the PDF text of this subsection: ' + this._numbers.get(st.id).join(', ') + '. Check these numbers against the page.' }));
-    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: mathHTML(t.term) }), el('dd', { html: mathHTML(t.meaning) })])));
-    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + mathHTML(st.intuition) }), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
-    if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + mathHTML(st.misconception) }), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
+    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: mathHTML(t.term) }), el('dd', { html: prose(t.meaning) })])));
+    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
+    if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
     if (st.check && st.check.q) {
       // the check's figure may give the answer away: it is drawn only when the answer is revealed
-      const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: mathHTML(st.check.a || '') })]); let drawn = false;
-      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + mathHTML(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); } } }), ans]));
+      const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
+      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); } } }), ans]));
     }
     const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
     if (st.bodies && st.bodies.length) art.append(el('div', { class: 'bodies' }, ['attached to', ...st.bodies.map(b => el('span', { class: 'chip', mathLabel: b }))]));
@@ -206,9 +215,9 @@ export class Reader {
     if (!x) return null; const added = x.origin === 'added';
     return el('div', { class: 'example-card' + (added ? ' added' : '') }, [
       el('div', { class: 'ex-head' }, [added ? el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }) : el('span', { class: 'pdf-tag', text: 'From the PDF' + (x.ref ? ' · ' + x.ref : '') }), el('b', { html: ' ' + mathHTML(x.title || 'Worked example') })]),
-      x.problem ? el('p', { class: 'ex-problem', html: mathHTML(x.problem) }) : null,
-      Array.isArray(x.solution) && x.solution.length ? el('ol', { class: 'ex-sol' }, x.solution.map(y => el('li', {}, [y && y.text ? el('span', { html: mathHTML(y.text) }) : null, y && y.math ? el('div', { class: 'ex', html: '\\[' + esc(y.math) + '\\]' }) : null]))) : null,
-      x.answer ? el('p', { class: 'ex-answer', html: '<b>Answer.</b> ' + mathHTML(x.answer) }) : null,
+      x.problem ? el('p', { class: 'ex-problem', html: prose(x.problem) }) : null,
+      Array.isArray(x.solution) && x.solution.length ? el('ol', { class: 'ex-sol' }, x.solution.map(y => el('li', {}, [y && y.text ? el('span', { html: prose(y.text) }) : null, y && y.math ? el('div', { class: 'ex', html: '\\[' + esc(y.math) + '\\]' }) : null]))) : null,
+      x.answer ? el('p', { class: 'ex-answer', html: '<b>Answer.</b> ' + prose(x.answer) }) : null,
       added ? (x.source ? el('div', { class: 'extra-src' }, ['Source: ', renderSource(x.source)]) : el('div', { class: 'err', text: 'No source given for this added example.' })) : null]);
   }
   // the quality gate's report: what was repaired, what the app fixed itself, what is still open
@@ -400,10 +409,10 @@ function normExtra(e) {
 }
 // code explained line by line: each source line beside what it does, then the printed output and what it means
 function renderCode(c) {
-  const t = el('table', { class: 'code-lines' }, [el('tbody', {}, c.lines.map((l, i) => el('tr', {}, [el('td', { class: 'ln', text: String(i + 1) }), el('td', { class: 'cl' }, [el('code', { text: (l && l.code) || String(l || '') })]), el('td', { class: 'ce', html: mathHTML((l && l.explain) || '') })])))]);
+  const t = el('table', { class: 'code-lines' }, [el('tbody', {}, c.lines.map((l, i) => el('tr', {}, [el('td', { class: 'ln', text: String(i + 1) }), el('td', { class: 'cl' }, [el('code', { text: (l && l.code) || String(l || '') })]), el('td', { class: 'ce', html: prose((l && l.explain) || '') })])))]);
   const out = Array.isArray(c.output) ? c.output : c.output ? String(c.output).split('\n') : [];
   return el('div', { class: 'code-step' }, [el('div', { class: 'code-head' }, [el('span', { class: 'kind', text: (c.lang || 'code').toUpperCase() + ' · line by line' })]), el('div', { class: 'code-wrap' }, [t]),
-    out.length ? el('pre', { class: 'code-out', text: out.join('\n') }) : null, c.interpret ? el('p', { class: 'code-int', html: '<b>What the output says.</b> ' + mathHTML(c.interpret) }) : null]);
+    out.length ? el('pre', { class: 'code-out', text: out.join('\n') }) : null, c.interpret ? el('p', { class: 'code-int', html: '<b>What the output says.</b> ' + prose(c.interpret) }) : null]);
 }
 function renderTable(T) {
   const t = el('table', { class: 'src-table' });
