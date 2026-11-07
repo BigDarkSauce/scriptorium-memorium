@@ -720,7 +720,9 @@ export function mathText(s) {
     if (!r.sh) { out.push(r.t); i++; continue; }
     const sg = Math.sign(r.sh); let j = i, t = '', plain = '';
     while (j < R.length && Math.sign(R[j].sh) === sg) { const x = R[j].t.replace(/[\u2009\u202F]/g, ''); t += x; plain += (Math.abs(R[j].sh) < Math.abs(r.sh) - .01 || (sg > 0 && R[j].sh < r.sh - .01) ? '_' : '') + x; j++; }
-    const u = conv(t, sg > 0 ? USUP : USUB); out.push(u != null ? u : (sg > 0 ? '^' : '_') + (plain.length > 1 ? '(' + plain + ')' : plain)); i = j;
+    const u = conv(t, sg > 0 ? USUP : USUB), last = out[out.length - 1] || '';
+    if (u == null && sg > 0 && /(^|[^A-Za-z])e$/.test(last)) out[out.length - 1] = last.slice(0, -1) + (/[A-Za-zα-ω0-9)]$/.test(last.length > 1 ? last.slice(0, -1) : out[out.length - 2] || '') ? ' ' : '') + 'exp(' + plain + ')';   // e^(…) that has no superscript characters reads as exp(…)
+    else out.push(u != null ? u : (sg > 0 ? '^' : '_') + (plain.length > 1 ? '(' + plain + ')' : plain)); i = j;
   }
   return out.join('');
 }
