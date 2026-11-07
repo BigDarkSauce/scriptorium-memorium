@@ -60,7 +60,7 @@ function skyBounce(R, groundAlbedo, skyFrac = .15, cloud = 0, floor = .02) {
   h.color.copy(R.skyTint || _sky).multiplyScalar(E * (skyFrac + cloud * .35) + floor);
   const A = R.atmos; if (A) { A.sunDir.copy(_cd); A.sunColor.copy(s.color).multiplyScalar(s.intensity); A.amb.copy(h.color).multiplyScalar(.25); }
 }
-const _sky = new THREE.Color(.55, .7, 1);
+const _sky = new THREE.Color(.55, .7, 1), _c1 = new THREE.Color(), _c2 = new THREE.Color();
 // Studio key as a spotlight: inverse-square falloff and a wide penumbra give the light pool of a product photograph.
 function spotKey(scene, { color = 0xffe6c8, pos = [7, 12, 6.5], lux = 3.6, angle = .62, map = 2048 } = {}) {
   const d = Math.hypot(pos[0], pos[1] - 1.2, pos[2]), s = new THREE.SpotLight(color, lux * d * d, 0, angle, .75, 2); s.position.set(...pos); s.castShadow = true;
@@ -168,15 +168,15 @@ function glassCase(scene, w, h) {
 }
 
 const LOOKS = {
-  studio: { contrast: 1.12, sat: 1.04, vignette: .36, grain: .028, warm: .018, exposure: 1.0, bloomThreshold: 2.2, bloom: .22, tilt: 1 },
-  lab: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.02, vignette: .32, grain: .025, warm: .0, exposure: 1.0 },
-  landscape: { bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.08, sat: 1.08, vignette: .28, grain: .022, warm: .01 },
-  cosmos: { bloomThreshold: 1.6, bloom: .26, contrast: 1.1, sat: 1.05, vignette: .4, grain: .03, warm: 0, exposure: 1.0 },
-  micro: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
-  abstract: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
-  ocean: { bloomThreshold: 9, bloom: .2, contrast: 1.06, sat: 1.06, vignette: .26, grain: .02, warm: .01, exposure: .95 },
-  desk: { contrast: 1.12, sat: 1.04, vignette: .4, grain: .028, warm: .03, exposure: 1.0, bloomThreshold: 1.8, bloom: .26, tilt: 1 },
-  night: { bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.12, sat: 1.0, vignette: .42, grain: .035, warm: 0, exposure: 1.05 }
+  studio: { punch: .45, contrast: 1.12, sat: 1.04, vignette: .36, grain: .028, warm: .018, exposure: 1.0, bloomThreshold: 2.2, bloom: .22, tilt: 1 },
+  lab: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.02, vignette: .32, grain: .025, warm: .0, exposure: 1.0 },
+  landscape: { punch: .9, bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.04, sat: 1.04, vignette: .28, grain: .022, warm: .01 },
+  cosmos: { punch: .4, bloomThreshold: 1.6, bloom: .26, contrast: 1.1, sat: 1.05, vignette: .4, grain: .03, warm: 0, exposure: 1.0 },
+  micro: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
+  abstract: { punch: .35, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
+  ocean: { punch: .8, bloomThreshold: 9, bloom: .2, contrast: 1.06, sat: 1.06, vignette: .26, grain: .02, warm: .01, exposure: .95 },
+  desk: { punch: .45, contrast: 1.12, sat: 1.04, vignette: .4, grain: .028, warm: .03, exposure: 1.0, bloomThreshold: 1.8, bloom: .26, tilt: 1 },
+  night: { punch: .35, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.12, sat: 1.0, vignette: .42, grain: .035, warm: 0, exposure: 1.05 }
 };
 
 // A writing desk: a long walnut top whose front edge runs out of the frame (the foreground plane), lit by a brass
@@ -285,9 +285,12 @@ function buildEnvironment(R, scene, gfx, env) {
         const phi = THREE.MathUtils.degToRad(90 - elev), th = THREE.MathUtils.degToRad(az); sunV.setFromSphericalCoords(1, phi, th);
         u.sunPosition.value.copy(sunV); R.sun.position.copy(sunV).multiplyScalar(30); const day = Math.max(0, Math.sin((hour - 6) / 12 * Math.PI));
         const storm = Math.min(1, Math.max(0, p.storm ?? p.cloud ?? 0));
-        R.sun.intensity = 4 * Math.pow(day, .6) * (1 - storm * .75); hemi.intensity = .2 + day * .45 * (1 - storm * .5);
-        R.sun.color.setHSL(.08 + .05 * day, .6 - .3 * day, .55 + .2 * day); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
-        gfx.renderer.toneMappingExposure = .55 + day * .35; R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
+        // sun colour and strength from its elevation (Weatherglass World._updateLight): white-warm → gold below
+        // sin(el) = .42 → red near the horizon; I = 4.6·smoothstep(−.035, .07, y)·(.68 + .32·smoothstep(.1, .55, y))
+        const y = Math.max(-.1, sunV.y), sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+        R.sun.intensity = 4.4 * sm(-.035, .07, y) * (.68 + .32 * sm(.1, .55, y)) * (1 - storm * .75); hemi.intensity = .2 + day * .45 * (1 - storm * .5);
+        _c1.setRGB(1, .43, .2).lerp(_c2.setRGB(1, .68, .38), sm(.0, .14, y)); R.sun.color.copy(_c1).lerp(_c2.setRGB(1, .94, .86), sm(.2, .45, y)); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
+        gfx.renderer.toneMappingExposure = (.62 + day * .4) * (env.exposure ?? 1);   // a little brighter than AgX base: the grade's punch look restores the contrast R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
         R.skyTint = _sky; placeCascades(R); skyBounce(R, ground, .15, storm);
         if (R.atmos) { R.atmos.density = .012 + storm * .03; R.atmos.god = .45 * (1 - storm * .8); }
       };

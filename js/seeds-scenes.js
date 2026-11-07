@@ -5,22 +5,31 @@ const trees = (pts, kind = 'tree') => pts.map(([x, z, h], i) => ({ id: kind + i,
 
 export const WATER_CYCLE = {
   type: 'scene', title: 'The water cycle in a glass valley', technique: 'topdown',
-  environment: { preset: 'landscape', time: 11, azimuth: -45 },
+  environment: { preset: 'landscape', time: 11, azimuth: -45, base: false },
+  // A specimen block of land (js/gfx/terrain.js): one terrain field with the ridge, two side ridges, a terrace whose
+  // edge is a waterfall, a stream from the saddle into the lake, a cottage yard and a path; cut faces show the soil
+  // section. Grass, flowers, reeds, rocks and trees are scattered by the field's ecology (realism-playbook §3).
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', shape: { kind: 'terrain', w: 13, d: 13, h: .2, seed: 3, low: '#4f6a35', high: '#74794a', flat: [[.9, 1.7, 1.95, 1.0, -.15]] }, position: [0, .02, 0] },
-    { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'mountain', r: 2.3, h: 1.25, seed: 5, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [.2, 0, -2.75] },
-    { id: 'ridgeN', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: 1.0, seed: 11, snowline: 9, low: '#564f45', high: '#857d6f' }, position: [-1.9, 0, -2.9] },
-    { id: 'ridgeS', name: 'Ridge', role: 'decor', shape: { kind: 'mountain', r: 1.7, h: .75, seed: 6, snowline: 9, low: '#5b5348', high: '#8b8273' }, position: [2.3, 0, -2.6] },
-    { id: 'farhill1', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.4, h: .8, seed: 9, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.6, 0, 1.4] },
-    { id: 'farhill2', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 2.0, h: .7, seed: 4, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-4.5, 0, -4.2] },
-    { id: 'farhill3', name: 'Far hills', role: 'decor', shape: { kind: 'mountain', r: 1.6, h: .5, seed: 2, snowline: 9, low: '#4b4c43', high: '#6c6e62' }, position: [-3.0, 0, 4.4] },
-    { id: 'lakebed', name: 'Lake bed', role: 'decor', shape: { kind: 'plane', w: 2.5, h: 2.9 }, material: { preset: 'mud', color: '#3b3226' }, position: [.9, -.12, 1.7], rotation: [-90, 0, 0] },
-    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'water', w: 2.5, d: 2.9, waves: .02 }, material: { preset: 'water', color: '#4aa6c0' }, position: [.9, .05, 1.7] },
-    { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint motes rising from the lake.', shape: { kind: 'particles', type: 'bubbles', count: 160, area: [2.2, 1.7, 2.6], size: .035 }, position: [.9, .05, 1.7] },
+    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3b5326', high: '#6b6f43', block: true, bottom: -.85,
+      backRise: [-2.4, -5, .35],
+      peaks: [{ x: .2, z: -2.9, r: 1.75, h: 2.75, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
+        { x: -4.9, z: 1.4, r: 1.5, h: .5, rough: .15, seed: 9 }, { x: 5.0, z: -3.9, r: 1.3, h: .8, seed: 4 }],
+      terraces: [{ z0: -.55, z1: -.72, x0: -2.7, x1: .15, h: .32 }],
+      river: { points: [[-1.0, -2.3], [-1.15, -1.6], [-.95, -1.05], [-.8, -.62], [-.65, -.2], [-.3, .15], [.15, .45], [.55, .75]], width: [.08, .2], depth: .05 },
+      lake: { x: .9, z: 1.7, rx: 1.25, rz: 1.45, depth: .3 },
+      pads: [[3.5, 3.7, .7]], path: { points: [[3.25, 3.35], [2.7, 2.9], [2.25, 2.2]], width: .14 } } },
+    { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'peak', id: 'ridge', x: .2, z: -2.9 }, position: [.2, 0, -2.9] },
+    { id: 'meadow', name: 'Meadow', role: 'decor', shape: { kind: 'grassField' }, position: [0, 0, 0] },
+    { id: 'flowers', name: 'Wild flowers', role: 'decor', shape: { kind: 'flowers' }, position: [0, 0, 0] },
+    { id: 'reeds', name: 'Reeds', role: 'decor', shape: { kind: 'reeds' }, position: [0, 0, 0] },
+    { id: 'rocks', name: 'Boulders', role: 'decor', shape: { kind: 'rockScatter', count: 80, r: [.04, .17] }, position: [0, 0, 0] },
+    { id: 'stream', name: 'Stream and waterfall', role: 'decor', shape: { kind: 'river', flow: .35 }, position: [0, 0, 0] },
+    { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'lake' }, position: [0, 0, 0] },
+    { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint wisps rising from the lake.', shape: { kind: 'particles', type: 'vapour', count: 140, area: [2.2, 1.7, 2.6], size: .16 }, position: [.9, .05, 1.7] },
     { id: 'parcel', name: 'Air parcel', label: 'Air parcel · moist air from the lake', role: 'actor', describe: 'One rising bubble of lake air: you can ride it (POV).', shape: { kind: 'sphere', r: .07 }, material: { preset: 'cloud', color: '#eef6ff', emissive: '#4a6c86' }, position: [1.1, .1, 1.4] },
-    { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Droplets condensed from the vapour; it greys as it fills with water.', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, 1.7], rotation: [0, 90, 0] },
-    { id: 'cloud2', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, 3.5], rotation: [0, 90, 0] },
-    { id: 'cloud3', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', r: .9, puffs: 13 }, position: [.7, 2.2, -4.5], rotation: [0, 90, 0] },
+    { id: 'cloud', name: 'Cloud', label: 'Cloud · condensed droplets', role: 'actor', describe: 'Droplets condensed from the vapour; it greys as it fills with water.', shape: { kind: 'cloud', volume: true, r: .9, puffs: 13 }, position: [.7, 2.2, 1.7], rotation: [0, 90, 0] },
+    { id: 'cloud2', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', volume: true, r: .9, puffs: 13 }, position: [.7, 2.2, 3.5], rotation: [0, 90, 0] },
+    { id: 'cloud3', name: 'Cloud', role: 'decor', shape: { kind: 'cloud', volume: true, r: .9, puffs: 13 }, position: [.7, 2.2, -4.5], rotation: [0, 90, 0] },
     { id: 'windsock', name: 'Windsock', label: 'Wind · carries the cloud to the ridge', role: 'actor', describe: 'It blows from the lake towards the ridge; the sock lifts as the wind strengthens.', shape: { kind: 'group' }, position: [2.9, 0, .2] },
     { id: 'sockpole', name: 'Windsock pole', role: 'decor', parent: 'windsock', shape: { kind: 'cylinder', r: .016, h: 1.0 }, material: { preset: 'steel' }, position: [0, .5, 0] },
     { id: 'sockpivot', name: 'Windsock', role: 'decor', parent: 'windsock', shape: { kind: 'group' }, position: [0, .98, 0] },
@@ -28,10 +37,11 @@ export const WATER_CYCLE = {
     { id: 'rain', name: 'Rain', label: 'Rain', role: 'actor', describe: 'Falls once the cloud holds more water than its droplets can keep aloft.', shape: { kind: 'group' }, position: [0, 0, 0] },
     { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated; the light and the shadows come from it.', shape: { kind: 'star', r: .34, color: '#ffe2b0', intensity: 2 }, position: [-4.2, 5, 3] },
     { id: 'house', name: 'Cottage', role: 'decor', shape: { kind: 'house', w: .9, d: .75, h: .6 }, position: [3.5, .1, 3.7], rotation: [0, 70, 0] },
-    { id: 'rock1', name: 'Boulder', role: 'decor', shape: { kind: 'rock', r: .32, h: .3 }, position: [4.4, .05, -1.2] },
-    { id: 'rock2', name: 'Boulder', role: 'decor', shape: { kind: 'rock', r: .22, h: .2 }, position: [2.6, .05, -.9] },
-    ...trees([[5.0, -3.4, 1.5], [4.5, -4.5, 1.2], [4.7, 4.4, 1.4], [5.5, 3.0, 1.0], [2.6, -.2, .9], [-1.6, .6, .9], [2.1, 4.5, 1.1], [-.6, -5.0, .8]]),
-    ...trees([[-1.0, -.9, 1.1], [1.8, -1.3, 1.0], [-1.4, -5.2, .9], [-.6, 3.1, 1.1], [3.6, -2.3, 1.3], [-3.0, -1.0, 1.0]], 'pine')
+    { id: 'pines', name: 'Pines', role: 'decor', shape: { kind: 'forest', species: 'pine', items: [[3.6, -2.3, 1.1], [-3.0, -1.3, 1.0], [-3.7, -2.2, 1.2], [4.2, -1.6, 1.0], [-1.9, -1.45, .9], [1.9, -1.55, .95], [-4.4, -3.6, 1.1], [4.6, -3.0, 1.15], [-2.9, -4.4, 1.0], [3.4, -4.3, 1.0], [-5.6, -2.6, 1.05], [5.7, -2.2, .95]] }, position: [0, 0, 0] },
+    { id: 'oaks', name: 'Oaks', role: 'decor', shape: { kind: 'forest', species: 'oak', items: [[4.9, 2.0, 1.2], [-2.5, 1.3, 1.1], [-3.9, 2.9, 1.3], [5.4, -.5, 1.0], [-1.4, 3.7, 1.0], [-5.5, -.3, 1.15]] }, position: [0, 0, 0] },
+    { id: 'birches', name: 'Birches', role: 'decor', shape: { kind: 'forest', species: 'birch', items: [[-1.6, -.95, .9], [-.3, -.5, .85], [-1.65, -.1, .8], [.1, -.05, .8], [-2.05, -2.1, .85]] }, position: [0, 0, 0] },
+    { id: 'bushes', name: 'Bushes', role: 'decor', shape: { kind: 'forest', species: 'bush', items: [[2.35, 3.35, .35], [1.25, 3.6, .3], [-.55, 2.3, .35], [3.05, .45, .3], [-1.05, 1.05, .3], [4.3, 4.1, .32]] }, position: [0, 0, 0] },
+    { id: 'cherry', name: 'Cherry in blossom', role: 'decor', shape: { kind: 'cherry', h: .95 }, position: [2.6, 0, 4.25] }
   ],
   tour: ['sun', 'lake', 'vapour', 'parcel', 'cloud', 'windsock', 'mountain', 'rain'],
   // the path of a parcel of the cloud's air over the ridge (lesson "Over the crest"): along the wind from the lake, up the
@@ -46,7 +56,7 @@ export const WATER_CYCLE = {
     { key: 'sun', label: 'sunshine (0 = overcast)', min: 0, max: 1.5, value: .9, unit: '' },
     { key: 'wind', label: 'wind speed', min: 0, max: 10, value: 4, unit: 'm/s' },
     { key: 'hour', label: 'time of day (sun held)', min: 6, max: 19.5, value: 11, unit: 'h' }],
-  behaviors: [{ target: 'tree*', type: 'sway', amount: 'wind*0.3', speed: '1' }, { target: 'pine*', type: 'sway', amount: 'wind*0.2', speed: '0.8' }],
+  behaviors: [],   // trees and grass move in the shaders with the wind parameter (scene.userData.wind)
   shots: {
     'has warmed to': { target: [.9, .7, 1.7], dist: 7 },
     'has cooled to': { target: [.9, .9, 1.7], dist: 9 },
@@ -73,15 +83,12 @@ const gm=(t,p)=>{const K=t+273.15,r=qsat(t,p)/1000;return 1000*9.81*(1+2.501e6*r
 const growth=t=>100*17.62*243.12/((243.12+t)*(243.12+t));               // d ln e_s / dT in % per K
 // ---- layout: heights in the air are drawn at 1 unit = 250 m; the wind blows towards -z ----
 const VS=250, PX=.7, HOME=1.7, LX=.9, LZ=1.7, AZ=-45;   // AZ: the landscape's sun azimuth offset (environment.azimuth)
-api.world.updateMatrixWorld(true);
-const ray=new T.Raycaster(), DOWN=V(0,-1,0), land=['ground','mountain','ridgeN','ridgeS','farhill1','farhill2','farhill3'].map(api.body).filter(Boolean);
-const hAt=(x,z,objs)=>{ray.set(V(x,40,z),DOWN);const h=ray.intersectObjects(objs||land,true)[0];return h?h.point.y:0;};
-api.bodies().forEach(o=>{const id=o.userData.bodyId||'';if(/^(tree|pine|house|windsock|rock)/.test(id)) o.position.y=hAt(o.position.x,o.position.z)-(/^rock/.test(id)?.08:.03);});  // decor stands on the ground
-let lakeY;{const b=[];for(let i=0;i<=24;i++){const u=i/24-.5;b.push(hAt(LX+u*2.5,LZ-1.45,[ground]),hAt(LX+u*2.5,LZ+1.45,[ground]),hAt(LX-1.25,LZ+u*2.9,[ground]),hAt(LX+1.25,LZ+u*2.9,[ground]));}b.sort((a,c)=>a-c);lakeY=Math.max(hAt(LX,LZ,[ground])+.05,b[Math.floor(b.length*.12)]-.015);}
-lake.position.y=lakeY; vap.position.y=lakeY; api.body('lakebed').position.y=hAt(LX,LZ,[ground])+.004;   // the shoreline is where the terrain rises through the water plane
-ground.traverse(o=>{const a=o.material&&o.material.userData&&o.material.userData.aaa;if(a)a.set({shoreY:lakeY-.01,shoreBand:.1});});   // visuals: a band of wet mud along the water line
-// the air's path over the land: terrain height under the cloud, smoothed (air flows over, not through, the ridge)
-const base0=hAt(PX,HOME,[ground]), raw=[];for(let i=0;i<=210;i++){const z=4-i*.05;raw.push(Math.max(0,hAt(PX,z)-base0));}
+// the land is one terrain field (js/gfx/terrain.js): exact heights without raycasts, the lake level found from its rim
+const F=ground.userData.field, hAt=(x,z)=>F?F.h(x,z):0;
+['house','windsock','cherry'].forEach(id=>{const o=api.body(id);if(o) o.position.y=hAt(o.position.x,o.position.z)-.03;});  // decor stands on the ground
+const lakeY=F&&F.lake?F.lake.level:.05; vap.position.y=lakeY;
+// the air's path over the land: terrain height under the cloud above the lake surface, smoothed (air flows over, not through, the ridge)
+const base0=lakeY, raw=[];for(let i=0;i<=210;i++){const z=4-i*.05;raw.push(Math.max(0,hAt(PX,z)-base0));}
 const lift=raw.map((_,i)=>{let s=0,n=0;for(let j=-14;j<=14;j++){const k=i+j;if(k<0||k>=raw.length)continue;const w=1-Math.abs(j)/15;s+=w*raw[k];n+=w;}return s/n;});
 const liftU=z=>{const i=Math.max(0,Math.min(lift.length-1,Math.round((4-z)/.05)));return lift[i];};
 let zCrest=HOME,top=0;lift.forEach((v,i)=>{if(v>top){top=v;zCrest=4-i*.05;}});
@@ -125,7 +132,7 @@ function step(h){
 }
 for(let i=0;i<60*120;i++) step(1/120); quiet=false;   // start from the steady state of the default sky
 api.onStep(h=>step(h));
-if(api.scene.fog){ api.scene.fog.near=13; api.scene.fog.far=40; }   // aerial perspective: the far hills sink into haze
+if(api.scene.fog){ api.scene.fog.near=20; api.scene.fog.far=60; }   // aerial perspective: a light haze over the far side of the block
 // ---- sky: the landscape's sky dome shows only grey haze below the horizon, so it gives way to a painted screen-space gradient (repainted with the hour) ----
 const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity);   // hidden every frame (the materialiser restores the background objects when it finishes)
 const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
@@ -135,10 +142,9 @@ function paintSky(day){ const warm=1-Math.min(1,day*1.7); hz.setRGB(.66+.22*warm
 api.scene.background=skyTex;
 let lastHr=-1;
 // ---- visuals ----
-const white=new T.Color('#ffffff'), slate=new T.Color('#5e6670'), cms=meshes.map(m=>{const a=[];m&&m.traverse(o=>{if(o.isMesh)a.push(o);});return a;});
+const cms=meshes.map(m=>{const a=[];m&&m.traverse(o=>{if(o.isMesh&&o.userData.cloud)a.push(o);});return a;});   // volumetric clouds (js/gfx/clouds.js): grey and fade are shader uniforms
 const vapPts=vap.children[0];
-const NR=420, RD=[], rg=new T.BufferGeometry(); rg.setAttribute('position',new T.BufferAttribute(new Float32Array(NR*6),3));
-const rl=new T.LineSegments(rg,new T.LineBasicMaterial({color:0xb8cfe0,transparent:true,opacity:.6,depthWrite:false})); rl.frustumCulled=false; rl.name='rain streaks'; rainB.add(rl);
+const NR=420, RD=[], rl=api.shape({kind:'particles',type:'streaks',count:NR,length:.17,width:.007}), RS=rl.userData.streaks; rainB.add(rl);   // velocity-aligned soft streaks (js/gfx/precip.js)
 for(let i=0;i<NR;i++) RD.push({x:0,y:-1,z:0,v:4.5+api.rand()*1.5,c:i%2});
 let fr=0, wetA=0, wetZ=HOME;
 function sunDir(hr){ const el=Math.sin((hr-6)/12*Math.PI)*62, az=(hr-12)/12*140+AZ; return new T.Vector3().setFromSphericalCoords(1,(90-el)*Math.PI/180,az*Math.PI/180); }   // same sun path as the landscape light
@@ -146,26 +152,26 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
   meshes.forEach((m,k)=>{ const c=C[k]; if(!m) return; if(!c){ m.visible=false; m.position.set(PX,base0+2,HOME); return; } m.visible=true;
     const vis=Math.min(1,c.qc/.12+(c.over?.15:0)), sxz=.75+.22*Math.min(3,c.d/400), sy=Math.max(.35,Math.min(2.6,c.d/VS/.8));
     m.position.set(PX,base0+(c.zb+c.d/2+c.L)/VS,c.z); m.scale.set(sxz,sy,sxz);
-    const kk=api.clamp(c.qc/2.2,0,1); cms[k].forEach(o=>{ o.material.color.copy(white).lerp(slate,kk*.85); o.material.transparent=true; o.material.opacity=.94*vis; o.visible=vis>.02; });
+    const kk=api.clamp(c.qc/2.2,0,1); cms[k].forEach(o=>{ o.userData.cloud.set({grey:kk*.85,fade:.94*vis,storm:c.raining?Math.min(.6,c.rk*.6):0}); o.visible=vis>.02; });
     c.rk+=((c.raining?Math.min(1,.35+(c.qc-.8)):0)-c.rk)*Math.min(1,dt*3); });
   parcel.position.copy(pp);
   // rain: streaks from each raining cloud's base to the ground under it
   const rk=Math.max(...C.map(c=>c?c.rk:0)); rl.visible=rk>.02; rl.material.opacity=.6*Math.min(1,rk+.2);
   { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; if(c&&rk>.05) wetZ+=(c.z-wetZ)*Math.min(1,dt*.8); wetA=Math.max(0,Math.min(1,wetA+dt*(rk*.35-.012))); api.scene.userData.aaaWet={g:0,rain:rk,x:PX,z:wetZ,r:1.6,a:wetA}; }   // visuals: where the rain falls the ground darkens, puddles form and dry slowly
-  { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; rainB.position.set(PX,0,c?c.z:HOME); rl.position.set(-PX,0,-(c?c.z:HOME)); if(!rl.visible) rg.boundingBox=new T.Box3(); }
-  if(rl.visible){ const a=rg.attributes.position.array;
-    for(let i=0;i<NR;i++){ const s=RD[i], c=C[s.c]; if(!c||c.rk<.02){ a[i*6+1]=a[i*6+4]=-5; continue; }
-      const yTop=base0+(c.zb+c.L)/VS-.1; s.y-=dt*s.v; const g=base0+liftU(s.z);
+  { const c=C.filter(Boolean).sort((a,b)=>b.rk-a.rk)[0]; rainB.position.set(PX,0,c?c.z:HOME); rl.position.set(-PX,0,-(c?c.z:HOME)); }
+  if(rl.visible){ const a=RS.pos;
+    for(let i=0;i<NR;i++){ const s=RD[i], c=C[s.c]; if(!c||c.rk<.02){ a[i*3+1]=-50; continue; }
+      const yTop=base0+(c.zb+c.L)/VS-.1; s.y-=dt*s.v; const g=Math.max(base0,hAt(s.x,s.z));
       if(s.y<g||s.y>yTop||Math.abs(s.z-c.z)>1){ s.x=PX+(api.rand()-.5)*.9; s.z=c.z+(api.rand()-.5)*1.6; s.y=g+api.rand()*(yTop-g); }
-      a[i*6]=s.x;a[i*6+1]=s.y+.16;a[i*6+2]=s.z+.02;a[i*6+3]=s.x;a[i*6+4]=s.y;a[i*6+5]=s.z; }
-    rg.attributes.position.needsUpdate=true; if((fr++)%10===0) rg.computeBoundingBox(); }
+      a[i*3]=s.x;a[i*3+1]=s.y;a[i*3+2]=s.z; }
+    RS.commit(NR); }
   // vapour motes: rise from the lake to the cloud base, drift with the wind; fainter as evaporation falls
   if(vapPts&&vapPts.geometry){ const a=vapPts.geometry.attributes.position, top=zb/VS, w=api.param('wind');
     for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(.12+.5*Math.min(1.5,heat())); let z=a.getZ(i)-dt*w*.03; if(y>top){y=0;z=(api.rand()-.5)*2.6;} if(z<-1.3) z+=2.6; a.setY(i,y); a.setZ(i,z); }
     a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
   const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);
   { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } if(dome) dome.visible=false; }
-  const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
+  const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; api.scene.userData.wind=[w*.12,-w*.42];   // grass, reeds, trees and the lake's waves follow the wind pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
 
 const atLake=()=>C.find(c=>c&&c.over), onRidge=()=>C.filter(c=>c&&!c.over).sort((a,b)=>b.L-a.L)[0];
@@ -178,7 +184,7 @@ api.readout('cloud water over the ridge',()=>{const c=onRidge();return c?f1(c.qc
 api.readout('rain on the slope',()=>f1(rainSlope)+' mm'); api.readout('rain on the lake',()=>f1(rainLake)+' mm');
 api.readout('föhn warming in the lee',()=>{const c=onRidge();return c&&c.z<zCrest?f1(2.49*Math.max(0,c.qt0-c.qt))+' K (2.5 K per g/kg rained out)':'—';});
 api.plot('cloud water (g/kg)',()=>{const c=C[0]||C[1];return c?c.qc:0;});
-api.camera({target:[.3,1.55,-.3],r:13.5,ph:1.27,th:1.2});`,
+api.camera({target:[.3,.95,-.2],r:18.5,ph:1.08,th:1.2,fov:32});   // a longer lens: a miniature world, not a toy table (realism-playbook R12)`,
   lessons: [
     { title: 'Heat the lake', question: 'What lifts water out of the lake?', text: 'Turn the sunshine up. Watch how the vapour rises faster from the lake, and watch three readouts: the lake-air temperature, the saturation vapour pressure e_s, and the evaporation rate.', set: { sun: 1.4 }, focus: 'lake', shot: 'push', isolate: ['sun', 'lake', 'vapour'], until: 'event:has warmed to', run: 30, explain: 'Stronger sunshine warms the lake air from 22.2 to 28.7 °C. The saturation vapour pressure e_s rises from 26.6 to 39.2 hPa, about 6 % per kelvin: the Clausius–Clapeyron rate (Koutsoyiannis 2012). Evaporation is driven by the gap between e_s and the vapour already in the air, so it more than doubles, from 1.4 to 3.4 mm a day. Saturation is a property of water at a given temperature. It is not a capacity of the air.', opens: 'Where does the vapour go?' },
     { title: 'Ride a parcel of air', question: 'Where does the vapour go?', text: 'You are now inside one parcel of moist lake air as it rises. Look up: the cloud base is above you. Wait until the parcel reaches its dew point.', focus: 'parcel', shot: 'pov', pov: 'Air parcel', until: 'event:parcel reaches its dew point', run: 40, explain: 'Rising air expands and cools by 9.8 K per kilometre while it is unsaturated. Its dew point falls only about 1.8 K per kilometre, so the gap between them closes by about 8 K per kilometre. The parcel therefore saturates about 125 m higher for every kelvin of gap at the ground (Espy). Here the lake air is at 28.9 °C with a dew point of 25.4 °C, a gap of 3.5 K, so condensation starts near 436 m, at 24.7 °C. There the vapour condenses on tiny aerosol particles into cloud droplets.', opens: 'Why does the rain fall on the ridge and not on the lake?' },

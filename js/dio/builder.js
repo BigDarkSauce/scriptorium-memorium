@@ -4,11 +4,17 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
-import { aaaMaterial } from '../gfx/aaa.js';
+import { aaaMaterial, AAA } from '../gfx/aaa.js';
 import { alignUV, relief } from '../gfx/proc.js';
 import { canvasTex, labelTex } from '../gfx/textures.js';
 import { compile, mulberry, makeNoise } from '../util.js';
-import { buildTree, treeForest } from './trees.js';
+import { buildTree, treeForest, speciesOf } from './trees.js';
+import { bakeField, buildTerrain, buildPeak, setField, getField } from '../gfx/terrain.js';
+import { grassField, flowerField, reedField } from '../gfx/grass.js';
+import { buildLake, buildRiver } from '../gfx/water.js';
+import { buildCloudVolume } from '../gfx/clouds.js';
+import { buildSoilBlock } from '../gfx/soil.js';
+import { vapourPoints, rainStreaks } from '../gfx/precip.js';
 
 const D2R = Math.PI / 180;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -16,10 +22,10 @@ const num = (v, d) => (v == null || !isFinite(+v) ? d : +v);
 function mesh(geo, mat, cast = true) { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = true; return m; }
 
 export const SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule', 'plane', 'disc', 'ring', 'extrude', 'lathe', 'tube', 'spring', 'arrow', 'text', 'group',
-  'tree', 'pine', 'bush', 'house', 'tower', 'mountain', 'rock', 'cloud', 'water', 'terrain', 'table', 'lamp', 'beaker', 'flask', 'testtube', 'molecule', 'cell', 'planet', 'star', 'gear', 'magnet', 'battery', 'coin', 'die', 'person', 'bars', 'surface', 'curve', 'grid', 'axes', 'sign', 'glasscase', 'particles', 'book', 'scale', 'pulley', 'boat', 'car'];
+  'tree', 'pine', 'bush', 'oak', 'birch', 'cherry', 'forest', 'house', 'tower', 'mountain', 'rock', 'cloud', 'water', 'terrain', 'table', 'lamp', 'beaker', 'flask', 'testtube', 'molecule', 'cell', 'planet', 'star', 'gear', 'magnet', 'battery', 'coin', 'die', 'person', 'bars', 'surface', 'curve', 'grid', 'axes', 'sign', 'glasscase', 'particles', 'book', 'scale', 'pulley', 'boat', 'car', 'peak', 'grassField', 'flowers', 'reeds', 'lake', 'river', 'waterfall', 'cloudVolume', 'soilBlock', 'rockScatter'];
 
 export function buildShape(shape = {}, matSpec, ctx = {}) {
-  const k = String(shape.kind || 'box').toLowerCase();
+  const k = String(shape.kind || 'box').toLowerCase(), F = () => getField(ctx);
   const mat = () => makeMaterial(matSpec || {});
   const g = new THREE.Group();
   switch (k) {
@@ -68,7 +74,44 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     case 'group': return g;
     // believable trees (js/dio/trees.js): bent tapered trunk + branches in AAA bark, displaced leaf clumps fringed by
     // alpha-tested leaf cards, whorled drooping tiers for pines; shared geometry (4 variants per kind), 2 draw calls each
-    case 'tree': case 'bush': case 'pine': return buildTree(k, shape, matSpec, ctx);
+    case 'tree': case 'bush': case 'pine': case 'oak': case 'birch': case 'cherry': return buildTree(k, shape, matSpec, ctx);
+    // ---- landscape kit (realism-playbook; js/gfx/terrain.js, grass.js, water.js, clouds.js, soil.js) ----
+    // forest{species, items:[[x,z,h],…]} or {species, count, region:[x0,z0,x1,z1], h:[min,max]}: instanced trees (2 draw calls per variant)
+    case 'forest': {
+      const sp = speciesOf(shape.species || 'tree'), f = F(), r = mulberry(ctx.seed || 5), hr = shape.h || [.8, 1.3], yAt = (x, z) => (f ? f.h(x, z) : 0) - .03;
+      let items = (shape.items || []).map(it => ({ x: +it[0], z: +it[1], h: +it[2] || hr[0] + r() * (hr[1] - hr[0]) }));
+      if (!items.length && shape.count) { const rg = shape.region || [-5, -4, 5, 4], kind = sp === 'pine' ? 'pine' : 'tree';
+        for (let n = 0, g2 = 0; n < shape.count && g2 < shape.count * 60; g2++) { const x = rg[0] + r() * (rg[2] - rg[0]), z = rg[1] + r() * (rg[3] - rg[1]); if (f && r() > f.suit(x, z, kind)) continue; if (items.some(o => Math.hypot(o.x - x, o.z - z) < (shape.spacing || .55))) continue; items.push({ x, z, h: hr[0] + r() * (hr[1] - hr[0]) }); n++; } }
+      items.forEach(it => { it.y = yAt(it.x, it.z); });
+      const fo = treeForest(sp, items, { color: matSpec && matSpec.color, seed: ctx.seed || 1, variants: shape.variants || 2 }); fo.userData.forest = { species: sp, items }; return fo;
+    }
+    // peak{id, x, z}: the rock of a terrain peak that has own:id, as its own (actor) body; place the body at [x,0,z]
+    case 'peak': { const f = F(), m = f && buildPeak(f, shape.id || shape.own, num(shape.x, 0), num(shape.z, 0)); if (m) { g.add(m); return g; } return buildShape(Object.assign({}, shape, { kind: 'mountain' }), matSpec, ctx); }
+    case 'grassfield': { const f = F(); if (!f) return g; const m = grassField(f, { density: shape.density, height: shape.height, amount: shape.amount, seed: ctx.seed }); g.add(m); g.userData.stats = m.userData.stats; return g; }
+    case 'flowers': { const f = F(); const m = f && flowerField(f, { amount: shape.amount, seed: ctx.seed, force: shape.force }); if (m) g.add(m); return g; }
+    case 'reeds': { const f = F(); const m = f && reedField(f, { amount: shape.amount, seed: ctx.seed }); if (m) g.add(m); return g; }
+    case 'lake': { const f = F(); const l = f && buildLake(f, shape); if (l) return l; return buildShape(Object.assign({}, shape, { kind: 'water' }), matSpec, ctx); }
+    case 'river': case 'waterfall': { const f = F(); const rv = f && buildRiver(f, { flow: shape.flow, spray: shape.spray }); return rv || g; }
+    case 'cloudvolume': { g.add(buildCloudVolume(shape, ctx.seed || 3, F())); return g; }
+    case 'soilblock': { const f = F(); if (f && !f.soil) { f.soil = true; g.add(buildSoilBlock(f, { bottom: num(shape.bottom, -.9), grass: shape.grass, plinth: shape.plinth !== false })); } return g; }
+    // rockScatter{count, r:[min,max], region?, moss}: half-buried boulders on the field's rocky ground, 2 shape variants
+    case 'rockscatter': {
+      const f = F(), r = mulberry(ctx.seed || 9), n = Math.round(num(shape.count, 60) * ({ low: .6, medium: 1, high: 1.3 }[AAA.quality] || 1)), rr = shape.r || [.04, .16], rg = shape.region;
+      const noise = makeNoise(ctx.seed || 9), mat = aaaMaterial('crag', { color: shape.low || '#57524a', color2: shape.high || '#8c8578', yRange: [-.2, 1.2], moss: num(shape.moss, .95), tile: .6, depth: .02, silhouette: false });
+      const geos = [0, 1].map(v => { let q = new THREE.IcosahedronGeometry(1, 2); q.deleteAttribute('uv'); q.deleteAttribute('normal'); q = mergeVertices(q); const P = q.attributes.position, t = V3();
+        for (let i = 0; i < P.count; i++) { t.fromBufferAttribute(P, i); const d = 1 + .35 * noise.fbm(t.x * 1.5 + v * 7, t.y * 1.5, t.z * 1.5, 4); t.multiplyScalar(d); t.y *= .62; P.setXYZ(i, t.x, t.y, t.z); } q.computeVertexNormals(); return q; });
+      const lists = [[], []], m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), nrm = V3();
+      for (let i = 0, guard = 0; i < n && guard < n * 80; guard++) {
+        const x = rg ? rg[0] + r() * (rg[2] - rg[0]) : (f ? f.minX + r() * f.w : (r() - .5) * 10), z = rg ? rg[1] + r() * (rg[3] - rg[1]) : (f ? f.minZ + r() * f.d : (r() - .5) * 10);
+        if (f && r() > f.suit(x, z, 'rock') + (shape.anywhere ? .25 : 0)) continue;
+        const R0 = rr[0] + Math.pow(r(), 2.2) * (rr[1] - rr[0]);
+        let y = 0; if (f) { y = 9; for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283; y = Math.min(y, f.h(x + Math.cos(a) * R0 * .8, z + Math.sin(a) * R0 * .8)); } f.normal(x, z, nrm); } else nrm.set(0, 1, 0);
+        qq.setFromUnitVectors(V3(0, 1, 0), nrm.lerp(V3(0, 1, 0), .5).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), r() * 6.283));
+        m4.compose(V3(x, y - R0 * .22, z), qq, V3(R0 * (.8 + r() * .5), R0 * (.7 + r() * .5), R0 * (.8 + r() * .5))); lists[i % 2].push(m4.clone()); i++;
+      }
+      lists.forEach((L, v) => { if (!L.length) return; const im = new THREE.InstancedMesh(geos[v], mat, L.length); L.forEach((mm, i) => im.setMatrixAt(i, mm)); im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); im.userData.noInk = true; im.name = 'rocks'; g.add(im); });
+      return g;
+    }
     case 'house': {
       const w = num(shape.w, 1.6), d = num(shape.d, 1.2), h = num(shape.h, 1);
       const wall = mesh(alignUV(new THREE.BoxGeometry(w, h, d)), makeMaterial(matSpec || { preset: 'plaster', color: '#efe3cc' })); wall.position.y = h / 2; g.add(wall);
@@ -81,7 +124,14 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       return g;
     }
     case 'tower': { const h = num(shape.h, 3), r = num(shape.r, .5); const t = mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 24), makeMaterial(matSpec || 'stone')); t.position.y = h / 2; const c = mesh(new THREE.ConeGeometry(r * 1.3, h * .35, 24), makeMaterial({ preset: 'ceramic', color: '#5a3a4a' })); c.position.y = h + h * .17; g.add(t, c); return g; }
-    case 'mountain': case 'rock': case 'terrain': {
+    case 'terrain': if (shape.peaks || shape.lake || shape.river || shape.block) {
+      // field terrain: one bake (heights + river/lake masks + slope) shared by every body that follows (getField)
+      const f = bakeField(shape); setField(ctx, f); const t = buildTerrain(f, shape); t.userData.field = f;
+      if (shape.block !== false) { f.soil = true; t.add(buildSoilBlock(f, { bottom: num(shape.bottom, -.9), grass: shape.turf || '#4a6a2c', plinth: shape.plinth !== false })); }
+      return t;
+    }
+    // falls through to the legacy displaced terrain
+    case 'mountain': case 'rock': {
       const isT = k === 'terrain', R = num(shape.r, isT ? 6 : (k === 'rock' ? .5 : 3)), H = num(shape.h, isT ? .8 : (k === 'rock' ? .4 : 3));
       const noise = makeNoise(num(shape.seed, 3)), seg = isT ? 128 : 64;
       let geo = isT ? new THREE.PlaneGeometry(num(shape.w, R * 2), num(shape.d, R * 2), seg, seg) : new THREE.IcosahedronGeometry(1, k === 'rock' ? 3 : 5);
@@ -109,6 +159,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       if (isT) { m.castShadow = false; m.userData.noInk = true; } else m.userData.inkAngle = 60; return m;
     }
     case 'cloud': {
+      if (shape.volume) { g.add(buildCloudVolume(shape, ctx.seed || 3, F())); return g; }
       const s = num(shape.r, 1), r = mulberry(ctx.seed || 3), cm = makeMaterial({ preset: 'cloud', color: shape.color || '#ffffff' });
       const n = num(shape.puffs, 7), geos = [];
       for (let i = 0; i < n; i++) { const q = new THREE.IcosahedronGeometry(s * (.45 + r() * .4), 2); q.translate((r() - .5) * s * 2.2, (r() - .3) * s * .5, (r() - .5) * s * 1.1); geos.push(q); }
@@ -218,6 +269,8 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     case 'boat': { const hull = mesh(new THREE.LatheGeometry([[.001, -.25], [.35, -.2], [.5, 0], [.52, .05]].map(p => new THREE.Vector2(p[0], p[1])), 32), makeMaterial(matSpec || 'wood')); hull.scale.set(1, 1, .45); g.add(hull); const mast = mesh(new THREE.CylinderGeometry(.02, .02, 1, 8), makeMaterial('darkwood')); mast.position.y = .5; g.add(mast); const sail = mesh(new THREE.PlaneGeometry(.5, .7), makeMaterial({ preset: 'fabric', color: '#efe6d0', side: 'double' }), false); sail.position.set(.27, .55, 0); g.add(sail); g.userData.sail = sail; return g; }
     case 'car': { const b = mesh(new RoundedBoxGeometry(1.2, .35, .6, 3, .08), makeMaterial(matSpec || { preset: 'plastic', color: '#c03a2a' })); b.position.y = .3; const c = mesh(new RoundedBoxGeometry(.6, .28, .55, 3, .08), makeMaterial('glass')); c.position.set(-.05, .55, 0); g.add(b, c); [[.4, .3], [.4, -.3], [-.4, .3], [-.4, -.3]].forEach(([x, z]) => { const w = mesh(new THREE.CylinderGeometry(.14, .14, .1, 24), makeMaterial('rubber')); w.rotation.x = Math.PI / 2; w.position.set(x, .14, z); g.add(w); }); return g; }
     case 'particles': {
+      if (shape.type === 'vapour') return vapourPoints(num(shape.count, 160), shape.area || [2, 1.5, 2], num(shape.size, .16));
+      if (shape.type === 'streaks') return rainStreaks(num(shape.count, 420), { len: num(shape.length, .16), width: num(shape.width, .007) });
       const n = num(shape.count, 400), a = shape.area || [8, 6, 8], kind = shape.type || 'dust', geo = new THREE.BufferGeometry(), p = new Float32Array(n * 3), r = mulberry(9);
       for (let i = 0; i < n; i++) { p[i * 3] = (r() - .5) * a[0]; p[i * 3 + 1] = r() * a[1]; p[i * 3 + 2] = (r() - .5) * a[2]; }
       geo.setAttribute('position', new THREE.BufferAttribute(p, 3));

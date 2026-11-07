@@ -180,6 +180,43 @@ export function prebake(kinds = Object.keys(KIND_ID)) {
   (window.requestIdleCallback || setTimeout)(next, { timeout: 3000 });
 }
 
+// ---------------------------------------------------------------- scanned detail (realism-playbook R13) ----------
+// CC0 ambientCG sets, repacked to two 1K JPEGs each in assets/textures (see CREDITS.txt there): <set>_albedo (colour ×
+// AO) and <set>_nrm (normal x, y in R, G; roughness in B). They are the MICRO layer only: the procedural bake keeps the
+// macro albedo, relief, masks and wetness; the scan modulates albedo by its colour relative to its own mean, adds its
+// normal and scales roughness. Two hashed offsets per low-frequency cell break the tiling (after Quilez). Loaded
+// lazily on the first AAA material; until they arrive (or if they never do) the weight is 0 and nothing changes.
+const SCAN_SETS = { ground: 'ground103', moss: 'moss002', bark: 'bark001' };
+const SCAN_OF = { meadow: ['ground', .6], mud: ['ground', .6], sand: ['ground', .8], crag: ['moss', .45], bark: ['bark', .32] };
+const SCAN = {}; let scanStarted = false;
+function scanDefaults() {
+  if (SCAN.ground) return; const px = (r, g, b) => { const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1); t.needsUpdate = true; t.userData.shared = true; return t; };
+  for (const k in SCAN_SETS) SCAN[k] = { A: { value: px(128, 128, 128) }, N: { value: px(128, 128, 128) }, K: { value: 0 } };
+}
+export function loadScans(base = 'assets/textures/') {
+  scanDefaults(); if (scanStarted || typeof document === 'undefined') return; scanStarted = true;
+  const L = new THREE.TextureLoader();
+  for (const k in SCAN_SETS) { const S = SCAN[k]; let n = 0; const done = () => { if (++n === 2) S.K.value = 1; };
+    const get = (suffix, srgb, slot) => L.load(base + SCAN_SETS[k] + suffix, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.userData.shared = true; t.generateMipmaps = true; t.needsUpdate = true; S[slot].value = t; done(); }, undefined, () => { S.K.value = 0; });
+    get('_albedo.jpg', true, 'A'); get('_nrm.jpg', false, 'N'); }
+}
+export const scanState = () => Object.fromEntries(Object.keys(SCAN).map(k => [k, SCAN[k].K.value]));
+const SCAN_GLSL = /* glsl */`
+  #ifdef AAA_SCAN
+  { vec2 su = vec2( dot( aPh, aE1 ), dot( aPh, aE2 ) ) / aScanTile; vec2 sdx = dFdx( su ), sdy = dFdy( su );
+    float ix = ( aaaSimplex2( su * .21 ) * .5 + .5 ) * 4.; float i0 = floor( ix ), fb = smoothstep( .25, .75, fract( ix ) );
+    vec2 o0 = aaaHash2( vec2( i0, 3. ), 11. ) * 7.3, o1 = aaaHash2( vec2( i0 + 1., 3. ), 11. ) * 7.3;
+    vec3 sa = mix( textureGrad( aScanA, su + o0, sdx, sdy ).rgb, textureGrad( aScanA, su + o1, sdx, sdy ).rgb, fb );
+    vec3 sn = mix( textureGrad( aScanN, su + o0, sdx, sdy ).rgb, textureGrad( aScanN, su + o1, sdx, sdy ).rgb, fb );
+    vec3 mean = max( textureLod( aScanA, vec2( .5 ), 12. ).rgb, vec3( .02 ) );
+    float sk = aScanK * ( 1. - aCard ) * AAA_SCANMASK;
+    aAlb = mix( aAlb, aAlb * clamp( sa / mean, vec3( .25 ), vec3( 2.2 ) ), sk );
+    vec2 g2 = ( sn.rg * 2. - 1. ) * .6; aN = normalize( aN + ( aE1 * g2.x + aE2 * g2.y ) * sk );
+    aRough = clamp( mix( aRough, aRough * ( .55 + .9 * sn.b ), sk * .6 ), .04, 1. ); }
+  #endif
+`;
+const SCAN_MASK = { crag: 'smoothstep( .55, .9, aNg.y )', bark: '1.', meadow: '1.', mud: '1.', sand: '.6' };
+
 // ---------------------------------------------------------------- material shader -------------------------------
 const VERT_DECL = 'varying vec3 vAaaPos;\nvarying vec3 vAaaNrm;\n';
 const VERT_BODY = /* glsl */`
@@ -201,6 +238,9 @@ uniform mat4 projectionMatrix;
 uniform sampler2D aTex; uniform float aTile, aDepthU, aBump, aSilK;
 uniform vec3 aCol0, aCol1, aCol2; uniform vec4 aP0, aP1; uniform vec4 aBound; uniform vec2 aYRange; uniform vec3 aShore;
 uniform float uAaaWet, uAaaRain, uAaaTime, uAaaPomOn; uniform vec4 uAaaWetSpot; uniform vec2 uAaaPomSteps, uAaaPomLod;
+#ifdef AAA_SCAN
+uniform sampler2D aScanA, aScanN; uniform float aScanK, aScanTile;
+#endif
 ${NOISE_GLSL}
 float aaaH(vec2 uv, vec2 dx, vec2 dy){ return textureGrad(aTex, uv, dx, dy).r; }
 // one projection of the triplanar set at world point p: returns the world-space height gradient (x,y,z) and height (w)
@@ -327,6 +367,7 @@ const FRAG_MAIN = /* glsl */`
   #else
     { float lich = aT.b * smoothstep( .1, .6, aNg.y + .4 ) * aP1.y; aAlb = mix( aCol0 * ( .55 + .7 * aHt ), aCol2 * ( .8 + .3 * aT.g ), lich ) * mix( .85, 1.12, aMacro2 ); aRough = mix( .82, 1., aT.a ); }
   #endif
+SCAN_HOOK
   if ( aP1.x > 0. ) { float sn = smoothstep( aP1.x, aP1.x + .12, aPh.y + aT.g * .1 ) * smoothstep( .45, .75, aNg.y ); aAlb = mix( aAlb, vec3( .82, .84, .88 ), sn ); aRough = mix( aRough, .6, sn ); aPor *= 1. - sn; }
   // ---- ambient occlusion from the relief: cavity (height below its blurred neighbourhood) and depth in the layer ----
   float aHb = textureLod( aTex, aUv, max( aMip, 0. ) + 3. ).r;
@@ -381,7 +422,7 @@ function patchShader(s, m) {
   s.vertexShader = VERT_DECL + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n' + VERT_BODY);
   let f = s.fragmentShader;
   f = f.replace('void main() {', FRAG_DECL + '\nvoid main() {');
-  f = f.replace('#include <map_fragment>', FRAG_MAIN.replace('AAA_CARD', card ? '( ( 1.0 - step( frontD( vFrontW ), uFrontR ) ) * uCardMix )' : '0.0'));
+  f = f.replace('#include <map_fragment>', FRAG_MAIN.replace('AAA_CARD', card ? '( ( 1.0 - step( frontD( vFrontW ), uFrontR ) ) * uCardMix )' : '0.0').replace('SCAN_HOOK', SCAN_GLSL.replace('AAA_SCANMASK', SCAN_MASK[A.kind] || '1.')));
   f = f.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = aRough;');
   f = f.replace('#include <metalnessmap_fragment>', 'float metalnessFactor = aMet;');
   f = f.replace('#include <normal_fragment_maps>', 'normal = normalize( ( viewMatrix * vec4( aN, 0. ) ).xyz ); normal = normalize( mix( normal, nonPerturbedNormal, aCard ) );');
@@ -414,6 +455,7 @@ function defsFor(kind, o) {
   if (Q.pdo && o.pdo !== false && !d.AAA_PROJ) d.AAA_PDO = '';
   if (Q.selfShadow) d.AAA_SELFSH = '';
   if (Q.glints) d.AAA_GLINTS = '';
+  if (SCAN_OF[kind] && Q.pom > 0 && o.scan !== false) d.AAA_SCAN = '';
   return d;
 }
 // Material factory. o: { color (palette base, sRGB hex), color2, color3, tile, depth, bump, bound: {type:'ring', x, z, rIn, rOut}
@@ -431,6 +473,7 @@ export function aaaMaterial(kind = 'mud', o = {}) {
     aBound: { value: b ? (b.type === 'rect' ? new THREE.Vector4(b.minX, b.minZ, b.maxX, b.maxZ) : new THREE.Vector4(b.x || 0, b.z || 0, b.rIn || 0, b.rOut || 1e4)) : new THREE.Vector4() },
     aYRange: { value: new THREE.Vector2(...(o.yRange || [0, 1])) }, aShore: { value: new THREE.Vector3(o.shoreY ?? 0, o.shoreBand ?? .1, o.shoreY != null ? 1 : 0) }
   };
+  if (SCAN_OF[kind]) { loadScans(); const S = SCAN[SCAN_OF[kind][0]]; Object.assign(U, { aScanA: S.A, aScanN: S.N, aScanK: o.scan === false ? { value: 0 } : S.K, aScanTile: { value: o.scanTile ?? SCAN_OF[kind][1] } }); }
   // the author's colours are sRGB like every other colour in the scene spec; Color() converts to linear
   m.userData.aaa = {
     kind, U, opts: o,

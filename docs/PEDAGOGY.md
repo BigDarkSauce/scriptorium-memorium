@@ -15,6 +15,27 @@ Scriptorium aims at understanding, not just coverage. A learner should be able t
 | `check` | A question that needs understanding (predict, compare, explain), with its answer hidden. | Retrieval practice is one of the two techniques rated "high utility" in the largest review of study methods (Dunlosky et al. 2013). Testing beats re-reading for long-term retention (Roediger & Karpicke 2006). |
 | `basis` + `sources` | Says where each claim comes from: the part's own text, standard knowledge, derived above, or a measured fact. Measured facts need a source. | Lets the reader judge how far to trust a claim, and keeps the AI honest. |
 
+### Explained steps, not pasted pages
+
+A scroll that repeats the PDF teaches nothing the PDF did not. The failure that made this rule explicit: a statistics tutorial made of infographic pages came back with the same page image and the same page text pasted into several steps. Every step is now an *explained* step:
+
+| Part of the step | What it does | Why |
+|---|---|---|
+| `statement` | the claim in one or two sentences of the chain's own | a claim you can say in your own words is one you have understood (self-explanation, Chi et al. 1994) |
+| `explain` | 2–4 short paragraphs that say how and why, with the source's numbers | the reasoning is what the learner rebuilds; a page of fragments (labels, arrows, call-outs) is turned into connected sentences |
+| `quote` | at most 40 words copied exactly, only where the wording matters, each passage once | attribution without pasting; the gate rejects more than 40 copied words |
+| `code` | every line of the source's code beside what it does, the printed output, and what that output means | code is read line by line, not as a picture; statistics output is only useful once interpreted (what a p-value does and does not say) |
+| `examples` | the PDF's own worked example first, then, where it helps, one researched from the literature, badged *Added from outside the PDF* with its source | worked examples before problem solving (Sweller 1988); a second example from another context helps transfer |
+| figures | every paragraph of 60 words or more, and every *Picture it*, *Common mistake* and *Check yourself*, comes with a drawing | dual coding (Paivio 1991; Mayer 2002): words with a picture that shows the same idea; the *Check yourself* picture appears only after the answer is revealed, so it does not give the answer away |
+
+Figures are data the reader draws (flows, plots, distributions with shaded probabilities, bars from tables, number lines for inequalities, trees for decisions, Venn diagrams, timelines, labelled sketches, code traces, wrong-versus-right cards), so every model draws the same kinds of picture for the same kinds of idea, and labels are typeset. A short loop shows what changes (random draws piling up into a distribution, a parameter sweeping a curve, code executing line by line); with reduced motion it is a still with a play button. The PDF's own figure is used when it is the best illustration, shown once, captioned with its page.
+
+The quality gate checks every answer for pasted text, repeated passages and figures, unexplained steps, unexplained code, missing subsections and missing figures, and sends only the offending steps back to be rewritten (docs/PROTOCOL.md, stage 4b).
+
+### Breakdown levels
+
+The learner chooses how fine the chain is, but never coarser than the source: *Complete* (every definition, rule, worked example, table, figure, code block and panel item its own step), *Essential* (the spine, at least one step per subsection), or an *exact number* of steps for the chosen pages (raised to the number of subsections if it is smaller).
+
 ## 2. Grounding: the literature as a co-author
 
 Inside claude.ai the page uses the viewer's own research connectors (the artifact `mcp` capability):
@@ -43,6 +64,9 @@ The reader can also press **Find sources** on any step to search OpenAlex and ci
 - *Osmosis:* "water diffuses down its own concentration gradient" was replaced by flow driven by the water's chemical potential, mostly as bulk flow through pores (Kramer & Myers 2013; Kedem & Katchalsky 1958). The diorama's lesson text now says that its particle picture shows the direction of flow, not the molecular mechanism.
 
 ## 3. Dioramas
+
+How many: each subsection gets as many dioramas as it has dynamic or spatial ideas (none for a list of definitions, one for a mechanism, two or three for a complex subsection), planned by the model (`dioramaPlan`) and built by the app. A diorama that cannot be authored is retried in a simpler form and otherwise replaced by a fitting ready-made model or a diagram, never left as an empty slot.
+
 
 A diorama is the same idea made physical:
 - **actors**: the bodies the idea is about, introduced one by one in the tour;

@@ -213,7 +213,7 @@ export class DioramaScene {
   }
   overviewKey() {
     const o = this.orb, dir = V3(Math.sin(o.ph) * Math.sin(o.th), Math.cos(o.ph), Math.sin(o.ph) * Math.cos(o.th)).normalize();
-    const fov = 40, dist = o.r, frameH = 2 * dist * Math.tan(fov * Math.PI / 360);
+    const fov = o.fov || 40, dist = o.r, frameH = 2 * dist * Math.tan(fov * Math.PI / 360);   // api.camera({fov}) gives a scene its own overview lens
     return { target: o.target.clone(), dir, fov, frameH };
   }
   rebuildKeepView() { const keep = this.p; this.build(); }

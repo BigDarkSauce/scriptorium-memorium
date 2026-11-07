@@ -20,8 +20,47 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { mulberry, makeNoise } from '../util.js';
+import { AAA } from '../gfx/aaa.js';
+import { VEG, vegWindFrom } from '../gfx/grass.js';
 
-export const TREE_KINDS = ['tree', 'pine', 'bush'], TREE_VARIANTS = 4;
+// ---------------------------------------------------------------- vertex wind (WG vegTreeDisplace, simplified) ------
+// The whole tree leans ∝ height² toward the scene's wind (scene.userData.wind, m/s) and oscillates with a per-tree phase;
+// leaves flutter about their own position. Object space of the unit-height geometry; the world wind direction is
+// brought into it through the (instance ×) model matrix. Wood and leaves use the same lean, so the crown stays on its
+// branches. Applied to the foliage material and wrapped around the AAA bark (own define TREE_WIND: distinct programs).
+const WIND_DECL = 'uniform vec2 uWind; uniform float uAaaTime;\n';
+const WIND_BODY = `vec3 transformed = vec3( position );
+  { mat4 tm = modelMatrix;
+    #ifdef USE_INSTANCING
+    tm = modelMatrix * instanceMatrix;
+    #endif
+    vec3 root = tm[3].xyz; float hN = max(position.y, 0.); vec2 W = uWind; float sp = length(W); vec2 dir = sp > 1e-4 ? W / sp : vec2(1., 0.);
+    float ph = dot(root.xz, vec2(1.7, 2.3)); float k = 1. - exp(-sp * .3);
+    float sway = (.55 + .45 * sin(uAaaTime * 1.3 + ph) + .15 * sin(uAaaTime * 3.1 + ph * 1.7)) * k;
+    float lean = .045 * hN * hN * sway; vec3 wl = (vec4(dir.x, 0., dir.y, 0.) * tm).xyz; wl = normalize(vec3(wl.x, 0., wl.z) + 1e-5);
+    transformed += wl * lean; transformed.y -= lean * lean * 1.5;
+    #ifdef TREE_LEAF
+    transformed += objectNormal * sin(uAaaTime * (6.5 + fract(ph) * 3.) + dot(position, vec3(41., 27., 33.))) * .005 * (.25 + k) * hN;
+    #endif
+  }`;
+export function windify(m, leaf = false) {
+  if (!m || m.userData.treeWind) return m; m.userData.treeWind = true;
+  m.defines = Object.assign({}, m.defines, { TREE_WIND: '' }); if (leaf) m.defines.TREE_LEAF = '';
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (s, r) => { if (prev) prev(s, r); s.uniforms.uWind = VEG.uWind; s.uniforms.uAaaTime = AAA.uniforms.uAaaTime; s.vertexShader = WIND_DECL + s.vertexShader.replace('#include <begin_vertex>', WIND_BODY); };
+  return m;
+}
+const windTick = (r, scene) => vegWindFrom(scene);
+
+export const TREE_KINDS = ['tree', 'pine', 'bush', 'oak', 'birch', 'cherry'], TREE_VARIANTS = 4;
+// broadleaf species (realism-playbook R8): crown half-width aR / half-height vR, trunk top and radius, branch count,
+// leaf clusters, cards per cluster, card size and atlas region, crown centre height, branch rise
+const SPECIES = {
+  tree: { aR: .25, vR: .21, top: .56, r0: .036, nb: 4, ncl: 9, per: 70, card: .06, reg: 'broad', cy: .7, rise: .75 },
+  oak: { aR: .31, vR: .2, top: .46, r0: .05, nb: 6, ncl: 12, per: 64, card: .062, reg: 'broad', cy: .62, rise: .45 },
+  birch: { aR: .16, vR: .25, top: .66, r0: .022, nb: 5, ncl: 9, per: 62, card: .05, reg: 'small', cy: .72, rise: 1.1, droop: 1 },
+  cherry: { aR: .28, vR: .17, top: .44, r0: .034, nb: 5, ncl: 11, per: 72, card: .055, reg: 'small', cy: .6, rise: .6 }
+};
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const Y = V3(0, 1, 0);
 
@@ -127,16 +166,16 @@ const prep = g => { if (g.index) g = g.toNonIndexed(); if (!g.attributes.uv) g.s
 const woodPrep = g => { g = g.index ? g.toNonIndexed() : g; ['uv', 'color'].forEach(k => g.deleteAttribute(k)); return g; };
 
 // unit-height trees (h = 1; the caller scales by h). Returns { wood, leaf } BufferGeometries.
-function buildBroadleaf(seed) {
+function buildBroadleaf(seed, sp = SPECIES.tree) {
   const r = mulberry(seed), noise = makeNoise(seed), wood = [], leaf = [];
-  const lean = V3((r() - .5) * .12, 0, (r() - .5) * .12), top = V3(lean.x, .56 + r() * .06, lean.z);
+  const lean = V3((r() - .5) * .12, 0, (r() - .5) * .12), top = V3(lean.x, sp.top + r() * .06, lean.z);
   const trunk = new THREE.CatmullRomCurve3([V3(0, -.02, 0), V3(lean.x * .2 + (r() - .5) * .03, .2, lean.z * .2 + (r() - .5) * .03), V3(lean.x * .6, .4, lean.z * .6), top]);
-  const r0 = .036 + r() * .008; wood.push(tube(trunk, t => r0 * (1 - .55 * t) * (1 + 1.1 * Math.pow(Math.max(0, 1 - t * 9), 2)), 9, 9));
-  const crownC = V3(top.x, .7, top.z), crownR = .34, ends = [];
-  const nb = 4 + Math.floor(r() * 2);
+  const r0 = sp.r0 + r() * .008; wood.push(tube(trunk, t => r0 * (1 - .55 * t) * (1 + 1.1 * Math.pow(Math.max(0, 1 - t * 9), 2)), 9, 9));
+  const crownC = V3(top.x, sp.cy, top.z), crownR = .34, ends = [];
+  const nb = sp.nb + Math.floor(r() * 2);
   for (let i = 0; i < nb; i++) {
-    const a = i / nb * Math.PI * 2 + r() * .8, t0 = .55 + r() * .35, base = trunk.getPointAt(t0), L = .2 + r() * .1;
-    const dir = V3(Math.cos(a), .75 + r() * .5, Math.sin(a)).normalize(), mid = base.clone().addScaledVector(dir, L * .5).add(V3(0, .03, 0)), end = base.clone().addScaledVector(dir, L);
+    const a = i / nb * Math.PI * 2 + r() * .8, t0 = .55 + r() * .35, base = trunk.getPointAt(t0), L = (.2 + r() * .1) * (sp.aR / .25);
+    const dir = V3(Math.cos(a), sp.rise + r() * .5, Math.sin(a)).normalize(), mid = base.clone().addScaledVector(dir, L * .5).add(V3(0, .03, 0)), end = base.clone().addScaledVector(dir, L);
     wood.push(tube(new THREE.CatmullRomCurve3([base, mid, end]), t => r0 * .42 * (1 - .7 * t), 6, 4)); ends.push(end);
   }
   ends.push(top.clone().add(V3(0, .1, 0)));
@@ -145,10 +184,10 @@ function buildBroadleaf(seed) {
   // gaps between the clusters; then ~200 cards anywhere in the crown volume at any angle (inward-facing too). Card
   // normals are bent outward (from the cluster's and the crown's centre), so each cluster shades as a soft volume, lit
   // on its sunny side, instead of as flat cards; vertex colours add depth occlusion and a lighter outer rim.
-  const cC = crownC.clone().add(V3(0, .03, 0)), aR = .25, vR = .21, clusters = [], NCL = 9, ph = r() * 6.28;
+  const cC = crownC.clone().add(V3(0, .03, 0)), aR = sp.aR, vR = sp.vR, clusters = [], NCL = sp.ncl, ph = r() * 6.28, REG = R[sp.reg] || R.broad;
   for (let i = 0; i < NCL; i++) {
     const y = 1 - (i + .5) / NCL * 1.6, rr = Math.sqrt(Math.max(0, 1 - y * y)), a = ph + i * 2.39996 + (r() - .5) * .4;   // golden-angle spiral
-    clusters.push({ c: cC.clone().add(V3(Math.cos(a) * rr * aR * .82, y * vR * .82, Math.sin(a) * rr * aR * .82)), r: .085 + r() * .025, hue: (r() - .5) * .14 });
+    clusters.push({ c: cC.clone().add(V3(Math.cos(a) * rr * aR * .82, y * vR * .82 - (sp.droop ? rr * .05 : 0), Math.sin(a) * rr * aR * .82)), r: (.085 + r() * .025) * Math.sqrt(sp.aR / .25), hue: (r() - .5) * .14 });
   }
   for (let i = 0; i < 3; i++) { const a = r() * 6.28, d = i ? .07 : 0; clusters.push({ c: cC.clone().add(V3(Math.cos(a) * d, i ? -.01 + r() * .06 : vR * .78, Math.sin(a) * d)), r: .08 + r() * .02, hue: (r() - .5) * .1 }); }
   clusters.forEach(k => {
@@ -158,14 +197,15 @@ function buildBroadleaf(seed) {
   const u = V3(), t2 = V3(), b2 = V3(), nn = V3();
   const quad = (p, n, s2, k, hue) => {   // a leaf-spray card facing n (with a random spin), normals bent outward
     t2.set(r() - .5, r() - .5, r() - .5).cross(n).normalize(); b2.crossVectors(n, t2);
-    const P = [], UV = [], N = []; nn.copy(p).sub(k ? k.c : cC).normalize().multiplyScalar(.65).add(u.copy(p).sub(cC).normalize().multiplyScalar(.35)).normalize();
-    [[-.5, 0], [.5, 0], [-.5, 1], [.5, 1]].forEach(([x, y]) => { const q = p.clone().addScaledVector(t2, x * s2 * .8).addScaledVector(b2, (y - .3) * s2); P.push(q.x, q.y, q.z); UV.push(...uvIn(R.broad, x + .5, y)); N.push(nn.x, nn.y, nn.z); });
+    const P = [], UV = [], N = []; const e = V3((p.x - cC.x) / (aR * aR), (p.y - cC.y) / (vR * vR), (p.z - cC.z) / (aR * aR)).normalize();   // crown ellipsoid normal (WG): the crown shades as one soft volume
+    nn.copy(e).multiplyScalar(.5).add(u.copy(p).sub(k ? k.c : cC).normalize().multiplyScalar(.38)).add(V3().copy(n).multiplyScalar(.12)).normalize();
+    [[-.5, 0], [.5, 0], [-.5, 1], [.5, 1]].forEach(([x, y]) => { const q = p.clone().addScaledVector(t2, x * s2 * .8).addScaledVector(b2, (y - .3) * s2); P.push(q.x, q.y, q.z); UV.push(...uvIn(REG, x + .5, y)); N.push(nn.x, nn.y, nn.z); });
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex([0, 1, 2, 1, 3, 2]);
     leaf.push(tintCrown(g, cC, aR, hue, r, k));
   };
-  clusters.forEach(k => { for (let j = 0; j < 70; j++) {
+  clusters.forEach(k => { for (let j = 0; j < sp.per; j++) {
     const d = V3(r() - .5, r() - .45, r() - .5).normalize(), p = k.c.clone().addScaledVector(d, k.r * Math.cbrt(.15 + r() * .85));
-    quad(p, d.clone().add(V3((r() - .5) * .9, .25, (r() - .5) * .9)).normalize(), .06 + r() * .045, k, k.hue); } });
+    quad(p, d.clone().add(V3((r() - .5) * .9, sp.droop ? -.2 : .25, (r() - .5) * .9)).normalize(), sp.card + r() * .045, k, k.hue); } });
   for (let i = 0; i < 200; i++) {
     let p; do { p = V3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); } while (p.lengthSq() > 1); p.set(cC.x + p.x * aR * .9, cC.y + p.y * vR * .9, cC.z + p.z * aR * .9);
     quad(p, V3(r() - .5, r() - .3, r() - .5).normalize(), .06 + r() * .04, null, (r() - .5) * .1);
@@ -218,7 +258,7 @@ export const TREE_STATS = {};
 export function treeGeometry(kind, variant) {
   const key = kind + ':' + variant; if (GEO.has(key)) return GEO.get(key);
   const seed = 1301 + variant * 7919 + TREE_KINDS.indexOf(kind) * 104729;
-  const G = kind === 'pine' ? buildPine(seed) : kind === 'bush' ? buildBush(seed) : buildBroadleaf(seed);
+  const G = kind === 'pine' ? buildPine(seed) : kind === 'bush' ? buildBush(seed) : buildBroadleaf(seed, SPECIES[kind] || SPECIES.tree);
   [G.wood, G.leaf].forEach(g => { g.computeBoundingBox(); g.computeBoundingSphere(); g.userData.shared = true; g.name = key; });
   TREE_STATS[key] = { woodTris: G.wood.attributes.position.count / 3, leafTris: G.leaf.attributes.position.count / 3 };
   GEO.set(key, G); return G;
@@ -247,24 +287,28 @@ export function foliageMaterial(color = '#4f7a3a', { bent = false } = {}) {
   };
   m.customProgramCacheKey = () => bent ? 'foliage-bent' : 'foliage';
   m.userData.preset = 'foliage';
-  return m;
+  return windify(m, true);
 }
 // per-scene material cache: keyed by the scene's params object (one per DioramaScene) or an explicit ctx.matCache
 const MATS = new WeakMap();
 function matCache(ctx) { if (ctx && ctx.matCache) return ctx.matCache; const k = ctx && ctx.params; if (!k || typeof k !== 'object') return null; let m = MATS.get(k); if (!m) MATS.set(k, m = new Map()); return m; }
 function cached(ctx, key, make) { const C = matCache(ctx); if (!C) return make(); if (!C.has(key)) C.set(key, make()); return C.get(key); }
-const DEF_COL = { tree: '#4f7a3a', pine: '#2f5a3a', bush: '#4a7238' };
+const DEF_COL = { tree: '#4f7a3a', pine: '#2f5a3a', bush: '#4a7238', oak: '#45692f', birch: '#7fa046', cherry: '#f2b8c8' };
+// bark per species: birch chalk-white with dark lenticels (the bark kind's lichen mask, darkened), the rest AAA bark
+const DEF_TRUNK = { birch: { preset: 'bark', color: '#d6d0c2', aaa: { color3: '#24201c', moss: .75 } }, cherry: { preset: 'bark', color: '#5a3a30' } };
+export const speciesOf = (kind, shape = {}) => { const s = String(shape.species || kind).toLowerCase(); return TREE_KINDS.includes(s) ? s : kind; };
 
 // ---------------------------------------------------------------- the scene-spec shape -----------------------------
 // h: overall height as before (tree ≈ h tall with a crown ≈ 0.75 h wide; pine h tall, 0.6 h wide; bush 0.85 h tall).
 export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
+  kind = speciesOf(kind, shape); const broad = !['pine', 'bush'].includes(kind);
   const dh = kind === 'bush' ? .6 : kind === 'pine' ? 2.4 : 2, h = +shape.h > 0 ? +shape.h : dh, seed = (ctx.seed >>> 0) || 7, r = mulberry(seed);
   const variant = seed % TREE_VARIANTS, G = treeGeometry(kind, variant);
-  const col = (matSpec && matSpec.color) || shape.color || DEF_COL[kind], trunkSpec = (matSpec && matSpec.trunk) || 'bark';
-  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => makeMaterial(trunkSpec)), lm = cached(ctx, 'leaf:' + col + (kind === 'tree' ? ':bent' : ''), () => foliageMaterial(col, { bent: kind === 'tree' }));
+  const col = (matSpec && matSpec.color) || shape.color || DEF_COL[kind], trunkSpec = (matSpec && matSpec.trunk) || DEF_TRUNK[kind] || 'bark';
+  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => windify(makeMaterial(trunkSpec))), lm = cached(ctx, 'leaf:' + col + (broad ? ':bent' : ''), () => foliageMaterial(col, { bent: broad }));
   const g = new THREE.Group(), s = h * (kind === 'bush' ? 1 / .85 : 1), j = 1 + (r() - .5) * .16, flip = r() < .5 ? -1 : 1;
   const wood = new THREE.Mesh(G.wood, wm), leaf = new THREE.Mesh(G.leaf, lm);
-  [wood, leaf].forEach(m => { m.scale.set(s * flip, s * j, s); m.rotation.y = r() * Math.PI * 2; m.castShadow = true; m.receiveShadow = true; g.add(m); });
+  const ry = r() * Math.PI * 2; [wood, leaf].forEach(m => { m.scale.set(s * flip, s * j, s); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; m.onBeforeRender = windTick; g.add(m); });
   wood.userData.inkAngle = 60; leaf.userData.noInk = true; leaf.userData.sway = 1; leaf.name = kind + ' foliage'; wood.name = kind + ' wood';
   g.userData.sway = true; g.userData.tree = { kind, variant };
   return g;
@@ -273,14 +317,15 @@ export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
 // ---------------------------------------------------------------- forests (instanced) ------------------------------
 // items: [{x, y, z, h, ry?}] → a Group with two InstancedMeshes per variant used (wood + foliage), per-instance colour
 // jitter. For backgrounds and hedgerows of built-in models: a 34-tree hedgerow is 8 draw calls instead of 68.
-export function treeForest(kind = 'tree', items = [], { color, seed = 1, trunk = 'bark', castShadow = true } = {}) {
+export function treeForest(kind = 'tree', items = [], { color, seed = 1, trunk, castShadow = true, variants = TREE_VARIANTS } = {}) {
+  kind = speciesOf(kind); trunk = trunk || DEF_TRUNK[kind] || 'bark'; const broad = !['pine', 'bush'].includes(kind);
   const g = new THREE.Group(); g.name = kind + ' forest'; const r = mulberry(seed), byV = new Map();
-  items.forEach((it, i) => { const v = Math.floor(r() * TREE_VARIANTS); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
-  const wm = makeMaterial(trunk), lm = foliageMaterial(color || DEF_COL[kind], { bent: kind === 'tree' }), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+  items.forEach((it, i) => { const v = Math.floor(r() * Math.max(1, Math.min(TREE_VARIANTS, variants))); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
+  const wm = windify(makeMaterial(trunk)), lm = foliageMaterial(color || DEF_COL[kind], { bent: broad }), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
   byV.forEach((list, v) => {
     const G = treeGeometry(kind, v), W = new THREE.InstancedMesh(G.wood, wm, list.length), L = new THREE.InstancedMesh(G.leaf, lm, list.length);
     list.forEach((it, i) => { const h = (it.h || 2) * (kind === 'bush' ? 1 / .85 : 1); q.setFromAxisAngle(Y, it.ry ?? r() * 6.28); m4.compose(V3(it.x || 0, it.y || 0, it.z || 0), q, V3(h, h * (.92 + r() * .16), h)); W.setMatrixAt(i, m4); L.setMatrixAt(i, m4); c.setRGB(.9 + r() * .2, .92 + r() * .16, .85 + r() * .2); L.setColorAt(i, c); });
-    [W, L].forEach(m => { m.castShadow = castShadow; m.receiveShadow = true; m.computeBoundingSphere(); m.userData.noInk = true; g.add(m); });
+    [W, L].forEach(m => { m.castShadow = castShadow; m.receiveShadow = true; m.computeBoundingSphere(); m.userData.noInk = true; m.onBeforeRender = windTick; g.add(m); });
   });
   return g;
 }

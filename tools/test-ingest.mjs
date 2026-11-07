@@ -54,7 +54,7 @@ for (const f of readdirSync(FXDIR).filter(f => f.endsWith('.json'))) FX[basename
 async function loadPlaywright() { try { return await import('playwright'); } catch (e) { } try { const g = execSync('npm root -g', { encoding: 'utf8' }).trim(); return createRequire(join(g, 'noop.js'))('playwright'); } catch (e) { console.error('playwright is not installed'); process.exit(2); } }
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1180, height: 760 } })).newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('uncaught: ' + e.message));
 page.on('console', m => { if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text().slice(0, 240)); });
@@ -76,11 +76,13 @@ await page.addInitScript(({ fx }) => {
   window.claude = { use: async cap => cap === 'sample' ? SAMPLE : null };
   try { localStorage.setItem('scriptorium.readerDock', 'full'); } catch (e) { }
 }, { fx: FX });
-const shot = async (name, el) => { if (!SHOTS) return; try { if (el) await page.locator(el).first().screenshot({ path: join(SHOTS, name) }); else await page.screenshot({ path: join(SHOTS, name) }); } catch (e) { console.log('  (screenshot ' + name + ' failed: ' + e.message.split('\n')[0] + ')'); } };
+const shot = async (name, el) => { if (!SHOTS) return; try { await page.evaluate(() => { const W = window.__scriptorium; if (W && W.gfx._r) W.gfx._r(1 / 60, W.t); });  if (el) await page.locator(el).first().screenshot({ path: join(SHOTS, name), timeout: 90000 }); else await page.screenshot({ path: join(SHOTS, name), timeout: 90000 }); } catch (e) { console.log('  (screenshot ' + name + ' failed: ' + e.message.split('\n')[0] + ')'); } };
 const T0 = Date.now();
 await page.goto(URL0, { timeout: 60000 });
 await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && window.__scriptorium.mode.constructor.name === 'Hub' && document.body.classList.contains('ready'), null, { timeout: 120000 });
-await page.waitForTimeout(1500);
+// software GL is slow and the machine is shared: 3D frames are drawn only for screenshots (the app loop still updates)
+await page.evaluate(() => { const g = window.__scriptorium.gfx; g._r = g.render.bind(g); g.render = () => {}; });
+await page.waitForTimeout(500);
 
 // ---- the dialog
 let dialogOK = false, dialogDetail = '', bookId = null;
@@ -119,7 +121,6 @@ try {
   await page.locator('input[name=aplevel][value=complete]').check();
   await page.click('.addpdf [data-next]');
   const review = await page.locator('.ap-review').innerText();
-  await page.evaluate(() => { window.__scriptorium.gfx._r = window.__scriptorium.gfx.render; window.__scriptorium.gfx.render = () => {}; });   // no 3D frames while the job runs (CPU for the pipeline)
   await page.getByRole('button', { name: 'Add and analyse' }).click();
   await page.waitForSelector('.addpdf-progress', { timeout: 20000 });
   bookId = await page.evaluate(() => window.__scriptorium.lib.books[window.__scriptorium.lib.books.length - 1].id);
@@ -137,13 +138,11 @@ try {
   await page.getByRole('button', { name: 'Cancel' }).click();
   await page.waitForSelector('.addpdf-progress button:has-text("Resume")', { timeout: 30000 });
   const afterCancel = await room(); const job1 = await page.evaluate(id => window.__scriptorium.store.get('job:' + id), bookId);
-  await page.evaluate(() => { const g = window.__scriptorium.gfx; g.render = g._r; }); await page.waitForTimeout(300);
   await shot('05-progress-paused.png', '.addpdf-progress .addpdf');
-  await page.evaluate(() => { const g = window.__scriptorium.gfx; g.render = () => {}; window.__stubDelay = 60; });
+  await page.evaluate(() => { window.__stubDelay = 60; });
   await page.getByRole('button', { name: 'Resume' }).click();
   await page.waitForSelector('.addpdf-progress button:has-text("Open the room")', { timeout: 420000 });
   const afterResume = await room(); const job2 = await page.evaluate(id => window.__scriptorium.store.get('job:' + id), bookId);
-  await page.evaluate(() => { const g = window.__scriptorium.gfx; g.render = g._r; }); await page.waitForTimeout(300);
   await shot('06-progress-done.png', '.addpdf-progress .addpdf');
   jobOK = job1.status === 'paused' && afterCancel[0] === 'done' && afterCancel.slice(1).some(s => s !== 'done') && job2.status === 'done' && afterResume.every(s => s === 'done');
   jobDetail = `after Cancel: job ${job1.status}, stages [${afterCancel.join(', ')}]; after Resume: job ${job2.status}, [${afterResume.join(', ')}]`;
