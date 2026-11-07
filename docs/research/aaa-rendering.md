@@ -434,6 +434,21 @@ dissolve on the block at any wind (checked headless by replaying the scene's phy
 
 Cost at medium: 165 draw calls, 1.52 M triangles, 132 programs.
 
+Fifth pass (scale and framing): content scaled up on the same 13 × 10 block: the massif ~1.3× higher and bulkier
+(Ridge 4.4, cliff bands .34–.38), trees and bushes 1.45–1.9× larger and fewer, stream .22–.5 wide, the lake 2.25 × 2.0,
+the case lid at 6.5; the overview camera moved in (radius 14.2, polar 1.18, FOV 34) so the case fills the frame; the sun's
+disc is hidden from outside the case (`userData.skyOnly`); landscape saturation .88. Forest items never land in the lake
+or the stream. Headless physics replay: rain on the slope, rain shadow and rain back on the lake fire at winds 4, 6, 0.3.
+
+| view | Weatherglass | pass 4 | pass 5 |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151, sat .079 | 5.71, .081, 120, .148 | 5.77, .096, 114, .122 |
+| low | 5.71, .135, 141, .069 | 5.94, .073, 111, .132 | 5.80, .083, 111, .110 |
+| close | 6.74, .175, 143, .093 | 6.31, .103, 157, .127 | 6.19, .120, 145, .107 |
+
+Cost at medium: 244 draw calls (bigger trees push more of them into the shadow cascades and the lake mirror),
+1.72 M triangles, 131 programs.
+
 Known gaps against Weatherglass: no contact-hardening
 shadow filter (R11.1) and no HDRI reflections (R11.4), cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
 on the slope speeds the stream and its waterfall.)

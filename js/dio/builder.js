@@ -83,6 +83,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       let items = (shape.items || []).map(it => ({ x: +it[0], z: +it[1], h: +it[2] || hr[0] + r() * (hr[1] - hr[0]) }));
       if (!items.length && shape.count) { const rg = shape.region || [-5, -4, 5, 4], kind = sp === 'pine' ? 'pine' : 'tree';
         for (let n = 0, g2 = 0; n < shape.count && g2 < shape.count * 60; g2++) { const x = rg[0] + r() * (rg[2] - rg[0]), z = rg[1] + r() * (rg[3] - rg[1]); if (f && r() > f.suit(x, z, kind)) continue; if (items.some(o => Math.hypot(o.x - x, o.z - z) < (shape.spacing || .55))) continue; items.push({ x, z, h: hr[0] + r() * (hr[1] - hr[0]) }); n++; } }
+      if (f) items = items.filter(it => !(f.lake && f.h(it.x, it.z) < f.lake.level + .03) && !(f.m(it.x, it.z, 1) > 0));   // never in the lake or the stream
       items.forEach(it => { it.y = yAt(it.x, it.z); });
       const fo = treeForest(sp, items, { color: matSpec && matSpec.color, seed: ctx.seed || 1, variants: shape.variants || 2 }); fo.userData.forest = { species: sp, items }; return fo;
     }

@@ -173,7 +173,7 @@ function glassCase(scene, w, h) {
 const LOOKS = {
   studio: { punch: .45, contrast: 1.12, sat: 1.04, vignette: .36, grain: .028, warm: .018, exposure: 1.0, bloomThreshold: 2.2, bloom: .22, tilt: 1 },
   lab: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.02, vignette: .32, grain: .025, warm: .0, exposure: 1.0 },
-  landscape: { tiltRadius: 4, punch: 1, bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.16, sat: 1.02, vignette: .28, grain: .022, warm: .01 },
+  landscape: { tiltRadius: 4, punch: 1, bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.16, sat: .88, vignette: .28, grain: .022, warm: .01 },
   cosmos: { punch: .4, bloomThreshold: 1.6, bloom: .26, contrast: 1.1, sat: 1.05, vignette: .4, grain: .03, warm: 0, exposure: 1.0 },
   micro: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
   abstract: { punch: .35, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
