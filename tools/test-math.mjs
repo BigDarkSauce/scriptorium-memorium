@@ -82,7 +82,10 @@ const C = [
   ['see https://example.org/a*b^c/x_y?q=1', 'see https://example.org/a*b^c/x_y?q=1'], ['open room-example.json and util.js', 'open room-example.json and util.js'],
   ['run `x^2 * 3` in code', 'run `x^2 * 3` in code'], ['the $x^2$ in TeX', 'the $x^2$ in TeX'], ['A note* here', 'A note* here'],
   ['It is 2024/05/01 today', 'It is 2024/05/01 today'], ['the file_name_here', 'the file_name_here'], ['e.g. a ball, i.e. one', 'e.g. a ball, i.e. one'],
-  ['pH 7 and pKa', 'pH 7 and pKa'], ['which way does p* move?', 'which way does *p*^{∗} move?'], ['a 4*4 grid', "a 4'×'4 grid"], ['10:30 am', '10:30 am'], ['Chapter 3-4', 'Chapter 3-4'],
+  ['pH 7 and pKa', 'pH 7 and pKa'],
+  // --- LaTeX: kept for MathJax in running text, converted to plain notation in labels; stray commands become symbols
+  [String.raw`so \[T_0=2\pi\sqrt{L/g}\] holds`, String.raw`so \[T_0=2\pi\sqrt{L/g}\] holds`], [String.raw`$\frac{a}{b}$ label`, '[*a*|*b*] label'.replace('[*a*|*b*]', '*a*/*b*'), 'label'],
+  [String.raw`\theta = 0 at rest`, '*θ* = 0 at rest'], ['S/S(16 °C)', '[*S*|*S*(16~°C)]'], ['S/S(16 °C)', '*S*/*S*(16~°C)', 'label'], ['m = -di/do', '*m* = −[*di*|*do*]'], ['which way does p* move?', 'which way does *p*^{∗} move?'], ['a 4*4 grid', "a 4'×'4 grid"], ['10:30 am', '10:30 am'], ['Chapter 3-4', 'Chapter 3-4'],
   // --- Greek names only inside expressions
   ['alpha = 0.5', '*α* = 0.5'], ['the alpha particle', 'the alpha particle'], ['theta1 - theta2', '*θ*_{1} − *θ*_{2}'],
   ['z = f(x,y)', '*z* = *f*(*x*, *y*)'], ['Q = [C]/([A][B])', '*Q* = [[*C*]|[*A*][*B*]]'], ['2 ln 2 / c = 4.62 s', "[2'ln'2|*c*] = 4.62~s"],

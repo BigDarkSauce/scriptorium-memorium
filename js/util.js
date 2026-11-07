@@ -158,7 +158,7 @@ const GREEK = { alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε'
 const FN = new Set('sin cos tan sec csc cot asin acos atan atan2 arcsin arccos arctan sinh cosh tanh arsinh arcosh artanh exp ln log log10 log2 lg sqrt cbrt abs sign sgn floor ceil round min max pow hypot det erf gcd lcm mod lim Re Im arg tr'.split(' '));
 const TRIG = new Set('sin cos tan sec csc cot asin acos atan arcsin arccos arctan sinh cosh tanh arsinh arcosh artanh ln log lg exp det arg'.split(' '));   // may take an argument without brackets (sin x)
 const FN_SHOW = { asin: 'arcsin', acos: 'arccos', atan: 'arctan', sign: 'sgn', log10: 'log₁₀', log2: 'log₂' };
-const UNITS = new Set('m s kg g mg µg km cm mm µm um nm pm Å mol mmol K Pa kPa MPa GPa hPa bar mbar atm N kN mN J kJ MJ mJ eV keV MeV GeV W kW MW mW V mV kV µV A mA µA Ω kΩ MΩ ohm Hz kHz MHz GHz C mC µC F µF nF pF H mH T mT L mL l h min ms µs ns ps yr rad mrad sr deg °C °F lx cd lm Wb S Gy Sv Bq M mM µM cal kcal Da kDa dB ppm ppb au ly pc'.split(' '));
+const UNITS = new Set('m s kg g mg µg km cm mm µm um nm pm Å mol mmol K Pa kPa MPa GPa hPa bar mbar atm N kN mN J kJ MJ mJ eV keV MeV GeV W kW MW mW V mV kV µV A mA µA Ω kΩ MΩ ohm Hz kHz MHz GHz C mC µC F mF µF nF pF H mH T mT L mL l h min ms µs ns ps yr rad mrad sr deg °C °F lx cd lm Wb S Gy Sv Bq M mM µM cal kcal Da kDa dB ppm ppb au ly pc'.split(' '));
 const MULTI_UNITS = new Set([...UNITS].filter(u => u.length > 1 && !['ms', 'min', 'au', 'pc', 'ly', 'cd', 'lm', 'rad', 'deg', 'bar', 'atm', 'yr'].includes(u)).concat(['m/s']));
 const ELEMENTS = new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pt Au Hg Tl Pb Bi Po Rn Ra U Pu'.split(' '));
 const UPRIGHT_WORDS = new Set('pH pKa pOH max min const avg rms tot net eff ext int sup inf lim mod Re Im Ma Nu Pr Sc'.split(' '));
@@ -175,6 +175,7 @@ const TOK = new RegExp([
   /(?<num>(?:\d+\.?\d*|\.\d+)(?:[eE][+\-−]?\d+)?)/.source,
   /(?<word>[A-Za-zα-ωΑ-ΩϑϕϵℓÅµ∂∇ΔΣΠ][A-Za-z0-9α-ωΑ-ΩϑϕϵµΔ₀-₉ᵢⱼₐₑₒₓₙₘ]*'*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]*)/.source,
   /(?<op>\*\*|<=>|<->|<=|>=|!=|==|->|=>|<-|~=|\+\/-|\+-|<<|>>|[-−+*\/^=<>~×·÷±∓≤≥≠≈∝→⇒⇌↔←≡≪≫_√∛!%°′])/.source,
+  /(?<tex>\\[A-Za-z]+|\\.)/.source,
   /(?<open>[(\[{])/.source, /(?<close>[)\]}])/.source, /(?<bar>\|)/.source, /(?<comma>,)/.source,
   /(?<ws>\s+)/.source, /(?<other>[\s\S])/.source].join('|'), 'gu');
 function tokenize(s) {
@@ -182,7 +183,7 @@ function tokenize(s) {
   while ((m = TOK.exec(s))) {
     const g = m.groups, k = Object.keys(g).find(x => g[x] !== undefined);
     if (k === 'ws') { ws += m[0]; continue; }
-    let kk = k, v = m[0];
+    let kk = k === 'tex' ? 'other' : k, v = m[0];
     if (k === 'ion' && !/^(?:[A-Z][a-z]?\d*)+(?:\^?\d{0,2}[+\-−])$/.test(v)) kk = 'word';
     if (k === 'ion') { const base = v.replace(/\^?\d{0,2}[+\-−]$/, ''); const ch = v.slice(base.length); const prev = s[m.index - 1];
       if (!isChem(base) || (prev && /[\w)]/.test(prev)) || (base.length === 1 && !/\d/.test(ch) && !/^[HKNOFIC]$/.test(base)) || (/^[A-Z]$/.test(base) && ch === '-')) { TOK.lastIndex = m.index + base.length; kk = 'word'; v = base; } }
@@ -197,6 +198,7 @@ function tokenize(s) {
       if (n.k === 'open') { let d = 0, j = i + 1; for (; j < out.length; j++) { if (out[j].k === 'open') d++; else if (out[j].k === 'close' && --d === 0) break; } if (j < out.length) { b.v += '_' + out.slice(i + 1, j + 1).map((x, q) => (q ? x.ws : '') + x.v).join(''); out.splice(i, j - i + 1); i--; continue; } }
     }
   }
+  for (let i = 0; i < out.length - 1; i++) { const t = out[i], n = out[i + 1]; if (t.k === 'op' && t.v === '°' && n.k === 'word' && /^[CFK]$/.test(n.v) && !n.ws) { t.k = 'word'; t.v = '°' + n.v; out.splice(i + 1, 1); } }
   for (let i = 0; i < out.length - 1; i++) { const t = out[i], n = out[i + 1], nn = out[i + 2]; if (t.k === 'word' && /^[A-Za-zα-ω]$/.test(t.v) && n.k === 'op' && n.v === '*' && !n.ws && (!nn || nn.ws || /^(close|comma|other)$/.test(nn.k))) { t.v += '*'; out.splice(i + 1, 1); } }   // p* (p-star)
   for (let i = 0; i < out.length - 1; i++) { const t = out[i], n = out[i + 1]; if (t.k === 'word' && (t.v === 'Delta' || t.v === 'Δ') && n.k === 'word' && n.ws === ' ' && /^[A-Za-zα-ω][A-Za-z0-9_α-ω]{0,3}$/.test(n.v) && !STOP2.has(n.v)) { t.v = 'Δ' + n.v; out.splice(i + 1, 1); } }
   return out;
@@ -237,7 +239,7 @@ function matchBrackets(T) {
 function findSpans(T) {
   const M = matchBrackets(T), n = T.length, anchor = new Array(n).fill(false);
   const tight = i => !T[i].ws;   // no space before token i
-  const groupMathy = (a, b) => { for (let i = a + 1; i < b; i++) { const t = T[i]; if (t.k === 'other' && !/[′°'.]/.test(t.v)) return false; if (t.k === 'word' && !mathyWord(t.v) && !FN.has(t.v) && !(T[i - 1] && T[i - 1].k === 'op' && tight(i)) && !(T[i + 1] && T[i + 1].k === 'op' && tight(i + 1))) return false; } return b > a + 1; };
+  const groupMathy = (a, b) => { for (let i = a + 1; i < b; i++) { const t = T[i]; if (t.k === 'other' && !/[′°'.]/.test(t.v)) return false; if (t.k === 'word' && !mathyWord(t.v) && !FN.has(t.v) && !(UNITS.has(t.v) && T[i - 1] && T[i - 1].k === 'num') && !(T[i - 1] && T[i - 1].k === 'op' && tight(i)) && !(T[i + 1] && T[i + 1].k === 'op' && tight(i + 1))) return false; } return b > a + 1; };
   const operandL = i => { const t = T[i]; return t && (isOperand(t) || t.k === 'close' || t.k === 'bar' || (t.k === 'op' && /^[!%°′]$/.test(t.v))); };
   const operandR = i => { const t = T[i]; return t && (isOperand(t) || t.k === 'open' || t.k === 'bar' || (t.k === 'op' && /[-−√∛]/.test(t.v))); };
   const mathyL = i => { const t = T[i]; if (!t) return false; if (t.k === 'num' || t.k === 'ion') return true; if (t.k === 'close') return M.has(i) && groupMathy(M.get(i), i); if (t.k === 'word') return mathyWord(t.v); return t.k === 'op' && /^[!%°′]$/.test(t.v); };
@@ -284,7 +286,7 @@ function findSpans(T) {
     // juxtaposition
     if (!t.ws) return t.k === 'word' ? (p.k !== 'word') : true;
     if (p.k === 'word' && TRIG.has(p.v) && isOperand(t)) return true;
-    if (t.k === 'word' && TRIG.has(t.v) && (p.k === 'num' || p.k === 'close' || (p.k === 'word' && mathyWord(p.v, true)))) return true;
+    if (t.k === 'word' && (TRIG.has(t.v) || FN.has(t.v) && T[j + 1] && T[j + 1].k === 'open' && !T[j + 1].ws) && (p.k === 'num' || p.k === 'close' || (p.k === 'word' && mathyWord(p.v, true)))) return true;
     if (p.k === 'num' && t.k === 'word' && (UNITS.has(t.v) || /^[A-Za-zΩµ°]{1,4}$/.test(t.v) && UNITS.has(t.v.split(/[\/^·*]/)[0]))) return true;
     if (p.k === 'word' && UNITS.has(p.v) && t.k === 'word' && UNITS.has(t.v) && T[j + 1] && T[j + 1].k === 'op' && /[\^*\/·]/.test(T[j + 1].v) && !T[j + 1].ws) return true;
     return false;
@@ -310,7 +312,7 @@ function findSpans(T) {
     const growR = () => { while (b < n - 1) { const j = b + 1, t = T[j];
       if (t.k === 'open' && M.has(j) && M.get(j) > j) { const c = M.get(j); const p = T[b]; if (groupMathy(j, c) || (p.k === 'op' && !t.ws) || (p.k === 'word' && FN.has(p.v) && !t.ws)) { if (t.ws && !(p.k === 'op') && !(p.k === 'num') && !(p.k === 'word' && FN.has(p.v))) break; b = c; continue; } break; }
       if (!contR(j)) break;
-      if (t.k === 'word' && T[b].k === 'op' && !mathyWord(t.v) && !FN.has(t.v) && (t.ws || STOP3.has(t.v) || STOP2.has(t.v.toLowerCase()) || t.v.length > 12) && !(T[j + 1] && T[j + 1].k === 'op' && !T[j + 1].ws && T[j + 1].v !== '·')) { if (!t.ws && !STOP3.has(t.v) && !STOP2.has(t.v.toLowerCase())) { b = j; } break; }
+      if (t.k === 'word' && T[b].k === 'op' && !mathyWord(t.v) && !FN.has(t.v) && !(!t.ws && !T[b].ws && T[b].v !== '·' && /^[A-Za-z]{1,3}$/.test(t.v) && !STOP3.has(t.v)) && (t.ws || STOP3.has(t.v) || STOP2.has(t.v.toLowerCase()) || t.v.length > 12) && !(T[j + 1] && T[j + 1].k === 'op' && !T[j + 1].ws && T[j + 1].v !== '·')) { if (!t.ws && !STOP3.has(t.v) && !STOP2.has(t.v.toLowerCase())) { b = j; } break; }
       if (t.k === 'op' && !/^[!%°′]$/.test(t.v)) { if (!operandR(j + 1)) break; }
       b = j; } };
     growL(); growR();
@@ -387,7 +389,7 @@ function parseSpan(T, a, b) {
     const o = next(), end = M.get(p - 1); const save = b; b = end - 1; const inner = p <= b ? list() : { t: 'raw', v: '' }; b = save; p = end + 1;
     return { t: 'group', o: o.v, c: T[end].v, a: inner };
   }
-  function list() { const items = [rel()]; while (peek() && peek().k === 'comma') { next(); items.push(peek() ? rel() : { t: 'raw', v: '' }); } while (p <= b) items.push({ t: 'raw', v: next().v }); return items.length > 1 ? { t: 'list', items } : items[0]; }
+  function list() { const items = [rel()]; while (peek() && peek().k === 'comma') { next(); items.push(peek() ? rel() : { t: 'raw', v: '' }); } let rest = ''; while (p <= b) { const t = next(); rest += (rest && t.ws ? ' ' : '') + (t.k === 'op' ? (RELS[t.v] || t.v) : t.v); } const L = items.length > 1 ? { t: 'list', items } : items[0]; return rest ? { t: 'seq', items: [L, { t: 'raw', v: ' ' + rest }] } : L; }
   function prim() {
     const t = peek(); if (!t) return { t: 'raw', v: '' };
     if (t.k === 'num') { next(); return numNode(t.v); }
@@ -460,7 +462,7 @@ function wordNode(w) {
   else if (/^[A-Za-zα-ω]\d{1,3}$/.test(b)) { x = { t: 'id', v: b[0], sub: { t: 'num', v: b.slice(1) } }; if (chemOk(b)) x = { t: 'chem', v: b }; }
   else if (chemOk(b)) x = { t: 'chem', v: b };
   else if (UPRIGHT_WORDS.has(b) || FN.has(b)) x = { t: 'word', v: FN_SHOW[b] || b };
-  else if (/^d[a-zα-ωθ]$/.test(b) && b !== 'dd') x = { t: 'mul', items: [{ t: 'id', v: 'd', up: true }, wordNode(b[1])], ex: '' };
+  else if (/^d[xyztrsuvwθφqmAVpEWQSN]$/.test(b)) x = { t: 'mul', items: [{ t: 'id', v: 'd', up: true }, wordNode(b[1])], ex: '' };
   else if (/^[A-Z][a-z]$/.test(b) && !ELEMENTS.has(b) && !UNITS.has(b)) x = { t: 'id', v: b[0], sub: { t: 'subw', v: b[1] } };   // Ea → E_a
   else if (/^[A-Za-z]{2,3}$/.test(b) && !UNITS.has(b) && !ELEMENTS.has(b) && !/^[A-Z][a-z]{2}$/.test(b) && !/^[a-z]{3}$/.test(b)) x = { t: 'mul', items: b.split('').map(c => ({ t: 'id', v: c })), ex: '' };   // kT, RC
   else if (/^[A-Za-zα-ω]{2,3}$/.test(b) && /[α-ω]/.test(b)) x = { t: 'mul', items: [...b].map(c => wordNode(c)), ex: '' };   // ωt, λt
@@ -547,6 +549,7 @@ function lay(x, C) {   // C: {stack: bool, lvl: 0 (base) / 1 (script)}
     case 'bin': return H(lay(x.a, C), T_(' ' + x.op + ' ', 'op'), lay(x.b, C));
     case 'rel': return H(x.items.map((y, i) => [i ? T_(' ' + x.ops[i - 1] + ' ', 'op') : null, lay(y, C)]));
     case 'list': return H(x.items.map((y, i) => [i ? T_(', ') : null, lay(y, C)]));
+    case 'seq': return H(x.items.map(y => lay(y, C)));
     case 'group': { const inner = lay(x.a, C); return H(T_(x.o), inner, T_(x.c)); }
     case 'sqrt': return { k: 'sqrt', a: lay(ungroup(x.a), C), idx: x.idx };
     case 'pow': {
@@ -633,8 +636,10 @@ function toRuns(b, st = { sz: 1, sh: 0, ov: 0 }, out = []) {
 }
 
 // ---- LaTeX → plain notation (for SVG / canvas, where MathJax does not run)
+const TEXSYM = { cdot: '·', times: '×', pm: '±', mp: '∓', le: '≤', leq: '≤', ge: '≥', geq: '≥', neq: '≠', ne: '≠', approx: '≈', propto: '∝', to: '→', rightarrow: '→', Rightarrow: '⇒', rightleftharpoons: '⇌', infty: '∞', partial: '∂', nabla: '∇', degree: '°', ll: '≪', gg: '≫', sim: '∼', equiv: '≡', hbar: 'ℏ', ell: 'ℓ' };
+const texCmds = t => t.replace(/\\([A-Za-z]+)(?![A-Za-z])/g, (m, w, i, all) => { const r = GREEK[w] || TEXSYM[w]; return r ? r + (/^[A-Za-z0-9\\]/.test(all.slice(i + m.length)) && GREEK[w] ? ' ' : '') : m; });
 function texPlain(s) {
-  let t = String(s);
+  let t = texCmds(String(s));
   const w = x => /^[\w.]+$/.test(x.trim()) ? x.trim() : '(' + x + ')';
   for (let k = 0; k < 4; k++) t = t.replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, (m, a, b) => w(a) + '/' + w(b)).replace(/\\sqrt\{([^{}]*)\}/g, 'sqrt($1)').replace(/\^\{([^{}]*)\}/g, '^($1)').replace(/_\{([^{}]*)\}/g, '_($1)');
   t = t.replace(/\\(left|right|,|;|!|quad|qquad)/g, ' ').replace(/\\(mathrm|text|mathbf|mathit|operatorname)\{([^{}]*)\}/g, '$2')
@@ -645,18 +650,19 @@ function texPlain(s) {
 }
 
 // ---- public: typeset a text into boxes per segment
-const PROTECT = /(\$\$[^$]+\$\$|\$[^$\n]+\$|`[^`\n]+`|\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|[\w.+-]+@[\w-]+\.[\w.]+|\b[\w-]+(?:\/[\w.-]+)*\.(?:js|mjs|json|md|pdf|html?|css|py|txt|png|jpe?g|svg|gif|webp|csv|xml|zip|bat|sh|glb|gltf)\b)/g;
+const PROTECT = /(\$\$[^$]+\$\$|\$[^$\n]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|`[^`\n]+`|\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|[\w.+-]+@[\w-]+\.[\w.]+|\b[\w-]+(?:\/[\w.-]+)*\.(?:js|mjs|json|md|pdf|html?|css|py|txt|png|jpe?g|svg|gif|webp|csv|xml|zip|bat|sh|glb|gltf)\b)/g;
 const CACHE = new Map();
 function typesetText(str, C) {   // → [{k:'box', b} | {k:'tex', v} | {k:'code', v} | {k:'text', v}]
   const parts = String(str).split(PROTECT), out = [];
   parts.forEach((seg, i) => {
     if (!seg) return;
-    if (i % 2) { if (seg[0] === '$') out.push(C.tex ? { k: 'tex', v: seg } : { k: 'box', b: plainBox(texPlain(seg.replace(/^\$+|\$+$/g, '')), C) }); else if (seg[0] === '`') out.push({ k: 'code', v: seg.slice(1, -1) }); else out.push({ k: 'text', v: seg }); return; }
+    if (i % 2) { if (seg[0] === '$' || /^\\[[(]/.test(seg)) out.push(C.tex ? { k: 'tex', v: seg } : { k: 'box', b: plainBox(texPlain(seg.replace(/^\$+|\$+$|^\\[[(]|\\[\])]$/g, '')), C) }); else if (seg[0] === '`') out.push({ k: 'code', v: seg.slice(1, -1) }); else out.push({ k: 'text', v: seg }); return; }
     out.push({ k: 'box', b: plainBox(seg, C) });
   });
   return out;
 }
 function plainBox(seg, C) {
+  if (seg.includes('\\')) seg = texCmds(seg);   // a stray \theta outside $…$ (no MathJax pass there): the symbol itself
   const T = tokenize(seg); if (!T.length) return T_(seg);
   const spans = findSpans(T); const c = []; let k = 0;
   const raw = (t, i) => { const ws = t.ws ? (/\n/.test(t.ws) ? t.ws : ' '.repeat(Math.min(t.ws.length, 1))) : ''; return ws; };
