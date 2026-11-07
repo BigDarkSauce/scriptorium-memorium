@@ -295,7 +295,7 @@ function matCache(ctx) { if (ctx && ctx.matCache) return ctx.matCache; const k =
 function cached(ctx, key, make) { const C = matCache(ctx); if (!C) return make(); if (!C.has(key)) C.set(key, make()); return C.get(key); }
 const DEF_COL = { tree: '#4f7a3a', pine: '#2f5a3a', bush: '#4a7238', oak: '#45692f', birch: '#7fa046', cherry: '#f2b8c8' };
 // bark per species: birch chalk-white with dark lenticels (the bark kind's lichen mask, darkened), the rest AAA bark
-const DEF_TRUNK = { birch: { preset: 'bark', color: '#d6d0c2', aaa: { color3: '#24201c', moss: .3 } }, cherry: { preset: 'bark', color: '#5a3a30' } };
+const DEF_TRUNK = { birch: { preset: 'bark', color: '#e4dfd2', aaa: { color2: '#f0ece2', color3: '#24201c', moss: .3, scan: false } }, cherry: { preset: 'bark', color: '#5a3a30' } };
 export const speciesOf = (kind, shape = {}) => { const s = String(shape.species || kind).toLowerCase(); return TREE_KINDS.includes(s) ? s : kind; };
 
 // ---------------------------------------------------------------- the scene-spec shape -----------------------------

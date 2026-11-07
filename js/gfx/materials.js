@@ -14,14 +14,23 @@
 // grass), 'marblefloor' (polished slabs), 'sand' and 'bark' are procedural GLSL materials with parallax-occlusion
 // relief, silhouette fracture and wetness; spec.color sets their palette base.
 //
+// Surface stacks (v5 interiors pass, docs/research/realism-playbook.md §4): metals use measured F0 colours
+// (physicallybased.info, linear sRGB: brass 0.91/0.78/0.42, gold 1/0.77/0.31, copper 0.93/0.62/0.52, stainless
+// 0.67/0.64/0.60, chromium 0.65/0.69/0.70) with a tarnish map, a faint brushed normal and anisotropy (turned and
+// polished parts), and rubbed-bright edges where the surface curves sharply (surfaces.js SM_CURV). Leather, parchment,
+// plaster and marble use the companion normal/roughness maps of textures.js. thinGlass({ transmit: true }) is
+// thin-walled transmission (ior 1.52, thickness 0: no image shift, Fresnel-correct see-through, roughness blur) for
+// panes and vessels that hold only opaque things (at 'medium' and 'high'; thin shell at 'low').
+//
 // Card stage: every lit material gets a small hook that, while the materialize front says "card", flattens
 // normal maps and removes clearcoat / sheen so the white card model stays matte and clean; thin glass turns into
 // a half-opaque vellum sheet. Each hook variant carries its own `defines`, which keeps three's program cache
 // keys distinct (patchMaterial gives every patched material of one type the same customProgramCacheKey).
 import * as THREE from 'three';
-import { paper, parchment, leather, stone, plaster } from './textures.js';
+import { paper, parchment, leather, stone, plaster, companions, patinaTex, marbleSet as marbleStack } from './textures.js';
+import { surface, patchSurface } from './surfaces.js';
 import { woodSet, brushed, smudge, castIron, paperSet, feltSet, marbleSet, relief, variation } from './proc.js';
-import { aaaMaterial } from './aaa.js';
+import { aaaMaterial, AAA } from './aaa.js';
 
 export const PRESETS = ['brass', 'gold', 'copper', 'chrome', 'steel', 'iron', 'wood', 'darkwood', 'walnut', 'paper', 'parchment', 'card', 'glass', 'solidglass', 'water', 'liquid', 'ice', 'plastic', 'rubber', 'ceramic', 'stone', 'marble', 'plaster', 'fabric', 'felt', 'leather', 'cork', 'foliage', 'bark', 'grass', 'soil', 'sand', 'mud', 'cobble', 'crag', 'meadow', 'marblefloor', 'snow', 'skin', 'membrane', 'gel', 'crystal', 'emissive', 'neon', 'cloud', 'smoke', 'mercury', 'ink', 'chalk'];
 // preset → AAA kind (and per-preset defaults: bark on the small trunks of the built-in trees is shallow and fine)
@@ -48,6 +57,12 @@ function hook(m) {
           material.sheenColor *= ( 1.0 - isCard );
         #endif`);
     }
+    if (m.userData.transmit && card) {
+      s.fragmentShader = s.fragmentShader.replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment.replace('material.transmission = transmission;', 'material.transmission = transmission * ( 1.0 - isCard );'))
+        .replace('#include <opaque_fragment>', '#include <opaque_fragment>\n gl_FragColor = mix( gl_FragColor, vec4( outgoingLight, smCard ), isCard );')
+        .replace('void main() {', 'uniform float smCard;\nvoid main() {');
+      s.uniforms.smCard = m.userData.smCard;
+    }
     if (m.userData.thin) {
       s.fragmentShader = s.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
         { float smNdV = abs( dot( normal, geometryViewDir ) );
@@ -57,13 +72,24 @@ function hook(m) {
         .replace('void main() {', 'uniform float smEdge;\nuniform float smCard;\nvoid main() {');
       s.uniforms.smEdge = m.userData.smEdge; s.uniforms.smCard = m.userData.smCard;
     }
+    if (m.userData.surf) patchSurface(s, m);   // surface stack (surfaces.js), applied after the card-stage edits
   };
-  m.customProgramCacheKey = () => 'sm' + (m.userData.thin ? 'thin' : '') + m.type;
+  m.customProgramCacheKey = () => 'sm' + (m.userData.thin ? 'thin' : '') + (m.userData.transmit ? 'tr' : '') + m.type;
   if (m.userData.thin) m.defines = Object.assign({}, m.defines, { SM_THIN: '' });
+  if (m.userData.transmit) m.defines = Object.assign({}, m.defines, { SM_TRANSMIT: '' });
   return m;
 }
 // Thin-shell glass: reflections + Fresnel-weighted occlusion of the background (premultiplied blending).
 export function thinGlass(o = {}) {
+  if (o.transmit && AAA.quality !== 'low' && (o.transmit !== 'high' || AAA.quality === 'high')) {
+    // thin-walled transmission: the opaque world behind is seen through (blurred by roughness), weighted by the
+    // dielectric Fresnel of ior 1.52 (4 % head-on, a mirror at grazing angles); soda-lime's faint green edge tint
+    const tm = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: o.roughness ?? .02, transmission: 1, thickness: o.thickness ?? 0, ior: o.ior ?? 1.52, specularIntensity: 1,
+      attenuationColor: new THREE.Color(.9, .975, .955), attenuationDistance: 3, side: o.side ?? THREE.DoubleSide, transparent: true, depthWrite: false, roughnessMap: o.smudge === false ? null : smudge().roughnessMap });
+    if (o.color != null && o.color !== 0x000000) tm.color.set(o.color).lerp(new THREE.Color(1, 1, 1), .85);
+    tm.userData.transmit = true; tm.userData.smCard = { value: o.card ?? .5 }; tm.userData.preset = 'glass';
+    return hook(tm);
+  }
   const tint = new THREE.Color(o.color ?? 0x000000);
   const m = new THREE.MeshPhysicalMaterial({
     color: tint, metalness: 0, roughness: o.roughness ?? .015, ior: o.ior ?? 1.5, specularIntensity: 1,
@@ -91,22 +117,25 @@ export function makeMaterial(spec = {}, opts = {}) {
   if (AAA_KINDS[p]) { const m = aaaMaterial(AAA_KINDS[p], Object.assign({ color: spec.color, side: spec.side === 'double' ? THREE.DoubleSide : undefined }, AAA_OPTS[p] || {}, spec.aaa || {})); m.userData.preset = p; return m; }
   let m;
   const P = (o) => new THREE.MeshPhysicalMaterial(o);
-  const metal = (color, rough, o = {}) => P(Object.assign({ color, metalness: 1, roughness: rough, roughnessMap: smudge().roughnessMap, envMapIntensity: 1.15 }, o));
-  const wood = (kind, o = {}) => { const W = woodSet(kind); return P(Object.assign({ map: W.map, normalMap: W.normalMap, normalScale: new THREE.Vector2(.35, .35), roughnessMap: W.roughnessMap, roughness: .7, clearcoat: .55, clearcoatRoughness: .22, color: 0xffffff }, o)); };
+  const lin = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
+  // polished/turned metal: measured F0, tarnish, handling smudges, a faint brushed normal + anisotropy, rubbed edges
+  const metal = (color, rough, o = {}, kind = 'brass') => { const B = brushed(); return surface(P(Object.assign({ color, metalness: 1, roughness: rough, roughnessMap: smudge().roughnessMap, map: patinaTex(kind), normalMap: B.normalMap, normalScale: new THREE.Vector2(.08, .08), anisotropy: .3, envMapIntensity: 1 }, o)), { curv: [14, 55], wear: 4, noise: 7, macro: [2.5, .05, .25] }); };
+  const wood = (kind, o = {}) => { const W = woodSet(kind); return surface(P(Object.assign({ map: W.map, normalMap: W.normalMap, normalScale: new THREE.Vector2(.35, .35), roughnessMap: W.roughnessMap, roughness: .7, clearcoat: .55, clearcoatRoughness: .22, color: 0xffffff }, o)), { macro: [1.2, .07, .15], detail: [3.3, .3] }); };
+  const stack = (map, o = {}) => { const C = companions(map) || {}; return P(Object.assign({ map, normalMap: C.normalMap || null, normalScale: new THREE.Vector2(C.normalScale ?? .5, C.normalScale ?? .5), roughnessMap: C.roughnessMap || null, roughness: C.roughness ?? .8, color: 0xffffff }, o)); };
   switch (p) {
-    case 'brass': m = metal(0xe2c47a, .3); break;
-    case 'gold': m = metal(0xffd98c, .22); break;
-    case 'copper': m = metal(0xeba283, .3); break;
-    case 'chrome': m = metal(0xe2e3e4, .1, { envMapIntensity: 1.3 }); break;
-    case 'steel': { const B = brushed(); m = P({ color: 0xc9cdd2, metalness: 1, roughness: .42, roughnessMap: B.roughnessMap, normalMap: B.normalMap, normalScale: new THREE.Vector2(.15, .15), anisotropy: .55, envMapIntensity: 1.1 }); break; }
-    case 'iron': { const I = castIron(); m = P({ map: I.map, normalMap: I.normalMap, normalScale: new THREE.Vector2(.5, .5), roughnessMap: I.roughnessMap, color: 0xffffff, metalness: .65, roughness: .85 }); break; }
+    case 'brass': m = metal(lin(.91, .778, .423), .3, {}, 'brass'); break;
+    case 'gold': m = metal(lin(1, .773, .307), .2, {}, 'gold'); break;
+    case 'copper': m = metal(lin(.932, .623, .522), .3, {}, 'copper'); break;
+    case 'chrome': m = metal(lin(.654, .685, .701), .08, { anisotropy: 0, normalScale: new THREE.Vector2(.03, .03) }, 'chrome'); break;
+    case 'steel': { const B = brushed(); m = surface(P({ color: lin(.669, .639, .598), map: patinaTex('steel'), metalness: 1, roughness: .42, roughnessMap: B.roughnessMap, normalMap: B.normalMap, normalScale: new THREE.Vector2(.15, .15), anisotropy: .55, envMapIntensity: 1 }), { curv: [14, 55], wear: 4, noise: 7 }); break; }
+    case 'iron': { const I = castIron(); m = surface(P({ map: I.map, normalMap: I.normalMap, normalScale: new THREE.Vector2(.5, .5), roughnessMap: I.roughnessMap, color: 0xffffff, metalness: .65, roughness: .85 }), { curv: [10, 45], wear: 4, noise: 9, macro: [1.5, .08, .1] }); break; }
     case 'mercury': m = P({ color: 0xeceef0, metalness: 1, roughness: .035, envMapIntensity: 1.35 }); break;
     case 'wood': m = wood('oak'); break;
     case 'darkwood': case 'walnut': m = wood('walnut', { clearcoat: .7, clearcoatRoughness: .16 }); break;
     case 'bark': { const W = woodSet('bark'); m = P({ map: W.map, normalMap: W.normalMap, normalScale: new THREE.Vector2(1.4, 1.4), roughnessMap: W.roughnessMap, roughness: 1, color: 0xffffff }); break; }
     case 'paper': { const S = paperSet(); m = P({ map: S.map, normalMap: S.normalMap, normalScale: new THREE.Vector2(.25, .25), color: 0xffffff, roughness: .88, sheen: .25, sheenRoughness: .7, sheenColor: new THREE.Color(0xffffff) }); break; }
     case 'card': { const S = paperSet([244, 240, 230], 'card'); m = P({ map: S.map, normalMap: S.normalMap, normalScale: new THREE.Vector2(.35, .35), color: 0xffffff, roughness: .9 }); break; }
-    case 'parchment': { const S = paperSet(); m = P({ map: parchment(), normalMap: S.normalMap, normalScale: new THREE.Vector2(.4, .4), color: 0xffffff, roughness: .82, side: THREE.DoubleSide }); break; }
+    case 'parchment': m = stack(parchment(), { side: THREE.DoubleSide, sheen: .2, sheenRoughness: .7, sheenColor: new THREE.Color(0xfff6e6) }); break;
     case 'glass': m = thinGlass({ color: col ? col.clone().multiplyScalar(.05) : 0x000000, absorb: col ? .08 : .035 }); break;
     case 'solidglass': m = liquid({ tint: col || 0xf4fbff, dist: col ? 1.2 : 8, ior: 1.5, thickness: .8, rough: .01 }); break;
     case 'water': m = liquid({ tint: col || 0x3aa6b8, dist: 1.6, ior: 1.333, thickness: 1.2, rough: .03, normal: relief('ripple').normalMap, ns: .12 }); break;
@@ -118,11 +147,11 @@ export function makeMaterial(spec = {}, opts = {}) {
     case 'rubber': { const R = relief('rubber'); m = P({ color: 0x232323, roughness: .82, normalMap: R.normalMap, normalScale: new THREE.Vector2(.45, .45), sheen: .5, sheenRoughness: .55, sheenColor: new THREE.Color(0x808080) }); break; }
     case 'ceramic': { const R = relief('peel'); m = P({ color: 0xf2efe8, roughness: .45, clearcoat: 1, clearcoatRoughness: .05, clearcoatNormalMap: R.normalMap, clearcoatNormalScale: new THREE.Vector2(.18, .18) }); break; }
     case 'stone': { const R = relief('stone'); m = P({ map: stone(), normalMap: R.normalMap, normalScale: new THREE.Vector2(.9, .9), roughnessMap: R.roughnessMap, color: 0xffffff, roughness: 1 }); break; }
-    case 'marble': { const M = marbleSet(); m = P({ map: M.map, roughnessMap: M.roughnessMap, color: 0xffffff, roughness: .32, clearcoat: .45, clearcoatRoughness: .08 }); break; }
-    case 'plaster': { const R = relief('ground'); m = P({ map: plaster(), normalMap: R.normalMap, normalScale: new THREE.Vector2(.35, .35), color: 0xffffff, roughness: .95 }); break; }
+    case 'marble': { const M = marbleStack('statuary', { size: 512, seed: 3 }); m = surface(P({ map: M.map, normalMap: M.normalMap, normalScale: new THREE.Vector2(M.normalScale, M.normalScale), roughnessMap: M.roughnessMap, color: new THREE.Color(.92, .92, .92), roughness: 2.2, clearcoat: 1, clearcoatRoughness: .06 }), { sss: [.85, .56, .4, .38], macro: [.9, .06, .2] }); break; }
+    case 'plaster': m = stack(plaster(), { roughness: 1 }); break;
     case 'fabric': { const R = relief('weave'); m = P({ color: 0x7a2e24, roughness: .95, normalMap: R.normalMap, normalScale: new THREE.Vector2(.5, .5), sheen: 1, sheenColor: new THREE.Color(0xffc0a0), sheenRoughness: .55 }); break; }
     case 'felt': { const F = feltSet(); m = P({ map: F.map, normalMap: F.normalMap, normalScale: new THREE.Vector2(.6, .6), color: 0x2f4a36, roughness: 1, sheen: .8, sheenRoughness: .8, sheenColor: new THREE.Color(0x9ab09a) }); break; }
-    case 'leather': { const R = relief('leather'); m = P({ map: leather(), normalMap: R.normalMap, normalScale: new THREE.Vector2(.6, .6), color: 0xffffff, roughness: .6, clearcoat: .25, clearcoatRoughness: .4 }); break; }
+    case 'leather': m = stack(leather(), { roughness: 1, clearcoat: .2, clearcoatRoughness: .45, sheen: .25, sheenRoughness: .5, sheenColor: new THREE.Color(0x8a6a58) }); break;
     case 'cork': { const V = variation('sand'), R = relief('ground'); m = P({ map: V.map, normalMap: R.normalMap, normalScale: new THREE.Vector2(1.2, 1.2), color: 0xb8875a, roughness: .92 }); break; }
     case 'foliage': m = P({ map: variation('foliage').map, color: 0x4f7a3a, roughness: .78, sheen: .4, sheenColor: new THREE.Color(0xb8e090), sheenRoughness: .5, flatShading: true }); break;
     case 'grass': { const R = relief('ground'); m = P({ map: variation('grass').map, normalMap: R.normalMap, normalScale: new THREE.Vector2(.8, .8), color: 0x6f9a48, roughness: .95, sheen: .5, sheenColor: new THREE.Color(0xd0f0a0) }); break; }

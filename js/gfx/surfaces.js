@@ -4,7 +4,8 @@
 //    varnish then reflect their real surroundings instead of a generic grey studio. Re-captured only when the room is
 //    rebuilt (size, bookcases moved). Reflections are box-projected onto the room's walls (Babylon.js "local cubemaps",
 //    CubeTexture.boundingBoxSize/Position), so a window mirrored in the floor stays where the window is as you walk.
-//  • surface(material, opts): one onBeforeCompile extension of MeshStandard/PhysicalMaterial adding, by define:
+//  • surface(material, opts): one onBeforeCompile extension of MeshStandard/PhysicalMaterial adding (uniform-driven,
+//    so most materials share a program; only box projection, floor/wall occlusion and traffic are defines):
 //    box-projected IBL, a rotated detail normal layer (breaks the tile), world-space macro variation of albedo and
 //    roughness, edge wear from per-vertex face-edge distances (boxes built by baroque.js `Acc`) or from screen-space
 //    curvature (turned brass), water-gilding logic (burnished highs, matte toned hollows, red bole on rubbed arrises),
@@ -30,10 +31,8 @@ export const SURF_U = {
 const COMMON = /* glsl */`
 uniform vec3 smBoxMin; uniform vec3 smBoxMax; uniform vec3 smProbePos; uniform float smBoxK;
 uniform vec4 smRoom; uniform vec4 smRoomY; uniform vec4 smFoot[ 24 ]; uniform int smFootN; uniform vec4 smAisle;
-uniform vec4 smMacro; uniform vec4 smDetail; uniform vec4 smEdge; uniform vec4 smSSS;
-#ifdef SM_EDGE
+uniform vec4 smMacro; uniform vec4 smDetail; uniform vec4 smEdge; uniform vec4 smSSS; uniform vec4 smMode;
 varying vec4 vSmEdge;
-#endif
 vec3 smWorldPos() { return ( vec4( - vViewPosition - viewMatrix[ 3 ].xyz, 0.0 ) * viewMatrix ).xyz; }
 float smHash( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
 float smNoise( vec3 x ) {
@@ -54,62 +53,40 @@ if ( smBoxK > 0.0 ) {
   if ( tt > 0.0 && tt < 1e3 ) reflectVec = normalize( mix( reflectVec, normalize( wp + reflectVec * tt - smProbePos ), smBoxK * ( 1.0 - roughness ) ) );
 }
 #endif`;
+// smMode: x = wear kind (0 none, 1 wood, 2 paint, 3 gilt, 4 metal), y = gilt cavity from vertex colour, z = curvature
+// wear on, w = face-edge wear on. Uniform-driven (coherent branches), so most materials share one program.
 const WEAR = /* glsl */`
 vec3 smWP = smWorldPos(); float smM = 0.5, smWear = 0.0, smCav = 0.0;
-#ifdef SM_MACRO
-smM = smFbm( smWP * smMacro.x ); diffuseColor.rgb *= 1.0 + smMacro.y * ( smM - 0.5 ) * 2.0;
-#endif
-#ifdef SM_EDGE
-{ float d = 9.0; if ( vSmEdge.x + vSmEdge.y > 1e-4 ) d = min( min( vSmEdge.x, vSmEdge.y ), min( vSmEdge.z, vSmEdge.w ) );
-  float e = 1.0 - smoothstep( 0.0, smEdge.x, d ); smWear = e * smoothstep( 0.35, 0.75, smNoise( smWP * smEdge.y ) + 0.35 * e ); }
-#endif
-#ifdef SM_CURV
-{ vec3 nn = normalize( vNormal ); float c = length( fwidth( nn ) ) / max( length( fwidth( smWP ) ), 1e-5 );
+if ( smMacro.y + smMacro.z > 0.0 ) { smM = smFbm( smWP * smMacro.x ); diffuseColor.rgb *= 1.0 + smMacro.y * ( smM - 0.5 ) * 2.0; }
+if ( smMode.w > 0.5 ) { float d = 9.0; if ( vSmEdge.x + vSmEdge.y > 1e-4 ) d = min( min( vSmEdge.x, vSmEdge.y ), min( vSmEdge.z, vSmEdge.w ) );
+  float e = 1.0 - smoothstep( 0.0, smEdge.x, d ); if ( e > 0.0 ) smWear = e * smoothstep( 0.35, 0.75, smNoise( smWP * smEdge.y ) + 0.35 * e ); }
+if ( smMode.z > 0.5 ) { vec3 nn = normalize( vNormal ); float c = length( fwidth( nn ) ) / max( length( fwidth( smWP ) ), 1e-5 );
   smWear = max( smWear, smoothstep( smEdge.z, smEdge.w, c ) * smoothstep( 0.25, 0.75, smNoise( smWP * smEdge.y ) ) ); }
+#ifdef USE_COLOR
+if ( smMode.y > 0.5 ) smCav = clamp( ( 1.0 - vColor.r ) * 1.6, 0.0, 1.0 );
 #endif
-#if defined( SM_GILT ) && defined( USE_COLOR )
-smCav = clamp( ( 1.0 - vColor.r ) * 1.6, 0.0, 1.0 );
-#endif
-#if SM_WEAR == 1
-diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 1.5 + 0.012, smWear * 0.65 );
-#elif SM_WEAR == 2
-diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.72, 0.66, 0.58 ), smoothstep( 0.45, 0.6, smWear ) );
-#elif SM_WEAR == 3
-diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.42, 0.13, 0.06 ), smoothstep( 0.55, 0.65, smWear ) );
-#elif SM_WEAR == 4
-diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 1.1 + 0.02, smWear );
-#endif`;
+int smK = int( smMode.x + 0.5 );
+if ( smK == 1 ) diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 1.5 + 0.012, smWear * 0.65 );
+else if ( smK == 2 ) diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.72, 0.66, 0.58 ), smoothstep( 0.45, 0.6, smWear ) );
+else if ( smK == 3 ) diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.42, 0.13, 0.06 ), smoothstep( 0.55, 0.65, smWear ) );
+else if ( smK == 4 ) diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 1.1 + 0.02, smWear );`;
 const ROUGH = /* glsl */`
-#ifdef SM_MACRO
 roughnessFactor *= 1.0 + smMacro.z * ( smM - 0.5 ) * 2.0;
-#endif
 #ifdef SM_TRAFFIC
 { float dWall = min( min( smWP.x - smRoom.x, smRoom.z - smWP.x ), min( smWP.z - smRoom.y, smRoom.w - smWP.z ) ) - smRoomY.w;
   float tr = 0.7 * ( 1.0 - smoothstep( smAisle.y * 0.5, smAisle.y * 1.6, abs( smWP.x - smAisle.x ) ) ) + 0.45 * smoothstep( 0.25, 0.6, dWall ) * ( 1.0 - smoothstep( 0.9, 1.6, dWall ) );
   tr *= 0.55 + 0.9 * smNoise( smWP * vec3( 1.7, 1.0, 0.6 ) );
   roughnessFactor = mix( roughnessFactor, roughnessFactor + 0.13, clamp( tr, 0.0, 1.0 ) ); }
 #endif
-#if SM_WEAR == 1
-roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.75, smWear );
-#elif SM_WEAR == 3
-roughnessFactor = mix( mix( roughnessFactor, 0.1, smWear * 0.85 ), 0.62, smoothstep( 0.55, 0.65, smWear ) );
-#elif SM_WEAR == 4
-roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.45, smWear );
-#endif
-#ifdef SM_GILT
-roughnessFactor = mix( roughnessFactor, 0.5, smCav );
-#endif`;
+if ( smK == 1 ) roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.75, smWear );
+else if ( smK == 3 ) roughnessFactor = mix( mix( roughnessFactor, 0.1, smWear * 0.85 ), 0.62, smoothstep( 0.55, 0.65, smWear ) );
+else if ( smK == 4 ) roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.45, smWear );
+roughnessFactor = mix( roughnessFactor, 0.5, smCav );`;
 const METAL = /* glsl */`
-#if SM_WEAR == 3
-metalnessFactor *= 1.0 - smoothstep( 0.55, 0.65, smWear );
-#endif
-#ifdef SM_GILT
-metalnessFactor *= 1.0 - 0.5 * smCav;
-#endif`;
+if ( smK == 3 ) metalnessFactor *= 1.0 - smoothstep( 0.55, 0.65, smWear );
+metalnessFactor *= 1.0 - 0.5 * smCav;`;
 const DETAIL = /* glsl */`
-#ifdef SM_DETAIL
-{ vec2 duv = mat2( 0.8, -0.6, 0.6, 0.8 ) * vNormalMapUv * smDetail.x + smDetail.zw; vec3 dN = texture2D( normalMap, duv ).xyz * 2.0 - 1.0; mapN.xy += dN.xy * smDetail.y; }
-#endif
+if ( smDetail.y > 0.0 ) { vec2 duv = mat2( 0.8, -0.6, 0.6, 0.8 ) * vNormalMapUv * smDetail.x + smDetail.zw; vec3 dN = texture2D( normalMap, duv ).xyz * 2.0 - 1.0; mapN.xy += dN.xy * smDetail.y; }
 mapN.xy *= normalScale;`;
 const AOCHUNK = /* glsl */`
 #ifdef SM_FLOORAO
@@ -134,16 +111,14 @@ export function patchSurface(s, m) {
   fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\n' + WEAR);
   fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + ROUGH);
   fs = fs.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n' + METAL);
-  if (f.detail) fs = fs.replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', DETAIL));
-  if (f.sss) fs = fs.replace('#include <lights_physical_pars_fragment>', THREE.ShaderChunk.lights_physical_pars_fragment
+  fs = fs.replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', DETAIL));
+  fs = fs.replace('#include <lights_physical_pars_fragment>', THREE.ShaderChunk.lights_physical_pars_fragment
     .replace('vec3 irradiance = dotNL * directLight.color;', 'vec3 irradiance = dotNL * directLight.color;\n\tfloat smWrapNL = saturate( ( dot( geometryNormal, directLight.direction ) + smSSS.w ) / ( 1.0 + smSSS.w ) );\n\tvec3 smDiffIrr = directLight.color * mix( vec3( dotNL ), vec3( smWrapNL ), smSSS.rgb );')
     .replace('reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );', 'reflectedLight.directDiffuse += smDiffIrr * BRDF_Lambert( material.diffuseColor );'));
-  if (f.wear === 1) fs = fs.replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat *= 1.0 - 0.6 * smWear;\n#endif');
+  fs = fs.replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nif ( smK == 1 ) material.clearcoat *= 1.0 - 0.6 * smWear;\n#endif');
   if (f.floorAO || f.wallAO) fs = fs.replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + AOCHUNK);
-  if (f.edge) {
-    vs = vs.replace('void main() {', 'attribute vec4 aEdge;\nvarying vec4 vSmEdge;\nvoid main() {').replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvSmEdge = aEdge;');
-    m.defaultAttributeValues = Object.assign({}, m.defaultAttributeValues, { aEdge: [9, 9, 9, 9] });   // meshes without the attribute: no wear
-  }
+  vs = vs.replace('void main() {', 'attribute vec4 aEdge;\nvarying vec4 vSmEdge;\nvoid main() {').replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvSmEdge = aEdge;');
+  m.defaultAttributeValues = Object.assign({}, m.defaultAttributeValues, { aEdge: [9, 9, 9, 9] });   // meshes without the attribute: no wear
   s.fragmentShader = fs; s.vertexShader = vs;
 }
 // opts: { box, detail: [scale, strength], macro: [freq (1/m), albedo ±, roughness ±], edge: width m | curv: [c0, c1],
@@ -152,19 +127,17 @@ export function patchSurface(s, m) {
 export function surface(m, o = {}) {
   if (!m || !(m.isMeshStandardMaterial) || m.userData.frontPatched) return m;
   const f = Object.assign({}, m.userData.surf || {}, o), D = {};
+  D.SM_SURF = '';
   if (f.box !== false) { f.box = true; D.SM_BOXPROJ = ''; }
-  if (f.detail && m.normalMap) D.SM_DETAIL = ''; else f.detail = null;
-  if (f.macro) D.SM_MACRO = '';
-  if (f.edge) D.SM_EDGE = '';
-  if (f.curv) D.SM_CURV = '';
-  D.SM_WEAR = String(f.wear || 0);
-  if (f.gilt) D.SM_GILT = ''; if (f.sss) D.SM_SSS = ''; if (f.floorAO) D.SM_FLOORAO = ''; if (f.wallAO) D.SM_WALLAO = ''; if (f.traffic) D.SM_TRAFFIC = '';
+  if (!(f.detail && m.normalMap)) f.detail = null;
+  if (f.floorAO) D.SM_FLOORAO = ''; if (f.wallAO) D.SM_WALLAO = ''; if (f.traffic) D.SM_TRAFFIC = '';
   m.userData.surf = f;
-  const U = m.userData.smU || (m.userData.smU = { smMacro: { value: new THREE.Vector4() }, smDetail: { value: new THREE.Vector4() }, smEdge: { value: new THREE.Vector4() }, smSSS: { value: new THREE.Vector4() } });
-  if (f.macro) U.smMacro.value.set(f.macro[0], f.macro[1], f.macro[2] || 0, 0);
-  if (f.detail) U.smDetail.value.set(f.detail[0], f.detail[1], .37, .61);
+  const U = m.userData.smU || (m.userData.smU = { smMacro: { value: new THREE.Vector4() }, smDetail: { value: new THREE.Vector4() }, smEdge: { value: new THREE.Vector4() }, smSSS: { value: new THREE.Vector4() }, smMode: { value: new THREE.Vector4() } });
+  U.smMacro.value.set(f.macro ? f.macro[0] : 1, f.macro ? f.macro[1] : 0, f.macro ? f.macro[2] || 0 : 0, 0);
+  U.smDetail.value.set(f.detail ? f.detail[0] : 1, f.detail ? f.detail[1] : 0, .37, .61);
   U.smEdge.value.set(f.edge || .01, f.noise || 18, f.curv ? f.curv[0] : 0, f.curv ? f.curv[1] : 1);
-  if (f.sss) U.smSSS.value.set(...f.sss);
+  U.smSSS.value.set(...(f.sss || [0, 0, 0, 0]));
+  U.smMode.value.set(f.wear || 0, f.gilt ? 1 : 0, f.curv ? 1 : 0, f.edge ? 1 : 0);
   m.defines = Object.assign({}, m.defines, D);
   if (!m.userData.smChained) {
     const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
@@ -186,7 +159,7 @@ export function enrich(root, { box = true } = {}) {
       m.userData.smEnriched = true;
       const c = companions(m.map);
       if (c) {
-        if (c.normalMap && !m.normalMap) { m.normalMap = c.normalMap; m.normalScale.setScalar(c.normalScale ?? .5); }
+        if (c.normalMap && !m.normalMap && AAA.quality !== 'low') { m.normalMap = c.normalMap; m.normalScale.setScalar(c.normalScale ?? .5); }
         if (c.roughnessMap && !m.roughnessMap) { m.roughnessMap = c.roughnessMap; if (c.roughness != null) m.roughness = Math.min(1, m.roughness / .6 * c.roughness); }
         if (c.metalMap && !m.metalnessMap) { m.metalnessMap = c.roughnessMap; m.metalness = c.metalness ?? 1; }
         if (c.sheen && m.isMeshPhysicalMaterial && !m.sheen) { m.sheen = .8; m.sheenRoughness = .35; m.sheenColor = m.color.clone().lerp(new THREE.Color(1, .95, .9), .45); }
@@ -202,7 +175,7 @@ export class RoomProbe {
   // scene: the room; o: { box: Box3 of the interior, pos: probe position, boost: [[material, k]], hide: [objects],
   //   fakeGI: [lights whose intensity stands in for bounce light: scaled by giScale once the probe lights the room] }
   capture(scene, o = {}) {
-    const g = this.gfx, r = g.renderer, q = AAA.quality, t0 = performance.now();
+    const g = this.gfx, r = g.renderer, q = this.q = AAA.quality, t0 = performance.now();
     const size = q === 'low' ? 128 : 256, bounces = q === 'high' ? 2 : 1;
     const crt = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType, generateMipmaps: false });
     const cam = new THREE.CubeCamera(.05, 200, crt); this.pos.copy(o.pos || V3(0, 1.7, 0)); cam.position.copy(this.pos); cam.updateMatrixWorld(true);
@@ -231,6 +204,8 @@ export class RoomProbe {
     this.apply(scene, true); this.ms = performance.now() - t0;
     return this.rt && this.rt.texture;
   }
+  // captured at another quality level (probe size and bounces follow gfx.quality): capture again
+  stale() { return !!this.rt && this.q !== AAA.quality; }
   // write the probe's box into the shared uniforms (called before every render of this scene)
   apply(scene, on = true) { const U = SURF_U; U.smBoxMin.value.copy(this.box.min); U.smBoxMax.value.copy(this.box.max); U.smProbePos.value.copy(this.pos); U.smBoxK.value = on && this.rt ? 1 : 0; }
   dispose() { if (this.rt) { this.rt.dispose(); this.rt = null; } }

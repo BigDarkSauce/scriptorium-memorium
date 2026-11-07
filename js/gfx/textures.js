@@ -445,10 +445,13 @@ export function windowSkyTex() {
 }
 // Additive light-shaft texture: bright at the window (v=1), fading to the floor, soft at the edges, faint dust streaks.
 // (falls off quickly, so the shafts read as beams near the windows instead of a golden haze over the window wall)
+// (v5 interiors: a crisp-edged beam, not a veil: a flat core with a short penumbra at the window's edges, faint dust
+// streaks along it, and a few motes catching the light; the beam's own falloff stays short)
 export function shaftTex() {
-  return canvasTex('shaft2', 64, 256, (g, w, h) => {
-    const img = g.createImageData(w, h), r = mulberry(5), streak = Array.from({ length: w }, () => .7 + r() * .3);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 1 - y / (h - 1), u = x / (w - 1), e = Math.pow(Math.sin(Math.PI * u), 1.2), a = Math.pow(v, 2.2) * e * streak[x]; const o = (y * w + x) * 4; img.data[o] = 255; img.data[o + 1] = 236; img.data[o + 2] = 200; img.data[o + 3] = a * 255; }
+  return canvasTex('shaft3', 128, 256, (g, w, h) => {
+    const img = g.createImageData(w, h), r = mulberry(5), streak = Array.from({ length: w }, () => .72 + r() * .28), mote = new Float32Array(w * h);
+    for (let k = 0; k < 160; k++) { const x = r() * w | 0, y = r() * h | 0, a = .3 + r() * .7; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = ((y + dy + h) % h) * w + ((x + dx + w) % w); mote[i] = Math.max(mote[i], a * (dx || dy ? .35 : 1)); } }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 1 - y / (h - 1), u = x / (w - 1), e = Math.min(1, Math.min(u, 1 - u) / .09), core = e * e * (3 - 2 * e), i = y * w + x, a = (Math.pow(v, 1.9) * .85 + .15 * v) * core * (streak[x] + mote[i] * .9 * v); const o = i * 4; img.data[o] = 255; img.data[o + 1] = 236; img.data[o + 2] = 200; img.data[o + 3] = Math.min(1, a) * 255; }
     g.putImageData(img, 0, 0);
   }, { aniso: 1 });
 }
@@ -527,6 +530,16 @@ function spineDraw(g, W, H, mr) {
 }
 // A long carpet runner (repeats along v): border bands, a field of lozenge medallions.
 export function runnerTex(colors = ['#5a1c1a', '#8e3a26', '#c9a053', '#1f2c3c', '#e8d6a8']) {
+  // companion: a knotted wool pile (rows of knots, each a small dome, the pile leaning along the warp) and a matte,
+  // slightly uneven roughness: the carpet reads as cloth with depth, not a printed plane
+  return withComp(runnerDraw(colors), () => {
+    if (!RUN.n) { const W = 256, H = 512, F = fieldF(W, H, (u, v, x, y) => { const kx = (x % 4) / 4, ky = (y % 4) / 4, dome = Math.sin(Math.PI * kx) * Math.sin(Math.PI * ky); return dome * .6 + pfbm(u, v, 16, 32, 3, 301) * .9 + pn(u * 128, v * 256, 128, 256, 302) * .3; });
+      RUN.n = nrmTex('runner-n', F, W, H, 1.6); RUN.r = greyTex('runner-r', fieldF(W, H, (u, v) => .88 + .1 * pfbm(u, v, 8, 16, 2, 303)), W, H); }
+    return { normalMap: RUN.n, roughnessMap: RUN.r, normalScale: .8, roughness: 1 };
+  });
+}
+const RUN = {};
+function runnerDraw(colors) {
   return canvasTex('runner' + colors.join(), 256, 512, (g, w, h) => {
     const [a, b, c, d, e] = colors; g.fillStyle = a; g.fillRect(0, 0, w, h);
     g.fillStyle = d; g.fillRect(0, 0, 30, h); g.fillRect(w - 30, 0, 30, h); g.fillStyle = c; g.fillRect(30, 0, 5, h); g.fillRect(w - 35, 0, 5, h); g.fillRect(10, 0, 3, h); g.fillRect(w - 13, 0, 3, h);

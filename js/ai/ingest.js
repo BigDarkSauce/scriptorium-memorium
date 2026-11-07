@@ -344,7 +344,7 @@ export function codeLang(body) {
   const b = String(body || '');
   // a list of function names (a cheat sheet row: "dbinom()   dpois()   dnorm()") is names, not a program
   if (b.trim().split('\n').every(l => /^(\s*[\w.]+\(\)\s*)+$/.test(l))) return 'names';
-  if (/<-|\blibrary\(|\bc\(|\$\w|^\[1\]|\bna\.rm\b|\bdata\.frame\(|~/m.test(b)) return 'r';
+  if (/<-|\blibrary\(|\bc\(|\$\w|^\[1\]|\bna\.rm\b|\bdata\.frame\(|~|\b(t\.test|wilcox\.test|chisq\.test|shapiro\.test|lm|glm|aov|summary|coef|seq|rep|read\.csv|table|plot|hist|boxplot|[dpqr](binom|pois|norm|unif))\(/m.test(b)) return 'r';
   if (/^\s*(import|from\s+\S+\s+import|def |print\()|\bnp\.|\bpd\./m.test(b)) return 'python';
   return 'code';
 }
@@ -608,7 +608,7 @@ export function findCaptions(lines) {
     // a caption starts a line and is followed by text (or is short); a mention inside a sentence is not a caption
     if (k > 0 && Math.abs(lines[k - 1].y - l.y) < 2) return;
     const rest = m[4] || ''; if (!rest && m[3] !== '.' && m[3] !== ':') return;
-    if (/^(shows|show|illustrates|gives|is|are|and|in|of|on|we|the\s+\w+\s+(?:shows|gives))\b/i.test(rest) && !/[:.]/.test(m[3])) return;
+    if (/^(shows|show|illustrates|gives|lists|summari[sz]es|compares|reports|contains|presents|displays|plots|depicts|is|are|and|in|of|on|we|the\s+\w+\s+(?:shows|gives))\b/i.test(rest) && !/[:.]/.test(m[3])) return;
     let text = l.text, box = [l.x, l.y - l.size * .3, l.x1, l.y + l.size], j = k + 1;
     // continuation lines: close below, same size, not a row of table cells, not after a finished short caption
     const rowOfCells = q => lines.some((o, i) => i !== q && Math.abs(o.y - lines[q].y) < 2);

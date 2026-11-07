@@ -10,13 +10,16 @@
 //    (ground radiance = ground albedo × sun irradiance on the ground); scene.userData.aaaAtmos describes the height
 //    fog and god rays for the renderer's atmosphere pass.
 //  • The plinth is a turned, varnished walnut base with a baize top and a brass inlay; the optional glass case is
-//    thin-shell glass in a slim brass frame.
+//    thin-walled transmissive glass at quality 'high' (thin shell below) in a slim brass frame.
+//  • Studio, lab and desk surfaces are full stacks (surfaces.js): wood with a rotated detail layer and world-space
+//    colour/roughness breakup so the grain never repeats visibly across the plinth or the desk.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { HorizontalBlurShader } from 'three/addons/shaders/HorizontalBlurShader.js';
 import { VerticalBlurShader } from 'three/addons/shaders/VerticalBlurShader.js';
 import { canvasTex } from '../gfx/textures.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
+import { surface } from '../gfx/surfaces.js';
 import { woodSet, feltSet, alignUV, softDisc } from '../gfx/proc.js';
 import { mulberry } from '../util.js';
 import { AAA, resetWeather, aaaMaterial } from '../gfx/aaa.js';
@@ -81,7 +84,7 @@ function plinth(scene, { r = 7.2, felt = '#1d3125', brass = true, turf = false }
   arc(r + .05, -.5, .08, Math.PI / 2, -Math.PI / 2, 10);                                          // bead
   prof.push(new THREE.Vector2(r + .06, -.62), new THREE.Vector2(r + .1, -.82)); arc(r + .18, -.86, .1, Math.PI * .9, Math.PI * 1.5, 6); // flared foot
   prof.push(new THREE.Vector2(r + .34, -.96), new THREE.Vector2(r + .34, -1.0), new THREE.Vector2(.01, -1.0));
-  const woodM = new THREE.MeshPhysicalMaterial({ map: cloneRep(W.map, 8, 1), normalMap: cloneRep(W.normalMap, 8, 1), roughnessMap: cloneRep(W.roughnessMap, 8, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .7, clearcoat: .6, clearcoatRoughness: .3, color: 0xffffff });   // satin varnish: the key's reflection on the bullnose is a sheen, not a pin-point
+  const woodM = surface(new THREE.MeshPhysicalMaterial({ map: cloneRep(W.map, 8, 1), normalMap: cloneRep(W.normalMap, 8, 1), roughnessMap: cloneRep(W.roughnessMap, 8, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .7, clearcoat: .6, clearcoatRoughness: .3, color: 0xffffff }), { box: false, macro: [.6, .08, .18], detail: [3.7, .35] });   // satin varnish: the key's reflection on the bullnose is a sheen, not a pin-point
   const base = new THREE.Mesh(new THREE.LatheGeometry(prof, 160), woodM); base.receiveShadow = true; base.castShadow = false; base.name = 'walnut base'; g.add(base);
   const F = feltSet(), feltM = new THREE.MeshPhysicalMaterial({ map: cloneRep(F.map, 10, 10), normalMap: cloneRep(F.normalMap, 10, 10), normalScale: new THREE.Vector2(.5, .5), color: new THREE.Color(felt), roughness: 1, sheen: .6, sheenRoughness: .75, sheenColor: new THREE.Color(felt).lerp(new THREE.Color(0xffffff), .12), envMapIntensity: .6 });
   // outdoors the top is turf: AAA meadow soil and grass with parallax relief, its edge fractured against the brass inlay
@@ -157,7 +160,7 @@ function contactShadows(scene, gfx, { size = 15, res = 512, height = 2.4, darkne
 // Display case: thin-shell glass panes (no bottom) in a slim brass frame.
 function glassCase(scene, w, h) {
   const g = new THREE.Group(); g.name = 'glass case'; g.userData.decorBase = true;
-  const gm = thinGlass({ absorb: .012, edge: .55, env: 1.1, card: .07 }), pane = (pw, ph) => new THREE.PlaneGeometry(pw, ph);
+  const gm = thinGlass({ absorb: .012, edge: .55, env: 1.1, card: .07, transmit: 'high' }), pane = (pw, ph) => new THREE.PlaneGeometry(pw, ph);
   [[0, h / 2, w / 2, 0], [0, h / 2, -w / 2, Math.PI], [w / 2, h / 2, 0, Math.PI / 2], [-w / 2, h / 2, 0, -Math.PI / 2]].forEach(([x, y, z, ry]) => { const m = new THREE.Mesh(pane(w, h), gm); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); });
   const topP = new THREE.Mesh(pane(w, w), gm); topP.rotation.x = -Math.PI / 2; topP.position.y = h; g.add(topP);
   const fm = makeMaterial('brass'), t = .07, bar = (L, axis, x, y, z) => { const geo = axis === 'y' ? new THREE.BoxGeometry(t, L, t) : axis === 'x' ? new THREE.BoxGeometry(L, t, t) : new THREE.BoxGeometry(t, t, L); const m = new THREE.Mesh(geo, fm); m.position.set(x, y, z); m.castShadow = false; g.add(m); };
@@ -185,7 +188,7 @@ const LOOKS = {
 function desk(scene, { w = 18, d = 11, lampAt = [-5.4, -3.4], aim = [.6, 1.1, .2] } = {}) {
   const g = new THREE.Group(); g.name = 'desk'; g.userData.decorBase = true;
   const W = woodSet('walnut'), tile = 2.4, rep = (t, x, y) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
-  const topM = new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .66, clearcoat: .25, clearcoatRoughness: .45, envMapIntensity: .5, color: 0xffffff });
+  const topM = surface(new THREE.MeshPhysicalMaterial({ map: rep(W.map, 1, 1), normalMap: rep(W.normalMap, 1, 1), roughnessMap: rep(W.roughnessMap, 1, 1), normalScale: new THREE.Vector2(.3, .3), roughness: .66, clearcoat: .3, clearcoatRoughness: .4, envMapIntensity: .5, color: 0xffffff }), { box: false, macro: [.35, .09, .25], detail: [3.1, .35] });
   const top = new THREE.Mesh(alignUV(new THREE.BoxGeometry(w, .5, d), tile), topM); top.position.y = -.25; top.receiveShadow = true; top.name = 'walnut desk top'; g.add(top);
   const blotM = makeMaterial({ preset: 'leather', color: '#2c3a2a' }); blotM.roughness = .85; blotM.clearcoat = 0; blotM.normalScale.set(.25, .25);
   const blot = new THREE.Mesh(new THREE.PlaneGeometry(w * .62, d * .7), blotM); blot.rotation.x = -Math.PI / 2; blot.position.set(.4, .004, .2); blot.receiveShadow = true; blot.name = 'leather blotter'; g.add(blot);

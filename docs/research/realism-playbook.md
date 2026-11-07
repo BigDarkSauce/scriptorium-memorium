@@ -913,3 +913,59 @@ reference the returned URLs. For the local build, keep the repacked files in `as
 9. Tree wind `vegTreeDisplace` (WG:45579–45612), species table (WG:45841) and crown-normal construction (WG:46030–46060),
    bark shading by species (WG:46513–46549).
 10. Sun colour/intensity ramp, auto exposure, tilt-shift driven by the camera, grade constants (weatherglass.md §2).
+
+---
+
+## 10. Material sources explored (interiors pass, 2026-11-07)
+
+What was looked at for the hub, book rooms and demo props, what was used, and why. Implementation:
+`js/gfx/surfaces.js` (probe, surface stack, GTAO), `js/gfx/textures.js` (companion maps), `js/gfx/baroque.js`,
+`js/gfx/materials.js`, `js/dio/environments.js`.
+
+**Three.js Resources** (threejsresources.com). Categories browsed: Materials & Textures (18), Environment (14),
+Lighting (4), Shaders (14), TSL. Related-resource chains followed from tool pages: *Physically Based* → Freestylized,
+Freepbr, Textures.com, Cgbookcase; *tsl textures* → tsl-Uniform-UI, Three.js Water Pro, Powershot, Three.js Journey
+WebGPU/TSL course; Lighting → HDRify, three-good-godrays (pmndrs postprocessing). Used: **Physically Based**
+(physicallybased.info, CC0 database, cloned from `AntonPalmqvist/physically-based-api`, `deploy/v2/materials.json`)
+for measured values: metal F0 in linear sRGB (brass 0.91/0.778/0.423, gold 1.0/0.773/0.307, copper 0.932/0.623/0.522,
+stainless 0.669/0.639/0.598, chromium 0.654/0.685/0.701, iron 0.53/0.51/0.49), marble albedo 0.83/0.79/0.75 with
+subsurface radius 0.85/0.56/0.40 (red scatters farthest: the warm wrap tint on pale marble), borosilicate/soda-lime
+glass ior 1.52 and Abbe 64, water ior 1.3325. Not used: the PBR texture libraries (Freepbr, Cgbookcase, Textures.com,
+Substance): their hosts are not reachable from this environment (§6), and the matcap/AI-texturing tools do not fit a
+lit PBR scene. TSL Textures is WebGPU-only; its marble/wood ideas were already covered by our canvas generators.
+
+**threejs.org examples (r170, read from the vendored copy)**: `webgl_materials_cubemap_dynamic` and
+`webgl_lightprobe_cubecamera` (CubeCamera into a HalfFloat `WebGLCubeRenderTarget`, then PMREM) → `RoomProbe`;
+`webgl_postprocessing_gtao` → `RoomAO` (but see the r170 bug below); `webgl_materials_physical_transmission(_alpha)`
+and `webgl_loader_gltf_transmission` → thin-walled transmission (`thickness: 0`) for panes and vessels;
+`webgl_loader_gltf_anisotropy`/`_sheen`/`_dispersion`, `webgl_materials_physical_clearcoat` → anisotropic gilt and
+brass, damask sheen, polishing coats; `webgl_postprocessing_ssr`/`ssao` (not used: SSR re-renders the scene with
+per-object selection and costs more than the box-projected probe, which gives the floor and gilt their reflections;
+SSAO is superseded by GTAO); `webgl_decals` (not needed: wear and grime are computed in the material).
+**r170 pitfalls found:** (1) with `scene.environment` set and `material.envMap === null`, three writes
+`scene.environmentIntensity` into every material's `envMapIntensity` uniform each frame, so per-material values (the
+old gilt 3.4) never applied; the hub reflected its RoomEnvironment at 0.16 everywhere. With the probe the scene
+intensity is 1 and material values are kept at 1 for honesty. (2) `GTAOPass.setGBuffer(depthTexture)` dereferences a
+normal target it never created; build the pass normally, then switch it to depth-only input (normals reconstructed
+from depth) and shrink the unused target. (3) `material.defaultAttributeValues` works for any material, so meshes
+without a custom attribute (`aEdge`) still render.
+
+**GitHub topic three-js** (sorted by stars): frameworks and tools; material-relevant were `gkjohnson/threejs-sandbox`
+(cloned: GTAO, PCSS, screen-space reflections, a depth-peeled translucent material — informative, none adopted:
+our probe + GTAO cover reflections and AO more cheaply; PCSS is the same idea as the contact-hardening filter of R11),
+`pmndrs/postprocessing` (N8AO-class AO; not added: a second post framework), `three-mesh-bvh` (still the right tool
+if baked per-vertex AO is wanted later), `three-gpu-pathtracer` (offline reference only).
+
+**Babylon.js** docs: *Reflection probes* (render-once refresh, place the probe at the centre of the meshes that use
+it; `realTimeFiltering` = our PMREM), *Reflections and refractions → local cubemaps* (`CubeTexture.boundingBoxSize`,
+`boundingBoxPosition`: box-projected reflections, after ARM's "reflections based on local cubemaps") → adopted as the
+`SM_BOXPROJ` patch of `getIBLRadiance` (the reflection ray is intersected with the room box and re-aimed from the probe
+position; weighted by 1 − roughness), *Mastering PBR* (specular anti-aliasing, horizon occlusion, sub-surface
+translucency with thickness, sheen, tinted clearcoat, anisotropy direction maps): used as the checklist for the stacks
+(marble wrap translucency, sheen damask, anisotropic burnished gilt); specular AA was not needed beyond mip-mapped
+normal maps.
+
+**CC0 scanned sets** (§6): none of the mirrors reachable from here holds marble, wood, fabric, plaster or leather in
+image form, so every interior stack is procedural (canvas, cached, built lazily on first use): colour + normal +
+roughness (+ metalness for gilt tooling) per texture, with the normal and roughness derived from the same random
+sequence as the colour (veins, pores, leaf seams, tooling and bands line up). No new files under `assets/textures/`.

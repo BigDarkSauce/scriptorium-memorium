@@ -515,7 +515,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const orbit={target:V3(.6,2.6,0),r:13,ph:1.15,th:.3},brass=D.mats.brass,walnut=makeMaterial('walnut'),steel=makeMaterial('steel'),iron=D.mats.iron;
   // vessel: thin glass box in a brass frame (always the full length; the piston sets the volume), on a walnut stand
   const VS=part('glass vessel',W,true),GL=9,GX=XL+GL/2;
-  const glass=put(new T.Mesh(new T.BoxGeometry(GL,2*BY,2*BZ),thinGlass({absorb:.02,edge:.7,card:.15})),'glass walls',VS);glass.position.set(GX,Y0,0);glass.renderOrder=5;
+  const glass=put(new T.Mesh(new T.BoxGeometry(GL,2*BY,2*BZ),thinGlass({absorb:.02,edge:.7,card:.15,transmit:true})),'glass walls',VS);glass.position.set(GX,Y0,0);glass.renderOrder=5;
   {const e=.05,bars=[];[[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([a,b])=>{bars.push([GL,e,e,GX,Y0+a*BY,b*BZ]);bars.push([e,2*BY,e,GX+a*GL/2,Y0,b*BZ]);bars.push([e,e,2*BZ,GX+a*GL/2,Y0+b*BY,0])});bars.forEach(([sx,sy,sz,x,y,z])=>{const m=box(sx,sy,sz,brass);m.position.set(x,y,z);VS.add(m)})}
   const ST=part('stand');[[XL+.6,-1.3],[XL+.6,1.3],[XL+GL-.6,-1.3],[XL+GL-.6,1.3]].forEach(([x,z])=>{const l=cyl(.06,Y0-BY,steel,12);l.position.set(x,(Y0-BY)/2,z);ST.add(l)});put(box(GL+.2,.06,2*BZ+.2,satin(walnut)),'shelf',ST).position.set(GX,Y0-BY-.03,0);
   // piston: the right wall of the gas, a brass plate on a rod through the end wall
@@ -1150,7 +1150,7 @@ const RXN={};
 DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecules B'],Ea:[0,3,.8,'','forward barrier Ea'],Eb:[0,4,2,'','reverse barrier'],T:[.3,3,1,'','temperature']},
  build(D,p){const {W,R,part,put,guides,at,ev}=stage(D,'micro');const BX=3.2,BY=2,BZ=2,Y0=BY+.25,RC=.3,RC2=RC*RC;
   const orbit={target:V3(0,Y0,0),r:12,ph:1.12,th:.32};
-  const CELL=part('reaction cell',W,true);const gl=put(new T.Mesh(new T.BoxGeometry(2*BX,2*BY,2*BZ),thinGlass({absorb:.015,edge:.6,card:.12,color:0x0a2a2a})),'cell wall',CELL);gl.position.y=Y0;gl.renderOrder=5;
+  const CELL=part('reaction cell',W,true);const gl=put(new T.Mesh(new T.BoxGeometry(2*BX,2*BY,2*BZ),thinGlass({absorb:.015,edge:.6,card:.12,color:0x0a2a2a,transmit:true})),'cell wall',CELL);gl.position.y=Y0;gl.renderOrder=5;
   const ed=put(new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(2*BX,2*BY,2*BZ)),new T.LineBasicMaterial({color:0x7fffd8,transparent:true,opacity:.55,blending:T.AdditiveBlending,depthWrite:false})),'cell edges',CELL);ed.position.y=Y0;
   const NA=Math.round(p.NA),NB=Math.round(p.NB),CAP=NA+NB;
   const K=new Int8Array(CAP),P=new Float64Array(CAP*3),Vv=new Float64Array(CAP*3),AX=new Float32Array(CAP*3);let n=0;const gauss=()=>Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(2*Math.PI*Math.random());
@@ -1231,7 +1231,7 @@ DIO.efield={params:{q1:[-5,5,3,'','charge q₁'],q2:[-5,5,-3,'','charge q₂'],d
   const P0=[-p.d/2+.45,Y+.4,.25],V0=[0,0,0],gam=p.drag??0;let P=P0.slice(),Vv=V0.slice(),A=[0,0,0],gone=false,wait=0,again=false;const Etot=()=>.5*p.m*(Vv[0]**2+Vv[1]**2+Vv[2]**2)+p.qt*Vp(P[0],P[1],P[2]);let Einit=Etot();
   const acc=()=>{Ef(P[0],P[1],P[2],A);const k=p.qt/p.m;A[0]*=k;A[1]*=k;A[2]*=k};acc();
   // foreground: a brass Leyden jar on the plinth at the lower-left frame edge
-  {const F=part('Leyden jar (foreground)'),q=inDisc(groundAt(orbit,-.84,-.82),6.1);F.position.copy(q);const j=new T.Mesh(new T.CylinderGeometry(.34,.34,.9,32),thinGlass({absorb:.05}));j.position.y=.45;F.add(j);const foil=cyl(.345,.5,makeMaterial('steel'),32);foil.position.y=.26;F.add(foil);const cap=cyl(.36,.06,walnut,32);cap.position.y=.93;F.add(cap);const rod=cyl(.02,.6,brass,8);rod.position.y=1.2;F.add(rod);const kn=ball(.08,brass);kn.position.y=1.52;F.add(kn)}
+  {const F=part('Leyden jar (foreground)'),q=inDisc(groundAt(orbit,-.84,-.82),6.1);F.position.copy(q);const j=new T.Mesh(new T.CylinderGeometry(.34,.34,.9,32),thinGlass({absorb:.05,transmit:true}));j.position.y=.45;F.add(j);const foil=cyl(.345,.5,makeMaterial('steel'),32);foil.position.y=.26;F.add(foil);const cap=cyl(.36,.06,walnut,32);cap.position.y=.93;F.add(cap);const rod=cyl(.02,.6,brass,8);rod.position.y=1.2;F.add(rod);const kn=ball(.08,brass);kn.position.y=1.52;F.add(kn)}
   const tp=V3(0,0,0);EFD.tc=()=>V3(P[0],P[1],P[2]);EFD.Y=Y;EFD.Q=Q;
   D.label('q₁',at(v=>v.copy(Q[0][1]).setY(Y+.55)),true);D.label('q₂',at(v=>v.copy(Q[1][1]).setY(Y+.55)),true);D.label('test charge · q, m',at(v=>gone?null:v.set(P[0],P[1]+.32,P[2])),TC);D.label('field lines',at(v=>lines.length?v.copy(lines[0][Math.floor(lines[0].length*.5)]).setY(lines[0][Math.floor(lines[0].length*.5)].y+.2):null),FLG);
   ev('test charge released from rest beside q₁; force F = qE'+(gam>0?', drag −γmv (in oil)':', energy ½mv² + qV conserved'),V3(...P),{sound:'zap'});D.seriesName='potential V at test charge';

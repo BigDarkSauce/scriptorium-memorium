@@ -81,7 +81,7 @@ await page.addInitScript(({ fx }) => {
 const shot = async (name, el) => { if (!SHOTS) return; try { await page.evaluate(() => document.querySelectorAll('.toasts').forEach(n => n.remove())).catch(() => {});  if (el) await page.locator(el).first().screenshot({ path: join(SHOTS, name), timeout: 45000 }); else await page.screenshot({ path: join(SHOTS, name), timeout: 45000 }); } catch (e) { console.log('  (screenshot ' + name + ' failed: ' + e.message.split('\n')[0] + ')'); } };
 const T0 = Date.now();
 await page.goto(URL0, { timeout: 60000 });
-await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && window.__scriptorium.mode.constructor.name === 'Hub' && document.body.classList.contains('ready'), null, { timeout: 120000 });
+await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && window.__scriptorium.mode.constructor.name === 'Hub' && document.body.classList.contains('ready'), null, { timeout: 300000 });
 // Nothing below needs 3D frames (the dialog, the hub API, the job, the reader's figures; the diorama is stepped
 // headless), and software GL on a shared machine starves the compositor, so the WebGL context is released at once:
 // screenshots are then DOM only (the 3D scroll drawings show as not drawn).

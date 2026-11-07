@@ -88,7 +88,7 @@ void main(){
   bool fine = false; int thin = 0, tick = 0; float od = 0.;
   float cosT = dot(rd, L); float ph0 = mix(hg(cosT, -.3), hg(cosT, .8), .5), ph1 = mix(hg(cosT, -.15), hg(cosT, .4), .5), ph2 = mix(hg(cosT, -.07), hg(cosT, .2), .5); float backlit = smoothstep(.1, .95, cosT);
   vec3 albedo = mix(vec3(1.), vec3(.37, .4, .47), uGrey); albedo = mix(albedo, vec3(.2, .215, .26), uStorm*.85); vec3 albTop = mix(vec3(.96, .97, 1.), albedo, .4 + .25*uGrey);
-  vec3 sunCol = uSunCol*.3, skyCol = uSkyCol*.9, bounce = uGndCol*.9 + uSunCol*.02;
+  vec3 sunCol = uSunCol*.4, skyCol = uSkyCol*.7, bounce = uGndCol*.9 + uSunCol*.02;   // more key than fill: lit crowns, shaded bellies
   float T = 1.; vec3 col = vec3(0.); float l0 = uSize*.09 + .03;
   for (int i = 0; i < MAX_STEPS*2; i++){
     if (t >= tF || T < .02) break;

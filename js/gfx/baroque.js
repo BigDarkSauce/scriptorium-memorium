@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
 import { surface } from './surfaces.js';
+import { AAA } from './aaa.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -22,18 +23,20 @@ export const Mx = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx,
 //    stays flat (varnish fills the pores); finish rubbed lighter on the arrises; painted wood chips at its edges
 //  • plaster: trowel waves, grit, hairline cracks, ≥ 0.86 rough; walls darken toward floor, cornice and corners
 const V2 = (x, y = x) => new THREE.Vector2(x, y);
+// at quality 'low' the relief (normal maps) is left out: colour + roughness + the probe still carry the materials
+const NRM = n => AAA.quality === 'low' ? null : n;
 const lin = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
 // marble with its companions; k = roughness multiplier on the map, cc = polishing coat roughness
 function marbleMat(stone, o = {}) {
   const M = marbleSet(stone, { size: 512, seed: o.seed ?? 2 }), pale = /statuary|cream|pavonazzetto|giallo|rose|warmgrey|dove/.test(stone);
-  const m = new THREE.MeshPhysicalMaterial({ map: M.map, normalMap: M.normalMap, normalScale: V2(M.normalScale), roughnessMap: M.roughnessMap, roughness: o.k ?? 2.2, clearcoat: o.cc == null ? 1 : o.cc ? 1 : 0, clearcoatRoughness: o.cc || .05, vertexColors: !!o.vc, envMapIntensity: 1,
+  const m = new THREE.MeshPhysicalMaterial({ map: M.map, normalMap: NRM(M.normalMap), normalScale: V2(M.normalScale), roughnessMap: M.roughnessMap, roughness: o.k ?? 2.2, clearcoat: o.cc == null ? 1 : o.cc ? 1 : 0, clearcoatRoughness: o.cc || .05, vertexColors: !!o.vc, envMapIntensity: 1,
     sheen: pale ? .12 : 0, sheenRoughness: .5, sheenColor: new THREE.Color(0xfff2e6) });
   if (/statuary|cream|pavonazzetto/.test(stone)) m.color.setScalar(.92);   // keep white marble below 0.8 linear
   return surface(m, { sss: pale ? [.85, .56, .4, .38] : null, macro: [.8, .07, .2], detail: [3.7, .35] });
 }
 function giltMat(o = {}) {
   const t = gildTex(), C = companions(t.map) || {};
-  const m = new THREE.MeshPhysicalMaterial({ color: o.color || lin(1.12, 1.16, 1.02), map: t.map, roughnessMap: t.rough, normalMap: C.normalMap, normalScale: V2(C.normalScale || .5), metalness: o.metal ?? 1, roughness: o.rough ?? .62,
+  const m = new THREE.MeshPhysicalMaterial({ color: o.color || lin(1.12, 1.16, 1.02), map: t.map, roughnessMap: t.rough, normalMap: NRM(C.normalMap), normalScale: V2(C.normalScale || .5), metalness: o.metal ?? 1, roughness: o.rough ?? .62,
     anisotropy: .22, anisotropyRotation: Math.PI / 2, vertexColors: !!o.vc, envMapIntensity: 1 });
   if (o.vc) m.defaultAttributeValues = { color: [1, 1, 1] };
   return surface(m, { edge: .007, wear: 3, noise: 26, gilt: !!o.vc, macro: [1.4, .06, .25] });
@@ -41,12 +44,12 @@ function giltMat(o = {}) {
 function woodMat(tone, key, o = {}) {
   const map = figuredWood(tone, key, o.fig || {}), C = companions(map);
   const P = o.coat === 0 ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
-  const m = new P(Object.assign({ map, normalMap: C.normalMap, normalScale: V2(C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 }, o.coat === 0 ? {} : { clearcoat: o.coat ?? .5, clearcoatRoughness: o.ccr ?? .22 }));
+  const m = new P(Object.assign({ map, normalMap: NRM(C.normalMap), normalScale: V2(C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 }, o.coat === 0 ? {} : { clearcoat: o.coat ?? .5, clearcoatRoughness: o.ccr ?? .22 }));
   return surface(m, { edge: o.paint ? .004 : .005, wear: o.paint ? 2 : 1, noise: o.paint ? 45 : 30, macro: [1.1, .07, .15], detail: [3.1, .3] });
 }
 function plasterMat(tone, key, amp, o = {}) {
   const map = plaster(tone, key, amp), C = companions(map);
-  const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, map, normalMap: C.normalMap, normalScale: V2(o.ns ?? C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 });
+  const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, map, normalMap: NRM(C.normalMap), normalScale: V2(o.ns ?? C.normalScale), roughnessMap: C.roughnessMap, roughness: o.rough ?? 1, envMapIntensity: 1 });
   return surface(m, { macro: [.45, .06, .04], detail: [5.3, .45], wallAO: !!o.wallAO });
 }
 const MATS = new Map();
@@ -94,7 +97,7 @@ export function bmat(name) {
     // beeswax: light scatters a few mm into the candle, so its shadow side glows (wrap) and it is never chalky
     case 'candle': m = surface(P({ color: 0xf6eedc, roughness: .45, emissive: 0xffcf8a, emissiveIntensity: .12, sheen: .3, sheenColor: new THREE.Color(0xfff0d8), sheenRoughness: .6 }), { sss: [1, .85, .6, .6] }); break;
     case 'flame': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 2.5, 1.1), toneMapped: false }); m.userData.noCast = true; break;
-    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; m.userData.hdr = 10; break;   // ×10 inside the room probe: a window is 10–20× brighter than the walls
+    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; m.userData.hdr = 6; break;   // ×6 inside the room probe: a window is many times brighter than the walls (kept moderate: gilt and glossy props mirror it)
     case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
     case 'cove': { const t = rocailleTex(3); m = S({ map: t.map, metalnessMap: t.mr, roughnessMap: t.mr, metalness: 1, roughness: 1, envMapIntensity: 1, emissive: 0xffffff, emissiveMap: t.map, emissiveIntensity: .06 }); surface(m, { macro: [.7, .05, .2] }); break; }
     case 'eggdart': m = surface(S({ map: eggDartTex(), metalness: .85, roughness: .34, envMapIntensity: 1 }), {}); break;

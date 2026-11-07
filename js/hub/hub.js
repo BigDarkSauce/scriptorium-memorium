@@ -39,7 +39,7 @@ export class Hub {
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
     // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
-    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36, bloom: .15, bloomThreshold: 2.1 });
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .95, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .004 });   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120); this.ao.camera = this.camera;
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
@@ -719,11 +719,11 @@ export class Hub {
     enrich(this.scene);
     const feet = footprints([...(this.furn ? this.furn.children : []), ...this.shelfObjs.values()]).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
     bindRoom(this.scene, this.probe, { w: R.w, d: R.d, floor: 0, cornice: info.ys || R.h * .83, ceiling: R.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.3], feet: feet.slice(0, 24) });
-    this.probe.capture(this.scene, { pos: V3(0, 1.75, R.d * .08), box: new THREE.Box3(V3(-R.w / 2, 0, -R.d / 2), V3(R.w / 2, R.h, R.d / 2)), hide: [this.ghost], fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .3 });
+    this.probe.capture(this.scene, { pos: V3(0, 1.75, R.d * .08), box: new THREE.Box3(V3(-R.w / 2, 0, -R.d / 2), V3(R.w / 2, R.h, R.d / 2)), hide: [this.ghost], fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .12 });
     this.shadowsDirty = true;
   }
   update(dt) {
-    if (this.probeDirty && !this.dragging && !this.opening && !this.sdrag) this.captureProbe();
+    if ((this.probeDirty || this.probe.stale()) && !this.dragging && !this.opening && !this.sdrag) this.captureProbe();
     this.ao.update();
     // the hall is static: its 2048² sun shadow map is redrawn only while something moves (opening, dragging, arriving)
     const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false;
