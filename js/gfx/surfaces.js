@@ -117,6 +117,9 @@ export function patchSurface(s, m) {
     .replace('reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );', 'reflectedLight.directDiffuse += smDiffIrr * BRDF_Lambert( material.diffuseColor );'));
   fs = fs.replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nif ( smK == 1 ) material.clearcoat *= 1.0 - 0.6 * smWear;\n#endif');
   if (f.floorAO || f.wallAO) fs = fs.replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + AOCHUNK);
+  // punctual lights are infinitely small: on a 0.05-rough polish their GGX peak exceeds the half-float range (Inf in a
+  // probe face, which PMREM then smears into a white blob on every glossy object); cap direct specular as materials.js does
+  if (!fs.includes('reflectedLight.directSpecular = min(')) fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n reflectedLight.directSpecular = min( reflectedLight.directSpecular, vec3( 3.0 ) );\n #ifdef USE_CLEARCOAT\n clearcoatSpecularDirect = min( clearcoatSpecularDirect, vec3( 3.0 ) );\n #endif');
   vs = vs.replace('void main() {', 'attribute vec4 aEdge;\nvarying vec4 vSmEdge;\nvoid main() {').replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvSmEdge = aEdge;');
   m.defaultAttributeValues = Object.assign({}, m.defaultAttributeValues, { aEdge: [9, 9, 9, 9] });   // meshes without the attribute: no wear
   s.fragmentShader = fs; s.vertexShader = vs;
