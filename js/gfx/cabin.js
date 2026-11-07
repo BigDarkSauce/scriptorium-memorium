@@ -101,7 +101,7 @@ export function buildHills({ r = 34, layers = 3, height = 5, y = -1.2, seed = 4,
   const g = new THREE.Group(); g.name = 'distant hills';
   for (let i = 0; i < layers; i++) {
     const R = r * (1 + i * .22), H = height * (1 + i * .35), t = hillLayer(seed + i * 3, 1024, 256, 1 - i * .25, .55 - i * .08).clone(); t.wrapS = THREE.RepeatWrapping; t.repeat.set(3 + i, 1); t.needsUpdate = true;
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 96, 1, true), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(colors[i % colors.length]), transparent: true, depthWrite: false, side: THREE.BackSide, fog: false })   // own aerial perspective (colours bluer and paler with distance): the scene fog would wash them out);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 96, 1, true), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(colors[i % colors.length]), transparent: true, depthWrite: false, side: THREE.BackSide, fog: false }));   // own aerial perspective (colours bluer and paler with distance): the scene fog would wash them out
     m.position.y = y + H / 2; m.rotation.y = i * 1.3; m.renderOrder = -10 + i; m.name = 'hills ' + i; m.userData.noInk = true; m.userData.noContact = true; m.raycast = () => {}; m.castShadow = m.receiveShadow = false; g.add(m);
   }
   return g;
