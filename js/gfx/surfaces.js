@@ -157,6 +157,8 @@ export function enrich(root, { box = true } = {}) {
     [].concat(o.material).forEach(m => {
       if (!m || !m.isMeshStandardMaterial || m.userData.frontPatched || m.userData.smEnriched || m.isShaderMaterial) return;
       m.userData.smEnriched = true;
+      // sheen set up under the old 0.16 studio environment: the probe lights the room at 1, so dark velvet would read pale
+      if (m.isMeshPhysicalMaterial && m.sheen > 0 && !m.sheenColorMap && !m.userData.surf) m.sheenColor.multiplyScalar(.45);
       const c = companions(m.map);
       if (c) {
         if (c.normalMap && !m.normalMap && AAA.quality !== 'low') { m.normalMap = c.normalMap; m.normalScale.setScalar(c.normalScale ?? .5); }
@@ -183,7 +185,7 @@ export class RoomProbe {
     const hidden = []; scene.traverse(x => { if (x.userData.noProbe && x.visible) { x.visible = false; hidden.push(x); } }); (o.hide || []).forEach(x => { if (x && x.visible) { x.visible = false; hidden.push(x); } });
     // windows (materials flagged userData.hdr = k) are k× brighter inside the probe: their real radiance relative to the room
     const hdr = new Map(o.boost || []); scene.traverse(x => { if (x.material && x.visible) [].concat(x.material).forEach(m => { if (m && m.userData.hdr && m.color && !hdr.has(m)) hdr.set(m, m.userData.hdr); }); });
-    const boosts = [...hdr].filter(([m]) => m && m.color).map(([m, k]) => { const c = m.color.clone(); m.color.multiplyScalar(k); return () => m.color.copy(c); });
+    const boosts = [...hdr].filter(([m]) => m && m.color).map(([m, k]) => { const c = m.color.clone(); if (Array.isArray(k)) m.color.multiply(new THREE.Color(k[0], k[1], k[2])); else m.color.multiplyScalar(k); return () => m.color.copy(c); });
     const gi = (o.fakeGI || []).filter(Boolean); gi.forEach(L => { if (L.userData.giBase == null) L.userData.giBase = L.intensity; L.intensity = L.userData.giBase; });
     const sm = r.shadowMap, au = sm.autoUpdate; sm.autoUpdate = false; sm.needsUpdate = true;
     let out = null;
