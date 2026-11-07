@@ -389,7 +389,16 @@ transmissive lake; the new lake has none. Estimated GPU cost at medium on a GTX 
 grass 1.0–1.5 ms, clouds 1.5–2.5 ms (three boxes, early-out outside the puffs), lake + river 0.3–0.5 ms, soil 0.1 ms,
 scans +0.2 ms, i.e. about 3.5–5 ms on top of the existing 6–8 ms: inside 16.7 ms.
 
-Known gaps against Weatherglass: no planar mirror for the lake (sky + dark landscape band only), no contact-hardening
-shadow filter (R11.1) and no HDRI reflections (R11.4), no log cabin/jetty/smoke (R10: the cottage is the old `house`),
-pines and bushes keep the older geometry, cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
+Second pass (after review): blades thinner (0.0045–0.009) and denser (70 k at medium, 3 rows) with dry straw tips, plus a
+ground-cover layer of crossed-card tufts with a comb of blades cut in the fragment shader (40 k, 4 triangles each);
+bushes are leaf-card clusters like the crowns; cherry petals recoloured from the atlas in the shader; pines get drooping
+needle sprays; `cabin` (log walls, bark-shingle roof, porch, stone chimney with smoke, glowing windows in the evening),
+`jetty` and painted `hills` kinds; a planar mirror for the lake (three's `Reflector` driven from the lake's first pass,
+half resolution at medium, 0.7 at high, off at low; the meadow is left out of the mirror); clouds eroded with inverted
+Worley above (cauliflower), finer noise below (wisps), shaded bases. Measured at medium: 179 draw calls, 1.22 M
+triangles including the mirror pass (about 0.45 M of it), 124 programs; the mirror is the largest new cost (≈1–1.5 ms
+on a mid GPU at half resolution).
+
+Known gaps against Weatherglass: no contact-hardening
+shadow filter (R11.1) and no HDRI reflections (R11.4), cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
 on the slope speeds the stream and its waterfall.)
