@@ -53,7 +53,7 @@ export function bakeField(spec = {}, quality = AAA.quality) {
   const w = num(spec.w, 13), d = num(spec.d, 10), noise = makeNoise(num(spec.seed, 3)), amp = num(spec.h, .2) * 2, fq = num(spec.freq, .18);
   const res = num(spec.res, TERRAIN_RES[quality] || TERRAIN_RES.medium), NX = Math.round(w >= d ? res : res * w / d) + 1, NZ = Math.round(d >= w ? res : res * d / w) + 1;
   const minX = -w / 2, minZ = -d / 2, dx = w / (NX - 1), dz = d / (NZ - 1);
-  const peaks = (spec.peaks || []).map(p => ({ x: num(p.x, 0), z: num(p.z, 0), r: num(p.r, 2), h: num(p.h, 1), sq: num(p.squash, 1), rot: num(p.rot, 0) * Math.PI / 180, seed: num(p.seed, 5), own: p.own || null, rough: num(p.rough, .3) }));
+  const peaks = (spec.peaks || []).map(p => ({ x: num(p.x, 0), z: num(p.z, 0), r: num(p.r, 2), h: num(p.h, 1), sq: num(p.squash, 1), rot: num(p.rot, 0) * Math.PI / 180, seed: num(p.seed, 5), own: p.own || null, rough: num(p.rough, .3), terrace: num(p.terrace, 0), crag: num(p.crag, 0) }));
   const terr = spec.terraces || [];
   // height before the river and lake: meadow fBm, back edge rising, terraces, peaks
   const hp = (x, z) => {
@@ -64,7 +64,12 @@ export function bakeField(spec = {}, quality = AAA.quality) {
       const c = Math.cos(p.rot), s = Math.sin(p.rot), u = (x - p.x) * c - (z - p.z) * s, v = ((x - p.x) * s + (z - p.z) * c) * p.sq;
       const r2 = (u * u + v * v) / (p.r * p.r); if (r2 > 4) continue;
       const rid = 1 - Math.abs(noise(x * 1.1 + p.seed, z * 1.1, p.seed)); const det = noise.fbm(x * 2.6 + p.seed, z * 2.6, 3, 3);
-      const ph = p.h * Math.exp(-Math.pow(r2, .8) * 1.6) * (1 + p.rough * (rid * rid - .4) + .12 * det);
+      let ph = p.h * Math.exp(-Math.pow(r2, .8) * 1.6) * (1 + p.rough * (rid * rid - .4) + .12 * det);
+      // craggy massifs: cliff bands and ledges (a terrace staircase, steep risers, near-flat treads that carry moss and
+      // grass), deep gullies from ridged noise; the strata tilt a little across the massif
+      if (p.terrace > 0 && ph > .15) { const st = p.terrace, tilt = (x - p.x) * .06 + noise(x * .7, z * .7, 21) * .08, q = (ph + tilt) / st, f = q - Math.floor(q), tq = (Math.floor(q) + sstep(0, .38, f) * (.82 + .18 * f)) * st - tilt;
+        const gully = p.crag * Math.pow(Math.abs(noise(x * 2.1 + p.seed, z * 2.1, 33)), .6) * .22 * Math.min(1, ph);
+        ph = ph * .3 + tq * .7 - gully; }
       h = smax(h, ph, .35);
     }
     return h;
