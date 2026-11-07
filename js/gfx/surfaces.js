@@ -145,7 +145,7 @@ export function surface(m, o = {}) {
   if (!m.userData.smChained) {
     const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
     const own = Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile');
-    m.onBeforeCompile = function (s, r) { if (own) prev.call(this, s, r); patchSurface(s, this); };
+    m.onBeforeCompile = function (s, r) { if (own) prev.call(m, s, r); patchSurface(s, m); };   // (callers such as materialize.js call it unbound)
     const pk = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? prevKey : null;
     m.customProgramCacheKey = () => (pk ? pk.call(m) : '') + '|surf';
     m.userData.smChained = true;
