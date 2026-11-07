@@ -292,7 +292,7 @@ export class BookRoom {
     enrich(this.shell); this.stations.forEach(st => { if (st.ped) enrich(st.ped); });
     const feet = footprints([...this.stations.values()].map(st => st.ped).filter(Boolean)).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
     bindRoom(this.scene, this.probe, { w: D.w, d: D.d, floor: 0, cornice: info.ys || D.h * .83, ceiling: D.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.2], feet: feet.slice(0, 24) });
-    this.probe.capture(this.scene, { pos: V3(0, 1.7, 0), box: new THREE.Box3(V3(-D.w / 2, 0, -D.d / 2), V3(D.w / 2, D.h, D.d / 2)), fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .15, hide: [...this.stations.values()].flatMap(st => st.bays.map(b => b.mini)).filter(Boolean) });
+    this.probe.begin(this.scene, { pos: V3(0, 1.7, 0), box: new THREE.Box3(V3(-D.w / 2, 0, -D.d / 2), V3(D.w / 2, D.h, D.d / 2)), fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .15, hide: [...this.stations.values()].flatMap(st => st.bays.map(b => b.mini)).filter(Boolean) });
   }
   makeStation(part, slot, i) {
     const g = new THREE.Group(); g.position.copy(slot.p); g.lookAt(slot.p.clone().add(slot.n)); this.scene.add(g);
@@ -519,7 +519,8 @@ export class BookRoom {
   }
   // ---------- frame ----------
   update(dt, t) {
-    if ((this.probeDirty || this.probe.stale()) && !this.unfold) this.captureProbe();
+    if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
+    this.probe.step();
     this.ao.update();
     if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {

@@ -176,36 +176,46 @@ export class RoomProbe {
   constructor(gfx) { this.gfx = gfx; this.rt = null; this.box = new THREE.Box3(); this.pos = V3(); this.ms = 0; }
   // scene: the room; o: { box: Box3 of the interior, pos: probe position, boost: [[material, k]], hide: [objects],
   //   fakeGI: [lights whose intensity stands in for bounce light: scaled by giScale once the probe lights the room] }
-  capture(scene, o = {}) {
-    const g = this.gfx, r = g.renderer, q = this.q = AAA.quality, t0 = performance.now();
-    const size = q === 'low' ? 128 : 256, bounces = q === 'high' ? 2 : 1;
-    const crt = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType, generateMipmaps: false });
-    const cam = new THREE.CubeCamera(.05, 200, crt); this.pos.copy(o.pos || V3(0, 1.7, 0)); cam.position.copy(this.pos); cam.updateMatrixWorld(true);
-    if (o.box) this.box.copy(o.box);
-    const hidden = []; scene.traverse(x => { if (x.userData.noProbe && x.visible) { x.visible = false; hidden.push(x); } }); (o.hide || []).forEach(x => { if (x && x.visible) { x.visible = false; hidden.push(x); } });
-    // windows (materials flagged userData.hdr = k) are k× brighter inside the probe: their real radiance relative to the room
-    const hdr = new Map(o.boost || []); scene.traverse(x => { if (x.material && x.visible) [].concat(x.material).forEach(m => { if (m && m.userData.hdr && m.color && !hdr.has(m)) hdr.set(m, m.userData.hdr); }); });
-    const boosts = [...hdr].filter(([m]) => m && m.color).map(([m, k]) => { const c = m.color.clone(); if (Array.isArray(k)) m.color.multiply(new THREE.Color(k[0], k[1], k[2])); else m.color.multiplyScalar(k); return () => m.color.copy(c); });
-    const gi = (o.fakeGI || []).filter(Boolean); gi.forEach(L => { if (L.userData.giBase == null) L.userData.giBase = L.intensity; L.intensity = L.userData.giBase; });
-    const sm = r.shadowMap, au = sm.autoUpdate; sm.autoUpdate = false; sm.needsUpdate = true;
-    let out = null;
-    try {
-      for (let b = 0; b < bounces; b++) {
-        this.apply(scene, b > 0);
-        cam.update(r, scene);
-        const next = g.pmrem.fromCubemap(crt.texture);
-        if (out) out.dispose(); out = next;
-        scene.environment = out.texture; scene.environmentIntensity = 1;
-        gi.forEach(L => { L.intensity = L.userData.giBase * (o.giScale ?? .3); });
-      }
-    } catch (e) { console.warn('room probe', e); }
-    finally {
-      boosts.forEach(f => f()); hidden.forEach(x => { x.visible = true; }); sm.autoUpdate = au; sm.needsUpdate = true; crt.dispose();
+  // Amortised capture: begin() schedules it ~0.8 s after the room appears (the room shows at once, lit by the studio
+  // environment); step(), called once per frame, renders ONE cube face (≈ 1/6 of a frame of the hall at 128–256²), and
+  // the pre-filtering (PMREM) gets its own frame. The window boost and hidden objects apply only inside each face
+  // render, so the visible frames are untouched. capture() does it all at once (tests, tools).
+  begin(scene, o = {}) { this.job = { scene, o, face: 0, bounce: 0, at: performance.now() + (o.delay ?? 800), t0: 0, work: 0 }; }
+  get busy() { return !!this.job; }
+  step() {
+    const J = this.job; if (!J || performance.now() < J.at) return false;
+    const g = this.gfx, r = g.renderer, { scene, o } = J, t0 = performance.now();
+    if (!J.crt) { // set up
+      const q = this.q = AAA.quality; J.size = 256; J.bounces = q === 'high' ? 2 : 1;   // 256² at every level: the same CUBE_UV size as the studio map, so swapping environments never recompiles a program
+      J.crt = new THREE.WebGLCubeRenderTarget(J.size, { type: THREE.HalfFloatType, generateMipmaps: false });
+      J.cam = new THREE.CubeCamera(.05, 200, J.crt); this.pos.copy(o.pos || V3(0, 1.7, 0)); J.cam.position.copy(this.pos); J.cam.updateMatrixWorld(true);
+      if (J.cam.coordinateSystem !== r.coordinateSystem) { J.cam.coordinateSystem = r.coordinateSystem; J.cam.updateCoordinateSystem(); }
+      if (o.box) this.box.copy(o.box);
+      J.gi = (o.fakeGI || []).filter(Boolean); J.gi.forEach(L => { if (L.userData.giBase == null) L.userData.giBase = L.intensity; });
     }
-    if (out) { if (this.rt) this.rt.dispose(); this.rt = out; out.texture.userData.shared = true; scene.environment = out.texture; scene.environmentIntensity = 1; }
-    this.apply(scene, true); this.ms = performance.now() - t0;
-    return this.rt && this.rt.texture;
+    if (J.face < 6) {
+      const hidden = []; scene.traverse(x => { if (x.userData.noProbe && x.visible) { x.visible = false; hidden.push(x); } }); (o.hide || []).forEach(x => { if (x && x.visible) { x.visible = false; hidden.push(x); } });
+      // windows (materials flagged userData.hdr = k or [r, g, b]) are brighter inside the probe: their real radiance
+      const hdr = new Map(o.boost || []); scene.traverse(x => { if (x.material && x.visible) [].concat(x.material).forEach(m => { if (m && m.userData.hdr && m.color && !hdr.has(m)) hdr.set(m, m.userData.hdr); }); });
+      const boosts = [...hdr].filter(([m]) => m && m.color).map(([m, k]) => { const c = m.color.clone(); if (Array.isArray(k)) m.color.multiply(new THREE.Color(k[0], k[1], k[2])); else m.color.multiplyScalar(k); return () => m.color.copy(c); });
+      const gi = J.gi.map(L => { const v = L.intensity; L.intensity = J.bounce ? L.userData.giBase * (o.giScale ?? .3) : L.userData.giBase; return () => { L.intensity = v; }; });
+      const sm = r.shadowMap, au = sm.autoUpdate, prev = r.getRenderTarget(), xr = r.xr.enabled;
+      sm.autoUpdate = false; if (J.face === 0 && J.bounce === 0) sm.needsUpdate = true;
+      try { r.xr.enabled = false; this.apply(scene, J.bounce > 0); r.setRenderTarget(J.crt, J.face); r.render(scene, J.cam.children[J.face]); }
+      catch (e) { console.warn('room probe', e); }
+      finally { r.setRenderTarget(prev); r.xr.enabled = xr; sm.autoUpdate = au; boosts.forEach(f => f()); gi.forEach(f => f()); hidden.forEach(x => { x.visible = true; }); this.apply(scene, true); }
+      J.face++;
+    } else { // pre-filter, publish, next bounce or done
+      const out = g.pmrem.fromCubemap(J.crt.texture);
+      if (this.rt) this.rt.dispose(); this.rt = out; out.texture.userData.shared = true; scene.environment = out.texture; scene.environmentIntensity = 1;
+      J.gi.forEach(L => { L.intensity = L.userData.giBase * (o.giScale ?? .3); });
+      J.bounce++; J.face = 0;
+      if (J.bounce >= J.bounces) { J.crt.dispose(); this.job = null; r.shadowMap.needsUpdate = true; }
+    }
+    J.work += performance.now() - t0; this.ms = J.work; (this.log || (this.log = [])).push(Math.round(performance.now() - t0)); this.apply(scene, true);
+    return true;
   }
+  capture(scene, o = {}) { this.begin(scene, Object.assign({}, o, { delay: 0 })); let n = 0; while (this.job && n++ < 40) this.step(); return this.rt && this.rt.texture; }
   // captured at another quality level (probe size and bounces follow gfx.quality): capture again
   stale() { return !!this.rt && this.q !== AAA.quality; }
   // write the probe's box into the shared uniforms (called before every render of this scene)

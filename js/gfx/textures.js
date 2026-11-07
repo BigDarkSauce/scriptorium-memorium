@@ -35,16 +35,20 @@ function pump() {
   const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 16));
   idle(() => { const t0 = performance.now(); try { JOBS.shift()(); } catch (e) { console.warn('texture bake', e); } BAKE.ms += performance.now() - t0; BAKE.n++; pumping = false; if (JOBS.length) setTimeout(pump, 0); }, { timeout: 1200 });
 }
-export const BAKE = { ms: 0, n: 0, pending: () => JOBS.length };
-function placeholder(rgb) {
-  const c = document.createElement('canvas'); c.width = c.height = 4; const g = c.getContext('2d'); g.fillStyle = `rgb(${rgb})`; g.fillRect(0, 0, 4, 4);
+export const BAKE = { ms: 0, n: 0, log: [], pending: () => JOBS.length, now() { while (JOBS.length) JOBS.shift()(); } };
+// the placeholder already has the final size (r170 allocates immutable storage: a later image of another size cannot
+// be uploaded into it), filled flat; the bake draws into it and flags it for upload
+function placeholder(rgb, w = 4, h = w) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.fillStyle = `rgb(${rgb})`; g.fillRect(0, 0, w, h);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.userData.shared = true; return t;
 }
 export function companions(t) {
   const e = t && t.image && COMP.get(t.image); if (!e) return null; if (e.res) return e.res;
   const m = e.meta, rv = Math.round((m.r ?? .6) * 255);
-  const res = e.res = Object.assign({}, m, { normalMap: m.nrm === false ? null : placeholder('128,128,255'), roughnessMap: m.rgh === false ? null : placeholder(`255,${rv},0`) });
-  JOBS.push(() => { const v = e.fn(); [['normalMap'], ['roughnessMap']].forEach(([k]) => { if (res[k] && v[k]) { res[k].source = v[k].source; res[k].needsUpdate = true; } }); }); pump();
+  const k = compRes(), sz = typeof m.size === 'function' ? m.size(k) : [256, 256];
+  const res = e.res = Object.assign({}, m, { normalMap: m.nrm === false ? null : placeholder('128,128,255', sz[0], sz[1]), roughnessMap: m.rgh === false ? null : placeholder(`255,${rv},0`, sz[0], sz[1]) });
+  delete res.size;
+  JOBS.push(() => { const t0 = performance.now(), v = e.fn(); ['normalMap', 'roughnessMap'].forEach(q => { const d = res[q], src = v[q]; if (d && src && src.image) { d.image.getContext('2d').drawImage(src.image, 0, 0, d.image.width, d.image.height); d.needsUpdate = true; } }); BAKE.log.push([e.meta.name || '?', Math.round(performance.now() - t0)]); }); pump();
   return res;
 }
 function withComp(t, fn, meta = {}) { if (t && t.image && !COMP.has(t.image)) COMP.set(t.image, { fn, meta }); return t; }
@@ -113,7 +117,7 @@ export function plaster(tone = [214, 200, 176], key = 'plaster', amp = .22) {
     g.putImageData(img, 0, 0);
     // a few hairline cracks and settled dust in them (drawn by the same walk as the relief below)
     plasterCracks(K).forEach(pts => { g.strokeStyle = 'rgba(70,58,44,.32)'; g.lineWidth = .8; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); });
-  }), () => plasterComp(K), { normalScale: .4, roughness: 1, r: .9 });
+  }), () => plasterComp(K), { name: 'plaster', size: k => [512 * k, 512 * k], normalScale: .4, roughness: 1, r: .9 });
 }
 function plasterCracks(K) { const r = mulberry(K.length * 13 + 5), out = []; for (let c = 0; c < 5; c++) { let x = r() * 512, y = r() * 512, a = r() * 6.28; const pts = [[x, y]]; for (let k = 0; k < 20 + r() * 40; k++) { a += (r() - .5) * 1.1; x += Math.cos(a) * 3; y += Math.sin(a) * 3; pts.push([x, y]); } out.push(pts); } return out; }
 // lime plaster: trowel undulation (~0.4–0.6 m waves at the walls' 4.5 m tile), sand grit, hairline cracks; matte
@@ -137,7 +141,7 @@ export function parchment(key = 'parch', w = 512, h = 1024) {
     for (let k = 0; k < w * h / 40; k++) { let x = r() * w, y = r() * h; const a = r() * 6.28, L = 3 + r() * 9; for (let t = 0; t < L; t++) { const i = ((y | 0) % h) * w + ((x | 0) % w); F[i] += .12; x = (x + Math.cos(a) + w) % w; y = (y + Math.sin(a) + h) % h; } }
     const R = fieldF(w, h, (u, v) => .74 + .14 * pfbm(u, v, 8, 16, 2, 94));
     return { normalMap: nrmTex(key + '-n' + w, blurF(F, w, h, 1), w, h, 1.3), roughnessMap: greyTex(key + '-r' + w, R, w, h) };
-  }, { normalScale: .35, roughness: 1, r: .8 });
+  }, { name: 'parchment', size: k => [Math.max(64, w * k | 0), Math.max(64, h * k | 0)], normalScale: .35, roughness: 1, r: .8 });
 }
 function parchDraw(g, w, h) {
   {
@@ -176,7 +180,7 @@ export function leather(tone = '#6b2a1e', key = 'leather') {
   }), () => {
     const C = cell(), R = new Float32Array(S * S); for (let i = 0; i < S * S; i++) R[i] = .78 - .3 * C[i];
     return { normalMap: nrmTex('lea-n', C, S, S, 3), roughnessMap: greyTex('lea-r', R, S, S) };
-  }, { normalScale: .55, roughness: 1, r: .62 });
+  }, { name: 'leather', size: () => [256, 256], normalScale: .55, roughness: 1, r: .62 });
 }
 const LEA = new Map();
 // Text plaque / tag texture
@@ -227,7 +231,7 @@ function wrapDraw(g, w, h, fn) { for (const dx of [-w, 0, w]) for (const dy of [
 // and a hair recessed after centuries of polishing), pits catch dirt.
 function marbleCanvas(name, size, seed = 1, mode = 'color') {
   const P = MARBLES[name] || MARBLES.rose, c = document.createElement('canvas'), mask = mode === 'mask'; c.width = c.height = size;
-  const g = c.getContext('2d'), r = mulberry(seed * 31 + name.length * 7), s = size / 512;
+  const g = c.getContext('2d', { willReadFrequently: mask }), r = mulberry(seed * 31 + name.length * 7), s = size / 512;
   g.fillStyle = mask ? '#000' : P.base; g.fillRect(0, 0, size, size);
   const blobs = []; for (let i = 0; i < 90; i++) blobs.push([r() * size, r() * size, (30 + r() * 150) * s, P.cloud[i % P.cloud.length], .12 + r() * .3]);
   if (!mask) blobs.forEach(([x, y, rad, col, a]) => wrapDraw(g, size, size, () => { const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, col); gr.addColorStop(1, col + '00'); g.globalAlpha = a; g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); }));
@@ -250,7 +254,7 @@ function marbleCanvas(name, size, seed = 1, mode = 'color') {
 }
 export function marbleTex(name = 'rose', { size = 512, seed = 1, repeat } = {}) {
   const key = 'marble-' + name + size + '-' + seed;
-  return withComp(canvasTex(key, size, size, (g) => g.drawImage(marbleCanvas(name, size, seed), 0, 0), { repeat }), () => marbleComp(name, Math.max(128, size * compRes()), seed, key + '-' + size * compRes()), { normalScale: .35, roughness: 1, r: .08 });
+  return withComp(canvasTex(key, size, size, (g) => g.drawImage(marbleCanvas(name, size, seed), 0, 0), { repeat }), () => marbleComp(name, Math.max(128, size * compRes()), seed, key + '-' + size * compRes()), { name: 'marble-' + name, size: k => [Math.max(128, size * k), Math.max(128, size * k)], normalScale: .35, roughness: 1, r: .08 });
 }
 // polished stone: roughness 0.05–0.09 on the field, veins 0.12–0.2, pits 0.35; heights: veins etched ~0.3, pits 1, a
 // faint wavy lap from the polishing stones (honing marks) so the reflection breaks up like real polished marble
@@ -274,13 +278,13 @@ export function gildTex() {
   // relief: each leaf is laid over its neighbours, so the seams are ~5 px bands of double leaf (a raised ridge that
   // catches a reflected window as a fine line), plus the leaf's own crumple and the burnisher's long strokes
   withComp(map, () => {
-    const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'), r = mulberry(17), n = 8, q = S / n;
+    const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d', { willReadFrequently: true }), r = mulberry(17), n = 8, q = S / n;
     g.fillStyle = '#000'; g.fillRect(0, 0, S, S); g.globalCompositeOperation = 'lighter';
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { r(); const x = i * q + (r() - .5) * 6, y = j * q + (r() - .5) * 6; g.fillStyle = 'rgb(60,60,60)'; [-S, 0, S].forEach(dx => [-S, 0, S].forEach(dy => g.fillRect(x + dx, y + dy, q + 4, q + 4))); }
     const L = readCh(c, 0), cr = fieldF(S, S, (u, v) => pfbm(u, v, 24, 24, 3, 171)), br = fieldF(S, S, (u, v) => pn(u * 3, v * 64, 3, 64, 172)), H = new Float32Array(S * S);
     for (let k = 0; k < S * S; k++) H[k] = (L[k] > .3 ? .5 : 0) + .18 * cr[k] + .08 * br[k];
     return { normalMap: nrmTex('gild-n', blurF(H, S, S, 1), S, S, 2.2) };
-  }, { normalScale: .5, rgh: false });
+  }, { name: 'gild', size: () => [256, 256], normalScale: .5, rgh: false });
   return { map, rough };
 }
 // Fluting normal map: one concave flute across u (repeat.x = number of flutes).
@@ -453,11 +457,11 @@ export function damaskTex(base = '#7a2e3a', key = 'damask') {
     g.fillStyle = base; g.fillRect(0, 0, w, h); damaskMotifs(g, 'rgba(255,225,190,.14)');
     const r = mulberry(8); for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(0,0,0,${r() * .08})`; g.fillRect(r() * w, r() * h, 1, 2); }
   }), () => {
-    if (!DAM.n) { const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, S, S); damaskMotifs(g, '#fff'); const M = blurF(readCh(c, 0), S, S, 1), H = new Float32Array(S * S), R = new Float32Array(S * S);
+    if (!DAM.n) { const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#000'; g.fillRect(0, 0, S, S); damaskMotifs(g, '#fff'); const M = blurF(readCh(c, 0), S, S, 1), H = new Float32Array(S * S), R = new Float32Array(S * S);
       for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const i = y * S + x, m = M[i], sat = Math.pow(Math.sin(Math.PI * (y * 32 / S + (x % 8) * .125)), 2), twl = Math.pow(Math.sin(Math.PI * ((x + y) * 48 / S)), 2); H[i] = m * (.55 * sat + .25) + (1 - m) * .6 * twl; R[i] = .78 - .32 * m; }
       DAM.n = nrmTex('damask-n', H, S, S, 2.4); DAM.r = greyTex('damask-r', R, S, S); }
     return { normalMap: DAM.n, roughnessMap: DAM.r };
-  }, { normalScale: .6, roughness: 1, sheen: true, r: .65 });
+  }, { name: 'damask', size: () => [256, 256], normalScale: .6, roughness: 1, sheen: true, r: .65 });
 }
 const DAM = {};
 // Bright morning sky seen through the tall windows.
@@ -486,7 +490,7 @@ export function shaftTex() {
 // the grain only shows faintly through an ivory coat, as on Admont's white-and-gold cases.
 export function figuredWood(tone = [110, 70, 40], key = 'fig', { paint = 0, seed = 7 } = {}) {
   const K = 'figwood' + key + tone.join() + paint;
-  return withComp(canvasTex(K, 512, 512, (g, w, h) => figuredWoodDraw(g, w, h, tone, paint, seed)), () => woodComp(K, paint, seed), { normalScale: paint ? .25 : .45, roughness: 1, r: paint ? .4 : .5 });
+  return withComp(canvasTex(K, 512, 512, (g, w, h) => figuredWoodDraw(g, w, h, tone, paint, seed)), () => woodComp(K, paint, seed), { name: 'wood-' + key, size: k => [512 * k, 512 * k], normalScale: paint ? .25 : .45, roughness: 1, r: paint ? .4 : .5 });
 }
 // wood relief: open pores (vessels cut lengthwise: 0.2–0.6 mm dashes along the grain, recessed), the softer earlywood
 // a hair lower than the latewood (the varnish shows it as a ripple), roughness 0.42–0.6 in the wood, pores 0.8. Painted
@@ -524,9 +528,9 @@ export function spineAtlas() {
   const t = canvasTex('spine-atlas', 1024, 512, (g, W, H) => spineDraw(g, W, H, false), { aniso: 8 });
   // companion: R = relief (raised bands over the cords, debossed tooling, a rounded back), G = roughness (calf 0.5,
   // vellum 0.65, gilt 0.22, page edges 0.8), B = metalness (gilt tooling 1)
-  return withComp(t, () => { const k = compRes(), W = 1024 * k, H = 512 * k, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.scale(k, k); spineDraw(g, 1024, 512, true);
+  return withComp(t, () => { const k = compRes(), W = 1024 * k, H = 512 * k, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); g.scale(k, k); spineDraw(g, 1024, 512, true);
     const Hh = blurF(readCh(c, 0), W, H, 1); return { normalMap: nrmTex('spine-atlas-n' + W, Hh, W, H, 3 * k), roughnessMap: canvasTex('spine-atlas-mr' + W, W, H, (g2) => g2.drawImage(c, 0, 0), { srgb: false, aniso: 8 }) }; },
-    { metalness: 1, metalMap: true, normalScale: .7, roughness: 1, r: .55 });
+    { name: 'spines', size: k => [1024 * k, 512 * k], metalness: 1, metalMap: true, normalScale: .7, roughness: 1, r: .55 });
 }
 function spineDraw(g, W, H, mr) {
   const r = mulberry(23), cw = W / SPINE_VARIANTS, sh = Math.round(H * .965);
@@ -562,7 +566,7 @@ export function runnerTex(colors = ['#5a1c1a', '#8e3a26', '#c9a053', '#1f2c3c', 
     if (!RUN.n) { const W = 256, H = 512, F = fieldF(W, H, (u, v, x, y) => { const kx = (x % 4) / 4, ky = (y % 4) / 4, dome = Math.sin(Math.PI * kx) * Math.sin(Math.PI * ky); return dome * .6 + pfbm(u, v, 16, 32, 3, 301) * .9 + pn(u * 128, v * 256, 128, 256, 302) * .3; });
       RUN.n = nrmTex('runner-n', F, W, H, 1.6); RUN.r = greyTex('runner-r', fieldF(W, H, (u, v) => .88 + .1 * pfbm(u, v, 8, 16, 2, 303)), W, H); }
     return { normalMap: RUN.n, roughnessMap: RUN.r };
-  }, { normalScale: .8, roughness: 1, r: .9 });
+  }, { name: 'runner', size: () => [256, 512], normalScale: .8, roughness: 1, r: .9 });
 }
 const RUN = {};
 function runnerDraw(colors) {
