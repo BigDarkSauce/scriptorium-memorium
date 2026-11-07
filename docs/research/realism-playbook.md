@@ -969,3 +969,33 @@ normal maps.
 image form, so every interior stack is procedural (canvas, cached, built lazily on first use): colour + normal +
 roughness (+ metalness for gilt tooling) per texture, with the normal and roughness derived from the same random
 sequence as the colour (veins, pores, leaf seams, tooling and bands line up). No new files under `assets/textures/`.
+
+**Costs and boot (measured 2026-11-08, SwiftShader, 640 × 400, medium unless noted).**
+
+| | before | after |
+|---|---|---|
+| hub: draw calls / triangles | 156 / 458 k | 158 / 458 k (high: 162, +1 pass GTAO) |
+| hub: programs | 38 | 53 (first version 85: features became uniform-driven so materials share programs) |
+| hub: texture memory (unique sources) | 66.7 MB | 86.7 MB (high: 119.6 MB, companions at full size) |
+| book room: calls / programs / textures | 698 / 104 / 84 MB | 699 / 124 / 100.9 MB |
+| gas (lab, transmissive glass) | 73 calls / 79 k tris | 100 / 125 k (the transmission pass renders the opaque scene once more) |
+| pendulum (studio) | 53 / 34 k | 53 / 34 k |
+| boot to first hub frame | 9–10 s, longest task 17–18 s | 7 s, longest task 13 s |
+
+After the first frame: the probe starts 0.8 s later and renders one cube face per frame (2–135 ms each in SwiftShader;
+on a GPU < 1 ms), then pre-filters in one frame (7 s in SwiftShader, a few ms on a GPU); the 22 companion bakes run one
+per idle slice (16–210 ms each, 1.6 s in all). Probe memory: one 768 × 1024 HalfFloat PMREM (6.3 MB), the cube target
+is freed after each capture. Per pixel: one 3-octave value-noise fbm (macro) + one noise (wear) + a box intersection in
+the IBL lookup; the floor adds the footprint loop (≤ 24 SDF boxes).
+
+**Pitfalls met in this pass.** Swapping a texture's `Source` after upload fails in r170 (immutable storage): bake into a
+placeholder canvas of the final size. Reading back a GPU-accelerated 2D canvas (`getImageData`) cost ~2 min in
+SwiftShader: canvases that are read back are created with `willReadFrequently`. A 0.05-rough polish lit by the sun
+overflows half floats in a probe face (Inf → white blobs after PMREM): the surface patch caps punctual specular at 3.0
+like `materials.js`. A probe smaller than 256² changes the CUBE_UV defines and recompiles every program: 256² at every
+level. `materialize.js` calls a material's previous `onBeforeCompile` unbound: chains must close over the material.
+
+**Still open.** The sunlit hall reads warmer than before: its own bounce (sun, candles, gilt, limewash) replaced the
+neutral studio fill; the window skylight is boosted cool in the probe and the sun moved to ~4800 K, but a camera white
+balance in the grade (owned by the grade/valley work) would finish the job. Companion relief applies to materials
+created at 'medium'/'high'; switching from 'low' to a higher level takes effect on the next load.
