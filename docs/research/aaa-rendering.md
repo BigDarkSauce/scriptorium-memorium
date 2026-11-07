@@ -417,6 +417,23 @@ reference's: its meadow, rocks and cliffs carry far more fine, high-contrast det
 dense dark-gapped grass), and our ridge is still one smooth peak rather than craggy massifs.
 Cost at medium: 195 draw calls, 1.57 M triangles (including the lake mirror), 130 programs.
 
+Fourth pass (composition): a craggy massif of four terraced peaks (`peaks[].terrace` cliff bands + flat treads that
+carry grass and moss, `crag` gullies; rock only on the risers), the water axis massif → waterfall (`river.fallAt`) →
+stream → a lake that crosses the block's front edge and is cut open in section (water volume, shafts, sediment;
+`buildLakeSection`), a tighter case (lid at 5.4, thin brass frame, teal glass edges, clear panes) on a dark wooden base,
+the sun moved outside the case (a warm lamp), boulders, roots and lake silt in the soil section, more bushes along the
+stream and forest edges, three cherries, a path to the cabin. The scene's clouds are drawn below the lid (CAP 4.5;
+the physics is unchanged), the parcel ride is 1.1 lower, and a lee hollow behind the Ridge lets the rain-shadow cloud
+dissolve on the block at any wind (checked headless by replaying the scene's physics against the field).
+
+| view | Weatherglass | pass 3 | pass 4 |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151 | 5.56, .073, 122 | 5.71, .081, 120 |
+| low | 5.71, .135, 141 | 5.81, .059, 106 | 5.94, .073, 111 |
+| close | 6.74, .175, 143 | 6.10, .083, 111 | 6.31, .103, 157 |
+
+Cost at medium: 165 draw calls, 1.52 M triangles, 132 programs.
+
 Known gaps against Weatherglass: no contact-hardening
 shadow filter (R11.1) and no HDRI reflections (R11.4), cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
 on the slope speeds the stream and its waterfall.)

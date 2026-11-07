@@ -91,8 +91,9 @@ export function bakeField(spec = {}, quality = AAA.quality) {
     lake.bottom = lake.level - lake.depth;
   }
   if (river) {   // the steepest drop over a short run is the waterfall (lip → foot)
-    const P = river.P; let best = 0, bi = -1, K = 4;
-    for (let i = 0; i + K < P.length; i++) { const dr = P[i].y - P[i + K].y; if (dr > best) { best = dr; bi = i; } }
+    const P = river.P; let best = 0, bi = -1, K = 4, fa = spec.river.fallAt;
+    if (fa) { let bd = 1e9; P.forEach((p, i) => { const d = Math.hypot(p.x - fa[0], p.z - fa[1]); if (d < bd) { bd = d; bi = Math.max(0, Math.min(P.length - 1 - K, i - 2)); } }); best = P[bi].y - P[bi + K].y; }   // an authored waterfall position wins
+    else for (let i = 0; i + K < P.length; i++) { const dr = P[i].y - P[i + K].y; if (dr > best) { best = dr; bi = i; } }
     if (best > .12) { let i0 = bi, i1 = bi + K; while (i0 > 0 && P[i0 - 1].y - P[i0].y > .01) i0--; while (i1 < P.length - 1 && P[i1].y - P[i1 + 1].y > .01) i1++; river.fall = { i0, i1, drop: P[i0].y - P[i1].y }; }
   }
   const pads = (spec.pads || []).map(p => ({ x: +p[0], z: +p[1], r: num(p[2], .6), y: p[3] }));

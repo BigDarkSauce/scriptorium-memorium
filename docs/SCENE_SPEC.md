@@ -147,8 +147,8 @@ and the per-recipe costs are in `research/realism-playbook.md`; the implementati
 
 - **`terrain` with a field** (any of `peaks`, `lake`, `river`, `block`): one height field baked on the mesh grid
   (`js/gfx/terrain.js`): fBm meadow (`h`, `seed`, `lift`), `backRise:[z0,z1,h]`, `terraces:[{z0,z1,x0,x1,h}]` (a sharp
-  terrace edge under a river becomes its waterfall), `peaks:[{x,z,r,h,squash,rot,rough,own}]` (smooth-max, no creases),
-  `river:{points:[[x,z],…],width:[source,mouth],depth}` (its water surface only runs downhill), `lake:{x,z,rx,rz,depth,level}`
+  terrace edge under a river becomes its waterfall), `peaks:[{x,z,r,h,squash,rot,rough,own,terrace,crag}]` (smooth-max, no creases; `terrace` = cliff-band height: steep rock risers and grassy ledges; `crag` 0–1 gullies),
+  `river:{points:[[x,z],…],width:[source,mouth],depth,fallAt:[x,z]}` (its water surface only runs downhill; `fallAt` places the waterfall), `lake:{x,z,rx,rz,depth,level}`
   (level from the rim if left out), `pads:[[x,z,r]]` (flattened yards), `path:{points,width}` (bare, no grass).
   Rock (AAA crag) where it is steep or high, meadow elsewhere. `block:true` (default) cuts the land as a rectangular
   specimen with a painted **soil section** on its four faces down to `bottom`, on a walnut plinth: use it with
@@ -160,7 +160,7 @@ and the per-recipe costs are in `research/realism-playbook.md`; the implementati
   six flower species, reeds and cattails on the shore, scattered by the field's ecology; they grow out of the paper as the
   materialize front passes. Counts follow `gfx.quality`.
 - **`rockScatter{count,r:[min,max],region,moss,anywhere}`**: half-buried mossy boulders on rocky ground (2 draw calls).
-- **`lake`** and **`river`** (alias `waterfall`): analytic water on the field: depth colour, Fresnel sky reflection, sun
+- **`lake`** and **`river`** (alias `waterfall`): where the lake crosses the block's edge, its water volume is drawn in the cut section. Analytic water on the field: depth colour, Fresnel sky reflection, sun
   glint and glitter, lapping foam, rain rings where it rains; the river has flowing streaks, a waterfall sheet, plunge
   foam and spray. No transmission.
 - **`forest{species,items:[[x,z,h],…]|count,region,h:[min,max],variants}`** and **`oak|birch|cherry{h}`** (also

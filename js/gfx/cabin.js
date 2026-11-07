@@ -141,13 +141,19 @@ export function buildHills({ r = 34, layers = 3, height = 5, y = -1.2, seed = 4,
 export function buildVitrine({ min = [-6.7, -.85, -5.2], max = [6.7, 6.6, 5.2], studio = ['#6a5140', '#2e2219'] } = {}) {
   const g = new THREE.Group(); g.name = 'glass vitrine';
   const [x0, y0, z0] = min, [x1, y1, z1] = max, W = x1 - x0, H = y1 - y0, D = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-  const gm = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .04, metalness: 0, transparent: true, opacity: .07, envMapIntensity: .5, depthWrite: false, side: THREE.DoubleSide, clearcoat: .5 }); gm.userData.frontPatched = true;   // nearly invisible: only faint reflections and the brass edges say 'glass case'
+  const gm = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .04, metalness: 0, transparent: true, opacity: .045, envMapIntensity: .45, depthWrite: false, side: THREE.DoubleSide, clearcoat: .5 }); gm.userData.frontPatched = true;   // nearly invisible: only faint reflections and the brass edges say 'glass case'
   const pane = (w, h, x, y, z, ry, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), gm); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.renderOrder = 20; m.castShadow = false; m.raycast = () => {}; g.add(m); };
   pane(W, H, cx, y0 + H / 2, z1, 0); pane(W, H, cx, y0 + H / 2, z0, Math.PI); pane(D, H, x1, y0 + H / 2, cz, Math.PI / 2); pane(D, H, x0, y0 + H / 2, cz, -Math.PI / 2); pane(W, D, cx, y1, cz, 0, -Math.PI / 2);
-  const brass = makeMaterial('brass'), t = .07, bars = [];
+  const brass = makeMaterial('brass'), t = .035, bars = [], teal = [];
   const bar = (sx, sy, sz, x, y, z) => { const b = new THREE.BoxGeometry(sx, sy, sz); b.translate(x, y, z); bars.push(clean(b)); };
   [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].forEach(([x, z]) => bar(t, H, t, x, y0 + H / 2, z));
   [y1, y0 + t / 2].forEach(y => { bar(W + t, t, t, cx, y, z0); bar(W + t, t, t, cx, y, z1); bar(t, t, D + t, x0, y, cz); bar(t, t, D + t, x1, y, cz); });
+  // the glass's edges seen end-on: a thin teal-green line just inside every frame bar (soda-lime glass, WG)
+  const tb = (sx, sy, sz, x, y, z) => { const b = new THREE.BoxGeometry(sx, sy, sz); b.translate(x, y, z); teal.push(clean(b)); }, e = .012, o = t * .5 + e * .5;
+  [[x0 + o, z0 + o], [x1 - o, z0 + o], [x1 - o, z1 - o], [x0 + o, z1 - o]].forEach(([x, z]) => tb(e, H - t, e, x, y0 + H / 2, z));
+  [y1 - o].forEach(y => { tb(W - t, e, e, cx, y, z0 + o); tb(W - t, e, e, cx, y, z1 - o); tb(e, e, D - t, x0 + o, y, cz); tb(e, e, D - t, x1 - o, y, cz); });
+  const tm = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.25, .62, .55), roughness: .15, transparent: true, opacity: .55, emissive: new THREE.Color(.03, .09, .08), depthWrite: false }); tm.userData.frontPatched = true;
+  const tl = new THREE.Mesh(mergeGeometries(teal), tm); tl.renderOrder = 21; tl.raycast = () => {}; tl.castShadow = false; tl.name = 'vitrine glass edges'; g.add(tl);
   const fr = new THREE.Mesh(mergeGeometries(bars), brass); fr.castShadow = false; fr.receiveShadow = true; fr.raycast = () => {}; fr.name = 'vitrine frame'; g.add(fr);
   g.traverse(o => { o.userData.noInk = true; o.userData.noContact = true; o.userData.noReflect = true; });
   // backdrop switch: outside the case → studio gradient; inside → the scene's sky (kept in scene.userData.skyBackground)

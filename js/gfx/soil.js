@@ -12,7 +12,7 @@ import { makeMaterial } from './materials.js';
 
 const SOIL_FRAG = /* glsl */`
 varying vec3 vSoilW; varying float vSoilS; varying float vSoilU;
-uniform float uAaaWet; uniform vec4 uAaaWetSpot; uniform vec3 uSoilGrass;
+uniform float uAaaWet; uniform vec4 uAaaWetSpot; uniform vec3 uSoilGrass; uniform float uLakeLevel;
 ${NOISE_GLSL}
 float sN(vec2 p){ return aaaSimplex2(p)*.5+.5; }
 vec3 sCell(vec2 p){ vec2 n=floor(p), f=fract(p); float md=8.; vec2 mi=vec2(0.); for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 g=vec2(i,j), o=aaaHash2(n+g,5.); vec2 r=g+o-f; float d=dot(r,r); if(d<md){ md=d; mi=n+g; } } return vec3(sqrt(md), aaaHash(mi,7.), 0.); }
@@ -48,10 +48,16 @@ const SOIL_MAIN = /* glsl */`
     loam *= .88+.24*sN(q*vec2(20.,90.)); float bur = smoothstep(.86,.9,sN(q*vec2(16.,13.)+9.))*step(.5,sN(q*3.+1.)); loam = mix(loam, vec3(.05,.035,.025), bur*.7);
     vec3 ec = sCell(q*9.+17.); float er=.12+.3*ec.y, eIn=(1.-smoothstep(er-.04,er,ec.x))*step(fract(ec.y*3.1),.14); loam = mix(loam, sPebble(ec.y, sN(q*70.))*.6, eIn);
     col = mix(col, loam, inLoam); sH = mix(sH, eIn*.02 + (sN(q*45.)-.5)*.003 - bur*.004, inLoam); }
+  // large stones: rounded boulders embedded in the loam, clay and gravel (domed, shaded, with a dark contact rim)
+  { vec3 bc = sCell(q*vec2(2.6, 3.4) + 5.); float br = .22 + .2*bc.y, bIn = (1. - smoothstep(br - .04, br, bc.x))*step(.5, fract(bc.y*5.3))*step(sY, yTop - .04)*(1. - inRim);
+    float dome = sqrt(max(0., 1. - bc.x*bc.x/(br*br))); vec3 stone = sPebble(bc.y, sN(q*40.))*(.55 + .45*dome)*1.15;
+    col = mix(col*(1. - .5*(1. - smoothstep(br, br + .06, bc.x))*step(sY, yTop - .04)), stone, bIn); sH = mix(sH, dome*.03, bIn); }
+  // the lake bed in section: grey-green silt over the soil where the column lies under the lake
+  { float lk = step(sS, uLakeLevel - .01); col = mix(col, vec3(.07, .075, .06)*(.8 + .4*sN(q*30.)), lk*smoothstep(sS - .09, sS - .02, sY)); }
   // humus and roots
   vec3 humus = mix(vec3(.03,.022,.016), vec3(.055,.04,.028), sN(q*25.)); col = mix(col, humus, inTop*(1.-m*.5)); sH = mix(sH, (sN(q*60.)-.5)*.003, inTop);
-  { float rz = (1.-m)*smoothstep(yClay, yClay+.05, sY)*step(sY, sS - rimB*.6); float x = sU*22.; float c = floor(x), f = fract(x)-.5; float len = (.12+.25*aaaHash(vec2(c,1.),2.))*rz; float wig = sin(sD*30.+c)*.08;
-    float root = (1.-smoothstep(.0,.06,abs(f-wig)))*step(sD - rimB, len)*step(.45,aaaHash(vec2(c,3.),2.)); col = mix(col, vec3(.16,.11,.07), root*.8); sH += root*.004; }
+  { float rz = (1.-m)*smoothstep(yClay, yClay+.05, sY)*step(sY, sS - rimB*.6); float x = sU*30.; float c = floor(x), f = fract(x)-.5; float len = (.15+.35*aaaHash(vec2(c,1.),2.))*rz; float wig = sin(sD*30.+c)*.08 + sin(sD*11.+c*2.)*.12;
+    float root = (1.-smoothstep(.0,.06,abs(f-wig)))*step(sD - rimB, len)*step(.3,aaaHash(vec2(c,3.),2.)); col = mix(col, vec3(.2,.13,.08), root*.85); sH += root*.004; }
   // turf rim: blades seen in section, an overhang shadow just below
   { float blade = sN(vec2(sU*260., sY*8.)); vec3 turf = uSoilGrass*(.6+.6*blade)*smoothstep(sS - rimB, sS, sY + blade*.01); col = mix(col, turf, inRim); col *= 1. - .45*(1.-smoothstep(0.,.05,sS - rimB - sY))*(1.-inRim); }
   // depth darkening, wetness soaking down from the top
@@ -60,12 +66,12 @@ const SOIL_MAIN = /* glsl */`
   wet *= 1. - smoothstep(.05, .45, sD); col *= mix(1., .55, wet);
   diffuseColor.rgb = col * diffuse; float soilRough = mix(mix(.92, .62, inClay*(1.-inLoam)), .45, wet);
 `;
-export function soilMaterial({ bottom = -.9, grass = '#4a6a2c' } = {}) {
+export function soilMaterial({ bottom = -.9, grass = '#4a6a2c', lake = -99 } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, metalness: 0 });
   m.defines = { SOIL_SECTION: '', SOIL_BOTTOM: (+bottom).toFixed(3) };
   const gc = new THREE.Color(grass);
   m.onBeforeCompile = s => {
-    Object.assign(s.uniforms, { uAaaWet: AAA.uniforms.uAaaWet, uAaaWetSpot: AAA.uniforms.uAaaWetSpot, uSoilGrass: { value: gc } });
+    Object.assign(s.uniforms, { uAaaWet: AAA.uniforms.uAaaWet, uAaaWetSpot: AAA.uniforms.uAaaWetSpot, uSoilGrass: { value: gc }, uLakeLevel: { value: lake } });
     s.vertexShader = 'attribute float aSurf; attribute float aU; varying vec3 vSoilW; varying float vSoilS; varying float vSoilU;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vSoilW = (modelMatrix * vec4(transformed, 1.)).xyz; vSoilS = aSurf; vSoilU = aU;');
     let f = s.fragmentShader.replace('void main() {', SOIL_FRAG + '\nvoid main() {');
     f = f.replace('#include <map_fragment>', SOIL_MAIN);
@@ -94,11 +100,11 @@ export function buildSoilBlock(field, { bottom = -.9, grass, plinth = true, plin
   geo.setIndex(idx); geo.computeVertexNormals();
   // winding check: make the first wall face +z (outward at the front edge)
   const nz = geo.getAttribute('normal').getZ(0); if (nz < 0) { for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; } geo.setIndex(idx); geo.computeVertexNormals(); }
-  const wall = new THREE.Mesh(geo, soilMaterial({ bottom, grass })); wall.name = 'soil section faces'; wall.receiveShadow = true; wall.castShadow = false; wall.userData.noInk = true; g.add(wall);
+  const wall = new THREE.Mesh(geo, soilMaterial({ bottom, grass, lake: field.lake ? field.lake.level : -99 })); wall.name = 'soil section faces'; wall.receiveShadow = true; wall.castShadow = false; wall.userData.noInk = true; g.add(wall);
   if (plinth) {
-    const W = field.w + plinthPad * 2, D = field.d + plinthPad * 2, wood = makeMaterial('darkwood');
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(W, .2, D), wood); slab.position.set(minX + field.w / 2, bottom - .1, minZ + field.d / 2); slab.receiveShadow = true; slab.castShadow = false; slab.name = 'walnut plinth';
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(W + .16, .08, D + .16), wood); foot.position.set(slab.position.x, bottom - .24, slab.position.z); foot.receiveShadow = true; foot.name = 'walnut plinth foot';
+    const W = field.w + plinthPad * 2, D = field.d + plinthPad * 2, wood = makeMaterial({ preset: 'darkwood', color: '#5a3f2c' });   // a dark wooden base, as under Weatherglass's case
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(W, .34, D), wood); slab.position.set(minX + field.w / 2, bottom - .17, minZ + field.d / 2); slab.receiveShadow = true; slab.castShadow = false; slab.name = 'walnut plinth';
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(W + .2, .1, D + .2), wood); foot.position.set(slab.position.x, bottom - .39, slab.position.z); foot.receiveShadow = true; foot.name = 'walnut plinth foot';
     const cap = new THREE.Mesh(new THREE.BoxGeometry(field.w + .02, .02, field.d + .02), makeMaterial('brass')); cap.position.set(slab.position.x, bottom + .005, slab.position.z); cap.name = 'brass fillet';
     [slab, foot, cap].forEach(m => { m.userData.noInk = true; g.add(m); });
   }

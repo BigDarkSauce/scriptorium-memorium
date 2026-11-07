@@ -92,7 +92,7 @@ uniform sampler2D uRefl; uniform mat4 uReflM; uniform float uReflOn;
 #include <fog_pars_fragment>
 void main(){
   ${CARD}
-  vec2 p = vW.xz; vec2 fw = fwidth(p); vec4 fld = fieldAt(p); float depth = uLevel - fld.r; if (depth < -.012 || fld.b <= 0.) discard;   // b: lake mask (inside the lake's rim)
+  vec2 p = vW.xz; vec2 fw = fwidth(p); vec4 fld = fieldAt(p); float depth = uLevel - fld.r; vec2 fuv = (p - uFieldM.xy) * uFieldM.zw; if (depth < -.012 || fld.b <= 0. || any(lessThan(fuv, vec2(-.01))) || any(greaterThan(fuv, uFieldN - .99))) discard;   // and never past the block's cut edge   // b: lake mask (inside the lake's rim)
   vec3 V = normalize(cameraPosition - vW); float rough; vec2 dir; vec3 wv = wWaves(p, uAaaTime, rough, dir); float shore = smoothstep(-.005, .07, depth);
   float fp = max(fw.x, fw.y); vec2 grad = wv.yz*(.3+.7*shore), gradLo = grad; vec3 rain = vec3(0.);
   float rainK = uAaaRain * (uAaaWetSpot.w > 0. ? 1. - smoothstep(uAaaWetSpot.z*.6, uAaaWetSpot.z*1.1, length(p - uAaaWetSpot.xy)) : 1.);
@@ -164,6 +164,7 @@ export function buildLake(field, o = {}) {
   if (refl) a.onBeforeRender = (r, sc, cam) => {   // before the first lake pass: render the mirrored scene (lake hidden, no recursion)
     skyFrom(sc); if (REFLECTING || !cam.isPerspectiveCamera) return; REFLECTING = true; const va = a.visible, vb = b.visible; a.visible = b.visible = false; refl.updateMatrixWorld(); const hid = []; sc.traverse(o => { if (o.userData.noReflect && o.visible) { o.visible = false; hid.push(o); } });
     try { refl.onBeforeRender(r, sc, cam); add.uniforms.uReflM.value.copy(refl.material.uniforms.textureMatrix.value).multiply(_inv.copy(refl.matrixWorld).invert()); } finally { hid.forEach(o => { o.visible = true; }); refl.visible = false; a.visible = va; b.visible = vb; REFLECTING = false; } };
+  const sec = buildLakeSection(field); if (sec) g.add(sec);
   g.userData.water = b; g.userData.lake = { level: L.level, mats: [mul, add], setTurbid: v => { mul.uniforms.uTurbid.value = add.uniforms.uTurbid.value = v; } };
   return g;
 }
@@ -287,4 +288,43 @@ export function buildRiver(field, o = {}) {
   parts.forEach(m => { m.castShadow = false; m.receiveShadow = false; m.userData.noInk = true; m.userData.noContact = true; m.raycast = () => {}; if (m.isMesh) m.onBeforeRender = (r, sc) => skyFrom(sc); g.add(m); });
   g.userData.river = { setFlow: v => { [river, ...parts].forEach(m => { if (m.material.uniforms && m.material.uniforms.uFlow) m.material.uniforms.uFlow.value = v; }); } };
   return g;
+}
+
+// The lake cut open where it meets the block's edge (WG): the water volume against the glass, from the bed up to the
+// level: clear near the surface and teal in depth, sun shafts drifting through it, suspended motes, a dark sediment
+// line on the bed. One strip per edge span where the bed lies under the level.
+const SEC_FS = /* glsl */`
+${FRONT_GLSL}
+${COMMON}
+uniform float uLevel; varying vec3 vW; varying vec3 vInfo; varying vec2 vUv2;
+void main(){
+  ${CARD}
+  if (wCard > .5) discard;
+  float d = uLevel - vW.y, bed = vInfo.x, h = max(uLevel - bed, .01), u = vInfo.y;
+  float k = clamp(d / h, 0., 1.);
+  vec3 lit = uSkyCol * .55 + uSunCol * max(uSunDir.y, 0.) * .3;
+  vec3 col = mix(vec3(.16, .42, .42), vec3(.02, .1, .12), smoothstep(0., .35, d)) * lit;
+  float shaft = pow(wN(vec2(u * 9. + d * 3. - uAaaTime * .15, 2.)), 4.) * (1. - k) * 1.4; col += vec3(.5, .75, .7) * lit * shaft * .25;
+  float motes = step(.985, aaaHash(floor(vec2(u, d) * 160.), 3.)) * .5; col += lit * motes * .2;
+  float sed = smoothstep(.035, .0, vW.y - bed); col = mix(col, vec3(.05, .045, .035) * lit, sed * .8);
+  float surf = smoothstep(.006, .0, d); col += lit * surf * .6;
+  float a = mix(.62, .9, smoothstep(0., .25, d)); a = max(a, sed * .9);
+  gl_FragColor = vec4(col * a, a);
+}`;
+export function buildLakeSection(field) {
+  const L = field.lake; if (!L) return null;
+  const { NX, NZ, H, minX, minZ, dx, dz } = field, pos = [], info = [], uv = [], idx = [];
+  const edges = [[i => [minX + i * dx, minZ + (NZ - 1) * dz, (NZ - 1) * NX + i], NX, [0, 0, .004]], [i => [minX + i * dx, minZ, i], NX, [0, 0, -.004]], [j => [minX + (NX - 1) * dx, minZ + j * dz, j * NX + NX - 1], NZ, [.004, 0, 0]], [j => [minX, minZ + j * dz, j * NX], NZ, [-.004, 0, 0]]];
+  let u = 0;
+  for (const [at, n, off] of edges) {
+    let prev = -1;
+    for (let i = 0; i < n; i++) { const [x, z, k] = at(i), y = H[k * 4];
+      if (y < L.level - .002 && H[k * 4 + 2] > 0) { const b = pos.length / 3; pos.push(x + off[0], y, z + off[2], x + off[0], L.level, z + off[2]); info.push(y, u, 0, y, u, 0); uv.push(0, 0, 0, 1); if (prev >= 0) idx.push(prev, prev + 1, b, b, prev + 1, b + 1); prev = b; u += .045; }
+      else prev = -1; }
+  }
+  if (!idx.length) return null;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+  const m = waterMaterial(SEC_FS, field, { uLevel: { value: L.level } }, {}, { blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }); m.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(geo, m); mesh.name = 'lake water in section'; mesh.renderOrder = 3; mesh.userData.noInk = true; mesh.userData.noContact = true; mesh.raycast = () => {}; mesh.onBeforeRender = (r, sc) => skyFrom(sc);
+  return mesh;
 }
