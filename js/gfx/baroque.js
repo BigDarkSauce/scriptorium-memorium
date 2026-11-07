@@ -97,7 +97,7 @@ export function bmat(name) {
     // beeswax: light scatters a few mm into the candle, so its shadow side glows (wrap) and it is never chalky
     case 'candle': m = surface(P({ color: 0xf6eedc, roughness: .45, emissive: 0xffcf8a, emissiveIntensity: .12, sheen: .3, sheenColor: new THREE.Color(0xfff0d8), sheenRoughness: .6 }), { sss: [1, .85, .6, .6] }); break;
     case 'flame': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 2.5, 1.1), toneMapped: false }); m.userData.noCast = true; break;
-    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; m.userData.hdr = [4.6, 5.6, 7.2]; break;   // inside the room probe: a window is many times brighter than the walls, and its skylight is cool (≈ 6500–8000 K against the warm sun patches and candles), which keeps the hall's bounce from compounding into orange
+    case 'sky': m = new THREE.MeshBasicMaterial({ map: windowSkyTex(), color: new THREE.Color(1.05, 1.02, .98) }); m.userData.noCast = true; m.userData.hdr = [3.4, 4.1, 5.4]; break;   // inside the room probe: a window is many times brighter than the walls, and its skylight is cool (≈ 6500–8000 K against the warm sun patches and candles), which keeps the hall's bounce from compounding into orange
     case 'shaft': { const t = shaftTex(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; m = new THREE.MeshBasicMaterial({ map: t, color: 0xffd9a6, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: true }); m.userData.noCast = true; break; }
     case 'cove': { const t = rocailleTex(3); m = S({ map: t.map, metalnessMap: t.mr, roughnessMap: t.mr, metalness: 1, roughness: 1, envMapIntensity: 1, emissive: 0xffffff, emissiveMap: t.map, emissiveIntensity: .06 }); surface(m, { macro: [.7, .05, .2] }); break; }
     case 'eggdart': m = surface(S({ map: eggDartTex(), metalness: .85, roughness: .34, envMapIntensity: 1 }), {}); break;
@@ -939,7 +939,8 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     if (!fast) { chandelier(FX, Mx(D.x, yc, D.z), sCh, flames);
     FX.add(gilt, new THREE.CylinderGeometry(.012, .012, h + D.rise - yc - .3 * sCh, 6), Mx(D.x, (h + D.rise + yc + .3 * sCh) / 2, D.z));
     }   // (a fast preview leaves out the chandelier's metalwork, never its light: the light count, and so every shader, stays the same)
-    const L = new THREE.PointLight(0xffc68c, 7 * yc * yc / 4 * (hasWin ? 1 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
+    // by day the candles are a warm accent, not the key (0.75 of their night strength in a hall with windows)
+    const L = new THREE.PointLight(0xffc68c, 7 * yc * yc / 4 * (hasWin ? .75 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
   });
   // ---- the sun through the window wall: shadowed directional light + soft additive shafts ----
   if (hasWin) {
@@ -947,11 +948,12 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const el = THREE.MathUtils.degToRad(33), az = THREE.MathUtils.degToRad(24);
     const dir = n.clone().multiplyScalar(Math.cos(el) * Math.cos(az)).addScaledVector(t, Math.cos(el) * Math.sin(az)).add(V(0, -Math.sin(el), 0)).normalize();
     const R = .5 * Math.hypot(w, d, h) + 1, D0 = 40;
-    const sun = new THREE.DirectionalLight(0xffd2a0, 4.6); sun.position.copy(dir).multiplyScalar(-D0).add(V(0, h * .35, 0)); sun.target.position.set(0, h * .35, 0);
+    // late-morning sun (~4800 K: warm-white, not orange); the candles stay at ~2000 K, the skylight in the probe is cool
+    const sun = new THREE.DirectionalLight(0xffe6c8, 4.6); sun.position.copy(dir).multiplyScalar(-D0).add(V(0, h * .35, 0)); sun.target.position.set(0, h * .35, 0);
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); const c = sun.shadow.camera; c.left = -R; c.right = R; c.top = R; c.bottom = -R; c.near = D0 - R - 2; c.far = D0 + R + 2; c.updateProjectionMatrix();
     sun.shadow.bias = -.0004; sun.shadow.normalBias = .035; sun.shadow.radius = 3;
     lights.add(sun, sun.target); g.userData.sun = sun;
-    const fill = new THREE.DirectionalLight(0xffe6c8, .3); fill.position.copy(n).multiplyScalar(-10).add(V(0, h, 0)); fill.target.position.set(0, 1, 0); lights.add(fill, fill.target);
+    const fill = new THREE.DirectionalLight(0xe6ecff, .3); /* skylight from the windows: cool */ fill.position.copy(n).multiplyScalar(-10).add(V(0, h, 0)); fill.target.position.set(0, 1, 0); lights.add(fill, fill.target);
     // shafts
     const M = WM(W), sp = [], su = [];
     const dl = dir.clone().applyMatrix4(new THREE.Matrix4().makeRotationY(-W.r)); // into wall-local frame
