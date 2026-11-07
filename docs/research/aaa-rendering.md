@@ -399,6 +399,24 @@ Worley above (cauliflower), finer noise below (wisps), shaded bases. Measured at
 triangles including the mirror pass (about 0.45 M of it), 124 programs; the mirror is the largest new cost (≈1–1.5 ms
 on a mid GPU at half resolution).
 
+Third pass, measured against the reference itself (`weatherglass_ref/index.html` served locally, captured in
+Playwright at its `hero`, `low` and `close` presets; ours at matching radius, elevation and FOV). R15 metrics, full
+960 × 600 frame including UI (colour entropy in bits over 16³ bins, edge density = share of pixels with Sobel > 32,
+contrast = luma p95 − p5):
+
+| view | Weatherglass | ours before (pass 2) | ours after (pass 3) |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151, luma p50 54 | 6.36, .046, 89, p50 105 | 5.58, .074, 122, p50 54 |
+| low | 5.71, .135, 141, p50 60 | (lake edge) 6.70, .110, 94, p50 94 | 5.81, .059, 106, p50 71 |
+| close | 6.74, .175, 143, p50 65 | — | 6.10, .083, 111, p50 78 |
+
+What closed the gap: the vitrine with a warm studio backdrop (median luma now matches, the flat blue void is gone),
+less aerial haze inside the case, a punchier landscape grade (contrast 1.16, punch 1), envIntensity .35 for deeper
+shadows, warm back rim, cumulus clouds with crisp lobes. What did not: edge density stays at about half of the
+reference's: its meadow, rocks and cliffs carry far more fine, high-contrast detail (individual stones, cliff ledges,
+dense dark-gapped grass), and our ridge is still one smooth peak rather than craggy massifs.
+Cost at medium: 195 draw calls, 1.57 M triangles (including the lake mirror), 130 programs.
+
 Known gaps against Weatherglass: no contact-hardening
 shadow filter (R11.1) and no HDRI reflections (R11.4), cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
 on the slope speeds the stream and its waterfall.)
