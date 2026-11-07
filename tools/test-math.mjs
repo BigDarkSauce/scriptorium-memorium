@@ -44,13 +44,13 @@ const C = [
   ['BODY 2 OF 2 · surface · z = a*sin(x)*cos(y) + 0.05*(x^2+y^2)', "BODY 2 OF 2 · surface · *z* = *a*'sin'*x*'cos'*y* + 0.05(*x*^{2} + *y*^{2})"],
   ['rate 1.5·e^(−Eb/kT)', "rate 1.5'e^{−*E*_{*b*}/*kT*}"],
   ['1.5*e^(-Eb/kT)', "1.5'e^{−*E*_{*b*}/*kT*}"],
-  ['collision theory (1+Ea/kT)e^(−Ea/kT)', "collision theory (1 + [*E*_{*a*}|*kT*])e^{−*E*_{*a*}/*kT*}"],
+  ['collision theory (1+Ea/kT)e^(−Ea/kT)', "collision theory (1 + *E*_{*a*}/*kT*)e^{−*E*_{*a*}/*kT*}", 'html', 'inside brackets a fraction keeps its solidus'],
   ['collision theory (1+Ea/kT)e^(−Ea/kT)', "collision theory (1 + *E*_{*a*}/*kT*)e^{−*E*_{*a*}/*kT*}", 'label'],
   // --- powers, roots, functions
   ['x^2', '*x*^{2}'], ['x**2 + y**2', '*x*^{2} + *y*^{2}'], ['x^(n+1)', '*x*^{*n* + 1}'], ['x^-1', '*x*^{−1}'], ['e^-x', 'e^{−*x*}'],
-  ['sqrt(x^2+y^2)', '√{*x*^{2} + *y*^{2}}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{[*L*|*g*]}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}', 'label'],
+  ['sqrt(x^2+y^2)', '√{*x*^{2} + *y*^{2}}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}', 'label'],
   ['cbrt(V)', '∛{*V*}'], ['exp(-x^2/2)', 'e^{−*x*^{2}/2}'], ['abs(v)', '|*v*|'], ['abs(x - y)', '|*x* − *y*|'],
-  ['ln(2)/c', "[ln'2|*c*]"], ['log10(I/I0)', 'log₁₀([*I*|*I*_{0}])'], ['sin(theta)', "sin'*θ*"], ['cos(omega*t + phi)', 'cos(*ωt* + *φ*)'],
+  ['ln(2)/c', "[ln'2|*c*]"], ['log10(I/I0)', 'log₁₀(*I*/*I*_{0})'], ['sin(theta)', "sin'*θ*"], ['cos(omega*t + phi)', 'cos(*ωt* + *φ*)'],
   ['sin(2x)', "sin'2*x*"], ['a*sin(x)*cos(y)', "*a*'sin'*x*'cos'*y*"], ['atan2(y, x)', 'atan2(*y*, *x*)'],
   ['pow(r, 3)', '*r*^{3}'], ['hypot(dx, dy)', '√{(d*x*)^{2} + (d*y*)^{2}}'],
   ['F = G*m1*m2/r^2', '*F* = [*Gm*_{1}*m*_{2}|*r*^{2}]'],
@@ -59,7 +59,7 @@ const C = [
   ['(x+1)/(x-1)', '[*x* + 1|*x* − 1]'], ['(x+1)/(x-1)', '(*x* + 1)/(*x* − 1)', 'label'],
   ['2*3 = 6', '2'+"'×'"+'3 = 6'], ['x*2', '*x*·2'], ['3*(a+b)', '3(*a* + *b*)'], ['(a+b)*(c+d)', '(*a* + *b*)(*c* + *d*)'],
   ['dy/dx = -k*y', '[d*y*|d*x*] = −*ky*'], ['theta_0 = 0.3', '*θ*_{0} = 0.3'], ['Delta T = T_max - T_min', 'Δ*T* = *T*_{max} − *T*_{min}'],
-  ['omega0 = sqrt(k/m)', '*ω*_{0} = √{[*k*|*m*]}'], ['n! / (k!(n-k)!)', '[*n*!|*k*!(*n* − *k*)!]'],
+  ['omega0 = sqrt(k/m)', '*ω*_{0} = √{*k*/*m*}'], ['v = d/t', '*v* = [*d*|*t*]'], ['n! / (k!(n-k)!)', '[*n*!|*k*!(*n* − *k*)!]'],
   // --- relations and operators
   ['x <= 2', '*x* ≤ 2'], ['y >= 0', '*y* ≥ 0'], ['a != b', '*a* ≠ *b*'], ['x -> 0', '*x* → 0'], ['v ~= 3.2', '*v* ≈ 3.2'], ['x = 2 +- 0.1', '*x* = 2 ± 0.1'],
   ['A + B -> C', 'A + B → C'], ['C → A + B', 'C → A + B'], ['2H2 + O2 -> 2H2O', '2H_{2} + O_{2} → 2H_{2}O'],
@@ -89,7 +89,7 @@ const C = [
   // --- Greek names only inside expressions
   ['alpha = 0.5', '*α* = 0.5'], ['the alpha particle', 'the alpha particle'], ['theta1 - theta2', '*θ*_{1} − *θ*_{2}'],
   ['z = f(x,y)', '*z* = *f*(*x*, *y*)'], ['Q = [C]/([A][B])', '*Q* = [[*C*]|[*A*][*B*]]'], ['2 ln 2 / c = 4.62 s', "[2'ln'2|*c*] = 4.62~s"],
-  ['ln(|Δθ₂|/ε)/t', "[ln([|Δ*θ*_{2}||*ε*])|*t*]"],
+  ['ln(|Δθ₂|/ε)/t', "[ln(|Δ*θ*_{2}|/*ε*)|*t*]"],
 ];
 
 let fail = 0, n = 0;

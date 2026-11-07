@@ -550,8 +550,8 @@ function lay(x, C) {   // C: {stack: bool, lvl: 0 (base) / 1 (script)}
     case 'rel': return H(x.items.map((y, i) => [i ? T_(' ' + x.ops[i - 1] + ' ', 'op') : null, lay(y, C)]));
     case 'list': return H(x.items.map((y, i) => [i ? T_(', ') : null, lay(y, C)]));
     case 'seq': return H(x.items.map(y => lay(y, C)));
-    case 'group': { const inner = lay(x.a, C); return H(T_(x.o), inner, T_(x.c)); }
-    case 'sqrt': return { k: 'sqrt', a: lay(ungroup(x.a), C), idx: x.idx };
+    case 'group': { const inner = lay(x.a, { ...C, stack: false }); return H(T_(x.o), inner, T_(x.c)); }   // inside brackets a fraction keeps the solidus (a small stacked one would crowd the line)
+    case 'sqrt': return { k: 'sqrt', a: lay(ungroup(x.a), { ...C, stack: false }), idx: x.idx };
     case 'pow': {
       let base = x.b.t === 'id' && x.b.v === 'e' && !x.b.sub ? { t: 'const', v: 'e' } : x.b; const bb = needParens(base, 'pow') ? paren(lay(base, C)) : lay(base, C);
       const s = lay(ungroup(x.e), { ...C, lvl: 1, stack: false });
@@ -604,10 +604,11 @@ const STY = 'mtyp-css';
 function ensureCSS() {
   if (typeof document === 'undefined' || document.getElementById(STY)) return;
   const st = document.createElement('style'); st.id = STY;
-  st.textContent = `.mx{white-space:nowrap}.mx.mw{white-space:normal}.mx i{font-style:italic}.mx sup,.mx sub{font-size:.72em;line-height:0}.mx sup{vertical-align:.42em}.mx sub{vertical-align:-.22em}
-.mx sup sup{vertical-align:.32em}.mx sup sub,.mx sub sub{vertical-align:-.18em}.m-ss{display:inline-flex;flex-direction:column;vertical-align:-.3em;font-size:.72em;line-height:1;margin-left:.04em}
-.m-sqrt{white-space:nowrap;display:inline-flex;align-items:flex-start}.m-sqrt>.m-idx{font-size:.6em;margin-right:-.45em;margin-top:-.1em}.m-rad{border-top:.07em solid currentColor;padding:.02em .1em 0 .05em;margin-top:.12em;display:inline-flex;align-items:baseline}
-.m-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.86em;line-height:1.05;margin:0 .1em}.m-frac>span:first-child{border-bottom:.07em solid currentColor;padding:0 .15em .04em}.m-frac>span:last-child{padding:.04em .15em 0}`;
+  st.textContent = `.mx{white-space:nowrap}.mx.mw{white-space:normal}.mx i{font-style:italic}
+.mx sup,.mx sub{font-size:.7em;line-height:0;position:relative;vertical-align:baseline}.mx sup{top:-.6em}.mx sub{top:.3em}.mx sup sup{top:-.5em}.mx sup sub,.mx sub sub{top:.25em}
+.m-ss{display:inline-block;vertical-align:-.25em;font-size:.7em;line-height:.95;margin-left:.03em;text-align:left}.m-ss>span{display:block}.m-ss sub,.m-ss sup{font-size:1em;top:0}
+.mx .m-sqrt{white-space:nowrap;display:inline-flex;align-items:baseline}.m-sqrt>.m-idx{font-size:.6em;margin-right:-.45em;margin-top:-.1em}.mx .m-rad{border-top:.07em solid currentColor;padding:.04em .1em 0 .05em;display:inline-block;line-height:1.1}
+.mx .m-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.86em;line-height:1.25;margin:0 .12em}.mx .m-frac>span:first-child{border-bottom:.07em solid currentColor;padding:0 .15em .06em}.mx .m-frac>span:last-child{padding:.06em .15em 0}`;
   document.head.append(st);
 }
 function toHTML(b) { return toHTML0(b).replace(/<\/i><i>/g, ''); }
