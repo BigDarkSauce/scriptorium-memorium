@@ -373,7 +373,7 @@ scene-spec shape kinds (`SCENE_SPEC.md`, "Landscape kit"); `WATER_CYCLE` in `js/
 | `js/dio/trees.js` | species table (tree, oak, birch, cherry; pine, bush), crown-ellipsoid normals, vertex wind (lean ∝ h², per-tree phase, leaf flutter) on foliage and bark (`TREE_WIND` define) | `oak`, `birch`, `cherry`, `tree{species}`, `forest` |
 | `js/gfx/aaa.js` | scanned CC0 micro layer (Ground103 on meadow/mud/sand, Moss002 on up-facing crag, Bark001 on bark), lazily loaded from `assets/textures`, weight 0 until loaded (no recompile, graceful fallback); two hashed offsets per noise cell against tiling; off at low quality | (automatic) |
 | `js/gfx/materialize.js` | `ShaderMaterial`s take the scene's front uniforms through `userData.onFront(U)`; cloud-shadow hook on directional light 0 of every patched material in outdoor scenes (`AAA_CLOUDSH` define, own program key) | — |
-| `js/gfx/renderer.js` | grade pass `uPunch` (AgX "Punchy" approximation: power 1 + .3k, saturation 1 + .25k); `look.punch`: landscape .9, ocean .8, studio/desk .45, hub/rooms .2, default .3 | — |
+| `js/gfx/renderer.js` | grade pass `uPunch` (AgX "Punchy" approximation: power 1 + .3k, saturation 1 + .25k); `look.punch`: landscape .9, ocean .8, studio/desk .45, hub/rooms .15, default .3 | — |
 | `js/dio/environments.js` | WG sun colour/intensity ramp from elevation; outdoor exposure raised to match the punch look | — |
 
 Measured with `gfx.stats()` (one full frame, shadow passes included; SwiftShader, so no GPU times) on the rebuilt valley:
