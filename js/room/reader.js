@@ -304,7 +304,7 @@ export class Reader {
     const label = !all.length ? 'No sources cited yet.' : `${all.length} source${all.length > 1 ? 's' : ''} cited · ${ok} verified` + (bad ? ` · ${bad} not found` : '') + (todo ? ` · ${todo} unchecked` : '');
     const kids = [el('span', { class: 'ev-ic', text: '❦' }), el('span', { text: label })];
     if (evidenceAvailable() && todo) kids.push(el('button', { class: 'linkbtn', text: 'Verify against OpenAlex', onclick: () => this.verify(st) }));
-    if (!evidenceAvailable()) kids.push(el('span', { class: 'dim small', text: ' Connect OpenAlex, Consensus or PubMed in claude.ai to ground and verify sources.' }));
+    if (!evidenceAvailable()) kids.push(el('span', { class: 'dim small', text: ' Connect OpenAlex, Consensus, PubMed, SciSpace, Hugging Face or ClinicalTrials.gov in claude.ai to ground and verify sources.' }));
     kids.push(st); this.evBar = el('div', { class: 'evidence-bar' }, kids); return this.evBar;
   }
   async verify(st) {
