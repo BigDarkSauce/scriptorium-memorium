@@ -9,7 +9,7 @@
 //    objects a sentence names (cause → effect)
 //  - the viewer stays in charge: grabbing the camera pauses the director's camera for a few seconds
 import * as THREE from 'three';
-import { el, esc, clamp, mathHTML } from '../util.js';
+import { el, esc, clamp, mathHTML, mathText } from '../util.js';
 const UP = new THREE.Vector3(0, 1, 0), rad = THREE.MathUtils.degToRad, smoother = x => x * x * x * (x * (x * 6 - 15) + 10);
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -473,7 +473,7 @@ export class Director {
     // process arrows supplied by the model for this event (DIO.<type>.flows): what pushes what, where
     b.flowEls = (b.flows || []).slice(0, 4).map(f => {
       const path = mk(f.vec ? 'guide vec' : 'guide flow', 'dir-ah-c'), t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'guide-label');
-      const full = String(f.label || ''), short = f.short || shortLabel(full), tip = document.createElementNS(NS, 'title'), vis = document.createElementNS(NS, 'tspan');
+      const full = mathText(String(f.label || '')), short = mathText(f.short || shortLabel(String(f.label || ''))),   /* typeset (plain Unicode: SVG tspan, compared by text) */ tip = document.createElementNS(NS, 'title'), vis = document.createElementNS(NS, 'tspan');
       tip.textContent = full; vis.textContent = full; t.append(tip, vis); this.svg.append(t); b.guides.push(t);
       // widths measured once (one layout read per beat): the placement then works on numbers
       const wF = t.getComputedTextLength ? t.getComputedTextLength() : full.length * 7; vis.textContent = short; const wS = short === full ? wF : (t.getComputedTextLength ? t.getComputedTextLength() : short.length * 7); vis.textContent = full;
