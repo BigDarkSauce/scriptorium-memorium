@@ -190,6 +190,8 @@ function tokenize(s) {
     out.push({ k: kk, v, ws, i: m.index }); ws = '';
   }
   out.end = ws;
+  // digit groups: 101 325 Pa, 13 595 kg/m³ are one number each (never 13 × 595)
+  for (let i = 0; i < out.length - 1; i++) { const t = out[i], n = out[i + 1]; if (t.k === 'num' && n.k === 'num' && /^\d{1,3}(?:[\u2009\u202F\u00A0 ]\d{3})*$/.test(t.v) && /^\d{3}$/.test(n.v) && /^[ \u2009\u202F\u00A0]$/.test(n.ws) && !(out[i - 1] && out[i - 1].k === 'op' && /[*×·\/]/.test(out[i - 1].v))) { t.v += '\u2009' + n.v; out.splice(i + 1, 1); i--; } }
   // merge x_i, P_in, T_{max}, x_(i+1) into one word; "Delta T" into ΔT
   for (let i = 1; i < out.length - 1; i++) {
     const t = out[i], b = out[i - 1], n = out[i + 1];
@@ -566,6 +568,7 @@ function lay(x, C) {   // C: {stack: bool, lvl: 0 (base) / 1 (script)}
       return H(name, lay(x.a, C));
     }
     case 'frac': {
+      if (x.op === '÷') return H(lay(x.n, C), T_(' ÷ ', 'op'), lay(x.d, C));   // an explicit ÷ is the author's arithmetic: kept
       if (x.n && x.n.t === 'num' && x.d && x.d.t === 'num') { const v = { '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾', '1/8': '⅛' }[x.n.v + '/' + x.d.v]; if (v) return T_(v); }
       if (C.stack && !x.unit && !x.inline && C.lvl === 0) return { k: 'frac', n: lay(ungroup(x.n), C), d: lay(ungroup(x.d), C) };
       const n = needParens(x.n, 'num') ? paren(lay(x.n, C)) : lay(x.n, C), d = needParens(x.d, 'den') ? paren(lay(x.d, C)) : lay(x.d, C);
@@ -638,7 +641,7 @@ function toRuns(b, st = { sz: 1, sh: 0, ov: 0 }, out = []) {
 
 // ---- LaTeX → plain notation (for SVG / canvas, where MathJax does not run)
 const TEXSYM = { cdot: '·', times: '×', pm: '±', mp: '∓', le: '≤', leq: '≤', ge: '≥', geq: '≥', neq: '≠', ne: '≠', approx: '≈', propto: '∝', to: '→', rightarrow: '→', Rightarrow: '⇒', rightleftharpoons: '⇌', infty: '∞', partial: '∂', nabla: '∇', degree: '°', ll: '≪', gg: '≫', sim: '∼', equiv: '≡', hbar: 'ℏ', ell: 'ℓ' };
-const texCmds = t => t.replace(/\\([A-Za-z]+)(?![A-Za-z])/g, (m, w, i, all) => { const r = GREEK[w] || TEXSYM[w]; return r ? r + (/^[A-Za-z0-9\\]/.test(all.slice(i + m.length)) && GREEK[w] ? ' ' : '') : m; });
+const texCmds = t => t.replace(/\\([A-Za-z]+)(?![A-Za-z])/g, (m, w, i, all) => { if (FN.has(w)) return (/[A-Za-z0-9_)]$/.test(all.slice(0, i)) ? ' ' : '') + w + ' '; const r = GREEK[w] || TEXSYM[w]; return r ? r + (/^[A-Za-z0-9\\]/.test(all.slice(i + m.length)) && GREEK[w] ? ' ' : '') : m; });
 function texPlain(s) {
   let t = texCmds(String(s));
   const w = x => /^[\w.]+$/.test(x.trim()) ? x.trim() : '(' + x + ')';
