@@ -173,7 +173,7 @@ function glassCase(scene, w, h) {
 const LOOKS = {
   studio: { punch: .45, contrast: 1.12, sat: 1.04, vignette: .36, grain: .028, warm: .018, exposure: 1.0, bloomThreshold: 2.2, bloom: .22, tilt: 1 },
   lab: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.02, vignette: .32, grain: .025, warm: .0, exposure: 1.0 },
-  landscape: { punch: .9, bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.04, sat: 1.04, vignette: .28, grain: .022, warm: .01 },
+  landscape: { tiltRadius: 4, punch: 1, bloomThreshold: 9, bloom: .2, tilt: .8, contrast: 1.16, sat: 1.02, vignette: .28, grain: .022, warm: .01 },
   cosmos: { punch: .4, bloomThreshold: 1.6, bloom: .26, contrast: 1.1, sat: 1.05, vignette: .4, grain: .03, warm: 0, exposure: 1.0 },
   micro: { punch: .4, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.08, sat: 1.06, vignette: .38, grain: .03, warm: 0, exposure: 1.0 },
   abstract: { punch: .35, bloomThreshold: 1.6, bloom: .26, tilt: .8, contrast: 1.1, sat: 1.0, vignette: .34, grain: .025, warm: 0, exposure: 1.0 },
@@ -277,11 +277,11 @@ function buildEnvironment(R, scene, gfx, env) {
     case 'landscape': {
       const sky = new Sky(); sky.scale.setScalar(450); sky.userData.noInk = true; scene.add(sky); R.sky = sky; R.bgObjects.push(sky);
       const u = sky.material.uniforms; u.turbidity.value = 3; u.rayleigh.value = 2.4; u.mieCoefficient.value = .005; u.mieDirectionalG.value = .8;
-      R.sun = sunRig(scene, { intensity: 3.6 }); scene.fog = R.fog = new THREE.Fog(0xc9d6e2, 45, 220); scene.environmentIntensity = .55;
+      R.sun = sunRig(scene, { intensity: 3.6 }); scene.fog = R.fog = new THREE.Fog(0xc9d6e2, 45, 220); scene.environmentIntensity = env.envIntensity ?? .55;
       hemi.color.set(0xbcd4f0); hemi.groundColor.set(0x4a4030); hemi.intensity = .45;
       cascadeRig(scene, R, nC); atmos({ density: .012, height: 2.2, base: -1, g: .76, rayleigh: .3, maxDist: 160, skyFog: .22, god: .45 });
       const ground = new THREE.Color(.1, .12, .06);   // meadow albedo (linear)
-      R.rim = dirLight(scene, 0xdde8ff, .5, [-6, 5, -9]);
+      R.rim = dirLight(scene, 0xffd29a, .8, [-6, 5, -9]);   // warm back rim: a golden edge on ridges, trees and clouds
       const sunV = new THREE.Vector3();
       R.update = (t, p = {}) => {
         const hour = p.hour ?? p.time ?? env.time ?? 10, elev = Math.sin((hour - 6) / 12 * Math.PI) * 62, az = (hour - 12) / 12 * 140 + (env.azimuth ?? 0);
@@ -295,7 +295,7 @@ function buildEnvironment(R, scene, gfx, env) {
         _c1.setRGB(1, .43, .2).lerp(_c2.setRGB(1, .68, .38), sm(.0, .14, y)); R.sun.color.copy(_c1).lerp(_c2.setRGB(1, .94, .86), sm(.2, .45, y)); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
         gfx.renderer.toneMappingExposure = (.62 + day * .4) * (env.exposure ?? 1);   // a little brighter than AgX base: the grade's punch look restores the contrast R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
         R.skyTint = _sky; placeCascades(R); skyBounce(R, ground, .15, storm);
-        if (R.atmos) { R.atmos.density = .012 + storm * .03; R.atmos.god = .45 * (1 - storm * .8); }
+        if (R.atmos) { R.atmos.density = (.012 + storm * .03) * (R.atmos.vitrineK ?? 1); if (R.atmos.vitrineK == null) R.atmos.god = .45 * (1 - storm * .8); }
       };
       if (showBase) R.base = plinth(scene, { felt: env.felt || '#3e4c2c', turf: env.turf !== false });
       break;

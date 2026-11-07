@@ -56,11 +56,12 @@ const VEG_BODY = {
   vec3 n = normalize(cross(side, T)); n *= sign(dot(n, cameraPosition - vegPos) + 1e-5);
   vec3 objectNormal = normalize(mix(n, vec3(0, 1, 0), .45));
   float p1 = aaaSimplex2(aRoot.xz * .9) * .5 + .5, p2 = aaaSimplex2(aRoot.xz * 3.1 + 7.) * .5 + .5;
-  vec3 c = mix(vec3(.055, .105, .028), vec3(.12, .16, .045), p1) * mix(.8, 1.15, p2);
+  vec3 c = mix(vec3(.07, .13, .03), vec3(.17, .2, .05), p1) * mix(.8, 1.15, p2);
   c = mix(c, vec3(.05, .13, .04), aTint.y * .7);
   c = mix(c, vec3(.2, .17, .08), aTint.x * .55);
   c = mix(c, vec3(.32, .27, .13), step(.94, fract(aRoot.w * 17.9)));
-  float t = position.y; vec3 tipC = c * 1.3 + vec3(.02, .025, .0);
+  c *= .65 + .7 * fract(aRoot.w * 13.7);   // per-blade brightness: the sward speckles like fur at overview distance
+  float t = position.y; vec3 tipC = c * 1.45 + vec3(.04, .04, .0);
   tipC = mix(tipC, vec3(.34, .29, .14), step(.62, fract(aRoot.w * 7.31)) * smoothstep(.55, 1., t) * .75);   // dry, straw-coloured tips (WG)
   vGCol = mix(c * .45, tipC, pow(t, .6)) + vec3(.05, .06, .03) * gust * t; vGT = t;`,
   flower: /* glsl */`
@@ -174,7 +175,7 @@ export function grassField(field, o = {}) {
   const H = o.height || 1, lv = field.lake ? field.lake.level : -9;
   const list = pts.map(p => { const r = rng(), damp = Math.max(0, 1 - (field.h(p.x, p.z) - lv) / .25); return { x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r, h: (.034 + .06 * r * r + .025 * damp) * H * (.55 + .45 * p.s), w: .0045 + rng() * .0045, yaw: rng() * 6.283, droop: .15 + rng() * .35, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5, damp }; });
   const g = bladeGeo(Q.seg); instAttrs(g, list);
-  const m = vegMesh(g, vegMaterial('grass', { lod: o.lod || [5, 15] }), field, 'grass');
+  const m = vegMesh(g, vegMaterial('grass', { lod: o.lod || [12, 30] }), field, 'grass');
   m.userData.stats = { blades: list.length, triangles: list.length * (2 * Q.seg - 1) };
   if (o.cover !== false) { const t = tuftField(field, o); const grp = new THREE.Group(); grp.name = 'meadow'; grp.add(m, t); grp.userData.stats = { blades: m.userData.stats, tufts: t.userData.stats }; return grp; }
   return m;

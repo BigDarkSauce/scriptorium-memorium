@@ -11,12 +11,12 @@ import { envScene } from './proc.js';
 import { AAA, initAAA, detectQuality, setQuality as setAAAQuality, prebake, rebakeAll, AtmospherePass, aaaFrame, QUALITY } from './aaa.js';
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uPunch: { value: .3 }, uRes: { value: new THREE.Vector2(1280, 800) } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uRes: { value: new THREE.Vector2(1280, 800) } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uContrast,uSat,uLift,uTilt,uPunch;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uContrast,uSat,uLift,uTilt,uTiltR,uPunch;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
-  if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*2.2;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
+  if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*uTiltR*uRes.y/800.;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
   if(uPunch>0.){vec3 pc=pow(max(c.rgb,0.),vec3(1.+.3*uPunch))*(1.+.1*uPunch);float pl=dot(pc,vec3(.2126,.7152,.0722));c.rgb=max(pl+(pc-pl)*(1.+.25*uPunch),0.);}
   float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,uSat);
   c.rgb=clamp(c.rgb+uLift,0.,1.);c.rgb=mix(c.rgb,c.rgb*c.rgb*(3.-2.*c.rgb),clamp((uContrast-1.)*2.5,0.,1.));
@@ -88,7 +88,7 @@ export class Gfx {
   // Per-scene look: scenes may set scene.userData.look = {contrast, sat, vignette, grain, warm, exposure}; others get the house look.
   applyLook(L = {}) {
     const u = this.grade.uniforms; u.uContrast.value = L.contrast ?? 1; u.uSat.value = L.sat ?? 1; u.uLift.value = L.lift ?? 0;
-    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
+    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2;   // miniature look: blur radius (px at 800 px height) at the frame's top and bottom u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
     if (L.exposure != null) this.renderer.toneMappingExposure = L.exposure;
     if (L.bloom != null) this.bloom.strength = L.bloom;
     this.bloom.threshold = L.bloomThreshold ?? .86; this.bloom.radius = L.bloomRadius ?? .55;

@@ -5,12 +5,12 @@ const trees = (pts, kind = 'tree') => pts.map(([x, z, h], i) => ({ id: kind + i,
 
 export const WATER_CYCLE = {
   type: 'scene', title: 'The water cycle in a glass valley', technique: 'topdown',
-  environment: { preset: 'landscape', time: 11, azimuth: -45, base: false },
+  environment: { preset: 'landscape', time: 11, azimuth: -45, base: false, exposure: 1.15, envIntensity: .35 },
   // A specimen block of land (js/gfx/terrain.js): one terrain field with the ridge, two side ridges, a terrace whose
   // edge is a waterfall, a stream from the saddle into the lake, a cottage yard and a path; cut faces show the soil
   // section. Grass, flowers, reeds, rocks and trees are scattered by the field's ecology (realism-playbook §3).
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3c5728', high: '#646d3f', block: true, bottom: -.85, lift: .1,
+    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3c5728', high: '#646d3f', rock: '#3f3c38', rockHigh: '#6a655d', block: true, bottom: -.85, lift: .1,
       backRise: [-2.4, -5, .35],
       peaks: [{ x: .2, z: -2.9, r: 1.9, h: 3.5, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
         { x: -4.9, z: 1.4, r: 1.5, h: .5, rough: .15, seed: 9 }, { x: 5.0, z: -3.9, r: 1.3, h: .8, seed: 4 }],
@@ -22,7 +22,7 @@ export const WATER_CYCLE = {
     { id: 'meadow', name: 'Meadow', role: 'decor', shape: { kind: 'grassField' }, position: [0, 0, 0] },
     { id: 'flowers', name: 'Wild flowers', role: 'decor', shape: { kind: 'flowers' }, position: [0, 0, 0] },
     { id: 'reeds', name: 'Reeds', role: 'decor', shape: { kind: 'reeds' }, position: [0, 0, 0] },
-    { id: 'rocks', name: 'Boulders', role: 'decor', shape: { kind: 'rockScatter', count: 80, r: [.04, .17] }, position: [0, 0, 0] },
+    { id: 'rocks', name: 'Boulders', role: 'decor', shape: { kind: 'rockScatter', count: 150, r: [.04, .22] }, position: [0, 0, 0] },
     { id: 'stream', name: 'Stream and waterfall', role: 'decor', shape: { kind: 'river', flow: .35 }, position: [0, 0, 0] },
     { id: 'lake', name: 'Lake', label: 'Lake · source of vapour', role: 'actor', describe: 'Sunshine warms the water and the air above it; molecules escape as vapour.', shape: { kind: 'lake' }, position: [0, 0, 0] },
     { id: 'vapour', name: 'Water vapour', label: 'Water vapour', role: 'actor', describe: 'An invisible gas in reality; drawn here as faint wisps rising from the lake.', shape: { kind: 'particles', type: 'vapour', count: 140, area: [2.2, 1.7, 2.6], size: .16 }, position: [.9, .05, 1.7] },
@@ -38,6 +38,9 @@ export const WATER_CYCLE = {
     { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated; the light and the shadows come from it.', shape: { kind: 'star', r: .34, color: '#ffe2b0', intensity: 2 }, position: [-4.2, 5, 3] },
     { id: 'house', name: 'Log cabin', role: 'decor', shape: { kind: 'cabin', w: .95, d: .72 }, position: [3.5, .1, 3.7], rotation: [0, -123, 0] },
     { id: 'jetty', name: 'Jetty', role: 'decor', shape: { kind: 'jetty', from: [2.12, 2.24], to: [1.38, 1.9], width: .17 }, position: [0, 0, 0] },
+    { id: 'vitrine', name: 'Glass case', role: 'decor', shape: { kind: 'vitrine', min: [-6.72, -.85, -5.22], max: [6.72, 6.7, 5.22] }, position: [0, 0, 0] },
+    { id: 'pines2', name: 'Pines', role: 'decor', shape: { kind: 'forest', species: 'pine', count: 26, region: [-6.2, -4.8, 6.2, -1.2], h: [.7, 1.15], spacing: .45 }, position: [0, 0, 0] },
+    { id: 'oaks2', name: 'Oaks', role: 'decor', shape: { kind: 'forest', species: 'oak', count: 10, region: [-6.2, -1, 6.2, 4.7], h: [.8, 1.2], spacing: .9 }, position: [0, 0, 0] },
     { id: 'hills', name: 'Distant hills', role: 'decor', shape: { kind: 'hills', r: 70, layers: 3, height: 9, y: -6 }, position: [0, 0, 0] },
     { id: 'pines', name: 'Pines', role: 'decor', shape: { kind: 'forest', species: 'pine', items: [[3.6, -2.3, 1.1], [-3.0, -1.3, 1.0], [-3.7, -2.2, 1.2], [4.2, -1.6, 1.0], [-1.9, -1.45, .9], [1.9, -1.55, .95], [-4.4, -3.6, 1.1], [4.6, -3.0, 1.15], [-2.9, -4.4, 1.0], [3.4, -4.3, 1.0], [-5.6, -2.6, 1.05], [5.7, -2.2, .95]] }, position: [0, 0, 0] },
     { id: 'oaks', name: 'Oaks', role: 'decor', shape: { kind: 'forest', species: 'oak', items: [[4.9, 2.0, 1.2], [-2.5, 1.3, 1.1], [-3.9, 2.9, 1.3], [5.4, -.5, 1.0], [-1.4, 3.7, 1.0], [-5.5, -.3, 1.15]] }, position: [0, 0, 0] },
@@ -134,14 +137,14 @@ function step(h){
 }
 for(let i=0;i<60*120;i++) step(1/120); quiet=false;   // start from the steady state of the default sky
 api.onStep(h=>step(h));
-if(api.scene.fog){ api.scene.fog.near=20; api.scene.fog.far=60; }   // aerial perspective: a light haze over the far side of the block
+if(api.scene.fog){ api.scene.fog.near=30; api.scene.fog.far=90; }   // aerial perspective: a light haze over the far side of the block
 // ---- sky: the landscape's sky dome shows only grey haze below the horizon, so it gives way to a painted screen-space gradient (repainted with the hour) ----
 const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity);   // hidden every frame (the materialiser restores the background objects when it finishes)
 const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
 const hz=new T.Color(), zn=new T.Color(), cc=new T.Color();
 const hz2=new T.Color(); function paintSky(day){ const warm=1-Math.min(1,day*1.7), k=.45+.55*Math.min(1,day*1.5+.2); hz.setRGB(.8+.15*warm,.8-.02*warm,.78-.25*warm).multiplyScalar(k); hz2.setRGB(.6+.2*warm,.68,.78-.15*warm).multiplyScalar(k); zn.setRGB(.2+.12*warm,.36+.04*warm,.66-.14*warm).multiplyScalar(.38+.62*Math.min(1,day*1.5+.2));
   for(let i=0;i<GN;i++){ const u=i/(GN-1); if(u<.22) cc.copy(hz).lerp(hz2,u/.22); else cc.copy(hz2).lerp(zn,Math.pow((u-.22)/.78,.8)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }   // hazy pale horizon band, then a deepening blue
-api.scene.background=skyTex;
+api.scene.background=skyTex; api.scene.userData.skyBackground=skyTex;   // the vitrine shows it from inside the case
 let lastHr=-1;
 // ---- visuals ----
 const cms=meshes.map(m=>{const a=[];m&&m.traverse(o=>{if(o.isMesh&&o.userData.cloud)a.push(o);});return a;});   // volumetric clouds (js/gfx/clouds.js): grey and fade are shader uniforms
@@ -187,7 +190,7 @@ api.readout('cloud water over the ridge',()=>{const c=onRidge();return c?f1(c.qc
 api.readout('rain on the slope',()=>f1(rainSlope)+' mm'); api.readout('rain on the lake',()=>f1(rainLake)+' mm');
 api.readout('föhn warming in the lee',()=>{const c=onRidge();return c&&c.z<zCrest?f1(2.49*Math.max(0,c.qt0-c.qt))+' K (2.5 K per g/kg rained out)':'—';});
 api.plot('cloud water (g/kg)',()=>{const c=C[0]||C[1];return c?c.qc:0;});
-api.camera({target:[.3,.8,-.1],r:15,ph:1.06,th:1.2,fov:32});   // a longer lens: a miniature world, not a toy table (realism-playbook R12)`,
+api.camera({target:[.2,1.2,-.1],r:16.5,ph:1.1,th:1.2,fov:32});   // a longer lens: a miniature world, not a toy table (realism-playbook R12)`,
   lessons: [
     { title: 'Heat the lake', question: 'What lifts water out of the lake?', text: 'Turn the sunshine up. Watch how the vapour rises faster from the lake, and watch three readouts: the lake-air temperature, the saturation vapour pressure e_s, and the evaporation rate.', set: { sun: 1.4 }, focus: 'lake', shot: 'push', isolate: ['sun', 'lake', 'vapour'], until: 'event:has warmed to', run: 30, explain: 'Stronger sunshine warms the lake air from 22.2 to 28.7 °C. The saturation vapour pressure e_s rises from 26.6 to 39.2 hPa, about 6 % per kelvin: the Clausius–Clapeyron rate (Koutsoyiannis 2012). Evaporation is driven by the gap between e_s and the vapour already in the air, so it more than doubles, from 1.4 to 3.4 mm a day. Saturation is a property of water at a given temperature. It is not a capacity of the air.', opens: 'Where does the vapour go?' },
     { title: 'Ride a parcel of air', question: 'Where does the vapour go?', text: 'You are now inside one parcel of moist lake air as it rises. Look up: the cloud base is above you. Wait until the parcel reaches its dew point.', focus: 'parcel', shot: 'pov', pov: 'Air parcel', until: 'event:parcel reaches its dew point', run: 40, explain: 'Rising air expands and cools by 9.8 K per kilometre while it is unsaturated. Its dew point falls only about 1.8 K per kilometre, so the gap between them closes by about 8 K per kilometre. The parcel therefore saturates about 125 m higher for every kelvin of gap at the ground (Espy). Here the lake air is at 28.9 °C with a dew point of 25.4 °C, a gap of 3.5 K, so condensation starts near 436 m, at 24.7 °C. There the vapour condenses on tiny aerosol particles into cloud droplets.', opens: 'Why does the rain fall on the ridge and not on the lake?' },

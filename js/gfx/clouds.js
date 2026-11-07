@@ -64,7 +64,7 @@ float shapeSD(vec3 p){ float d = 1e3; for (int i = 0; i < MAX_PUFFS; i++){ if (i
 float remap01(float v, float lo, float hi){ return clamp((v - lo)/max(hi - lo, 1e-4), 0., 1.); }
 float heightFrac(float y){ return clamp((y - uBase)/max(uTop - uBase, .2), 0., 1.); }
 float baseDensity(vec3 p, float sd, out float cov, out vec4 n1){
-  float edge = uSize*.22; cov = smoothstep(edge, -edge*1.6, sd);
+  float edge = uSize*.16; cov = smoothstep(edge, -edge*1.4, sd);
   vec3 q = p/uSize + uSeed; n1 = texture(uNoise, q*.34 + vec3(0., -uAaaTime*.012, 0.));
   float hf = heightFrac(p.y); float d = remap01(cov, (1. - n1.r)*mix(.66, .82, hf), 1.);
   float soft = uSize*.12; float baseY = uBase + (n1.a - .5)*soft*1.2; d *= smoothstep(baseY - soft*.4, baseY + soft, p.y);
@@ -74,7 +74,7 @@ float fullDensity(vec3 p, float sd, out float cov){ vec4 n1; float d = baseDensi
   float billowy = smoothstep(.06, .4, hf); float detail = mix(mix(n2.b, n3.a, .5), n2.g * .8 + n3.g * .2, billowy);   // wisps below, cauliflower (inverted Worley) above
   d = remap01(d, mix(1. - detail, detail, billowy)*mix(.68, .62, billowy), 1.);
   return pow(d, mix(1.05, .6, hf)); }
-float lightDensity(vec3 p){ float sd = shapeSD(p); if (sd > uSize*.22) return 0.; float cov; vec4 n1; return baseDensity(p, sd, cov, n1); }
+float lightDensity(vec3 p){ float sd = shapeSD(p); if (sd > uSize*.16) return 0.; float cov; vec4 n1; return baseDensity(p, sd, cov, n1); }
 float hg(float c, float g){ float g2 = g*g; return (1. - g2)/pow(1. + g2 - 2.*g*c, 1.5); }
 float ign(vec2 p){ return fract(52.9829189*fract(dot(p, vec2(.06711056, .00583715)))); }
 void main(){
@@ -84,7 +84,7 @@ void main(){
   vec3 inv = 1./mix(rd, vec3(1e-6), vec3(lessThan(abs(rd), vec3(1e-6)))); vec3 t0 = (uBoxMin - ro)*inv, t1 = (uBoxMax - ro)*inv, tmn = min(t0, t1), tmx = max(t0, t1);
   float tN = max(max(max(tmn.x, tmn.y), tmn.z), 0.), tF = min(min(tmx.x, tmx.y), tmx.z); if (tF <= tN) discard;
   vec3 L = normalize(mat3(uInv)*uSunDir);
-  float sigma = 26./max(.6, pow(uSize, .35)), edge = uSize*.22, chord = tF - tN;
+  float sigma = 40./max(.6, pow(uSize, .35)), edge = uSize*.16, chord = tF - tN;
   float dsC = max(chord/(uSteps*.8), .02), dsF = max(min(dsC*.38, 1.2/sigma), .012), ds = dsC, t = tN + ds*ign(gl_FragCoord.xy);
   bool fine = false; int thin = 0, tick = 0; float od = 0.;
   float cosT = dot(rd, L); float ph0 = mix(hg(cosT, -.3), hg(cosT, .8), .5), ph1 = mix(hg(cosT, -.15), hg(cosT, .4), .5), ph2 = mix(hg(cosT, -.07), hg(cosT, .2), .5); float backlit = smoothstep(.1, .95, cosT);
@@ -148,7 +148,7 @@ const sceneOf = o => { let p = o; while (p.parent) p = p.parent; return p.isScen
 // spec: { r, puffs, seed, color?, region:[minX, minZ, maxX, maxZ] (shadow texture rect) }, field (optional, terrain occlusion)
 export function buildCloudVolume(shape = {}, seed = 3, field = null) {
   const s = +shape.r > 0 ? +shape.r : 1, n = Math.min(20, Math.max(3, +shape.puffs || 7)), r = mulberry(seed || 3), puffs = [];
-  for (let i = 0; i < n; i++) puffs.push([(r() - .5) * s * 2.2, (r() - .3) * s * .5, (r() - .5) * s * 1.1, s * (.45 + r() * .4)]);
+  for (let i = 0; i < n; i++) { const x = (r() - .5) * s * 2.2, lob = 1 - Math.min(1, Math.abs(x) / (s * 1.2)); puffs.push([x, (r() - .25) * s * .45 + lob * s * .45 * r(), (r() - .5) * s * 1.1, s * (.38 + r() * .38 + lob * .12)]); }   // a flat base, lobes heaped up in the middle (cumulus)
   const mn = new THREE.Vector3(1e9, 1e9, 1e9), mx = new THREE.Vector3(-1e9, -1e9, -1e9);
   puffs.forEach(p => { mn.min(_v.set(p[0] - p[3], p[1] - p[3], p[2] - p[3])); mx.max(_v.set(p[0] + p[3], p[1] + p[3], p[2] + p[3])); });
   const pad = s * .25; mn.subScalar(pad); mx.addScalar(pad);
