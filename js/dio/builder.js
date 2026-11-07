@@ -15,6 +15,7 @@ import { buildLake, buildRiver } from '../gfx/water.js';
 import { buildCloudVolume } from '../gfx/clouds.js';
 import { buildSoilBlock } from '../gfx/soil.js';
 import { vapourPoints, rainStreaks } from '../gfx/precip.js';
+import { buildCabin, buildJetty, buildHills } from '../gfx/cabin.js';
 
 const D2R = Math.PI / 180;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -22,7 +23,7 @@ const num = (v, d) => (v == null || !isFinite(+v) ? d : +v);
 function mesh(geo, mat, cast = true) { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = true; return m; }
 
 export const SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule', 'plane', 'disc', 'ring', 'extrude', 'lathe', 'tube', 'spring', 'arrow', 'text', 'group',
-  'tree', 'pine', 'bush', 'oak', 'birch', 'cherry', 'forest', 'house', 'tower', 'mountain', 'rock', 'cloud', 'water', 'terrain', 'table', 'lamp', 'beaker', 'flask', 'testtube', 'molecule', 'cell', 'planet', 'star', 'gear', 'magnet', 'battery', 'coin', 'die', 'person', 'bars', 'surface', 'curve', 'grid', 'axes', 'sign', 'glasscase', 'particles', 'book', 'scale', 'pulley', 'boat', 'car', 'peak', 'grassField', 'flowers', 'reeds', 'lake', 'river', 'waterfall', 'cloudVolume', 'soilBlock', 'rockScatter'];
+  'tree', 'pine', 'bush', 'oak', 'birch', 'cherry', 'forest', 'house', 'tower', 'mountain', 'rock', 'cloud', 'water', 'terrain', 'table', 'lamp', 'beaker', 'flask', 'testtube', 'molecule', 'cell', 'planet', 'star', 'gear', 'magnet', 'battery', 'coin', 'die', 'person', 'bars', 'surface', 'curve', 'grid', 'axes', 'sign', 'glasscase', 'particles', 'book', 'scale', 'pulley', 'boat', 'car', 'peak', 'grassField', 'flowers', 'reeds', 'lake', 'river', 'waterfall', 'cloudVolume', 'soilBlock', 'rockScatter', 'cabin', 'jetty', 'hills'];
 
 export function buildShape(shape = {}, matSpec, ctx = {}) {
   const k = String(shape.kind || 'box').toLowerCase(), F = () => getField(ctx);
@@ -87,11 +88,15 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     }
     // peak{id, x, z}: the rock of a terrain peak that has own:id, as its own (actor) body; place the body at [x,0,z]
     case 'peak': { const f = F(), m = f && buildPeak(f, shape.id || shape.own, num(shape.x, 0), num(shape.z, 0)); if (m) { g.add(m); return g; } return buildShape(Object.assign({}, shape, { kind: 'mountain' }), matSpec, ctx); }
-    case 'grassfield': { const f = F(); if (!f) return g; const m = grassField(f, { density: shape.density, height: shape.height, amount: shape.amount, seed: ctx.seed }); g.add(m); g.userData.stats = m.userData.stats; return g; }
+    case 'grassfield': { const f = F(); if (!f) return g; const m = grassField(f, { density: shape.density, height: shape.height, amount: shape.amount, seed: ctx.seed, cover: shape.cover }); g.add(m); g.userData.stats = m.userData.stats; return g; }
     case 'flowers': { const f = F(); const m = f && flowerField(f, { amount: shape.amount, seed: ctx.seed, force: shape.force }); if (m) g.add(m); return g; }
     case 'reeds': { const f = F(); const m = f && reedField(f, { amount: shape.amount, seed: ctx.seed }); if (m) g.add(m); return g; }
     case 'lake': { const f = F(); const l = f && buildLake(f, shape); if (l) return l; return buildShape(Object.assign({}, shape, { kind: 'water' }), matSpec, ctx); }
     case 'river': case 'waterfall': { const f = F(); const rv = f && buildRiver(f, { flow: shape.flow, spray: shape.spray }); return rv || g; }
+    // cabin{w,d}: log cabin with porch, stone chimney + smoke, woodpile (front = +z); jetty{from:[x,z],to:[x,z],width}; hills{r,layers,height}
+    case 'cabin': return buildCabin(shape, ctx.seed || 7);
+    case 'jetty': return buildJetty(F(), shape.from, shape.to, { width: num(shape.width, .17), seed: ctx.seed || 3 });
+    case 'hills': return buildHills({ r: num(shape.r, 34), layers: num(shape.layers, 3), height: num(shape.height, 5), y: num(shape.y, -1.2), seed: num(shape.seed, 4) });
     case 'cloudvolume': { g.add(buildCloudVolume(shape, ctx.seed || 3, F())); return g; }
     case 'soilblock': { const f = F(); if (f && !f.soil) { f.soil = true; g.add(buildSoilBlock(f, { bottom: num(shape.bottom, -.9), grass: shape.grass, plinth: shape.plinth !== false })); } return g; }
     // rockScatter{count, r:[min,max], region?, moss}: half-buried boulders on the field's rocky ground, 2 shape variants

@@ -130,7 +130,7 @@ export function bakeField(spec = {}, quality = AAA.quality) {
       switch (kind) {
         case 'grass': if (wet < .006 || rm > .05) return 0; return clamp((1 - sstep(.5, 1.0, s)) * (1 - sstep(1.0, 1.55, h)) * sstep(path ? path.hw * .6 : 0, path ? path.hw * 1.6 : .01, pd) * sstep(.55, 1, pad), 0, 1);
         case 'flower': if (wet < .05 || rm > 0) return 0; return clamp((1 - sstep(.25, .45, s)) * (1 - sstep(.7, .9, h)) * sstep(.25, .5, pd) * sstep(.8, 1.4, pad), 0, 1);
-        case 'reed': { if (!lake || rm > 0) return 0; const lm = sample(x, z, 2); if (lm <= 0 || lm > .45) return 0; return clamp(1 - Math.abs(wet - .01) / .06, 0, 1) * (1 - sstep(.3, .6, s)); }   // the shore shallows only
+        case 'reed': { if (!lake || rm > 0) return 0; const lm = sample(x, z, 2); if (lm <= 0 || lm > .6) return 0; return clamp(1 - Math.abs(wet - .015) / .09, 0, 1) * (1 - sstep(.3, .6, s)); }   // the shore shallows only
         case 'rock': return clamp(rock * .7 + sstep(.3, .6, s) * .3, 0, 1) * (wet < -.03 ? 0 : 1);
         case 'tree': if (wet < .06 || rm > 0) return 0; return clamp((1 - sstep(.45, .7, s)) * sstep(.35, .6, pd) * sstep(1.1, 1.6, pad), 0, 1);
         case 'pine': if (wet < .1 || rm > 0) return 0; return clamp((1 - sstep(.6, .95, s)) * sstep(.3, .6, h), 0, 1);

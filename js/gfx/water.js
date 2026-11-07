@@ -21,6 +21,11 @@ import { AAA, NOISE_GLSL } from './aaa.js';
 import { FRONT_GLSL, makeFrontUniforms, CLOUD_SH_U } from './materialize.js';
 import { FIELD_GLSL, fieldUniforms } from './terrain.js';
 import { VEG } from './grass.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+
+// planar reflection of the lake (medium/high): a mirrored render at a fraction of the screen resolution
+export const LAKE_REFL = { low: 0, medium: .5, high: .7 };
+let REFLECTING = false; const _inv = new THREE.Matrix4();
 
 // lighting uniforms shared by every water and cloud material of the current scene (filled from the environment)
 export const SKY_U = {
@@ -83,6 +88,7 @@ const LAKE_FS = /* glsl */`
 ${FRONT_GLSL}
 ${COMMON}
 uniform float uLevel; varying vec3 vW; varying vec3 vInfo; varying vec2 vUv2;
+uniform sampler2D uRefl; uniform mat4 uReflM; uniform float uReflOn;
 #include <fog_pars_fragment>
 void main(){
   ${CARD}
@@ -111,6 +117,8 @@ void main(){
   vec3 amb = uSkyCol*.52 + uSunCol*max(uSunDir.y, 0.)*.32*mix(.3, 1., sun);
   vec3 alb = mix(vec3(.03, .2, .19), vec3(.2, .22, .12), uTurbid);
   vec3 R = reflect(-V, N); R.y = abs(R.y); vec3 refl = mix(wLand(R.y), wSky(R), smoothstep(.02, .14, R.y));
+  if (uReflOn > .5) { vec4 rc = uReflM * vec4(vW.x, uLevel, vW.z, 1.); vec2 ruv = rc.xy / rc.w + gradLo * .18 + (grad - gradLo) * .03;   // the mirrored scene: terrain, ridge, trees, clouds
+    vec3 rr = texture2D(uRefl, clamp(ruv, vec2(.001), vec2(.999))).rgb; refl = mix(refl, rr, smoothstep(0., .02, min(min(ruv.x, 1. - ruv.x), min(ruv.y, 1. - ruv.y)))); }
   float sharp = mix(2200., 320., clamp(rough*.45, 0., 1.)); float m2 = 2./(sharp + 2.) + wChopLost(rough, fp); sharp = 2./m2 - 2.;
   vec3 emit = alb*amb*(1. - T)*(1. - F) + refl*F + (wGlint(N, V, sharp) + wGlitter(p, N, V, dir, rough, 1. - smoothstep(.02, .06, fp)))*sun;
   emit += wSky(vec3(0.,1.,0.))*rain.z*.07;
@@ -145,12 +153,17 @@ export function buildLake(field, o = {}) {
   const g = new THREE.Group(); g.name = 'lake water';
   const geo = new THREE.PlaneGeometry(L.rx * 2.7, L.rz * 2.7, 1, 1); geo.rotateX(-Math.PI / 2); geo.translate(L.x, L.level, L.z);
   geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(new Float32Array(4 * 3), 3));
-  const fs = withCloud(prepFS(LAKE_FS)), lv = { uLevel: { value: L.level } };
+  const rq = o.reflect === false ? 0 : (LAKE_REFL[AAA.quality] || 0); let refl = null;
+  if (rq > 0 && typeof innerWidth !== 'undefined') { refl = new Reflector(new THREE.PlaneGeometry(1, 1), { textureWidth: Math.round(innerWidth * rq), textureHeight: Math.round(innerHeight * rq), clipBias: .004 }); refl.rotation.x = -Math.PI / 2; refl.position.set(L.x, L.level, L.z); refl.visible = false; refl.name = 'lake reflection'; refl.userData.noInk = true; g.add(refl); }
+  const fs = withCloud(prepFS(LAKE_FS)), lv = { uLevel: { value: L.level }, uRefl: { value: refl ? refl.getRenderTarget().texture : null }, uReflM: { value: new THREE.Matrix4() }, uReflOn: { value: refl ? 1 : 0 } };
   const mul = waterMaterial(fs, field, lv, { W_MUL: '' }, { blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor });
   const add = waterMaterial(fs, field, lv, {}, { blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor });
   add.depthWrite = true;   // so the atmosphere pass and god rays see the water surface, not the bed
   const a = new THREE.Mesh(geo, mul), b = new THREE.Mesh(geo, add); a.renderOrder = 1; b.renderOrder = 2; a.name = 'lake (transmittance)'; b.name = 'lake (light)';
   [a, b].forEach(m => { m.castShadow = false; m.receiveShadow = false; m.userData.noInk = true; m.userData.noContact = true; m.onBeforeRender = (r, sc) => skyFrom(sc); g.add(m); });
+  if (refl) a.onBeforeRender = (r, sc, cam) => {   // before the first lake pass: render the mirrored scene (lake hidden, no recursion)
+    skyFrom(sc); if (REFLECTING || !cam.isPerspectiveCamera) return; REFLECTING = true; const va = a.visible, vb = b.visible; a.visible = b.visible = false; refl.updateMatrixWorld();
+    try { refl.onBeforeRender(r, sc, cam); add.uniforms.uReflM.value.copy(refl.material.uniforms.textureMatrix.value).multiply(_inv.copy(refl.matrixWorld).invert()); } finally { refl.visible = false; a.visible = va; b.visible = vb; REFLECTING = false; } };
   g.userData.water = b; g.userData.lake = { level: L.level, mats: [mul, add], setTurbid: v => { mul.uniforms.uTurbid.value = add.uniforms.uTurbid.value = v; } };
   return g;
 }

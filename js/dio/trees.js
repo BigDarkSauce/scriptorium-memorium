@@ -58,6 +58,7 @@ export const TREE_KINDS = ['tree', 'pine', 'bush', 'oak', 'birch', 'cherry'], TR
 const SPECIES = {
   tree: { aR: .25, vR: .21, top: .56, r0: .036, nb: 4, ncl: 9, per: 70, card: .06, reg: 'broad', cy: .7, rise: .75 },
   oak: { aR: .31, vR: .2, top: .46, r0: .05, nb: 6, ncl: 12, per: 64, card: .062, reg: 'broad', cy: .62, rise: .45 },
+  bush: { aR: .42, vR: .29, top: .1, r0: .018, nb: 5, ncl: 10, per: 72, card: .075, reg: 'broad', cy: .33, rise: .35 },
   birch: { aR: .16, vR: .25, top: .66, r0: .022, nb: 5, ncl: 9, per: 62, card: .05, reg: 'small', cy: .72, rise: 1.1, droop: 1 },
   cherry: { aR: .28, vR: .17, top: .44, r0: .034, nb: 5, ncl: 11, per: 72, card: .055, reg: 'small', cy: .6, rise: .6 }
 };
@@ -232,7 +233,10 @@ function buildPine(seed) {
     // drooping branches along the lobes: two crossed needle ribbons each, reaching past the skirt
     for (let b = 0; b < nbr; b++) { const a = b / nbr * Math.PI * 2 - ph + (r() - .5) * .25, out = V3(Math.cos(a), 0, Math.sin(a)), L = Rt * (1.1 + r() * .3), droop = -.3 - r() * .3;
       const dir = out.clone().add(V3(0, droop * .6, 0)).normalize(), base = ax.clone().addScaledVector(out, .01).add(V3(0, Rt * .15, 0));
-      [0, Math.PI / 2.4].forEach(roll => leaf.push(tint(card(base, dir, Math.PI / 2 + roll + (r() - .5) * .3, L * .62, L, R.needle, -.2), crownC, crownR, hue, r))); }
+      [0, Math.PI / 2.4].forEach(roll => leaf.push(tint(card(base, dir, Math.PI / 2 + roll + (r() - .5) * .3, L * .62, L, R.needle, -.2), crownC, crownR, hue, r)));
+      // drooping needle sprays hanging from the branch: two along it and one at the tip (spruce/fir silhouette, WG)
+      for (const k of [.45, .75, 1]) { const tip = base.clone().addScaledVector(dir, L * k * .9), hang = out.clone().multiplyScalar(.35).add(V3(0, -1, 0)).normalize();
+        leaf.push(tint(card(tip, hang, r() * 6.28, L * .38, L * (.32 + .12 * k), R.needle, .15), crownC, crownR, hue * 1.2, r)); } }
   }
   // the leader at the top
   leaf.push(tint(card(V3(bend.x * 1.4, H - .1, bend.z * 1.4), Y.clone(), r() * 3, .06, .14, R.needle, .05), crownC, crownR, 0, r));
@@ -258,7 +262,7 @@ export const TREE_STATS = {};
 export function treeGeometry(kind, variant) {
   const key = kind + ':' + variant; if (GEO.has(key)) return GEO.get(key);
   const seed = 1301 + variant * 7919 + TREE_KINDS.indexOf(kind) * 104729;
-  const G = kind === 'pine' ? buildPine(seed) : kind === 'bush' ? buildBush(seed) : buildBroadleaf(seed, SPECIES[kind] || SPECIES.tree);
+  const G = kind === 'pine' ? buildPine(seed) : buildBroadleaf(seed, SPECIES[kind] || SPECIES.tree);   // bushes are leaf-card clusters like the crowns (buildBush kept for reference)
   [G.wood, G.leaf].forEach(g => { g.computeBoundingBox(); g.computeBoundingSphere(); g.userData.shared = true; g.name = key; });
   TREE_STATS[key] = { woodTris: G.wood.attributes.position.count / 3, leafTris: G.leaf.attributes.position.count / 3 };
   GEO.set(key, G); return G;
@@ -276,16 +280,20 @@ const WRAP_TO = `float dotNL = saturate( dot( geometryNormal, directLight.direct
 	  reflectedLight.directDiffuse += directLight.color * ( BRDF_Lambert( material.diffuseColor ) * ( wrapNL - dotNL ) + BRDF_Lambert( material.diffuseColor * vec3( 1.0, 1.1, 0.6 ) ) * back * FOL_TRANS ); }`;
 // bent: the geometry's normals are bent outward (broadleaf crowns): both faces of a card use that normal as it is (no
 // flip for the back face), so a cluster shades as one soft volume
-export function foliageMaterial(color = '#4f7a3a', { bent = false } = {}) {
+export function foliageMaterial(color = '#4f7a3a', { bent = false, blossom = false } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(1.25), map: leafAtlas(), alphaTest: .45, side: THREE.DoubleSide, vertexColors: true, roughness: .82, metalness: 0, envMapIntensity: .6 });
   m.defines = { SM_FOLIAGE: '', FOL_WRAP: '0.45', FOL_TRANS: '0.55' };   // own defines: a distinct program key
   if (bent) m.defines.FOL_BENT = '';
+  if (blossom) { m.defines.FOL_BLOSSOM = ''; m.color.setRGB(1.15, 1.15, 1.15); }   // cherry: the atlas leaves recoloured as pink-white petals, a few leaves left green
   m.onBeforeCompile = s => {
     const ch = THREE.ShaderChunk.lights_physical_pars_fragment;
     if (ch.includes(WRAP_FROM)) s.fragmentShader = s.fragmentShader.replace('#include <lights_physical_pars_fragment>', ch.replace(WRAP_FROM, WRAP_TO));
+    if (blossom) s.fragmentShader = s.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      { float lum = dot(diffuseColor.rgb, vec3(.3, .59, .11)); vec2 cell = floor(vMapUv * 48.); float leafy = step(.8, fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453));
+        diffuseColor.rgb = mix(vec3(lum) * vec3(1., .66, .76) * 1.15, diffuseColor.rgb * vec3(.35, .75, .3), leafy); }`);
     if (bent) s.fragmentShader = s.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
   };
-  m.customProgramCacheKey = () => bent ? 'foliage-bent' : 'foliage';
+  m.customProgramCacheKey = () => (bent ? 'foliage-bent' : 'foliage') + (blossom ? '-blossom' : '');
   m.userData.preset = 'foliage';
   return windify(m, true);
 }
@@ -301,11 +309,11 @@ export const speciesOf = (kind, shape = {}) => { const s = String(shape.species 
 // ---------------------------------------------------------------- the scene-spec shape -----------------------------
 // h: overall height as before (tree ≈ h tall with a crown ≈ 0.75 h wide; pine h tall, 0.6 h wide; bush 0.85 h tall).
 export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
-  kind = speciesOf(kind, shape); const broad = !['pine', 'bush'].includes(kind);
+  kind = speciesOf(kind, shape); const broad = kind !== 'pine';
   const dh = kind === 'bush' ? .6 : kind === 'pine' ? 2.4 : 2, h = +shape.h > 0 ? +shape.h : dh, seed = (ctx.seed >>> 0) || 7, r = mulberry(seed);
   const variant = seed % TREE_VARIANTS, G = treeGeometry(kind, variant);
   const col = (matSpec && matSpec.color) || shape.color || DEF_COL[kind], trunkSpec = (matSpec && matSpec.trunk) || DEF_TRUNK[kind] || 'bark';
-  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => windify(makeMaterial(trunkSpec))), lm = cached(ctx, 'leaf:' + col + (broad ? ':bent' : ''), () => foliageMaterial(col, { bent: broad }));
+  const wm = cached(ctx, 'wood:' + JSON.stringify(trunkSpec), () => windify(makeMaterial(trunkSpec))), lm = cached(ctx, 'leaf:' + col + (broad ? ':bent' : '') + kind, () => foliageMaterial(col, { bent: broad, blossom: kind === 'cherry' }));
   const g = new THREE.Group(), s = h * (kind === 'bush' ? 1 / .85 : 1), j = 1 + (r() - .5) * .16, flip = r() < .5 ? -1 : 1;
   const wood = new THREE.Mesh(G.wood, wm), leaf = new THREE.Mesh(G.leaf, lm);
   const ry = r() * Math.PI * 2; [wood, leaf].forEach(m => { m.scale.set(s * flip, s * j, s); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; m.onBeforeRender = windTick; g.add(m); });
@@ -318,10 +326,10 @@ export function buildTree(kind, shape = {}, matSpec, ctx = {}) {
 // items: [{x, y, z, h, ry?}] → a Group with two InstancedMeshes per variant used (wood + foliage), per-instance colour
 // jitter. For backgrounds and hedgerows of built-in models: a 34-tree hedgerow is 8 draw calls instead of 68.
 export function treeForest(kind = 'tree', items = [], { color, seed = 1, trunk, castShadow = true, variants = TREE_VARIANTS } = {}) {
-  kind = speciesOf(kind); trunk = trunk || DEF_TRUNK[kind] || 'bark'; const broad = !['pine', 'bush'].includes(kind);
+  kind = speciesOf(kind); trunk = trunk || DEF_TRUNK[kind] || 'bark'; const broad = kind !== 'pine';
   const g = new THREE.Group(); g.name = kind + ' forest'; const r = mulberry(seed), byV = new Map();
   items.forEach((it, i) => { const v = Math.floor(r() * Math.max(1, Math.min(TREE_VARIANTS, variants))); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
-  const wm = windify(makeMaterial(trunk)), lm = foliageMaterial(color || DEF_COL[kind], { bent: broad }), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+  const wm = windify(makeMaterial(trunk)), lm = foliageMaterial(color || DEF_COL[kind], { bent: broad, blossom: kind === 'cherry' }), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
   byV.forEach((list, v) => {
     const G = treeGeometry(kind, v), W = new THREE.InstancedMesh(G.wood, wm, list.length), L = new THREE.InstancedMesh(G.leaf, lm, list.length);
     list.forEach((it, i) => { const h = (it.h || 2) * (kind === 'bush' ? 1 / .85 : 1); q.setFromAxisAngle(Y, it.ry ?? r() * 6.28); m4.compose(V3(it.x || 0, it.y || 0, it.z || 0), q, V3(h, h * (.92 + r() * .16), h)); W.setMatrixAt(i, m4); L.setMatrixAt(i, m4); c.setRGB(.9 + r() * .2, .92 + r() * .16, .85 + r() * .2); L.setColorAt(i, c); });

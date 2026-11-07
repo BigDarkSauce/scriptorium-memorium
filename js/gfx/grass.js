@@ -24,13 +24,13 @@ export const VEG = { uWind: { value: new THREE.Vector2(1.2, -.4) }, uGustT: { va
 const _w = new THREE.Vector2();
 export function vegWindFrom(scene) { const w = scene && scene.userData.wind; if (w) _w.set(+w[0] || 0, +w[1] || 0); else _w.set(1.2, -.4); VEG.uWind.value.lerp(_w, .08); }
 
-export const VEG_QUALITY = { low: { density: 260, max: 18000, seg: 3, flowers: 0, reeds: .5 }, medium: { density: 620, max: 46000, seg: 4, flowers: 1, reeds: 1 }, high: { density: 1300, max: 100000, seg: 5, flowers: 2, reeds: 1.6 } };
+export const VEG_QUALITY = { low: { density: 420, max: 26000, seg: 3, flowers: 0, reeds: .6, tufts: 14000 }, medium: { density: 1000, max: 70000, seg: 3, flowers: 1, reeds: 1, tufts: 40000 }, high: { density: 1900, max: 140000, seg: 5, flowers: 2, reeds: 1.6, tufts: 90000 } };
 
 const VEG_HEAD = /* glsl */`
 attribute vec4 aRoot; attribute vec4 aShape; attribute vec4 aTint;
 uniform float uAaaTime; uniform vec2 uWind;
 uniform int uFrontKind; uniform vec3 uFrontC; uniform vec3 uFrontN; uniform float uFrontR; uniform float uJitter;
-varying vec3 vGCol; varying float vGT;
+varying vec3 vGCol; varying float vGT; varying vec2 vTU;
 ${NOISE_GLSL}
 float vegFrontD(vec3 p){ vec3 q=floor(p*1.25); float hsh=fract(sin(dot(q,vec3(12.9898,78.233,45.164)))*43758.5453); float d = uFrontKind==0 ? distance(p,uFrontC) : dot(p-uFrontC,uFrontN); return d + (hsh-.5)*uJitter; }
 vec3 vegArc(vec2 B, float L, float t, out vec3 T){ float th=max(length(B),.002); vec2 d=B/th; float a=th*t, s=sin(a), c=cos(a), r=L/th; T=vec3(d.x*s,c,d.y*s); return vec3(d.x*r*(1.-c), r*s, d.y*r*(1.-c)); }
@@ -61,6 +61,7 @@ const VEG_BODY = {
   c = mix(c, vec3(.2, .17, .08), aTint.x * .55);
   c = mix(c, vec3(.32, .27, .13), step(.94, fract(aRoot.w * 17.9)));
   float t = position.y; vec3 tipC = c * 1.3 + vec3(.02, .025, .0);
+  tipC = mix(tipC, vec3(.34, .29, .14), step(.62, fract(aRoot.w * 7.31)) * smoothstep(.55, 1., t) * .75);   // dry, straw-coloured tips (WG)
   vGCol = mix(c * .45, tipC, pow(t, .6)) + vec3(.05, .06, .03) * gust * t; vGT = t;`,
   flower: /* glsl */`
   float grow = smoothstep(0., .6, uFrontR - vegFrontD(aRoot.xyz));
@@ -72,6 +73,16 @@ const VEG_BODY = {
   else { float hs = aShape.y * grow; vegPos = aRoot.xyz + top + (sd * position.x + fw * position.z) * hs + vec3(0., position.y * hs, 0.); objectNormal = normalize(vec3(B.x * .3, 1., B.y * .3)); }
   int sp = int(aTint.z); vec3 pc = sp == 0 ? vec3(.85, .85, .8) : sp == 1 ? vec3(.9, .7, .05) : sp == 2 ? vec3(.18, .3, .85) : sp == 3 ? vec3(.45, .2, .7) : sp == 4 ? vec3(.85, .1, .06) : vec3(.75, .5, .8);
   vGCol = part < .5 ? vec3(.06, .11, .03) : pc; vGT = part < .5 ? position.y : 1. + length(position.xz) * 2.;`,
+  tuft: /* glsl */`
+  float grow = smoothstep(0., .6, uFrontR - vegFrontD(aRoot.xyz));
+  float dist = distance(aRoot.xyz, cameraPosition); float cull = smoothstep(VEG_LOD0 * .7, VEG_LOD1 * .8, dist);
+  float H = aShape.x * grow * step(cull * .9, aRoot.w); float gust; vec2 B = vegWindBend(aRoot.xz, aRoot.w, 1.4, gust) * .35;
+  float yaw = aShape.z + position.z * 1.5708; vec3 side = vec3(cos(yaw), 0., sin(yaw));
+  vec3 vegPos = aRoot.xyz + side * position.x * aShape.y * mix(1., 1.6, cull) + vec3(B.x * position.y * position.y * H, position.y * H, B.y * position.y * position.y * H);
+  vec3 objectNormal = normalize(mix(cross(side, vec3(0., 1., 0.)), vec3(0., 1., 0.), .7)); objectNormal *= sign(dot(objectNormal, cameraPosition - vegPos) + 1e-5); objectNormal = normalize(mix(objectNormal, vec3(0,1,0), .5));
+  float p1 = aaaSimplex2(aRoot.xz * .9) * .5 + .5, p2 = aaaSimplex2(aRoot.xz * 3.1 + 7.) * .5 + .5;
+  vec3 c = mix(vec3(.05, .095, .026), vec3(.11, .15, .042), p1) * mix(.8, 1.15, p2); c = mix(c, vec3(.2, .17, .08), aTint.x * .5);
+  vGCol = mix(c * .8, c * 1.5, position.y); vGT = position.y; vTU = vec2(position.x + .5 + aRoot.w * 3., position.y);`,
   reed: /* glsl */`
   float grow = smoothstep(0., .6, uFrontR - vegFrontD(aRoot.xyz));
   float H = aShape.x * grow; float gust; vec2 B = vegWindBend(aRoot.xz, aRoot.w, 2.2, gust) * .7 + vec2(-sin(aShape.z), cos(aShape.z)) * aShape.w;
@@ -86,13 +97,14 @@ const VEG_BODY = {
 export function vegMaterial(kind = 'grass', { lod = [5, 14] } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: kind === 'flower' ? .6 : .72, metalness: 0, side: THREE.DoubleSide, transparent: true, opacity: 1, envMapIntensity: .6 });
   m.forceSinglePass = true;   // transparent + double-sided would otherwise draw twice
-  m.defines = { VEG_KIND: kind === 'grass' ? 0 : kind === 'flower' ? 1 : 2, VEG_LOD0: lod[0].toFixed(2), VEG_LOD1: lod[1].toFixed(2) }; m.defines['VEG_' + kind.toUpperCase()] = '';
+  m.defines = { VEG_KIND: kind === 'grass' ? 0 : kind === 'flower' ? 1 : kind === 'tuft' ? 3 : 2, VEG_LOD0: lod[0].toFixed(2), VEG_LOD1: lod[1].toFixed(2) }; m.defines['VEG_' + kind.toUpperCase()] = '';
   m.onBeforeCompile = s => {
     const def = { uFrontKind: { value: 0 }, uFrontC: { value: new THREE.Vector3() }, uFrontN: { value: new THREE.Vector3(1, 0, 0) }, uFrontR: { value: 1e5 }, uJitter: { value: 0 } };
     for (const k in def) if (!s.uniforms[k]) s.uniforms[k] = def[k];
     s.uniforms.uAaaTime = AAA.uniforms.uAaaTime; s.uniforms.uWind = VEG.uWind;
     s.vertexShader = VEG_HEAD + s.vertexShader.replace('#include <beginnormal_vertex>', VEG_BODY[kind]).replace('#include <begin_vertex>', 'vec3 transformed = vegPos;');
-    s.fragmentShader = 'varying vec3 vGCol; varying float vGT;\n' + s.fragmentShader
+    s.fragmentShader = 'varying vec3 vGCol; varying float vGT; varying vec2 vTU;\n' + s.fragmentShader
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n' + (kind === 'tuft' ? '{ float u = vTU.x * 9.; float id = floor(u), f = fract(u) - .5; float hh = .5 + .5 * fract(sin(id * 12.9898) * 43758.5453); float w = .42 * (1. - vTU.y / hh); if (vTU.y > hh || abs(f) > w) discard; }' : ''))
       .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= vGCol;')
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         #if NUM_DIR_LIGHTS > 0
@@ -141,15 +153,30 @@ function scatter(field, kind, n, rng, tuft = 0, tuftR = [.025, .06], tuftN = [6,
 }
 const suitArea = (field, kind, rng) => { let a = 0; const N = 900; for (let i = 0; i < N; i++) a += field.suit(field.minX + rng() * field.w, field.minZ + rng() * field.d, kind); return a / N * field.w * field.d; };
 
+// ground cover: short tufts (two crossed cards, a comb of blades cut in the fragment shader) under the blades, so
+// the meadow reads as dense sward with no bare green between the blades; 4 triangles per tuft
+function tuftGeo() {
+  const P = [], I = []; for (let q = 0; q < 2; q++) { const b = P.length / 3; P.push(-.5, 0, q, .5, 0, q, -.5, 1, q, .5, 1, q); I.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+  const g = new THREE.InstancedBufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); return g;
+}
+export function tuftField(field, o = {}) {
+  const Q = VEG_QUALITY[AAA.quality] || VEG_QUALITY.medium, rng = mulberry((o.seed || 77) + 5);
+  const n = Math.min(Q.tufts, Math.round(suitArea(field, 'grass', rng) * Q.tufts / 50 * (o.amount ?? 1)));
+  const pts = scatter(field, 'grass', n, rng, .2);
+  const list = pts.map(p => ({ x: p.x, y: field.h(p.x, p.z) - .003, z: p.z, r: rng(), h: (.018 + .022 * rng()) * (o.height || 1), w: .03 + rng() * .025, yaw: rng() * 6.283, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5 }));
+  const g = tuftGeo(); instAttrs(g, list);
+  const m = vegMesh(g, vegMaterial('tuft', { lod: o.lod || [5, 15] }), field, 'ground cover'); m.userData.stats = { tufts: list.length, triangles: list.length * 4 }; return m;
+}
 export function grassField(field, o = {}) {
   const Q = VEG_QUALITY[AAA.quality] || VEG_QUALITY.medium, rng = mulberry(o.seed || 77);
   const n = Math.min(o.max || Q.max, Math.round(suitArea(field, 'grass', rng) * (o.density || Q.density) * (o.amount ?? 1)));
   const pts = scatter(field, 'grass', n, rng, .45);
   const H = o.height || 1, lv = field.lake ? field.lake.level : -9;
-  const list = pts.map(p => { const r = rng(), damp = Math.max(0, 1 - (field.h(p.x, p.z) - lv) / .25); return { x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r, h: (.042 + .07 * r * r + .03 * damp) * H * (.55 + .45 * p.s), w: .011 + rng() * .009, yaw: rng() * 6.283, droop: .15 + rng() * .35, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5, damp }; });
+  const list = pts.map(p => { const r = rng(), damp = Math.max(0, 1 - (field.h(p.x, p.z) - lv) / .25); return { x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r, h: (.034 + .06 * r * r + .025 * damp) * H * (.55 + .45 * p.s), w: .0045 + rng() * .0045, yaw: rng() * 6.283, droop: .15 + rng() * .35, dry: Math.max(0, field.slope(p.x, p.z) - .25) * 1.5, damp }; });
   const g = bladeGeo(Q.seg); instAttrs(g, list);
   const m = vegMesh(g, vegMaterial('grass', { lod: o.lod || [5, 15] }), field, 'grass');
   m.userData.stats = { blades: list.length, triangles: list.length * (2 * Q.seg - 1) };
+  if (o.cover !== false) { const t = tuftField(field, o); const grp = new THREE.Group(); grp.name = 'meadow'; grp.add(m, t); grp.userData.stats = { blades: m.userData.stats, tufts: t.userData.stats }; return grp; }
   return m;
 }
 function flowerGeo() {
@@ -186,7 +213,7 @@ function reedGeo() {
 }
 export function reedField(field, o = {}) {
   const Q = VEG_QUALITY[AAA.quality] || VEG_QUALITY.medium, rng = mulberry(o.seed || 55);
-  const n = Math.round(Math.min(2400, suitArea(field, 'reed', rng) * 900 * Q.reeds * (o.amount ?? 1))); if (n < 1) return null;
+  const n = Math.round(Math.min(5000, suitArea(field, 'reed', rng) * 2600 * Q.reeds * (o.amount ?? 1))); if (n < 1) return null;
   const pts = scatter(field, 'reed', n, rng, .7, [.03, .09], [4, 12]);
   const list = pts.map(p => ({ x: p.x, y: field.h(p.x, p.z) - .004, z: p.z, r: rng(), h: .07 + rng() * .09, w: .008 + rng() * .006, yaw: rng() * 6.283, droop: .1 + rng() * .3, sp: rng() < .35 ? 1 : 0, dry: rng() * .5 }));
   const g = reedGeo(); instAttrs(g, list);

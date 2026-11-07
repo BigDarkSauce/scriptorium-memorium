@@ -36,7 +36,9 @@ export const WATER_CYCLE = {
     { id: 'sockcone', name: 'Windsock', role: 'decor', parent: 'sockpivot', shape: { kind: 'cone', r: .075, h: .48 }, material: { preset: 'fabric', color: '#d8642a' }, position: [0, .24, 0] },
     { id: 'rain', name: 'Rain', label: 'Rain', role: 'actor', describe: 'Falls once the cloud holds more water than its droplets can keep aloft.', shape: { kind: 'group' }, position: [0, 0, 0] },
     { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated; the light and the shadows come from it.', shape: { kind: 'star', r: .34, color: '#ffe2b0', intensity: 2 }, position: [-4.2, 5, 3] },
-    { id: 'house', name: 'Cottage', role: 'decor', shape: { kind: 'house', w: .9, d: .75, h: .6 }, position: [3.5, .1, 3.7], rotation: [0, 70, 0] },
+    { id: 'house', name: 'Log cabin', role: 'decor', shape: { kind: 'cabin', w: .95, d: .72 }, position: [3.5, .1, 3.7], rotation: [0, -123, 0] },
+    { id: 'jetty', name: 'Jetty', role: 'decor', shape: { kind: 'jetty', from: [2.12, 2.24], to: [1.38, 1.9], width: .17 }, position: [0, 0, 0] },
+    { id: 'hills', name: 'Distant hills', role: 'decor', shape: { kind: 'hills', r: 30, layers: 3, height: 4.5, y: -3.2 }, position: [0, 0, 0] },
     { id: 'pines', name: 'Pines', role: 'decor', shape: { kind: 'forest', species: 'pine', items: [[3.6, -2.3, 1.1], [-3.0, -1.3, 1.0], [-3.7, -2.2, 1.2], [4.2, -1.6, 1.0], [-1.9, -1.45, .9], [1.9, -1.55, .95], [-4.4, -3.6, 1.1], [4.6, -3.0, 1.15], [-2.9, -4.4, 1.0], [3.4, -4.3, 1.0], [-5.6, -2.6, 1.05], [5.7, -2.2, .95]] }, position: [0, 0, 0] },
     { id: 'oaks', name: 'Oaks', role: 'decor', shape: { kind: 'forest', species: 'oak', items: [[4.9, 2.0, 1.2], [-2.5, 1.3, 1.1], [-3.9, 2.9, 1.3], [5.4, -.5, 1.0], [-1.4, 3.7, 1.0], [-5.5, -.3, 1.15]] }, position: [0, 0, 0] },
     { id: 'birches', name: 'Birches', role: 'decor', shape: { kind: 'forest', species: 'birch', items: [[-1.6, -.95, .9], [-.3, -.5, .85], [-1.65, -.1, .8], [.1, -.05, .8], [-2.05, -2.1, .85]] }, position: [0, 0, 0] },
@@ -137,8 +139,8 @@ if(api.scene.fog){ api.scene.fog.near=20; api.scene.fog.far=60; }   // aerial pe
 const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity);   // hidden every frame (the materialiser restores the background objects when it finishes)
 const GN=64, gd=new Uint8Array(GN*4), skyTex=new T.DataTexture(gd,1,GN); skyTex.colorSpace=T.SRGBColorSpace; skyTex.magFilter=skyTex.minFilter=T.LinearFilter;
 const hz=new T.Color(), zn=new T.Color(), cc=new T.Color();
-function paintSky(day){ const warm=1-Math.min(1,day*1.7); hz.setRGB(.66+.22*warm,.71+.02*warm,.76-.18*warm).multiplyScalar(.45+.55*Math.min(1,day*1.5+.2)); zn.setRGB(.33+.1*warm,.47,.66-.12*warm).multiplyScalar(.4+.6*Math.min(1,day*1.5+.2));
-  for(let i=0;i<GN;i++){ cc.copy(hz).lerp(zn,Math.pow(i/(GN-1),.75)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }
+const hz2=new T.Color(); function paintSky(day){ const warm=1-Math.min(1,day*1.7), k=.45+.55*Math.min(1,day*1.5+.2); hz.setRGB(.8+.15*warm,.8-.02*warm,.78-.25*warm).multiplyScalar(k); hz2.setRGB(.6+.2*warm,.68,.78-.15*warm).multiplyScalar(k); zn.setRGB(.2+.12*warm,.36+.04*warm,.66-.14*warm).multiplyScalar(.38+.62*Math.min(1,day*1.5+.2));
+  for(let i=0;i<GN;i++){ const u=i/(GN-1); if(u<.22) cc.copy(hz).lerp(hz2,u/.22); else cc.copy(hz2).lerp(zn,Math.pow((u-.22)/.78,.8)); gd[i*4]=cc.r*255; gd[i*4+1]=cc.g*255; gd[i*4+2]=cc.b*255; gd[i*4+3]=255; } skyTex.needsUpdate=true; }   // hazy pale horizon band, then a deepening blue
 api.scene.background=skyTex;
 let lastHr=-1;
 // ---- visuals ----
@@ -170,7 +172,7 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
     for(let i=0;i<a.count;i++){ let y=a.getY(i)+dt*(.12+.5*Math.min(1.5,heat())); let z=a.getZ(i)-dt*w*.03; if(y>top){y=0;z=(api.rand()-.5)*2.6;} if(z<-1.3) z+=2.6; a.setY(i,y); a.setZ(i,z); }
     a.needsUpdate=true; vapPts.material.opacity=.08+.5*Math.min(1,Emm/3); }
   const sd=sunDir(api.param('hour')).multiplyScalar(6.2); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);
-  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); } if(dome) dome.visible=false; }
+  { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); const cab=api.body('house'); if(cab&&cab.userData.cabin) cab.userData.cabin.setGlow(api.clamp((hr-16.5)/2.5,0,1)); } if(dome) dome.visible=false; }   // evening: the cabin's windows glow
   const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; api.scene.userData.wind=[w*.12,-w*.42];   // grass, reeds, trees and the lake's waves follow the wind
   { const rv=api.body('stream'); if(rv&&rv.userData.river) rv.userData.river.setFlow(.35+.5*Math.min(1,rainSlope/2)); }   // runoff: rain on the ridge swells the stream and its waterfall pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
