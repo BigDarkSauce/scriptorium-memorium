@@ -10,7 +10,7 @@ export const WATER_CYCLE = {
   // edge is a waterfall, a stream from the saddle into the lake, a cottage yard and a path; cut faces show the soil
   // section. Grass, flowers, reeds, rocks and trees are scattered by the field's ecology (realism-playbook §3).
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#4b6d2f', high: '#7f8452', block: true, bottom: -.85, lift: .1,
+    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3c5728', high: '#646d3f', block: true, bottom: -.85, lift: .1,
       backRise: [-2.4, -5, .35],
       peaks: [{ x: .2, z: -2.9, r: 1.9, h: 3.5, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
         { x: -4.9, z: 1.4, r: 1.5, h: .5, rough: .15, seed: 9 }, { x: 5.0, z: -3.9, r: 1.3, h: .8, seed: 4 }],
@@ -38,7 +38,7 @@ export const WATER_CYCLE = {
     { id: 'sun', name: 'Sun', label: 'Sun · the energy source', role: 'actor', describe: 'Its height through the day sets how strongly the lake is heated; the light and the shadows come from it.', shape: { kind: 'star', r: .34, color: '#ffe2b0', intensity: 2 }, position: [-4.2, 5, 3] },
     { id: 'house', name: 'Log cabin', role: 'decor', shape: { kind: 'cabin', w: .95, d: .72 }, position: [3.5, .1, 3.7], rotation: [0, -123, 0] },
     { id: 'jetty', name: 'Jetty', role: 'decor', shape: { kind: 'jetty', from: [2.12, 2.24], to: [1.38, 1.9], width: .17 }, position: [0, 0, 0] },
-    { id: 'hills', name: 'Distant hills', role: 'decor', shape: { kind: 'hills', r: 30, layers: 3, height: 4.5, y: -3.2 }, position: [0, 0, 0] },
+    { id: 'hills', name: 'Distant hills', role: 'decor', shape: { kind: 'hills', r: 70, layers: 3, height: 9, y: -6 }, position: [0, 0, 0] },
     { id: 'pines', name: 'Pines', role: 'decor', shape: { kind: 'forest', species: 'pine', items: [[3.6, -2.3, 1.1], [-3.0, -1.3, 1.0], [-3.7, -2.2, 1.2], [4.2, -1.6, 1.0], [-1.9, -1.45, .9], [1.9, -1.55, .95], [-4.4, -3.6, 1.1], [4.6, -3.0, 1.15], [-2.9, -4.4, 1.0], [3.4, -4.3, 1.0], [-5.6, -2.6, 1.05], [5.7, -2.2, .95]] }, position: [0, 0, 0] },
     { id: 'oaks', name: 'Oaks', role: 'decor', shape: { kind: 'forest', species: 'oak', items: [[4.9, 2.0, 1.2], [-2.5, 1.3, 1.1], [-3.9, 2.9, 1.3], [5.4, -.5, 1.0], [-1.4, 3.7, 1.0], [-5.5, -.3, 1.15]] }, position: [0, 0, 0] },
     { id: 'birches', name: 'Birches', role: 'decor', shape: { kind: 'forest', species: 'birch', items: [[-1.6, -.95, .9], [-.3, -.5, .85], [-1.65, -.1, .8], [.1, -.05, .8], [-2.05, -2.1, .85]] }, position: [0, 0, 0] },

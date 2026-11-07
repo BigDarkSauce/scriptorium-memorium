@@ -82,7 +82,7 @@ const VEG_BODY = {
   vec3 objectNormal = normalize(mix(cross(side, vec3(0., 1., 0.)), vec3(0., 1., 0.), .7)); objectNormal *= sign(dot(objectNormal, cameraPosition - vegPos) + 1e-5); objectNormal = normalize(mix(objectNormal, vec3(0,1,0), .5));
   float p1 = aaaSimplex2(aRoot.xz * .9) * .5 + .5, p2 = aaaSimplex2(aRoot.xz * 3.1 + 7.) * .5 + .5;
   vec3 c = mix(vec3(.05, .095, .026), vec3(.11, .15, .042), p1) * mix(.8, 1.15, p2); c = mix(c, vec3(.2, .17, .08), aTint.x * .5);
-  vGCol = mix(c * .8, c * 1.5, position.y); vGT = position.y; vTU = vec2(position.x + .5 + aRoot.w * 3., position.y);`,
+  vGCol = mix(c * 1.1, c * 1.8, position.y); vGT = position.y; vTU = vec2(position.x + .5 + aRoot.w * 3., position.y);`,
   reed: /* glsl */`
   float grow = smoothstep(0., .6, uFrontR - vegFrontD(aRoot.xyz));
   float H = aShape.x * grow; float gust; vec2 B = vegWindBend(aRoot.xz, aRoot.w, 2.2, gust) * .7 + vec2(-sin(aShape.z), cos(aShape.z)) * aShape.w;
@@ -133,7 +133,7 @@ function instAttrs(g, list, part) {
 }
 function vegMesh(g, mat, field, name) {
   const m = new THREE.Mesh(g, mat); m.name = name; m.castShadow = false; m.receiveShadow = true; m.frustumCulled = false; m.raycast = () => {};
-  m.userData.noInk = true; m.userData.noContact = true;
+  m.userData.noInk = true; m.userData.noContact = true; m.userData.noReflect = true;   // the lake's mirror skips the meadow (half the triangles of the reflection pass)
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(field.minX + field.w / 2, .5, field.minZ + field.d / 2), Math.hypot(field.w, field.d) / 2 + 1);
   g.boundingBox = new THREE.Box3(new THREE.Vector3(field.minX, -1, field.minZ), new THREE.Vector3(field.minX + field.w, 2, field.minZ + field.d));
   m.onBeforeRender = (r, scene) => vegWindFrom(scene);

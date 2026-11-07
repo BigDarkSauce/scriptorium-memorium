@@ -162,8 +162,8 @@ export function buildLake(field, o = {}) {
   const a = new THREE.Mesh(geo, mul), b = new THREE.Mesh(geo, add); a.renderOrder = 1; b.renderOrder = 2; a.name = 'lake (transmittance)'; b.name = 'lake (light)';
   [a, b].forEach(m => { m.castShadow = false; m.receiveShadow = false; m.userData.noInk = true; m.userData.noContact = true; m.onBeforeRender = (r, sc) => skyFrom(sc); g.add(m); });
   if (refl) a.onBeforeRender = (r, sc, cam) => {   // before the first lake pass: render the mirrored scene (lake hidden, no recursion)
-    skyFrom(sc); if (REFLECTING || !cam.isPerspectiveCamera) return; REFLECTING = true; const va = a.visible, vb = b.visible; a.visible = b.visible = false; refl.updateMatrixWorld();
-    try { refl.onBeforeRender(r, sc, cam); add.uniforms.uReflM.value.copy(refl.material.uniforms.textureMatrix.value).multiply(_inv.copy(refl.matrixWorld).invert()); } finally { refl.visible = false; a.visible = va; b.visible = vb; REFLECTING = false; } };
+    skyFrom(sc); if (REFLECTING || !cam.isPerspectiveCamera) return; REFLECTING = true; const va = a.visible, vb = b.visible; a.visible = b.visible = false; refl.updateMatrixWorld(); const hid = []; sc.traverse(o => { if (o.userData.noReflect && o.visible) { o.visible = false; hid.push(o); } });
+    try { refl.onBeforeRender(r, sc, cam); add.uniforms.uReflM.value.copy(refl.material.uniforms.textureMatrix.value).multiply(_inv.copy(refl.matrixWorld).invert()); } finally { hid.forEach(o => { o.visible = true; }); refl.visible = false; a.visible = va; b.visible = vb; REFLECTING = false; } };
   g.userData.water = b; g.userData.lake = { level: L.level, mats: [mul, add], setTurbid: v => { mul.uniforms.uTurbid.value = add.uniforms.uTurbid.value = v; } };
   return g;
 }

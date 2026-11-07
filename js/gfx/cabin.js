@@ -23,7 +23,7 @@ import { mulberry } from '../util.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clean = g => { g = g.index ? g.toNonIndexed() : g; Object.keys(g.attributes).forEach(k => { if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); }); if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; };
 function box(list, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) { const g = new THREE.BoxGeometry(w, h, d); g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z); list.push(clean(g)); }
-function log(list, len, r, x, y, z, along, rng) { const g = new THREE.CylinderGeometry(r * (.92 + rng() * .1), r, len, 9, 1); if (along === 'x') g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2); g.translate(x, y, z); list.push(clean(g)); }
+function log(list, len, r, x, y, z, along, rng) { const g = new THREE.CylinderGeometry(r * (.92 + rng() * .1), r, len, 9, 1); if (along === 'x') g.rotateZ(Math.PI / 2); else if (along === 'z') g.rotateX(Math.PI / 2); g.translate(x, y, z); list.push(clean(g)); }
 
 export function buildCabin(shape = {}, seed = 7) {
   const W = +shape.w || .95, D = +shape.d || .72, rng = mulberry(seed), r = .032, rows = 7, Hw = rows * r * 2 + r;
@@ -51,10 +51,10 @@ export function buildCabin(shape = {}, seed = 7) {
   [[.2, D / 2 + r + .006, 0], [-W / 2 - r - .006, -.05, Math.PI / 2]].forEach(([x, z, ry]) => { box(L.plank, .2, .17, .02, x, .26, z, 0, ry); box(L.glass, .15, .12, .02, x, .26, z + (ry ? 0 : .004), 0, ry); });
   const pz = D / 2 + .2; box(L.plank, W + .1, .03, .34, 0, .04, pz);
   for (let k = 0; k < 9; k++) box(L.plank, .012, .031, .34, -W / 2 + (k + .5) * W / 9, .041, pz);
-  [-1, 1].forEach(s => box(L.plank, .04, .4, .04, s * (W / 2 - .02), .24, pz + .15));
+  [-1, 1].forEach(s => log(L.logs, .42, .022, s * (W / 2 - .02), .25, pz + .15, 'y', rng));   // round porch posts
   box(L.roof, W + .16, .02, .4, 0, .46, pz + .03, .25);
   for (let k = 0; k < 9; k++) log(L.logs, .12, .022, -W / 2 - .12, .025 + Math.floor(k / 3) * .042, -.2 + (k % 3) * .048 + (Math.floor(k / 3) % 2) * .02, 'x', rng);
-  const mats = { logs: makeMaterial({ preset: 'bark', color: '#6e4e33' }), roof: makeMaterial({ preset: 'darkwood' }), stone: makeMaterial({ preset: 'stone', color: '#8d877c' }), plank: makeMaterial({ preset: 'wood' }), dark: makeMaterial({ preset: 'darkwood' }), glass: makeMaterial({ preset: 'emissive', color: '#ffcf86', emissiveIntensity: .5 }) }; mats.plank.side = THREE.DoubleSide;
+  const mats = { logs: makeMaterial({ preset: 'bark', color: '#6e4e33', aaa: { color3: '#4a3a2a', moss: .25 } }), roof: makeMaterial({ preset: 'bark', color: '#4e4238', aaa: { color3: '#3d4a2a', moss: .5, tile: .5 } }), stone: makeMaterial({ preset: 'stone', color: '#8d877c' }), plank: makeMaterial({ preset: 'wood' }), dark: makeMaterial({ preset: 'darkwood' }), glass: makeMaterial({ preset: 'emissive', color: '#ffcf86', emissiveIntensity: .5 }) }; mats.plank.side = THREE.DoubleSide;
   const g = new THREE.Group(); g.name = 'log cabin';
   for (const k in L) { if (!L[k].length) continue; const m = new THREE.Mesh(mergeGeometries(L[k]), mats[k]); m.castShadow = k !== 'glass'; m.receiveShadow = true; m.name = 'cabin ' + k; m.userData.inkAngle = 40; if (k === 'roof' || k === 'logs') m.userData.noInk = true; g.add(m); }
   const smoke = chimneySmoke(V3(cx, ch + .05, 0)); g.add(smoke);
@@ -97,7 +97,7 @@ export function buildJetty(field, from = [0, 0], to = [1, 0], { width = .17, see
   return gr;
 }
 // painted hills on open cylinders around the block: far layers bluer and hazier (the scene fog adds the rest)
-export function buildHills({ r = 34, layers = 3, height = 5, y = -1.2, seed = 4, colors = ['#4f6150', '#6c7d78', '#8d9ca2'] } = {}) {
+export function buildHills({ r = 34, layers = 3, height = 5, y = -1.2, seed = 4, colors = ['#71837a', '#8d9c9c', '#a8b6bc'] } = {}) {
   const g = new THREE.Group(); g.name = 'distant hills';
   for (let i = 0; i < layers; i++) {
     const R = r * (1 + i * .22), H = height * (1 + i * .35), t = hillLayer(seed + i * 3, 1024, 256, 1 - i * .25, .55 - i * .08).clone(); t.wrapS = THREE.RepeatWrapping; t.repeat.set(3 + i, 1); t.needsUpdate = true;
