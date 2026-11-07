@@ -85,7 +85,7 @@ await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mo
 // Nothing below needs 3D frames (the dialog, the hub API, the job, the reader's figures; the diorama is stepped
 // headless), and software GL on a shared machine starves the compositor, so the WebGL context is released at once:
 // screenshots are then DOM only (the 3D scroll drawings show as not drawn).
-await page.evaluate(() => { const W = window.__scriptorium; W.gfx.render = () => {}; try { W.gfx.renderer.forceContextLoss(); } catch (e) { } document.getElementById('scene').style.visibility = 'hidden'; });
+await page.evaluate(() => { const W = window.__scriptorium; W.gfx.render = () => {}; try { W.gfx.renderer.forceContextLoss(); } catch (e) { } document.getElementById('scene').style.visibility = 'hidden'; const st = document.createElement('style'); st.textContent = '.toasts{display:none!important}'; document.head.append(st); });
 await page.waitForTimeout(500);
 
 const STATS_ONLY = process.env.TEST_STATS === 'only';

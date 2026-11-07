@@ -220,13 +220,14 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
   const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', f.alt || f.caption || f.kind);
   box.append(el('div', { class: 'fig-frame' }, [svg])); const c = capEl(); if (c) box.append(c);
   const fs = small ? 10 : 11.5;
-  const mk = (n, a = {}, parent = svg) => { const e = document.createElementNS(NS, n); for (const k in a) if (a[k] != null) e.setAttribute(k, a[k]); parent.append(e); return e; };
+  // everything drawn after the layer exists goes into it, so each animation frame clears it all (defs stay on the svg)
+  let target = svg; const mk = (n, a = {}, parent = target) => { const e = document.createElementNS(NS, n); for (const k in a) if (a[k] != null) e.setAttribute(k, a[k]); (parent || target).append(e); return e; };
   // labels are typeset maths (m2 → m₂), except code (dnorm(x), avg <- mean(…), dat$col), which stays verbatim in a code face
   const txt = (x, y, s, a = {}, parent) => { const code = looksLikeCode(String(s)); const e = mk('text', { x, y, 'font-size': fs, fill: FC.ink, 'font-family': code ? 'IBM Plex Mono, monospace' : 'Alegreya, Georgia, serif', ...a, ...(code ? { 'font-size': (a['font-size'] || fs) * .92 } : {}) }, parent); if (code) e.textContent = String(s); else svgMath(e, String(s)); return e; };
   const wrapText = (s, max) => { const w = String(s).split(/\s+/), out = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > max && cur) { out.push(cur); cur = x; } else cur = (cur + ' ' + x).trim(); }); if (cur) out.push(cur); return out; };
   const multi = (x, y, s, max, a = {}, parent, lh = fs * 1.25) => { const L = wrapText(s, max).slice(0, 4); L.forEach((l, i) => txt(x, y + (i - (L.length - 1) / 2) * lh, l, a, parent)); return L.length; };
   const defs = mk('defs'); defs.innerHTML = `<marker id="fa${uid()}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="${FC.soft}"/></marker>`; const arrowId = defs.firstChild.id;
-  const layer = mk('g'); const clear = () => { layer.innerHTML = ''; };
+  const layer = mk('g'); target = layer; const clear = () => { layer.innerHTML = ''; };
   // axes helper for the chart kinds
   const P0 = { l: small ? 34 : 46, r: small ? 10 : 16, t: small ? 14 : 18, b: small ? 30 : 38 };
   const axes = (xr, yr, { xlabel, ylabel, logx, cats } = {}) => {
