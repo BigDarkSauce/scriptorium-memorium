@@ -76,7 +76,9 @@ await page.addInitScript(({ fx }) => {
   window.claude = { use: async cap => cap === 'sample' ? SAMPLE : null };
   try { localStorage.setItem('scriptorium.readerDock', 'full'); } catch (e) { }
 }, { fx: FX });
-const shot = async (name, el) => { if (!SHOTS) return; try { await page.evaluate(() => { const W = window.__scriptorium; if (W && W.gfx._r) W.gfx._r(1 / 60, W.t); });  if (el) await page.locator(el).first().screenshot({ path: join(SHOTS, name), timeout: 90000 }); else await page.screenshot({ path: join(SHOTS, name), timeout: 90000 }); } catch (e) { console.log('  (screenshot ' + name + ' failed: ' + e.message.split('\n')[0] + ')'); } };
+// screenshots: software GL cannot be read back quickly on a busy machine, so DOM-only shots hide the 3D canvas; the
+// shots that show 3D (the ghost scroll on the bookcase, the diorama) draw one frame first
+const shot = async (name, el, with3D = false) => { if (!SHOTS) return; try { await page.evaluate(on => { const W = window.__scriptorium, c = document.getElementById('scene'); if (on && W && W.gfx._r) W.gfx._r(1 / 60, W.t); c.style.visibility = on ? '' : 'hidden'; }, with3D);  if (el) await page.locator(el).first().screenshot({ path: join(SHOTS, name), timeout: 45000 }); else await page.screenshot({ path: join(SHOTS, name), timeout: 45000 }); } catch (e) { console.log('  (screenshot ' + name + ' failed: ' + e.message.split('\n')[0] + ')'); } await page.evaluate(() => { document.getElementById('scene').style.visibility = ''; }).catch(() => {}); };
 const T0 = Date.now();
 await page.goto(URL0, { timeout: 60000 });
 await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && window.__scriptorium.mode.constructor.name === 'Hub' && document.body.classList.contains('ready'), null, { timeout: 120000 });
@@ -102,7 +104,7 @@ try {
   await page.waitForTimeout(1200);
   const ghost = await page.evaluate(() => { const h = window.__scriptorium.mode; return { api: typeof h.highlightSlot === 'function', ghost: !!(h.ghost && h.ghost.visible) }; });
   await page.evaluate(() => { const v = document.querySelector('.addpdf-veil'); if (v) v.style.background = 'rgba(8,6,4,.15)'; });
-  await shot('02-dialog-place.png');
+  await shot('02-dialog-place.png', null, true);
   const placeInfo = await page.locator('.addpdf .ap-body .dim.small').first().innerText();
   await page.click('.addpdf [data-next]');
   // pages: the detected sheets, a range, and ticking chapters
@@ -217,10 +219,10 @@ let dioOK = false, dioDetail = '';
 try {
   const spec = FX['scene-holling'];
   await page.evaluate(s => window.__scriptorium.openDiorama(JSON.parse(JSON.stringify(s)), { skipIntro: true }), spec);
-  await page.waitForFunction(() => { const m = window.__scriptorium.mode; return m && m.ds && m.stage === 'explore'; }, null, { timeout: 90000 });
+  await page.waitForFunction(() => { const m = window.__scriptorium.mode; return m && m.ds && m.stage === 'explore'; }, null, { timeout: 45000 });
   await page.waitForTimeout(5000);
   const D = await page.evaluate(() => { const m = window.__scriptorium.mode; return { actors: m.ds.actors.map(a => a.name), reads: (m.ds.readouts() || []).map(r => (r[0] || r.name) + '=' + (r[1] != null ? r[1] : r.value)).join('; '), t: +m.ds.t.toFixed(1) }; });
-  await shot('13-diorama-holling.png');
+  await shot('13-diorama-holling.png', null, true);
   dioOK = D.actors.length >= 2 && D.t > 1;
   dioDetail = `actors: ${D.actors.join(', ')}; ran ${D.t} s; readouts: ${D.reads.slice(0, 140)}`;
 } catch (e) { dioDetail = 'error: ' + e.message.split('\n')[0]; }

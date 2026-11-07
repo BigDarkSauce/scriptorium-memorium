@@ -26,6 +26,7 @@ Shape kinds: box{w,h,d,round} sphere{r} cylinder{r,rt,rb,h} cone{r,h} torus{R,r}
  table{w,d,h} lamp{h} beaker{r,h,fill,liquid} flask testtube molecule{atoms:[["O",x,y,z]...],bonds:[[i,j]...],scale} cell{r} planet{r,rings,color} star{r,color,intensity}
  gear{r,teeth,depth} magnet battery coin{r} die{s} book person{h,color} bars{data:[..],w,gap,scale,colors} surface{expr in x,y,range,h} curve{x,y,z exprs in t,t0,t1,r}
  grid{size,div} axes{size} glasscase{w,d,h} particles{type:rain|snow|dust|bubbles|stars|sparks,count,area:[x,y,z],speed} scale pulley{r} boat car group
+ Landscape kit (outdoor scenes, environment.base:false): terrain{w,d,h,seed,low,high,block:true,bottom,peaks:[{x,z,r,h,squash,own}],terraces:[{z0,z1,x0,x1,h}],river:{points:[[x,z]...],width:[a,b],depth},lake:{x,z,rx,rz,depth,level},pads:[[x,z,r]],path:{points,width}} (ONE height field, a specimen block with a soil cross-section; put it FIRST: the kinds below sit on it) peak{id,x,z} (the rock of the terrain peak with own:id as its own actor body, position [x,0,z]) grassField{density} flowers reeds rockScatter{count,r:[min,max]} lake river (with its waterfall) forest{species:oak|birch|cherry|pine|bush|tree,items:[[x,z,h]...]} oak{h} birch{h} cherry{h} cloud{r,puffs,volume:true} (volumetric, casts cloud shadows; code: obj.userData.cloud.set({grey,fade,storm})) particles{type:vapour|streaks} (wisps; velocity-aligned rain); scene code reads heights with api.body(terrainId).userData.field.h(x,z) and sets wind with api.scene.userData.wind=[x,z]
 Material presets: brass gold copper chrome steel iron mercury wood darkwood bark paper parchment card glass water ice plastic rubber ceramic stone marble plaster fabric leather foliage grass soil sand snow skin membrane gel emissive neon cloud smoke ink chalk
 Expressions ("amount","speed", surface/curve): plain maths with + - * / ^ ( ), sin cos tan exp log sqrt abs min max pow, PI, E, t (seconds) and the param keys.
 Techniques: "card" = a white card model on a drafting desk seen through a long lens; a light sphere turns card into real materials (good for objects, machines, organisms, economies).
@@ -137,6 +138,39 @@ See `../examples/scene-*.json`:
 - **Galton board** (statistics, section sweep): binomial counts against the normal curve; ride one bead.
 - **Market** (economics, card model): a double auction of zero-intelligence traders, as in Smith 1962 and Gode & Sunder 1993; close-up on the price crossing.
 - **Osmosis** (biology, section sweep): the ideal-solution balance −ln x_w = 2KΔh, reverse osmosis under a piston; ride a tagged molecule through a pore.
+
+## Landscape kit (outdoor dioramas at Weatherglass quality)
+
+Built for the water-cycle flagship (`js/seeds-scenes.js`, `WATER_CYCLE`) and usable by any outdoor scene. The research
+and the per-recipe costs are in `research/realism-playbook.md`; the implementation notes are in
+`research/aaa-rendering.md`, "Landscape kit".
+
+- **`terrain` with a field** (any of `peaks`, `lake`, `river`, `block`): one height field baked on the mesh grid
+  (`js/gfx/terrain.js`): fBm meadow (`h`, `seed`, `lift`), `backRise:[z0,z1,h]`, `terraces:[{z0,z1,x0,x1,h}]` (a sharp
+  terrace edge under a river becomes its waterfall), `peaks:[{x,z,r,h,squash,rot,rough,own}]` (smooth-max, no creases),
+  `river:{points:[[x,z],…],width:[source,mouth],depth}` (its water surface only runs downhill), `lake:{x,z,rx,rz,depth,level}`
+  (level from the rim if left out), `pads:[[x,z,r]]` (flattened yards), `path:{points,width}` (bare, no grass).
+  Rock (AAA crag) where it is steep or high, meadow elsewhere. `block:true` (default) cuts the land as a rectangular
+  specimen with a painted **soil section** on its four faces down to `bottom`, on a walnut plinth: use it with
+  `environment.base:false`. Put the terrain body first; later bodies find its field. Scene code: `api.body('ground').userData.field`
+  gives `h(x,z)`, `slope(x,z)`, `normal(x,z)`, `suit(x,z,kind)`, `lake.level`, `river.P`, `river.fall`.
+- **`peak{id,x,z}`**: the rock of the terrain peak whose `own` is `id`, as its own body (an actor ridge that labels,
+  isolates and glows on its own); give the body `position:[x,0,z]`.
+- **`grassField{density,height,amount}`**, **`flowers{amount}`**, **`reeds{amount}`**: instanced, wind-bent blades,
+  six flower species, reeds and cattails on the shore, scattered by the field's ecology; they grow out of the paper as the
+  materialize front passes. Counts follow `gfx.quality`.
+- **`rockScatter{count,r:[min,max],region,moss,anywhere}`**: half-buried mossy boulders on rocky ground (2 draw calls).
+- **`lake`** and **`river`** (alias `waterfall`): analytic water on the field: depth colour, Fresnel sky reflection, sun
+  glint and glitter, lapping foam, rain rings where it rains; the river has flowing streaks, a waterfall sheet, plunge
+  foam and spray. No transmission.
+- **`forest{species,items:[[x,z,h],…]|count,region,h:[min,max],variants}`** and **`oak|birch|cherry{h}`** (also
+  `tree{species}`): species with crown-shaded foliage and wind in the vertex shader (2 draw calls per variant).
+- **`cloud{r,puffs,volume:true}`** (alias `cloudVolume`): a raymarched volumetric cloud; it shadows the land. Code drives
+  it with `mesh.userData.cloud.set({grey,fade,storm})` (find the mesh with `traverse(o => o.userData.cloud)`).
+- **`particles{type:"vapour"}`** (soft rising wisps; `material.opacity` still fades them) and **`particles{type:"streaks"}`**
+  (rain as velocity-aligned soft streaks; write drop positions into `obj.userData.streaks.pos` and call `commit()`).
+- Wind for grass, reeds, trees and lake waves: `api.scene.userData.wind = [x, z]` (m/s). A scene may set its overview lens
+  with `api.camera({fov})`.
 
 ## Edits stored in a spec
 

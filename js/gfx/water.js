@@ -86,7 +86,7 @@ uniform float uLevel; varying vec3 vW; varying vec3 vInfo; varying vec2 vUv2;
 #include <fog_pars_fragment>
 void main(){
   ${CARD}
-  vec2 p = vW.xz; vec2 fw = fwidth(p); float depth = uLevel - fieldAt(p).r; if (depth < -.012) discard;
+  vec2 p = vW.xz; vec2 fw = fwidth(p); vec4 fld = fieldAt(p); float depth = uLevel - fld.r; if (depth < -.012 || fld.b <= 0.) discard;   // b: lake mask (inside the lake's rim)
   vec3 V = normalize(cameraPosition - vW); float rough; vec2 dir; vec3 wv = wWaves(p, uAaaTime, rough, dir); float shore = smoothstep(-.005, .07, depth);
   float fp = max(fw.x, fw.y); vec2 grad = wv.yz*(.3+.7*shore), gradLo = grad; vec3 rain = vec3(0.);
   float rainK = uAaaRain * (uAaaWetSpot.w > 0. ? 1. - smoothstep(uAaaWetSpot.z*.6, uAaaWetSpot.z*1.1, length(p - uAaaWetSpot.xy)) : 1.);
@@ -101,7 +101,7 @@ void main(){
   float foam = smoothstep(.011, 0., abs(depth - lapPos))*lace + smoothstep(.007, 0., depth)*(.35 + .4*lace); foam *= .5 + .5*smoothstep(.1, 1.4, rough);
   foam += smoothstep(1.5, 2.6, rough)*smoothstep(.64, .92, wN(p*8.5 - dir*uAaaTime*1.5))*.55; foam = clamp(foam, 0., 1.);
   float fogK = 0.;
-#ifdef USE_FOG
+#if defined( USE_FOG ) && !defined( FOG_EXP2 )
   float fogDepth = length(vW - cameraPosition); fogK = smoothstep(fogNear, fogFar, fogDepth);
 #endif
 #ifdef W_MUL
@@ -179,7 +179,7 @@ void main(){
   col = mix(col, vec3(.88, .93, .97)*(uSkyCol*.5 + uSunCol*max(uSunDir.y, 0.)*.3*sun), foam);
   float a = mix(.82, 1., foam) * smoothstep(1., .9, bank);
   float fogK = 0.;
-#ifdef USE_FOG
+#if defined( USE_FOG ) && !defined( FOG_EXP2 )
   fogK = smoothstep(fogNear, fogFar, length(vW - cameraPosition));
   col = mix(col, fogColor, fogK);
 #endif
@@ -205,7 +205,7 @@ void main(){
   vec3 col = mix(glassy, white, max(aer, .3)*(.6 + .4*streak));
   col += uSunCol*pow(max(dot(-V, uSunDir), 0.), 4.)*.25*a;
   float fogK = 0.;
-#ifdef USE_FOG
+#if defined( USE_FOG ) && !defined( FOG_EXP2 )
   fogK = smoothstep(fogNear, fogFar, length(vW - cameraPosition));
   col = mix(col, fogColor, fogK);
 #endif

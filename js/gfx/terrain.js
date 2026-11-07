@@ -82,9 +82,8 @@ export function bakeField(spec = {}, quality = AAA.quality) {
   if (spec.lake) {
     const L = spec.lake; lake = { x: num(L.x, 0), z: num(L.z, 0), rx: num(L.rx, 1.2), rz: num(L.rz, 1.4), depth: num(L.depth, .38) };
     const rim = []; for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2; rim.push(hp(lake.x + Math.cos(a) * lake.rx * .95, lake.z + Math.sin(a) * lake.rz * .95)); }
-    rim.sort((a, b) => a - b); lake.level = L.level != null ? +L.level : Math.max(hp(lake.x, lake.z) + .05, rim[Math.floor(rim.length * .12)] - .015);
+    rim.sort((a, b) => a - b); lake.level = L.level != null ? +L.level : Math.max(hp(lake.x, lake.z) + .05, rim[0] - .02);   // below the lowest rim point: the lake never spills
     lake.bottom = lake.level - lake.depth;
-    if (river) { const P = river.P; for (const p of P) p.y = Math.max(p.y, lake.level - .004); }   // the river meets the lake at its level
   }
   if (river) {   // the steepest drop over a short run is the waterfall (lip → foot)
     const P = river.P; let best = 0, bi = -1, K = 4;

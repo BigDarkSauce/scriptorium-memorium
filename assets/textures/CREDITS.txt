@@ -1,0 +1,12 @@
+Scanned detail textures (micro layer for js/gfx/aaa.js; see docs/research/realism-playbook.md R13 and §6)
+
+All three sets are ambientCG assets, released under CC0 1.0 (public domain), fetched from the mirror in
+scottstts/Threejs-Awesome-Graphics-Agent-Skills at commit 53eb5a24097425d82532ec33697ad472750132a4:
+  ground103_*  <- skills/threejs-procedural-materials/assets/hybrid-soil-moss-surface/Ground103_1K-JPG_*  (ambientCG Ground103)
+  moss002_*    <- .../hybrid-soil-moss-surface/moss/Moss002_1K-JPG_*                                     (ambientCG Moss002)
+  bark001_*    <- skills/threejs-procedural-vegetation/assets/structured-ash-growth/bark-*                (ambientCG Bark001)
+
+Repacked (Pillow, Lanczos):
+  <set>_albedo.jpg  colour multiplied by a softened ambient occlusion (AO 0..1 -> 0.38..1), sRGB, JPEG q85
+  <set>_nrm.jpg     R, G = OpenGL normal x, y; B = roughness; linear, JPEG q90
+1024 x 1024 (bark 512 x 1024). Total about 2.2 MB.

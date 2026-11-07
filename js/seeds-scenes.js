@@ -10,13 +10,13 @@ export const WATER_CYCLE = {
   // edge is a waterfall, a stream from the saddle into the lake, a cottage yard and a path; cut faces show the soil
   // section. Grass, flowers, reeds, rocks and trees are scattered by the field's ecology (realism-playbook §3).
   bodies: [
-    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3b5326', high: '#6b6f43', block: true, bottom: -.85,
+    { id: 'ground', name: 'Valley floor', role: 'decor', position: [0, 0, 0], shape: { kind: 'terrain', w: 13, d: 10, h: .1, seed: 3, low: '#3b5326', high: '#6b6f43', block: true, bottom: -.85, lift: .05,
       backRise: [-2.4, -5, .35],
-      peaks: [{ x: .2, z: -2.9, r: 1.75, h: 2.75, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
+      peaks: [{ x: .2, z: -2.9, r: 1.9, h: 3.5, squash: 1.3, own: 'ridge', seed: 5 }, { x: -2.4, z: -3.2, r: 1.6, h: 1.85, squash: 1.1, seed: 11 }, { x: 2.8, z: -3.0, r: 1.4, h: 1.45, seed: 6 },
         { x: -4.9, z: 1.4, r: 1.5, h: .5, rough: .15, seed: 9 }, { x: 5.0, z: -3.9, r: 1.3, h: .8, seed: 4 }],
       terraces: [{ z0: -.55, z1: -.72, x0: -2.7, x1: .15, h: .32 }],
       river: { points: [[-1.0, -2.3], [-1.15, -1.6], [-.95, -1.05], [-.8, -.62], [-.65, -.2], [-.3, .15], [.15, .45], [.55, .75]], width: [.08, .2], depth: .05 },
-      lake: { x: .9, z: 1.7, rx: 1.25, rz: 1.45, depth: .3 },
+      lake: { x: .9, z: 1.7, rx: 1.25, rz: 1.45, depth: .3, level: .02 },
       pads: [[3.5, 3.7, .7]], path: { points: [[3.25, 3.35], [2.7, 2.9], [2.25, 2.2]], width: .14 } } },
     { id: 'mountain', name: 'Ridge', label: 'Ridge', role: 'actor', describe: 'Wind forces the moist air up its slope; rising air expands and cools.', shape: { kind: 'peak', id: 'ridge', x: .2, z: -2.9 }, position: [.2, 0, -2.9] },
     { id: 'meadow', name: 'Meadow', role: 'decor', shape: { kind: 'grassField' }, position: [0, 0, 0] },

@@ -110,7 +110,7 @@ function countryside(W,seed=3,camTh=null){const skip=camTh==null?null:a=>Math.ab
   // procedural broadleaf + pine forest (js/dio/trees.js): instanced, 2 draw calls per variant; shadows land in the sun's outer cascades
   const NT=34,broad=[],pines=[];
   for(let i=0;i<NT;i++){const a=r()*Math.PI*2;if(skip&&skip(a))continue;const d=10+r()*9,s=.8+r()*1.1;(r()<.33?pines:broad).push({x:Math.sin(a)*d,y:-1,z:Math.cos(a)*d,h:s*2.6,ry:r()*6.28})}
-  if(broad.length)g.add(treeForest('tree',broad,{color:'#3d5a2c',seed}));if(pines.length)g.add(treeForest('pine',pines,{seed:seed+7}));
+  if(broad.length)g.add(treeForest('oak',broad,{color:'#3d5a2c',seed}));if(pines.length)g.add(treeForest('pine',pines,{seed:seed+7}));
   const hill=new T.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),hm=new T.MeshStandardMaterial({color:0x4a6040,roughness:1});
   for(let i=0;i<12;i++){const a=i/12*Math.PI*2+r()*.4,d=60+r()*40,h=new T.Mesh(hill,hm);h.castShadow=h.receiveShadow=true;h.scale.set(18+r()*20,5+r()*9,14+r()*10);h.position.set(Math.sin(a)*d,-1.1,Math.cos(a)*d);g.add(h)}
   g.traverse(o=>{o.userData.noInk=true;o.userData.noContact=true});W.add(g);return g}

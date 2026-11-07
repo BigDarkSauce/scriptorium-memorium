@@ -24,7 +24,7 @@ export const VEG = { uWind: { value: new THREE.Vector2(1.2, -.4) }, uGustT: { va
 const _w = new THREE.Vector2();
 export function vegWindFrom(scene) { const w = scene && scene.userData.wind; if (w) _w.set(+w[0] || 0, +w[1] || 0); else _w.set(1.2, -.4); VEG.uWind.value.lerp(_w, .08); }
 
-export const VEG_QUALITY = { low: { density: 160, max: 18000, seg: 3, flowers: 0, reeds: .5 }, medium: { density: 380, max: 46000, seg: 4, flowers: 1, reeds: 1 }, high: { density: 820, max: 100000, seg: 5, flowers: 2, reeds: 1.6 } };
+export const VEG_QUALITY = { low: { density: 260, max: 18000, seg: 3, flowers: 0, reeds: .5 }, medium: { density: 620, max: 46000, seg: 4, flowers: 1, reeds: 1 }, high: { density: 1300, max: 100000, seg: 5, flowers: 2, reeds: 1.6 } };
 
 const VEG_HEAD = /* glsl */`
 attribute vec4 aRoot; attribute vec4 aShape; attribute vec4 aTint;
