@@ -447,12 +447,13 @@ export class Ops {
       Lv.cur = cur; }
     // the landmark: a ghost while the camera is near or inside it (hysteresis: on at 1.15 ×, off at 1.5 × its box)
     if (Lv.anchor && Lv.anchor.obj) { this.boxOf(Lv.anchor.obj, bx); const c = bx.getCenter(this._p), r = bx.getSize(this._q).length() * .5, dd = cam.position.distanceTo(c); const want = Lv.ghost ? dd < r * 1.5 : dd < r * 1.15; if (want && !Lv.ghost) this.ghost(Lv, true); else if (!want && Lv.ghost) this.ghost(Lv, false); }
-    const html = Lv.L.map((x, i) => `<i${i === Lv.cur ? ' class="now"' : ''}>${esc(x.name)}</i>`).join('<s>▸</s>') + (Lv.ghost ? `<em>in: ${esc(short(Lv.anchor))}</em>` : '');
+    const html = Lv.L.map((x, i) => `<i${i === Lv.cur ? ' class="now"' : ''}>${esc(x.name)}</i>`).join('<s>▸</s>') + (Lv.ghost ? `<em>in: ${esc(short(Lv.anchor).split(' (')[0])}</em>` : '');
     if (Lv.box._h !== html) { Lv.box._h = html; Lv.box.innerHTML = html; Lv.box._w = 0; }
     if (!Lv.box._w) { Lv.box._w = Lv.box.offsetWidth || 200; Lv.box._hh = Lv.box.offsetHeight || 22; }
     const w = innerWidth, h = innerHeight, fr = v.dir.freeFrame(w); let x = Math.max(fr[0] + 18, 12), y = h - 96 - 36 - Lv.box._hh;
     if (w < 760) { x = 10; y = 64; }
-    for (let k = 0; k < 10 && this.hits(x, y, Lv.box._w, Lv.box._hh); k++) y -= 28;
+    const bel = v.dir.beat && v.dir.beat.el, HR = this.hud().filter(r => !(bel && bel.isConnected && (() => { const q = bel.getBoundingClientRect(); return Math.abs(q.left - 8 - r[0]) < 1 && Math.abs(q.top - 8 - r[1]) < 1; })()));   /* the callout steps round the indicator (director), not the other way */
+    for (let k = 0; k < 10 && this.hits(x, y, Lv.box._w, Lv.box._hh, HR); k++) y -= 28;
     const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; }
   }
   ghost(Lv, on) {

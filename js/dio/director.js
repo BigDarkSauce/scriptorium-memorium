@@ -652,7 +652,7 @@ export class Director {
         b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()).filter(r => r.width > 1); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
         const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height }; };
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
-        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip].map(R).filter(Boolean);
+        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box].map(R).filter(Boolean);   /* (the level indicator of grammar.js)*/
         const ch0 = R(this.chipEl); b.chipR = ch0;
       }
       const cw = b.cw, ch = b.ch;
