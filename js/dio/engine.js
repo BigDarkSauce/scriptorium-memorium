@@ -652,7 +652,7 @@ export class DioramaView {
     this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
     // the opening overview framed in the free part of the screen (not under the instruction panel), once the panel and the
     // readouts are laid out (second frame) and nothing else moves the camera
-    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(); this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); } }
+    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(), big = this.camera.position.distanceTo(k.pos) > (this.ds.orb ? this.ds.orb.r : 10) * .04 || this.controls.target.distanceTo(k.target) > (this.ds.orb ? this.ds.orb.r : 10) * .04, put = () => { this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); }; if (big) this.dir.dip = { t: 0, done: false, apply: put }; else put(); } }   // a visible change of view goes through a dip, like any cut (never a bare jump)
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
     // panels are measured every 0.5 s (cheap); the callout moves every frame, so its drawn box is added fresh each frame

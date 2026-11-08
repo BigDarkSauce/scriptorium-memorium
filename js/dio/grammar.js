@@ -163,6 +163,7 @@ export class Ops {
   simRate() { const E = this.ex; return (E && E.phase !== 'done' && E.phase !== 'wait') || (this.sc && this.sc.phase !== 'wait' && !this.sc.done) ? 0 : 1; }
   busy() { return !!((this.ex && this.ex.phase !== 'done') || (this.as && !this.as.done) || (this.ins && !this.ins.done) || (this.pr && !this.pr.done) || (this.sc && !this.sc.done)); }
   holdShot() { return !!(this.cmp || this.sc || (this.ex && this.ex.phase !== 'done') || (this.ins && !this.ins.done)); }   // the director does not cut away for an event while one of these owns the frame
+  muteVectors() { return !!((this.ex && /^(frame|out|hold|in)$/.test(this.ex.phase)) || (this.sc && this.sc.phase !== 'wait')); }
   ownsFrame() { return !!((this.cmp && this.cmp.pose) || (this.sc && this.sc.phase !== 'wait')); }
   noAnchor() { return !!(this.cmp && this.cmp.mode === 'side'); }   // side by side: a callout leader into one half would point at the wrong state
   hidePins() { return !!(this.cmp || this.sc || (this.ex && /^(out|hold|in)$/.test(this.ex.phase))); }   // the parts' own callouts replace the pins while they are apart
@@ -373,6 +374,17 @@ export class Ops {
         if (K.mode === 'side') { cam.aspect = asp; cam.updateProjectionMatrix(); }
       }
     };
+    // the atmosphere pass (fog, god rays) reconstructs view rays from the full frame: in side mode each half gets its own,
+    // through the half-aspect projection composed with the map from the full frame's NDC to the half's
+    const at = v.gfx.atmos; if (at && this.cmp.mode === 'side') { const ao = at.render, tmp = new THREE.PerspectiveCamera(), M = new THREE.Matrix4(); this.cmp.atmos = { at, ao };
+      at.render = function (r, wb, rb, dtt, mask) {
+        const K = self.cmp, cam = v.camera; if (!K || K !== cm || !this.enabled) return ao.call(this, r, wb, rb, dtt, mask);
+        tmp.copy(cam); tmp.aspect = (cam.aspect || 1.6) / 2; tmp.updateProjectionMatrix();
+        const sets = [this.mat, this.godMat].filter(m => m && m.uniforms && m.uniforms.uProjInv), keep = sets.map(m => m.uniforms.uProjInv.value.clone()), T = wb, W = T.width, H = T.height, half = W >> 1;
+        try { T.scissorTest = true;
+          [[-1, 0, half], [1, half, W - half]].forEach(([sx, x0, w0]) => { M.set(2, 0, 0, sx === -1 ? 1 : -1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1); sets.forEach(m => m.uniforms.uProjInv.value.multiplyMatrices(tmp.projectionMatrixInverse, M)); T.scissor.set(x0, 0, w0, H); ao.call(this, r, wb, rb, dtt, mask); });
+        } finally { sets.forEach((m, i) => m.uniforms.uProjInv.value.copy(keep[i])); T.scissor.set(0, 0, W, H); T.scissorTest = false; }
+      }; }
     B.world.visible = false; B.extras.visible = false;   // (outside the pass, the second world is never drawn: shadow maps, the inset, the focus mask)
   }
   // one framing for both: the whole model centred, fitted to a half-width frame (side) or to the full frame (split)
@@ -400,6 +412,7 @@ export class Ops {
   endCompare() {
     const K = this.cmp; if (!K) return; this.cmp = null;
     K.rp.render = K.orig; if (Object.prototype.hasOwnProperty.call(K.rp, 'render') && K.rp.render === Object.getPrototypeOf(K.rp).render) delete K.rp.render;
+    if (K.atmos) { K.atmos.at.render = K.atmos.ao; if (K.atmos.at.render === Object.getPrototypeOf(K.atmos.at).render) delete K.atmos.at.render; }
     K.B.world.removeFromParent(); K.B.extras.removeFromParent();
     // the second world's own geometry and materials go; the shared materials (ds.mats) and everything the main world still uses stay
     const keep = new Set(); this.v.ds.world.traverse(o => { if (o.geometry) keep.add(o.geometry); [].concat(o.material || []).forEach(m => { keep.add(m); for (const k in m) if (m[k] && m[k].isTexture) keep.add(m[k]); }); });

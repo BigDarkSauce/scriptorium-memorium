@@ -633,7 +633,7 @@ export class Director {
     // lens: ease the field of view toward the shot's focal length (or back to the base lens after the learner takes over)
     if (this.fovTo && Math.abs(v.camera.fov - this.fovTo) > .05 && !v.pov) { v.camera.fov += (this.fovTo - v.camera.fov) * Math.min(1, dt * 2.5); v.camera.updateProjectionMatrix(); }
     this.updateShots(dt);
-    if (v.ds && v.ds.scene && v.ds.scene.userData.vecMute && !(this.guides && this.beat && this.beat.flowEls)) v.ds.scene.userData.vecMute = false;
+    if (v.ds && v.ds.scene) { const om = !!(v.ops && v.ops.muteVectors()); if (om) v.ds.scene.userData.vecMute = true; else if (v.ds.scene.userData.vecMute && !(this.guides && this.beat && this.beat.flowEls)) v.ds.scene.userData.vecMute = false; }   // (a model's own vector arrows step aside while parts are apart or a lineup shows)
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
     if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = Math.max(riding ? .6 : 0, this.queue.length ? .12 : .3);   // more waiting → slower, so text never lags far behind the process
