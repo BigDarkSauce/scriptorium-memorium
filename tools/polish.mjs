@@ -172,7 +172,8 @@ window.POLISH = function (scope, ctx) {
       if (hit) out.push({ check: 'e', what: 'legend over a data mark', where, legend: [L.x, L.y, L.width, L.height].map(Math.round), mark: hit }); }
   }
   // (f) HUD boxes that should be visible but leave the viewport
-  for (const b of boxes) { if (b.kind === 'label' && /pin|guide/.test(b.n)) continue; const r = b.r; if (r[0] < -2 || r[1] < -2 || r[2] > vw + 2 || r[3] > vh + 2) out.push({ check: 'f', what: 'off screen', el: b.n, rect: r, viewport: [vw, vh] }); }
+  // (only a box that is mostly on screen and cut off: one parked wholly or mostly outside is a hidden state)
+  for (const b of boxes) { if (b.kind === 'label' && /pin|guide/.test(b.n)) continue; const r = b.r, on = Math.max(0, Math.min(r[2], vw) - Math.max(r[0], 0)) * Math.max(0, Math.min(r[3], vh) - Math.max(r[1], 0)), area = (r[2] - r[0]) * (r[3] - r[1]) || 1; if (on / area < .5) continue; if (r[0] < -2 || r[1] < -2 || r[2] > vw + 2 || r[3] > vh + 2) out.push({ check: 'f', what: 'off screen', el: b.n, rect: r, viewport: [vw, vh] }); }
   return out;
 };`;
 
