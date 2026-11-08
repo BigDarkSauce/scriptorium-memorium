@@ -164,7 +164,7 @@ export class Cues {
   // already reads "Step k of n"), or, with no callout on screen, at the top of the free frame (desktop) / above the time
   // bar (phones), clear of the side buttons, the readouts and the inset
   placeChip() {
-    const d = this.v.dir, b = d && d.beat, co = b && b.el && b.el.isConnected ? b.el : null;
+    const d = this.v.dir, b = d && d.beat, co = b && b.el && b.el.isConnected && this.beatAboutChain(b) ? b.el : null;   // only a callout about the chain (the step's instruction, or the link now lit) carries the step; any other event keeps the chip in its own slot
     if (this.chip.hidden) { this.dropCoStep(); return; }
     if (co) {
       if (!this.coStep || this.coStep.parentNode !== co) { this.dropCoStep(); this.coStep = el('div', { class: 'co-step' }); const k = co.querySelector('.co-kicker'); if (k) k.after(this.coStep); else co.prepend(this.coStep); this.coStep._h = null; }
@@ -201,7 +201,9 @@ export class Cues {
     this.dirty = true;
   }
   // the current callout carries the k-of-n numbering too (S5.8)
-  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = k.dataset.base + ' · ' + txt; }
+  // a callout belongs to the chain when it is the step's own instruction or explanation, or an event about the link now lit
+  beatAboutChain(b) { const C = this.chain; if (!b || !C) return false; if (b.kind !== 'event') return true; const f = C.front; if (!f) return false; const nm = f.name.split(' · ')[0].toLowerCase(); return b.host === f || (b.names || []).includes(f) || String(b.text || '').toLowerCase().includes(nm); }
+  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k || !this.beatAboutChain(b)) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = k.dataset.base + ' · ' + txt; }
   // ---------- S3 peel ----------
   // P: {layers:[actor], mode, order, dwell, restore}, host: the inner subject
   startPeel(P, host) {
