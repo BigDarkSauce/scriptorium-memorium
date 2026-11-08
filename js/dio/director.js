@@ -246,14 +246,14 @@ export class Director {
   occluders(a) {
     const out = [], ds = this.v.ds, mine = new Set(); if (a && a.obj) a.obj.traverse(o => mine.add(o));
     const shown = o => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
-    const see = []; [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o)) return; const ms = [].concat(o.material); if (ms.some(m => !m || m.visible === false)) return; if (ms.some(m => m.transmission > 0 || (m.transparent && m.opacity < .6))) see.push(o); else out.push(o); }));
+    const see = []; [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o) || (o.isInstancedMesh && o.count > 200)) return;   /* dense instanced decor (grass tufts, fronds, molecules) never decides an approach */ const ms = [].concat(o.material); if (ms.some(m => !m || m.visible === false)) return; if (ms.some(m => m.transmission > 0 || (m.transparent && m.opacity < .6))) see.push(o); else out.push(o); }));
     out.see = see;   // see-through surfaces (glass, a membrane, water): they still dim and tint the view, so they count a little
     return out;
   }
   // how blocked the view of a target at c is from direction ax: five rays (centre and four around the target's rim) up to
   // the final distance d1 (heavy), and the centre ray up to the start distance d0 (light: the dolly passes through it)
   blockCost(c, ax, d0, d1, r, occ) {
-    const rc = this._rc || (this._rc = new THREE.Raycaster()), u = V3(), w = V3(), o = V3(); let cost = 0;
+    const rc = this._rc || (this._rc = new THREE.Raycaster()); rc.firstHitOnly = true; const u = V3(), w = V3(), o = V3(); let cost = 0;
     u.crossVectors(ax, Math.abs(ax.y) > .9 ? V3(1, 0, 0) : UP).normalize(); w.crossVectors(ax, u);
     const offs = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [.75, .75], [-.75, .75], [.75, -.75], [-.75, -.75]];
     for (const [i, j] of offs) {
