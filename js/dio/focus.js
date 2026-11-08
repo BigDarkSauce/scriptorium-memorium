@@ -353,6 +353,7 @@ export class Cues {
     const dot = this.v.dir && this.v.dir.beat && this.v.dir.beat.dot; if (dot && dot.style.opacity === '1') { const r = dot.getBoundingClientRect(); pinR.push([r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]); }   // nor on the callout's anchor dot
     const onHud = (x, y) => this._hudR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]) || pinR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]);
     for (const o of order) {
+      o.x = clamp(o.x, 14, w - 14); o.y = clamp(o.y, 14, h - 14);   // a link near the frame edge: its badge stays whole on screen
       for (let k = 0; k < 6; k++) { const hit = placed.find(p => Math.abs(p.x - o.x) < 26 && Math.abs(p.y - o.y) < 26); if (!hit) break; o.y = hit.y + 27; }
       if (onHud(o.x, o.y)) { const x0 = o.x, y0 = o.y, alt = [[x0 - 46, y0], [x0 - 10, y0 + 52], [x0 - 46, y0 + 52], [x0 + 24, y0], [x0 - 10, y0 - 30], [x0 - 80, y0], [x0 - 80, y0 + 52]].find(([x, y]) => x > 12 && y > 12 && x < w - 12 && y < h - 12 && !onHud(x, y) && !placed.some(p => Math.abs(p.x - x) < 26 && Math.abs(p.y - y) < 26));
         if (alt) { o.x = alt[0]; o.y = alt[1]; } else { o.b.style.opacity = 0; continue; } }
