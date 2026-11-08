@@ -204,7 +204,7 @@ export class Ops {
       // a stack along the axis: rank by position along it (ties share a rank), the lowest (or the named anchor) stays
       const pr = homes.map((h, i) => ({ i, t: h.c.dot(ax) })).sort((a, b) => a.t - b.t); let rank = 0, last = null; const rk = [];
       pr.forEach(o => { if (last != null && o.t - last > R * .04) rank++; rk[o.i] = rank; last = o.t; });
-      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, gap = Math.max(...homes.map(h => Math.abs(h.s.dot(ax)))), d = Math.max((+E.distance || .25) * R, gap * 1.8);   /* every rank clears the tallest part along the axis: visible gaps */
+      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, gap = Math.max(.01, ...homes.filter((h, i) => rk[i] !== base).map(h => Math.abs(h.s.dot(ax)))),   /* the parts that move (the base stays) */ d = Math.max((+E.distance || .25) * R, gap * 1.8);   /* every rank clears the tallest part along the axis: visible gaps */
       dirs = rk.map(r => ax.clone().multiplyScalar((r - base) * d));
     } else {
       const d = (+E.distance || .55) * R;
