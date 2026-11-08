@@ -76,6 +76,10 @@ const C = [
   ['C6H12O6 + 6O2 -> 6CO2 + 6H2O', 'C_{6}H_{12}O_{6} + 6O_{2} → 6CO_{2} + 6H_{2}O'],
   // --- units
   ['I = 2.5 kg*m^2', '*I* = 2.5~kg·m^{2}'], ['g = 9.81 m/s^2', '*g* = 9.81~m/s^{2}'], ['ΔH = -286 kJ*mol^-1', 'Δ*H* = −286~kJ·mol^{−1}'], ['J·mol⁻¹', 'J·mol⁻¹'],
+  // units after numbers, and unit-like tokens (K, Pa, J, mol, %/K), are upright — never an italic K
+  ['6.8 %/K', '6.8 %/K'], ['6.8 %/K', '6.8 %/K', 'label'], ['e_s growth per kelvin: 6.8 %/K', '*e*_{*s*} growth per kelvin: 6.8 %/K', 'label'], ['α = 6.8 %/K', '*α* = 6.8 %/K', 'label'],
+  ['2 ‰/K', '2 ‰/K'], ['6 %/°C', '6 %/°C'], ['ΔT = 2.5 K', 'Δ*T* = 2.5~K', 'label'], ['p = 101 kPa', '*p* = 101~kPa', 'label'], ['E = 5 J', '*E* = 5~J', 'label'], ['n = 2 mol', '*n* = 2~mol', 'label'],
+  ['k = 1.38e-23 J/K', "*k* = 1.38'×'10^{−23}~J/K", 'label'], ['p = 12 Pa', '*p* = 12~Pa'], ['c = 4.2 J/(g·K)', '*c* = 4.2~J/(g·K)', 'label'],
   ['speed in m/s', 'speed in m/s'], ['units kg*m^2/s^2', 'units kg·m^{2}/s^{2}'], ['a = 3 m/s^2', '*a* = 3~m/s^{2}'],
   // --- prose that must stay as it is
   ['as it is, this is a test', 'as it is, this is a test'], ['Step S9 follows S8; see G2.', 'Step S9 follows S8; see G2.'],
@@ -112,6 +116,8 @@ for (const [inp, want, mode = 'html', note] of C) {
   n++; const r = mathRuns('e^(−Eb/kT)'); const sup = r.filter(x => x.sh > 0).map(x => x.t).join(''), sub = r.find(x => x.sh > 0 && x.sh < .42 && x.t === 'b');
   if (sup !== '−E/kT' && sup !== '−Eb/kT') { fail++; console.log('FAIL runs: superscript of e^(−Eb/kT) = ' + JSON.stringify(r)); }
   n++; const q = mathRuns('sqrt(L/g)'); if (!q.some(x => x.ov && /L/.test(x.t)) || !q.some(x => x.t.includes('√'))) { fail++; console.log('FAIL runs: radical ' + JSON.stringify(q)); }
+  // units in SVG / canvas runs are never italic
+  for (const [src, unit] of [['6.8 %/K', 'K'], ['T = 300 K', 'K'], ['p = 12 Pa', 'Pa'], ['E = 5 J', 'J'], ['n = 2 mol', 'mol']]) { n++; const rr = mathRuns(src); if (rr.some(x => x.it && x.t.includes(unit))) { fail++; console.log('FAIL runs: italic unit in ' + src + ' ' + JSON.stringify(rr)); } }
   n++; const t = mathText('z = a*sin(x)*cos(y)'); if (/[*^]/.test(t)) { fail++; console.log('FAIL mathText ' + t); }
 }
 console.log(`${n - fail} of ${n} maths typesetting cases pass`);
