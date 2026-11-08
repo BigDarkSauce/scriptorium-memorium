@@ -58,6 +58,8 @@ export class Ops {
     this.chip = el('div', { class: 'ops-chip', hidden: true }); this.layer.append(this.chip);
   }
   ready() { const c = this.v.cues; return !!(c && c.ready()); }
+  // the previous stage's callout has been read (or nearly): the next stage never runs ahead of the text on screen
+  read() { const d = this.v.dir; return !(d.beat && d.beat.opsBeat && d.beat.t < d.beat.dur * .85) && !d.queue.some(b => b.opsBeat); }
   reduced() { return !!(this.v.reducedMotion && this.v.reducedMotion()); }
   actor(n) { if (!n) return null; const a = this.v.actorByName(n); if (a) return a; const ds = this.v.ds, o = ds.bodyMap && ds.bodyMap.get(String(n)); return o ? { name: o.userData.label || o.name || String(n), obj: o, getPos: () => ds.centerOf(o), describe: o.userData.describe || '', id: String(n) } : null; }   // an actor, else a scene body by id (decor can be cut or moved too)
   boxOf(o, out = new THREE.Box3()) { out.makeEmpty(); if (o) { o.updateWorldMatrix(true, true); out.setFromObject(o); } return out; }
@@ -113,8 +115,10 @@ export class Ops {
   // the same pose turned round its target until nothing opaque stands between the lens and the part (the director's ray test)
   clearPose(pose, a) {
     if (!pose) return pose; const d = this.v.dir, c = pose.target, ax = pose.pos.clone().sub(c), dist = ax.length(); if (dist < 1e-6) return pose; ax.divideScalar(dist);
+    // a close-up looks down on its part (about 40°): wires and neighbours on the bench then rarely stand in front of it
+    { const h = Math.hypot(ax.x, ax.z) || 1, e = THREE.MathUtils.degToRad(40); ax.set(ax.x / h * Math.cos(e), Math.sin(e), ax.z / h * Math.cos(e)); }
     const bx = this.boxOf(a.obj), rs = Math.max(.02, bx.isEmpty() ? .2 : bx.getSize(V3()).length() * .3);
-    try { const occ = d.occluders(a), nx = d.clearAxis(bx.isEmpty() ? c : bx.getCenter(V3()), ax, dist, dist, rs, occ, 105); return { target: c, pos: c.clone().addScaledVector(nx, dist), fov: pose.fov }; } catch (e) { return pose; }
+    try { const occ = d.occluders(a), nx = d.blockCost(bx.isEmpty() ? c : bx.getCenter(V3()), ax, dist, dist, rs, occ) === 0 ? ax : d.clearAxis(bx.isEmpty() ? c : bx.getCenter(V3()), ax, dist, dist, rs, occ, 105); return { target: c, pos: c.clone().addScaledVector(nx, dist), fov: pose.fov }; } catch (e) { return pose; }
   }
   // an eased camera glide (a moving shot: smoothstep position, slerped heading, so start and stop are gentle and the turn
   // rate stays bounded); Calm turns it into a cut through a dip
@@ -230,9 +234,10 @@ export class Ops {
   explodeBeat() {
     const X = this.ex, d = this.v.dir, txt = X.E.caption || `The ${X.parts.length} parts, apart: ${X.names.map((n, i) => (i + 1) + ' ' + n).join(', ')}. Each dashed line leads back to where the part sits.`;
     X.holdFor = Math.max(X.hold, d.readTime(txt));
-    d.push({ kind: 'explain', kicker: 'Exploded view', noShot: true, opsBeat: true, title: 'Parts', text: txt, anchor: () => X.C0, focus: null, host: X.host, names: [] });
+    const P = X.proxy || (X.proxy = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))), fc = X.fin.getCenter(V3()), fs = X.fin.getSize(V3()); P.position.copy(fc); P.scale.set(Math.max(fs.x, .01), Math.max(fs.y, .01), Math.max(fs.z, .01)); P.updateMatrixWorld(true);   /* the callout keeps off the whole exploded assembly */
+    d.push({ kind: 'explain', kicker: 'Exploded view', noShot: true, opsBeat: true, title: 'Parts', text: txt, anchor: () => X.C0, focus: P, host: X.host, names: [] });
   }
-  endExplode() { const X = this.ex; if (!X) return; X.parts.forEach(a => this.setOff(a.obj, V3())); this.applyOffAndDrop(X.parts.map(a => a.obj)); X.lines.removeFromParent(); X.lines.geometry.dispose(); X.lines.material.dispose(); this.clearBadges(); this.ex = null; }
+  endExplode() { const X = this.ex; if (!X) return; X.parts.forEach(a => this.setOff(a.obj, V3())); this.applyOffAndDrop(X.parts.map(a => a.obj)); X.lines.removeFromParent(); X.lines.geometry.dispose(); X.lines.material.dispose(); if (X.proxy) X.proxy.geometry.dispose(); this.clearBadges(); this.ex = null; }
   applyOffAndDrop(objs) { this.preStep(); objs.forEach(o => this.off.delete(o)); }
 
   // ================================================================ assemble (chronological reconstruction)
@@ -249,7 +254,7 @@ export class Ops {
     S.parts.forEach((p, j) => { if (j > S.i) p.a.obj.visible = false; });   // (re-asserted every frame: a model may set visibility itself)
     if (!S.done && this.ready()) {
       S.t += dt;
-      if (S.i < 0 || S.t >= S.wait) {
+      if (S.i < 0 || (S.t >= S.wait && this.read())) {
         S.i++; S.t = 0;
         if (S.i >= S.parts.length) { S.done = true; }
         else { const p = S.parts[S.i], txt = p.caption || (short(p.a) + (p.a.describe ? ': ' + p.a.describe : '')); p.a.obj.visible = p.vis0 !== false; S.wait = Math.max(+S.A.stagger || 1.6, d.readTime(txt)) + .5;
@@ -270,7 +275,7 @@ export class Ops {
   updateInspect(dt) {
     const S = this.ins, d = this.v.dir; if (S.done || !this.ready() && S.i < 0) return;
     S.t += dt;
-    if (S.i < 0 || (S.t >= S.wait && !d.move)) {
+    if (S.i < 0 || (S.t >= S.wait && !d.move && this.read())) {
       S.i++; S.t = 0;
       if (S.i >= S.parts.length) { S.done = true; const k = d.wideKey(); this.glide({ target: k.target, pos: k.pos, fov: d.baseFov() }); this.legend(null); return; }   // back to the whole: an internal part is never left without its place in it
       const p = S.parts[S.i], txt = p.note || (short(p.a) + (p.a.describe ? ': ' + p.a.describe : ''));
@@ -287,7 +292,7 @@ export class Ops {
   updateProgression(dt) {
     const S = this.pr, d = this.v.dir; if (S.done) return; if (S.i < 0 && !this.ready()) return;
     S.t += dt;
-    if (S.i < 0 || S.t >= S.wait) {
+    if (S.i < 0 || (S.t >= S.wait && this.read())) {
       S.i++; S.t = 0; if (S.i >= S.st.length) { S.done = true; this.legend(null); return; }
       const s = S.st[S.i], txt = s.caption || s.label; for (const k in s.set || {}) this.v.setParam(k, +s.set[k], true); if (s.set) this.v.renderParams && this.v.renderParams();
       S.wait = Math.max(+s.hold || 4, d.readTime(txt)) + .4;
@@ -428,7 +433,7 @@ export class Ops {
   // level stays visible around the new one.
   startLevels(l, cue) {
     const v = this.v, L0 = cue.levels || null;
-    const zoom = cue.zoom, show = !!(l.level || zoom || (cue.scaleTo) || (L0 && l.cameraMode));
+    const zoom = cue.zoom, show = !!(l.level || zoom || cue.scaleTo);   /* only beats that move between levels or name one */
     if (!show || (!L0 && !l.level && !(zoom && zoom.anchor))) return;
     const L = (L0 || [l.level]).map(x => typeof x === 'string' ? { name: x } : x).filter(x => x && x.name).slice(0, 6).map(x => ({ name: String(x.name), a: x.at ? this.actor(x.at) : null }));
     const st = zoom && (zoom.stations || []).map(s => s.level).filter(Boolean);
