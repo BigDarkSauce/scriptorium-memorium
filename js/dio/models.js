@@ -1706,7 +1706,7 @@ DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',dur:
  points:[[-5.7,1.7,-.2],[-5.6,1.55,1.4],[-5.2,1.5,3.2],[-3.6,1.5,3.6],[0,1.5,3.6],[3.6,1.5,3.6],[5.2,1.5,3.2],[5.6,1.5,1.4],[5.6,1.5,-1.4],[5.2,1.5,-3.2],[3.6,1.5,-3.6],[2.4,1.5,-3.8],[1.4,1.5,-4.4],[0,1.5,-4.5],[-1.2,1.55,-4.4]],
  look:[[-4.5,.6,.2],[-4.5,.45,1.4],[-4.3,.45,2.4],[-3.0,.45,2.5],[0,.45,2.5],[3.0,.45,2.5],[4.3,.45,2.4],[4.5,.45,1.0],[4.5,.45,-1.0],[4.3,.45,-2.4],[3.0,.45,-2.5],[1.8,.45,-2.6],[1.5,.45,-3.2],[0,.45,-3.3],[-1.5,.45,-3.2]]}};
 DIO.circuit.lessons=[
- {title:'What is in the loop?',question:'What does each part of the circuit do?',focus:'battery',set:{V:9,R:5,C:.6,closed:1},run:4,cameraMode:'component',
+ {title:'What is in the loop?',question:'What does each part of the circuit do?',focus:'battery',set:{V:9,R:5,C:.6,closed:1},run:4,cameraMode:'global',
   inspect:{parts:[{a:'battery · ε',note:'Battery: pushes charge round the loop with an emf of 9 V.'},{a:'switch',note:'Switch: closes the loop through the battery, or bypasses it.'},{a:'resistor · R',note:'Resistor: 5 kΩ that limits how much current can flow.'},{a:'capacitor · C',note:'Capacitor: two metal plates with an insulating gap; charge piles up on them.'},{a:'voltmeter (across C)',note:'Voltmeter: reads the voltage across the capacitor.'}]},
   text:'The camera visits each part of the circuit in turn, then returns to the whole loop. Note what each one does before anything is explained.',
   explain:'Five parts, one loop: the battery pushes, the switch decides the path, the resistor limits the current, the capacitor stores the charge that arrives, and the voltmeter reads how full it is. The question is how fast it fills.',
@@ -1716,9 +1716,9 @@ DIO.circuit.lessons=[
   text:'Close the switch: the 9 V battery charges the capacitor through the 5 kΩ resistor. Watch the voltmeter.',
   explain:'After τ = RC = 5 kΩ × 0.6 mF = 3.00 s the capacitor was at 5.69 V, 63.2 % of 9 V. The current is driven by the difference between the battery and the capacitor (ε − V_C)/R; as the capacitor fills, the difference shrinks, so it fills ever more slowly: V_C = ε(1 − e^(−t/RC)).',
   opens:'Where does the charge actually go inside the capacitor?'},
- {title:'Inside the capacitor',question:'Where does the charge actually go inside the capacitor?',focus:'capacitor',run:6,cameraMode:'object',
+ {title:'Inside the capacitor',question:'Where does the charge actually go inside the capacitor?',focus:'capacitor',run:6,cameraMode:'component',
   section:{on:['capacitor · C'],axis:'y',sweep:1.6,caption:'Cut open: two steel plates and the insulating sheet between them. No charge crosses the sheet.'},
-  text:'Keep the switch closed. The capacitor is cut open from the top while the whole loop stays in view: watch the two plates glow as charge piles up, red (+) on one, blue (−) on the other.',
+  text:'Keep the switch closed. The camera moves in on the capacitor (the small overview in the corner keeps the whole loop) and cuts it open from the top: watch the two plates glow as charge piles up, red (+) on one, blue (−) on the other.',
   explain:'The charge never crosses the gap: electrons pile up on one plate and leave the other, so the plates carry +q and −q with q = C·V_C. At 5.69 V the 0.6 mF capacitor holds q = 0.6 mF × 5.69 V ≈ 3.4 mC. The more charge on the plates, the more they push back against the battery, which is why the current dies away.',
   opens:'How long until it is full, and what does an electron do meanwhile?'},
  {title:'Ride an electron',question:'How long until it is full, and what does an electron do meanwhile?',focus:'tracked electron',set:{R:2},shot:'pov',pov:'tracked electron',until:'event:t = 5τ',run:10,cameraMode:'frame',
