@@ -271,7 +271,12 @@ export class Cues {
   preStep() { const P = this.peel; if (!P || P.mode !== 'lift') return; for (const l of P.L) { if (!l.has) continue; const p = l.a.obj.position; if (p.equals(l.ap)) p.sub(l.lastOff); l.has = false; } }
   layerBeat(l) {
     const P = this.peel, d = this.v.dir, a = l.a, nm = a.name.split(' · ')[0], idx = P.order === 'out-in' ? l.i : P.n - 1 - l.i;
-    d.push({ kind: 'explain', kicker: `${P.kicker} ${idx + 1} of ${P.n}`, noShot: true, title: nm, text: (a.describe ? nm + ': ' + a.describe : nm), anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
+    // the kicker names the layer ("Section · capacitor", "Layer 2 of 3 · soil"; no counter for a single one); the caption is the
+    // text as written when it is a sentence, else it follows the name (never "name: Caption: …" with two colons)
+    const named = !!nm && nm.toLowerCase() !== String(P.kicker).toLowerCase(), D = String(a.describe || '').trim();
+    const kicker = (P.n > 1 ? `${P.kicker} ${idx + 1} of ${P.n}` : P.kicker) + (named ? ' · ' + nm : '');
+    const text = !D ? nm : (/^[A-Z0-9“"(]/.test(D) || !named) ? D : nm + (D.includes(':') ? ' — ' : ': ') + D;
+    d.push({ kind: 'explain', kicker, noShot: true, title: nm, text, anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
     this.v.touchLabels && this.v.touchLabels([a]);
   }
   updatePeel(dt) {
