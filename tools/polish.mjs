@@ -9,7 +9,7 @@
 //      --quick        one view per area, desktop only (≈ 2–4 min with software rendering); used by tools/smoke.mjs
 //      --views=desktop,phone   which viewports (desktop 1280×720, phone = iPhone 13 at device scale 1)
 //      --only=regex   only the items whose id matches
-//      --budget=540   stop cleanly after this many seconds (exit code 3: run again to continue)
+//      --budget=420   stop cleanly after this many seconds (exit code 3: run again to continue)
 //      --reset        forget earlier results and start over (a --quick run always starts over unless --resume)
 //      --resume       (with --quick) keep earlier quick results
 //      --redo=regex   walk the matching finished items again;  --redo-failed: walk again every item with findings
@@ -51,7 +51,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2), opt = k => { const a = argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a == null ? null : a.includes('=') ? a.split('=').slice(1).join('=') : true; };
 const URL0 = argv.find(a => !a.startsWith('--')) || process.env.POLISH_URL || 'http://localhost:8000/';
-const QUICK = !!opt('quick'), BUDGET = +(opt('budget') || 540) * 1000, ONLY = opt('only') ? new RegExp(opt('only')) : null;
+const QUICK = !!opt('quick'), BUDGET = +(opt('budget') || 420) * 1000, ONLY = opt('only') ? new RegExp(opt('only')) : null;
 const VIEWS = String(opt('views') || (QUICK ? 'desktop' : 'desktop,phone')).split(',');
 const OUT = process.env.POLISH_OUT || join(tmpdir(), 'scriptorium-polish'); mkdirSync(OUT, { recursive: true });
 const STATE = join(OUT, QUICK ? 'state-quick.json' : 'state.json'), REPORT = process.env.POLISH_REPORT || join(ROOT, 'docs/qa/polish-report.md');
@@ -86,7 +86,7 @@ window.W = window.__scriptorium; const sleep = ms => new Promise(r => setTimeout
 window.S = {
   sleep,
   stop() { if (W._polishStopped) return; W._polishStopped = true; W.loop = function () { requestAnimationFrame(() => W.loop()); }; },
-  tick(n, dt = 1 / 30) { for (let k = 0; k < n; k++) { W.t += dt; W.mode.update(dt, W.t); } },
+  tick(n, dt = 1 / 20) { for (let k = 0; k < n; k++) { W.t += dt; W.mode.update(dt, W.t); } },
   draw() { W.gfx.render(1 / 30, W.t); },
   async settle() { for (let k = 0; k < 400 && (W.gfx.grade.uniforms.uFade.value > 0.01 || W._swBusy); k++) await sleep(50); },
   // colour of the frame just drawn: mean HSV saturation, share of near-white pixels
@@ -181,7 +181,11 @@ async function pageFor(view) {
   page.on('pageerror', e => page._errors.push('uncaught: ' + e.message)); page.on('console', m => { if (m.type() === 'error' && !/GL Driver|ReadPixels|favicon|KHR_parallel/.test(m.text())) page._errors.push('console: ' + m.text().slice(0, 200)); });
   await page.goto(URL0, { timeout: 60000 });
   await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 240000 });
-  await page.evaluate(HELPERS); await page.evaluate(() => { S.stop(); W.gfx.setQuality && W.gfx.setQuality('low'); });
+  // drawing at half resolution: a software-rendered frame is slow, and colour and layout do not depend on it
+  // no backdrop blur and no CSS transitions in the gate: every sample sees final states (a box fading out is not a
+  // finding), and a software compositor is not re-blurring the canvas under every glass panel on each DOM change
+  await page.addStyleTag({ content: '*, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; transition-duration: 0s !important; transition-delay: 0s !important; }' });
+  await page.evaluate(HELPERS); await page.evaluate(() => { S.stop(); W.gfx.setQuality && W.gfx.setQuality('low'); W.gfx.maxDpr = W.gfx.dpr = .5; W.gfx.resize(); });
   pages[view] = page; return page;
 }
 const shotName = (id, k) => id.replace(/[^\w.-]+/g, '_').slice(0, 90) + (k ? '_' + k : '') + '.png';
@@ -212,14 +216,14 @@ async function enumerate() {
 // one item → issues ([{check, what, …, beat?, shot?}]) and notes
 async function runItem(id) {
   const [view, area, ...rest] = id.split(':'), arg = rest.join(':'); const page = await pageFor(view); const issues = [], notes = {};
-  const sample = async (tag) => { const r = await page.evaluate(([sc]) => POLISH(sc), [area]); r.forEach(x => { if (tag) x.at = tag; }); return r; };
+  notes.pms = 0; const sample = async (tag) => { const { r, ms } = await page.evaluate(([sc]) => { const t = performance.now(), r = POLISH(sc); return { r, ms: performance.now() - t }; }, [area]); notes.pms += Math.round(ms); r.forEach(x => { if (tag) x.at = tag; }); return r; };
   const keep = (list, at) => { for (const x of list) { const key = x.check + '|' + (x.what || '') + '|' + (x.a || x.el || x.label || x.where || '') + '|' + (x.b || x.text || ''); if (!issues.some(y => y._k === key)) { x._k = key; if (at) x.at = at; issues.push(x); } } };
   if (area === 'hub') {
     await page.evaluate(async () => { await W.openHub(); await S.settle(); S.tick(8); });
     notes.colour = await page.evaluate(() => S.colour()); keep(await sample());
   } else if (area === 'room') {
-    await page.evaluate(async t => { const b = W.lib.books.find(x => x.title === t); await W.openRoom(b.id); await S.settle(); S.tick(8); }, arg);
-    notes.colour = await page.evaluate(() => S.colour()); keep(await sample());
+    notes.ms = await page.evaluate(async t => { const b = W.lib.books.find(x => x.title === t), t0 = performance.now(); await W.openRoom(b.id); const t1 = performance.now(); await S.settle(); const t2 = performance.now(); S.tick(8); return [t1 - t0, t2 - t1, performance.now() - t2].map(Math.round); }, arg);
+    const tc = Date.now(); notes.colour = await page.evaluate(() => S.colour()); notes.ms.push(Date.now() - tc); keep(await sample());
   } else if (area === 'reader') {
     const [book, pi] = [arg.slice(0, arg.lastIndexOf('/')), +arg.slice(arg.lastIndexOf('/') + 1)];
     if (book === 'BYU fixture') await page.evaluate(async (chains) => { if (!W.lib.books.find(x => x.title === 'BYU fixture')) await W.importJSON({ format: 'scriptorium-room/1', book: { title: 'BYU fixture', pages: 7 }, room: { parts: chains.map((c, k) => ({ title: c.title || 'Sheet ' + (k + 1), startPage: k + 1, endPage: k + 1, analysis: c })) } }); }, [1, 2, 3, 4, 5, 6, 7].map(k => JSON.parse(readFileSync(join(ROOT, `tools/fixtures/byu-stub/chain-0${k}.json`), 'utf8'))));
@@ -236,26 +240,29 @@ async function runItem(id) {
     keep(await sample());
     // a phone or desktop screenshot of the reader's first fold is not needed unless something failed
   } else if (area === 'dio') {
-    const [kind, key] = arg.split(':');
+    const [kind, key] = arg.split(':'); const tOpen = Date.now(); notes.ms = {};
     await page.evaluate(async ([kind, key]) => { let spec; if (kind === 'flag') { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); spec = FLAGSHIPS[+key]; } else spec = { type: key };
-      await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(3); }, [kind, key]);
+      window._pKeys = null; window._pSeen = null; await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(3); }, [kind, key]);
     const nLessons = Math.min(QUICK ? 1 : 99, await page.evaluate(() => (W.mode.lessons ? W.mode.lessons() : []).length)); notes.beats = 0;
-    notes.lessons = nLessons; keep(await sample(), 'idle');
+    notes.lessons = nLessons; notes.ms.open = Date.now() - tOpen; let ts = Date.now(); keep(await sample(), 'idle'); notes.ms.sample = Date.now() - ts; notes.ms.ticks = 0; notes.ms.samples = 0;
     let shots = 0; const tItem = Date.now(), ITEM_MS = QUICK ? 150000 : 240000;
     for (const guides of [true, false]) for (let li = 0; li < Math.max(1, nLessons); li++) {
       if (!nLessons || notes.cut) break;
       await page.evaluate(([g, li]) => { const v = W.mode; v.setPref('guides', g); if (v.dir) v.dir.guides = g; v.runLesson(li); }, [guides, li]);
       // run the lesson; sample once per beat (after 1.2 s) and once per chain step
       for (let round = 0; round < 40; round++) {
-        const st = await page.evaluate(() => { const v = W.mode, d = v.dir; const seen = window._pSeen || (window._pSeen = new Set()); let k = 0;
-          for (; k < 1800; k++) { S.tick(1); const b = d && d.beat, c = v.cues && v.cues.chain; const key = b ? (b.kind + ':' + (b.text || b.title || '')).slice(0, 80) : null; const ckey = c && c.gi != null ? 'chain' + c.gi : null;
-            if (b && b.t > 1.2 && key && !seen.has(key)) { seen.add(key); return { beat: key }; } if (ckey && c.ft > .6 && !seen.has(ckey)) { seen.add(ckey); return { beat: ckey }; } if (v.running == null && k > 30) return { end: true }; }
-          return { end: true, timeout: true }; });
+        // the lesson runs in the page and is sampled once per beat (after 1.2 s) and once per chain step, in the same task
+        // as the ticks; control comes back here only with a finding not seen before (for its screenshot) or at the end
+        ts = Date.now(); const st = await page.evaluate(() => { const v = W.mode, d = v.dir; const seen = window._pSeen || (window._pSeen = new Set()), keys = window._pKeys || (window._pKeys = new Set()); let k = 0, n = 0;
+          for (; k < 2400; k++) { S.tick(1); const b = d && d.beat, c = v.cues && v.cues.chain; const key = b ? (b.kind + ':' + (b.text || b.title || '')).slice(0, 80) : null; const ckey = c && c.gi != null ? 'chain' + c.gi : null;
+            let at = null; if (b && b.t > 1.2 && key && !seen.has(key)) at = key; else if (ckey && c.ft > .6 && !seen.has(ckey)) at = ckey;
+            if (at) { seen.add(at); n++; const r = POLISH('dio'), fresh = r.filter(x => { const q = x.check + '|' + x.what + '|' + (x.a || x.el || x.label || x.where || '') + '|' + (x.b || ''); if (keys.has(q)) return false; keys.add(q); return true; }); if (fresh.length) return { beat: at, r: fresh, n }; }
+            if (v.running == null && k > 30) return { end: true, n }; }
+          return { end: true, timeout: true, n }; });
+        notes.ms.ticks += Date.now() - ts; notes.beats += st.n || 0;
         if (st.end) { notes['L' + li + (guides ? 'g' : '')] = st.timeout ? 'timeout' : 'done'; break; }
-        const tag = `lesson ${li + 1}, guides ${guides ? 'on' : 'off'}, ${st.beat}`; const r = await sample(); notes.beats++;
-        // a screenshot only for a finding not seen before in this item, at most 3 per item (a software-rendered frame is slow)
-        const fresh = r.filter(x => !issues.some(y => y.check === x.check && y.what === x.what && (y.a || y.el || y.label || y.where) === (x.a || x.el || x.label || x.where)));
-        if (fresh.length) { const shot = shots < 3 ? (shots++, await evidence(page, id, issues.length)) : null; fresh.forEach(x => { if (shot) x.shot = shot; }); keep(fresh, tag); }
+        const tag = `lesson ${li + 1}, guides ${guides ? 'on' : 'off'}, ${st.beat}`; const fresh = st.r;
+        const shot = shots < 3 ? (shots++, await evidence(page, id, issues.length)) : null; fresh.forEach(x => { if (shot) x.shot = shot; }); keep(fresh, tag);
         if (Date.now() - tItem > ITEM_MS) { notes.cut = 'item time cap reached'; break; }
       }
       await page.evaluate(() => { window._pSeen = null; const v = W.mode; if (v.running != null && v.stopLesson) v.stopLesson(); });
@@ -296,7 +303,8 @@ function writeReport(final) {
   mkdirSync(dirname(REPORT), { recursive: true }); writeFileSync(REPORT, L.join('\n'));
 }
 
-let exitCode = 0;
+let exitCode = 0, KILLED = false;
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { KILLED = true; exitCode = 3; console.log('polish: stopped by ' + sig + ' — finished items are kept'); });
 try {
   if (!state.items) { state.items = await enumerate(); saveState(); }
   const todo = state.items.filter(i => !state.done[i] && (!ONLY || ONLY.test(i)) && VIEWS.includes(i.split(':')[0]));
@@ -304,8 +312,8 @@ try {
   for (const id of todo) {
     if (Date.now() - T0 > BUDGET) { console.log(`polish: budget reached, ${todo.length - todo.indexOf(id)} items left — run again to continue`); exitCode = 3; break; }
     const t1 = Date.now(); let res;
-    try { res = await runItem(id); } catch (e) { res = { issues: [{ check: 'errors', what: 'the walk failed', text: String(e.message || e).split('\n')[0] }], notes: {} }; const v = id.split(':')[0]; try { await pages[v].close(); } catch (x) { } pages[v] = null; }
-    state.done[id] = { ...res, ms: Date.now() - t1 }; saveState(); writeReport(false);
+    try { res = await runItem(id); } catch (e) { if (KILLED) break;   /* stopped from outside: this item is not done, it runs again next time */ res = { issues: [{ check: 'errors', what: 'the walk failed', text: String(e.message || e).split('\n')[0] }], notes: {} }; const v = id.split(':')[0]; try { await pages[v].close(); } catch (x) { } pages[v] = null; }
+    if (KILLED) break; state.done[id] = { ...res, ms: Date.now() - t1 }; saveState(); writeReport(false);
     console.log(`${res.issues.length ? 'FAIL' : 'ok  '}  ${id}  ${((Date.now() - t1) / 1000).toFixed(0)} s${res.issues.length ? '  ' + res.issues.slice(0, 2).map(x => x.check + ': ' + x.what + ' ' + (x.a || x.el || x.label || x.where || '')).join(' | ') : ''}`);
   }
 } catch (e) { console.error('polish: could not run: ' + e.message); await browser.close(); process.exit(2); }
