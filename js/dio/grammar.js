@@ -330,7 +330,7 @@ export class Ops {
   scaleBeat(which) {
     const Z = this.sc, d = this.v.dir, C = Z.S.captions || {}, txt = which === 'common' ? (C.common || 'All drawn the same size, as in a classroom chart.') : (C.true || 'Now each is drawn at its true size relative to the others.');
     Z.holdFor = d.readTime(txt);
-    d.push({ kind: 'explain', kicker: which === 'common' ? 'Classroom picture' : 'True scale', noShot: true, opsBeat: true, title: which === 'common' ? 'Same size' : 'True size', text: txt + (which === 'true' && Z.S.source ? ' (' + Z.S.source + ')' : ''), anchor: () => Z.tgt, focus: null, host: null, names: [] });
+    d.push({ kind: 'explain', kicker: which === 'common' ? 'Classroom picture' : 'True scale', noShot: true, opsBeat: true, title: which === 'common' ? 'Same size' : 'True size', text: txt + (which === 'true' && Z.S.source ? ' (' + Z.S.source + ')' : ''), anchor: null,   /* the whole lineup is the subject: no leader onto one sphere */ focus: null, host: null, names: [] });
   }
   endScale() { const Z = this.sc; if (!Z) return; Z.hid.forEach(o => { o.visible = true; }); Z.G.removeFromParent(); Z.meshes.forEach(m => m.material.dispose()); Z.geo.dispose(); this.clearBadges(); this.sc = null; }
 
@@ -394,7 +394,7 @@ export class Ops {
     if (all.isEmpty()) all.setFromCenterAndSize(ds.center.clone(), V3(4, 4, 4));
     const c = all.getCenter(V3()), r = Math.max(.5, all.getSize(V3()).length() * .5), fov = v.dir.baseFov(), asp = (cam.aspect || 1.6) / (K.mode === 'side' ? 2 : 1);
     const off = cam.position.clone().sub(v.controls.target); off.y = 0; if (off.lengthSq() < 1e-6) off.set(0, 0, 1); off.normalize(); const el2 = THREE.MathUtils.degToRad(12), dir = off.multiplyScalar(Math.cos(el2)); dir.y = Math.sin(el2);
-    const dist = r / Math.tan(THREE.MathUtils.degToRad(fov / 2)) / Math.min(1, asp) * 1.12;
+    const dist = Math.max(r / Math.tan(THREE.MathUtils.degToRad(fov / 2)) * 1.25, ds.orb ? ds.orb.r : 0) / Math.min(1, asp);   /* at least the model's own overview distance (its stand and scenery count), widened for a half-width frame */
     K.pose = { target: c, pos: c.clone().addScaledVector(dir, dist), fov };
     v.dir.cutTo(K.pose.target, K.pose.pos, fov, true);
   }
