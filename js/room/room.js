@@ -131,9 +131,10 @@ function miniEmblem(title) {
 const st0 = o => { o.updateMatrixWorld(true); const b = new THREE.Box3(); o.children.forEach(c => { if (c.userData.solid) b.expandByObject(c); }); return b.isEmpty() ? new THREE.Box3().setFromObject(o) : b; };
 const SPACING = 2.9;
 // Floor-plan margins (metres): a plinth stands WALL_GAP clear of every wall (0.9 m walkway, and 0.6 m clear of the
-// 0.42 m wall bookcases); FURN_GAP clear of other plinths, the door and stairs; scrolls at least STATION_MIN apart
+// 0.42 m wall bookcases); FURN_GAP clear of other plinths, the door and stairs (a full walkway: at 0.6 m the plinths
+// read as one crowded counter); scrolls at least STATION_MIN apart
 // (niche + pilaster) and CORNER_MIN from a corner; the door zone covers the double door, its frame and columns.
-const CASE_D = .42, WALL_GAP = Math.max(.9, CASE_D + .6), FURN_GAP = .6, STATION_MIN = SPACING, CORNER_MIN = 1.2, DOOR_HALF = 2, DOOR_DEPTH = 1;
+const CASE_D = .42, WALL_GAP = Math.max(1, CASE_D + .6), FURN_GAP = 1.05, STATION_MIN = SPACING, CORNER_MIN = 1.2, DOOR_HALF = 2, DOOR_DEPTH = 1;
 // A pedestal's size from its number of demos: one (or none) is the round marble pedestal; several make a long plinth
 // with up to 4 bays a row. W × Dp is the marble body; Wf × Df the footprint with the top slab's lip.
 function plinthDims(n) {
@@ -145,7 +146,7 @@ function plinthDims(n) {
 // (PED_TOP + up to ~.4 m), so from the opening view (eye ~1.9 m, ~4.5 m back) the model never hides the sheet.
 const SHEET_BOTTOM = 1.3, PED_TOP = .965, SPOTS = 8;
 // mini models: fitted to ~80 % of the pedestal's card (or of a bay's model area), at most MINI_H tall
-const MINI_FIT = .8, MINI_H = .38;
+const MINI_FIT = .86, MINI_H = .4;
 
 export class BookRoom {
   constructor(app, book, data, opts = {}) {
@@ -366,7 +367,7 @@ export class BookRoom {
     const cm = new THREE.Mesh(round ? new THREE.CircleGeometry(card, 48) : new THREE.PlaneGeometry(card, card), paper); cm.rotation.x = -Math.PI / 2; cm.position.y = PED_TOP + (round ? 0 : .002); cm.receiveShadow = true; g.add(cm);
     let area = { r: card * MINI_FIT, dz: 0 };
     if (label && spec) {   // an engraved brass label at the bay's front edge, tilted toward the viewer (two lines when long)
-      const title = String(spec.d.title || spec.st.title || 'Demo'), lw = card * .86, lh = .085, pz = card / 2 - .05, tex = plateTex(`${i + 1} · ${title}`, lw / lh);
+      const title = String(spec.d.title || spec.st.title || 'Demo'), lw = card * .9, lh = .1, pz = card / 2 - .05, tex = plateTex(`${i + 1} · ${title}`, lw / lh);
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshStandardMaterial({ map: tex, metalness: .55, roughness: .38, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .08 }));
       plate.rotation.x = -Math.PI / 2 + .9; plate.position.set(0, PED_TOP + .006 + raise + lh / 2 * Math.sin(.9) + .004, pz); plate.name = 'label'; g.add(plate);
       const sh = .012 + raise, stand = new THREE.Mesh(new THREE.BoxGeometry(lw + .01, sh, .028), bmat('gilt')); stand.position.set(0, PED_TOP + .002 + sh / 2, pz + .006); g.add(stand);
@@ -400,6 +401,11 @@ export class BookRoom {
       // lines and sprites reaching well outside the model's box (field lines, guides, labels) are left out too
       const grow = fit.box.clone().expandByScalar(Math.max(fit.rXZ, fit.h) * .15), wb = new THREE.Box3(), winv = w.matrixWorld.clone().invert();
       w.traverse(o => { if (!(o.isLine || o.isSprite) || !o.visible || !o.geometry) return; wb.setFromObject(o).applyMatrix4(winv); if (isFinite(wb.min.x) && !grow.containsBox(wb)) o.visible = false; });
+      // helper wireframes (a cell's glowing edge lines, wireframe meshes) are diagram ink, not part of a maquette
+      w.traverse(o => { if (o.isLineSegments || (o.isMesh && [].concat(o.material).some(m => m && m.wireframe))) o.visible = false; });
+      // what the mini leaves out is taken out of it, not just hidden: the station's bounds (layout checks, picking, the
+      // probe's box) then measure the maquette, not a 250 m ground or hills 40–90 m out still hanging off the plinth
+      { const out = []; w.traverse(o => { if (o !== w && !o.visible && !o.isLight) out.push(o); }); out.filter(o => !out.includes(o.parent)).forEach(o => o.removeFromParent()); bay.cut = out.length; }
       let s = Math.min(bay.area.r / fit.rXZ, (bay.hMax || MINI_H) / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
       bay.mini.add(w);
       // never past its area: the model turns, so its farthest visible point from the turning axis must lie inside r

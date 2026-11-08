@@ -182,7 +182,7 @@ export class DioramaView {
     const cue = this.dir.cinematic ? this.lessonCues(l, host) : {}; this.stepCue = cue;
     if (this.pov && this.pov.auto) this.exitPOV(false, true);
     if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
-    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
+    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null, extra: (l.chain || []).map(c => this.actorByName(c && (c.a || c))).filter(a => a && a !== host) });   // extra: the chain's links are framed with the subject
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     if (cue.isolate) this.cues.setIsolate(cue.isolate);
     if (cue.chain) this.cues.startChain(cue.chain, { pace: l.chainPace, on: l.chainOn });
@@ -406,10 +406,10 @@ export class DioramaView {
     this.paceSel = el('select', { class: 'mini', 'aria-label': 'Reading pace', title: 'How long explanations stay on screen' }, [['slow', 'Read slowly'], ['normal', 'Read normally'], ['fast', 'Read fast']].map(([v, t]) => el('option', { value: v, text: t, selected: (this.prefs.pace || 'normal') === v })));
     this.paceSel.onchange = () => this.setPref('pace', this.paceSel.value);
     u.append(el('div', { class: 'dio-time glass' }, [this.playBtn, this.clock, this.speedSel, el('span', { class: 'sep' }), tog('cinematic', 'Cinematic', 'Camera follows each step and event; explanations appear beside what they describe, and time slows while you read', true), tog('guides', 'Guides', 'Show arrows for motion and links between the objects an explanation names', false), this.calmBtn = el('button', { class: 'tog', title: 'Calm motion: rides become still views and zooms become cuts (also follows the system setting "reduce motion")', 'aria-pressed': String(this.prefs.motion === 'reduced'), text: 'Calm', onclick: () => { this.setPref('motion', this.prefs.motion === 'reduced' ? 'full' : 'reduced'); } }), this.paceSel]));
-    this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.evlog = el('ul', { class: 'evlog' });
+    this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.sparkCap = el('div', { class: 'spark-cap' }); this.evlog = el('ul', { class: 'evlog' });   // the chart's caption is HTML, so it wraps instead of being cut at the canvas edge
     // readouts stay small by default (six values) so they don't cover the model; one click shows all of them
     this.readMore = el('button', { class: 'reads-more', onclick: () => { this.prefs.readsAll = !this.prefs.readsAll; savePrefs(this.prefs); this._rt = 0; } });
-    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.spark, this.evlog]); u.append(this.readPanel);
+    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.sparkCap, this.spark, this.evlog]); u.append(this.readPanel);
     this.ticker = el('div', { class: 'ticker' }); u.append(this.ticker);
     this.editBar = el('div', { class: 'edit-bar glass', hidden: true }); u.append(this.editBar);
     this.syncTimeUI();
@@ -444,7 +444,7 @@ export class DioramaView {
     this.pushDyn(ev);   // every change is listed under Variables → Dynamic changes (the old top-of-screen ticker is gone)
     // sound, placed left/right where the event happens
     if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } this._sndT = this._sndT || new Map(); if (now - (this._sndT.get(evKey) || -1e9) > 3000) { this._sndT.set(evKey, now); if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); } }
-    this.evlog.prepend(el('li', { html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text, 'label') })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
+    this.evlog.prepend(el('li', { title: this.clockText(ev.t) + ' · ' + mathText(ev.text), html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text, 'label') })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
     if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) { if (!this.awaitIdle) this.awaitT = 0; this.awaitIdle = true; } else this.runT = this.runDur; }
   }
@@ -660,7 +660,7 @@ export class DioramaView {
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
       this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
-      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k, 'label')}</em> ${mathHTML(v, 'label')}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${readKey(k)}</em> ${mathHTML(v, 'label')}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
   }
   // S6.2 comfort vignette: while a POV ride or a moving shot turns the camera faster than 30°/s (or a POV moves faster
   // than 3 actor sizes per second), the periphery darkens, at most 0.55; a cut (a jump) never counts
@@ -673,13 +673,13 @@ export class DioramaView {
   }
   drawSpark() {
     const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
-    g.fillStyle = 'rgba(244,239,230,.55)'; g.font = '20px IBM Plex Mono, monospace'; g.textAlign = 'left'; canvasMath(g, ds.seriesName || '', 8, 22);
+    const cap = ds.seriesName || ''; if (cap !== this._sparkCapT) { this._sparkCapT = cap; this.sparkCap.innerHTML = mathHTML(cap, 'label'); this.sparkCap.hidden = !cap; }
     const H = ds.sim && ds.sim.hist ? ds.sim.hist() : null;
-    if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 34), bw - 2, v / mx * (c.height - 34)); }); return; }
+    if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 8), bw - 2, v / mx * (c.height - 8)); }); return; }
     const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d);
     if (ds.sim && ds.sim.seriesRange) { try { const r = ds.sim.seriesRange(lo, hi); if (r && isFinite(r[0]) && isFinite(r[1]) && r[1] > r[0]) [lo, hi] = r; } catch (e) { } }
     if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
-    g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 40); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
+    g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 16); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
   }
   dispose() {
     if (this.pov) this.exitPOV(true);
@@ -694,6 +694,9 @@ export class DioramaView {
   disposeGPU() { if (this.gpuFreed) return; this.gpuFreed = true; const keep = this.app.mode && this.app.mode !== this ? this.app.mode.scene : null; const set = gpuSet([this.scene, this.tcHelper].filter(Boolean)); disposeTree(set, keep); }   // like ds.dispose(), plus textures and the gizmo, minus anything the next place still shows
 }
 
+// a readout's name: a lone leading letter is a quantity (x, t, V, "P measured", "R no drag") and is set as a maths
+// italic; the rest is typeset like any label (⟨KE⟩, T = 2⟨KE⟩/3, vₓ)
+function readKey(k) { k = String(k ?? ''); const m = /^([A-Za-zα-ωΑ-Ω])(?=\s|$)/.exec(k); return m && !/^(A|a|I)\s+[a-z]/.test(k) ? '<i class="rk">' + esc(m[1]) + '</i>' + mathHTML(k.slice(1), 'label') : mathHTML(k, 'label'); }
 // Off-screen sketch renderer: the drawing as an image (scroll illustrations, pedestal previews).
 const sketchCache = new Map();
 // opts.focusText: render a "stage plate" instead of the overview — the camera frames only the bodies the text names,

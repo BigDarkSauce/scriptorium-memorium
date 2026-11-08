@@ -152,7 +152,8 @@ export const bus = { m: new Map(), on(k, f) { (this.m.get(k) || this.m.set(k, []
 // Text inside $…$ / $$…$$ is LaTeX for MathJax (HTML) or is converted to plain notation first (SVG, canvas).
 // Entry points: typeset(el, s[, target]) writes s into an HTML element or an SVG <text> (and runs MathJax when s holds
 // $…$); mathHTML(s, target) gives the HTML; mathRuns(s) gives styled runs; svgMath / canvasMath / measureMath draw.
-// target: 'html' (running text: fractions stacked, the default) or 'label' (one compact line: fractions slashed).
+// target: 'html' (running text, the default: fractions with a solidus), 'display' (a line of its own: fractions stacked)
+// or 'label' (one compact line, no MathJax: fractions slashed, TeX converted to plain notation).
 
 const GREEK = { alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', rho: 'ρ', sigma: 'σ', tau: 'τ', upsilon: 'υ', phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω', pi: 'π', PI: 'π' };
 const FN = new Set('sin cos tan sec csc cot asin acos atan atan2 arcsin arccos arctan sinh cosh tanh arsinh arcosh artanh exp ln log log10 log2 lg sqrt cbrt abs sign sgn floor ceil round min max pow hypot det erf gcd lcm mod lim Re Im arg tr'.split(' '));
@@ -173,7 +174,7 @@ const chemOk = f => isChem(f) && /\d/.test(f) && (f.match(/[A-Z]/g).length >= 2 
 const TOK = new RegExp([
   /(?<ion>(?:[A-Z][a-z]?\d*){1,6}(?:\^?\d{0,2}[+\-−](?![\w(+\-])))/.source,    // Ca2+, SO4^2-, Na+, Cl-
   /(?<num>(?:\d+\.?\d*|\.\d+)(?:[eE][+\-−]?\d+)?)/.source,
-  /(?<word>[A-Za-zα-ωΑ-ΩϑϕϵℓÅµ∂∇ΔΣΠ][A-Za-z0-9α-ωΑ-ΩϑϕϵµΔ₀-₉ᵢⱼₐₑₒₓₙₘ]*'*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]*)/.source,
+  /(?<word>[A-Za-zα-ωΑ-ΩϑϕϵℓÅµ∂∇ΔΣΠ][A-Za-z0-9α-ωΑ-ΩϑϕϵµΔ₀-₉ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ]*'*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]*)/.source,
   /(?<op>\*\*|<=>|<->|<=|>=|!=|==|->|=>|<-|~=|\+\/-|\+-|<<|>>|[-−+*\/^=<>~×·÷±∓≤≥≠≈∝→⇒⇌↔←≡≪≫_√∛!%°′])/.source,
   /(?<tex>\\[A-Za-z]+|\\.)/.source,
   /(?<open>[(\[{])/.source, /(?<close>[)\]}])/.source, /(?<bar>\|)/.source, /(?<comma>,)/.source,
@@ -212,7 +213,7 @@ function splitWord(w) {   // the parts of a word token: {base, sub, prime, sup, 
   let sup = ''; const um = /^([^_]+)_(.+)$/.exec(w); let usub = null; if (um) { w = um[1]; usub = um[2]; }
   const qm = /([⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)$/.exec(w); if (qm) { sup = qm[1]; w = w.slice(0, -sup.length); }
   const pm = /('+)$/.exec(w), prime = pm ? pm[1].length : 0; if (pm) w = w.slice(0, -prime);
-  const sm = /^(.*?)([₀-₉ᵢⱼₐₑₒₓₙₘ]+)$/.exec(w); let sub = null; if (sm && sm[1]) { w = sm[1]; sub = sm[2].replace(/[₀-₉]/g, c => String(SUBCH.indexOf(c))).replace(/[ᵢⱼₐₑₒₓₙₘ]/g, c => 'ijaeoxnm'['ᵢⱼₐₑₒₓₙₘ'.indexOf(c)]); }
+  const sm = /^(.*?)([₀-₉ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ]+)$/.exec(w); let sub = null; if (sm && sm[1]) { w = sm[1]; sub = sm[2].replace(/[₀-₉]/g, c => String(SUBCH.indexOf(c))).replace(/[ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ]/g, c => 'ijaeoxnmyhklpstruv'['ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ'.indexOf(c)]); }
   return { w, sub, prime, sup, usub };
 }
 function mathyWord(w, strict) {   // a word that is surely maths on its own (not prose)
@@ -611,7 +612,8 @@ function ensureCSS() {
 .mx sup,.mx sub{font-size:.7em;line-height:0;position:relative;vertical-align:baseline}.mx sup{top:-.6em}.mx sub{top:.3em}.mx sup sup{top:-.5em}.mx sup sub,.mx sub sub{top:.25em}
 .m-ss{display:inline-block;vertical-align:-.25em;font-size:.7em;line-height:.95;margin-left:.03em;text-align:left}.m-ss>span{display:block}.m-ss sub,.m-ss sup{font-size:1em;top:0}
 .mx .m-sqrt{white-space:nowrap;display:inline-flex;align-items:baseline}.m-sqrt>.m-idx{font-size:.6em;margin-right:-.45em;margin-top:-.1em}.mx .m-rad{border-top:.07em solid currentColor;padding:.04em .1em 0 .05em;display:inline-block;line-height:1.1}
-.mx .m-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.86em;line-height:1.25;margin:0 .12em}.mx .m-frac>span:first-child{border-bottom:.07em solid currentColor;padding:0 .15em .06em}.mx .m-frac>span:last-child{padding:.06em .15em 0}`;
+.mx .m-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.86em;line-height:1.25;margin:0 .12em}.mx .m-frac>span:first-child{border-bottom:.07em solid currentColor;padding:0 .15em .06em}.mx .m-frac>span:last-child{padding:.06em .15em 0}
+.m-ang{display:inline-block;width:.32em;height:1.1em;margin:0 .04em;vertical-align:-.22em;overflow:hidden;line-height:1;-webkit-text-fill-color:transparent;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 30'%3E%3Cpath d='M8 1.5L2.2 15L8 28.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 30'%3E%3Cpath d='M8 1.5L2.2 15L8 28.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/100% 100% no-repeat}.m-ang.r{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 30'%3E%3Cpath d='M2 1.5L7.8 15L2 28.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 30'%3E%3Cpath d='M2 1.5L7.8 15L2 28.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}`;
   document.head.append(st);
 }
 function toHTML(b) { return toHTML0(b).replace(/<\/i><i>/g, ''); }
@@ -676,7 +678,7 @@ function plainBox(seg, C) {
     if (t.k === 'word') { const b = splitWord(t.v).w;
       if (chemOk(b) && t.v === b) return chemBox(b);
       if (/^[A-FH-RT-Za-zα-ω]\d{1,2}$/.test(b) && t.v === b && !/^[A-Z]\d$/.test(b) || /^[A-FH-RT-Z]\d$/.test(b) && t.v === b && !/^[A-FH-RT-Z]\d$/.test('') ) return /^(H|O|N|F|I)2$/.test(b) ? chemBox(b) : lay(wordNode(b), C);
-      if (/^(alpha|beta|gamma|delta|theta|lambda|omega|phi|psi|sigma|tau|mu|rho|Delta|Omega)(\d{1,2}|_\w+)$/.test(t.v) || /^[A-Za-zα-ω]\*$/.test(t.v)) return lay(wordNode(t.v), C);
+      if (/^(alpha|beta|gamma|delta|theta|lambda|omega|phi|psi|sigma|tau|mu|rho|Delta|Omega)(\d{1,2}|_\w+)$/.test(t.v) || /^[A-Za-zα-ω]\*$/.test(t.v) || /^[A-Za-zα-ω][₀-₉ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ]+$/.test(t.v)) return lay(wordNode(t.v), C);   // vₓ, vᵧ, θ₀ written with Unicode subscripts
       return T_(t.v); }
     if (t.k === 'op') return T_(RELS[t.v] && /^(<=|>=|!=|->|=>|~=|<->|<=>|<-)$/.test(t.v) ? RELS[t.v] : t.v === '+-' || t.v === '+/-' ? '±' : t.v);
     return T_(t.v);
@@ -697,15 +699,21 @@ function plainBox(seg, C) {
   const lead = /^\s*/.exec(seg)[0]; if (lead && c[0] && c[0].k === 't' && c[0].v === ' ') c[0] = T_(lead);
   return H(c);
 }
-const mathTarget = t => (t === 'label' || t === 'compact' || t === 'svg' || t === 'canvas') ? { stack: false, lvl: 0, tex: false } : { stack: true, lvl: 0, tex: true };   // labels have no MathJax pass: $…$ becomes plain notation
+// labels have no MathJax pass: $…$ becomes plain notation. Running text ('html') keeps fractions on one line with a
+// solidus (θ³/6, L/g), so a fraction never opens the line spacing of a paragraph; 'display' (a line of its own) stacks them.
+const mathTarget = t => (t === 'label' || t === 'compact' || t === 'svg' || t === 'canvas') ? { stack: false, lvl: 0, tex: false } : t === 'display' ? { stack: true, lvl: 0, tex: true } : { stack: false, lvl: 0, tex: true };
 export function mathHTML(s, target = 'html') {
   const str = String(s ?? ''); if (!str) return '';
   ensureCSS();
   const key = target + '\u0000' + str; if (CACHE.has(key)) return CACHE.get(key);
   const C = mathTarget(target);
-  const html = typesetText(str, C).map(p => p.k === 'tex' ? esc(p.v) : p.k === 'code' ? `<code>${esc(p.v)}</code>` : p.k === 'text' ? esc(p.v) : boxHTML(p.b)).join('');
+  const html = typesetText(str, C).map(p => p.k === 'tex' ? esc(p.v) : p.k === 'code' ? `<code>${esc(p.v)}</code>` : angles(p.k === 'text' ? esc(p.v) : boxHTML(p.b))).join('');
   if (CACHE.size > 4000) CACHE.clear(); CACHE.set(key, html); return html;
 }
+// ⟨ ⟩ (mean values, ⟨KE⟩) are drawn as a masked stroke in the text colour: many text faces (the mono readouts among
+// them) have no glyph for them and fall back to one that looks like ( ). The character stays in the DOM for copy and
+// screen readers; only its ink is replaced.
+const angles = h => h.indexOf('⟨') < 0 && h.indexOf('⟩') < 0 ? h : h.replace(/[⟨⟩]/g, c => `<span class="m-ang${c === '⟩' ? ' r' : ''}">${c}</span>`);
 function boxHTML(b) {   // math parts get a no-wrap wrapper so an expression never breaks inside a script or fraction
   if (b.k === 'h' && !b.math) return b.c.map(boxHTML).join('');
   if (b.k === 'h' && b.math) { const inner = toHTML(b), vis = inner.replace(/<[^>]+>/g, '').replace(/&\w+;/g, '_'); return /<|[\u2009·×−=]/.test(inner) ? `<span class="mx${vis.length > 30 ? ' mw' : ''}">${inner}</span>` : inner; }   // a short expression never breaks; a long one may break at its spaces

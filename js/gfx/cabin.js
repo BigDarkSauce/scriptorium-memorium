@@ -141,13 +141,14 @@ export function buildHills({ r = 34, layers = 3, height = 5, y = -1.2, seed = 4,
 export function buildVitrine({ min = [-6.7, -.85, -5.2], max = [6.7, 6.6, 5.2], studio = ['#6a5140', '#2e2219'] } = {}) {
   const g = new THREE.Group(); g.name = 'glass vitrine';
   const [x0, y0, z0] = min, [x1, y1, z1] = max, W = x1 - x0, H = y1 - y0, D = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-  const gm = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .04, metalness: 0, transparent: true, opacity: .045, envMapIntensity: .45, depthWrite: false, side: THREE.DoubleSide, clearcoat: .5 }); gm.userData.frontPatched = true;   // nearly invisible: only faint reflections and the brass edges say 'glass case'
+  const gm = new THREE.MeshPhysicalMaterial({ color: 0xe6f4f0, roughness: .03, metalness: 0, transparent: true, opacity: .075, envMapIntensity: .9, depthWrite: false, side: THREE.DoubleSide, clearcoat: .8, clearcoatRoughness: .03, specularIntensity: 1 }); gm.userData.frontPatched = true;   // faint: a cool green tint, reflections and the brass edges say 'glass case'
   const pane = (w, h, x, y, z, ry, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), gm); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.renderOrder = 20; m.castShadow = false; m.raycast = () => {}; g.add(m); };
   pane(W, H, cx, y0 + H / 2, z1, 0); pane(W, H, cx, y0 + H / 2, z0, Math.PI); pane(D, H, x1, y0 + H / 2, cz, Math.PI / 2); pane(D, H, x0, y0 + H / 2, cz, -Math.PI / 2); pane(W, D, cx, y1, cz, 0, -Math.PI / 2);
-  const brass = makeMaterial('brass'), t = .035, bars = [], teal = [];
+  const brass = makeMaterial('brass'), t = .07, bars = [], teal = []; brass.envMapIntensity = .55; brass.color.multiplyScalar(.8);   // a darker, warmer brass: seen against a bright sky probe the default read as white wire
   const bar = (sx, sy, sz, x, y, z) => { const b = new THREE.BoxGeometry(sx, sy, sz); b.translate(x, y, z); bars.push(clean(b)); };
   [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].forEach(([x, z]) => bar(t, H, t, x, y0 + H / 2, z));
-  [y1, y0 + t / 2].forEach(y => { bar(W + t, t, t, cx, y, z0); bar(W + t, t, t, cx, y, z1); bar(t, t, D + t, x0, y, cz); bar(t, t, D + t, x1, y, cz); });
+  [y1].forEach(y => { bar(W + t, t, t, cx, y, z0); bar(W + t, t, t, cx, y, z1); bar(t, t, D + t, x0, y, cz); bar(t, t, D + t, x1, y, cz); });
+  { const bh = .16, bd = t * 1.6, y = y0 + bh / 2; bar(W + bd, bh, bd, cx, y, z0); bar(W + bd, bh, bd, cx, y, z1); bar(bd, bh, D + bd, x0, y, cz); bar(bd, bh, D + bd, x1, y, cz); }   // a deeper brass sill round the foot of the case (its base reads at any distance)
   // the glass's edges seen end-on: a thin teal-green line just inside every frame bar (soda-lime glass, WG)
   const tb = (sx, sy, sz, x, y, z) => { const b = new THREE.BoxGeometry(sx, sy, sz); b.translate(x, y, z); teal.push(clean(b)); }, e = .012, o = t * .5 + e * .5;
   [[x0 + o, z0 + o], [x1 - o, z0 + o], [x1 - o, z1 - o], [x0 + o, z1 - o]].forEach(([x, z]) => tb(e, H - t, e, x, y0 + H / 2, z));
@@ -162,8 +163,11 @@ export function buildVitrine({ min = [-6.7, -.85, -5.2], max = [6.7, 6.6, 5.2], 
   const lamp = x.createRadialGradient(70, 40, 4, 70, 40, 230); lamp.addColorStop(0, 'rgba(255,214,160,.55)'); lamp.addColorStop(1, 'rgba(255,214,160,0)'); x.fillStyle = lamp; x.fillRect(0, 0, 512, 512);   // a warm lamp glow in the studio corner
   const bg = new THREE.CanvasTexture(c); bg.colorSpace = THREE.SRGBColorSpace;
   let sky = null, skyOnly = null, atm0 = null;
-  fr.onBeforeRender = (r, scene, cam) => {
-    if (!cam.isPerspectiveCamera) return;
+  // the switch runs from the scene's own onBeforeRender (before the renderer collects the objects and draws the
+  // background), so the frame that first sees the case from outside already has the studio and no hills: from the frame
+  // mesh's hook it came one frame late, which every single still (a screenshot, a thumbnail) showed
+  const sw = (r, scene, cam) => {
+    if (!cam || !cam.isPerspectiveCamera) return;
     const p = cam.position, inside = p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1 && p.y < y1, cur = scene.background;
     if (!sky && cur && cur !== bg && cur.isTexture) { sky = scene.userData.skyBackground || cur; g.userData.gpu.push(sky); }   // freed with the group even while the backdrop is up
     if (sky && (cur === sky || cur === bg)) scene.background = inside ? sky : bg;   // never touch the paper background of the drawing stage
@@ -171,6 +175,11 @@ export function buildVitrine({ min = [-6.7, -.85, -5.2], max = [6.7, 6.6, 5.2], 
     skyOnly.forEach(o => { o.visible = inside; });
     const A = scene.userData.aaaAtmos; if (A) { if (!atm0) atm0 = { skyFog: A.skyFog, god: A.god }; A.skyFog = inside ? atm0.skyFog : 0; A.god = inside ? atm0.god : 0; A.vitrineK = inside ? 1 : .2; }   // a specimen seen from outside has no aerial perspective
   };
+  let hooked = null;
+  const hook = scene => { if (hooked === scene || !scene || !scene.isScene) return; hooked = scene; const prev = scene.onBeforeRender; scene.onBeforeRender = function (rr, sc, c, rt) { if (prev) prev.call(this, rr, sc, c, rt); if (g.parent) sw(rr, sc, c); }; };
+  // installed from the matrix update, which the renderer runs before scene.onBeforeRender: even the very first frame is right
+  g.updateMatrixWorld = function (force) { if (!hooked) { let s0 = this; while (s0.parent) s0 = s0.parent; hook(s0); } THREE.Group.prototype.updateMatrixWorld.call(this, force); };
+  fr.onBeforeRender = (r, scene, cam) => { hook(scene); sw(r, scene, cam); };
   fr.frustumCulled = false;
   g.userData.vitrine = { min, max, backdrop: bg }; g.userData.gpu = [bg];   // util.js gpuSet: disposed with the group (whichever of the two is not the scene background)
   return g;

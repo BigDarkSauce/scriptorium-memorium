@@ -99,7 +99,8 @@ class App {
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
     // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
-    if (b && b.example && (r.threadV || 0) < 3) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 3; store.set('room:' + id, r); }
+    // v4: the explanatory paragraphs and the figures of every teaching box (seeds-figures.js), where the learner has not edited
+    if (b && b.example && (r.threadV || 0) < 4) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 4; store.set('room:' + id, r); }
     return r;
   }
   // ---------- modes, with a warm fade between them ----------
@@ -235,7 +236,8 @@ class App {
   // Example rooms saved before the question thread existed: fill, from the current seeds, the part's question, subsections
   // and coverage map, each step's section/answers/opens, each demo's purpose and each lesson's question/opens/shot/pov.
   // Parts are matched by title (in the same book first), steps by id (and title), demos by type + title, lessons by title.
-  // Only empty fields are filled, so nothing the reader changed is overwritten.
+  // Only empty fields are filled, so nothing the reader changed is overwritten. Since v4 also the explanatory paragraphs
+  // and the figures of the teaching boxes (seeds-figures.js), each only beside text that is still the seed's own.
   threadFromSeeds(book, room) {
     const books = this.seedBooks(), C = o => JSON.parse(JSON.stringify(o));
     const own = (books.find(x => x.title === book.title) || { parts: [] }).parts, all = books.flatMap(x => x.parts);
@@ -249,6 +251,20 @@ class App {
       for (const st of p.analysis.chain) {
         const ss = s.analysis.chain.find(x => x.id === st.id && x.title === st.title); if (!ss) continue;
         fill(st, ss, ['section', 'answers', 'opens']); n++;
+        // explanatory paragraphs and teaching-box figures: added where the box is empty, or where its text is still the
+        // seed's own (so a figure never illustrates words the learner rewrote); nothing the learner wrote is replaced
+        const same = (a, b) => String(a ?? '').trim() === String(b ?? '').trim(), txt = p => typeof p === 'string' ? p : p && p.text;
+        if (empty(st.explain) && !empty(ss.explain)) st.explain = C(ss.explain);
+        else if (Array.isArray(st.explain) && Array.isArray(ss.explain)) st.explain.forEach((p, k) => { const sp = ss.explain[k]; if (p && sp && sp.figure && !(p && p.figure) && same(txt(p), sp.text)) st.explain[k] = { text: sp.text, figure: C(sp.figure) }; });
+        for (const [t, fk] of [['intuition', 'intuitionFigure'], ['misconception', 'misconceptionFigure']]) {
+          if (!ss[t]) continue;
+          if (empty(st[t])) { st[t] = ss[t]; if (ss[fk]) st[fk] = C(ss[fk]); }
+          else if (same(st[t], ss[t]) && !st[fk] && ss[fk]) st[fk] = C(ss[fk]);
+        }
+        if (ss.check && ss.check.q) {
+          if (!st.check || !st.check.q) st.check = C(ss.check);
+          else if (same(st.check.q, ss.check.q) && same(st.check.a, ss.check.a) && !st.check.figure && ss.check.figure) st.check.figure = C(ss.check.figure);
+        }
         (st.demos || []).forEach(d => {
           const sd = (ss.demos || []).find(x => x.type === d.type && (x.title || '') === (d.title || '')); if (!sd) return;
           fill(d, sd, ['purpose', 'scale', 'tracks']);

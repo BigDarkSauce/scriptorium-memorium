@@ -2,6 +2,7 @@
 // Ported from Scriptorium v2; used inline in the reading scroll.
 import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathText } from '../util.js';
 import { validateFigure } from './figspec.js';
+import { isCodeCall } from './prose.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
 export function SVGDEMO(spec,host,fail){
@@ -372,5 +373,7 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
   }
   return stop;
 }
-export const looksLikeCode = s => /[A-Za-z_][\w.]*\([^)]*\)|<-|\b\w+\$\w|^\[1\]|\bna\.rm\b|==|::/.test(s);
+// a label is code when it holds R / Python syntax or a code call (mean(x), read.csv(…)); maths calls such as sin(θ),
+// e_s(T) or K(sin 45°) stay typeset maths (the rule is js/room/prose.js isCodeCall, shared with the scroll's prose)
+export const looksLikeCode = s => /<-|\b\w+\$\w|^\[1\]|\bna\.rm\b|==|::/.test(s) || [...String(s).matchAll(/([A-Za-z_][\w.]*)\(([^)]*)\)/g)].some(m => isCodeCall(m[1], m[2]));
 function mathCap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }

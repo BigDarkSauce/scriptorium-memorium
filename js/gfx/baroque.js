@@ -69,13 +69,14 @@ export function bmat(name) {
     // long run instead of a dashed row of 57 mm squares that shimmers as the view moves
     case 'gilt-fine': m = giltMat({ rough: .55 }); m.userData.boxUV = .55; break;
     case 'gilt-dim': m = giltMat({ color: lin(.7, .62, .42), rough: .85, metal: .9 }); m.userData.boxUV = 2.2; break;
-    case 'stucco': m = plasterMat([240, 234, 222], 'stucco', .1, { color: 0xf3ede2, ns: .3 }); m.userData.boxUV = .35; break;
+    case 'stucco': m = plasterMat([242, 239, 232], 'stucco2', .1, { color: 0xf4f1ea, ns: .3 }); m.userData.boxUV = .35; break;
     // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
-    case 'wall': m = plasterMat([222, 207, 182], 'bwall3', .09, { wallAO: true }); m.userData.boxUV = .22; break;
+    case 'wall': m = plasterMat([226, 220, 207], 'bwall4', .09, { wallAO: true }); m.userData.boxUV = .22; break;   // warm off-white stucco (saturation ≈ .08 before the lamps' warmth; it read ochre at .18)
     // painted wood (Admont's white cases): ivory lacquer with the grain faintly showing through
     case 'cream': m = woodMat([244, 236, 220], 'ivory', { fig: { paint: 1 }, paint: true, coat: .45, ccr: .28 }); m.color.set(0xfbf6ec); m.userData.boxUV = .55; break;
     // case interiors (backs, inner side panels) a shade deeper, as they sit in their own shadow: the shelves read as
     // hollows framed by the ivory carcass instead of one flat white block
+    case 'cream-board': m = woodMat([236, 218, 186], 'ivoryboard', { fig: { paint: 1, seed: 5 }, paint: true, coat: 0, rough: .78 }); m.color.set(0xf4d9b0); m.envMapIntensity = .35;   /* up-facing: lit by the windows' blue sky through the probe, so its albedo leans warm to land on cream */ m.userData.boxUV = .55; break;
     case 'cream-back': m = woodMat([186, 166, 134], 'ivoryb2', { fig: { paint: 1, seed: 3 }, paint: true, coat: 0 }); m.userData.boxUV = .55; break;
     // figured walnut (Metten) and pale rococo oak (Mafra)
     case 'walnut': m = woodMat([128, 80, 46], 'walnut', { coat: .5, ccr: .2 }); m.userData.boxUV = .8; break;
@@ -792,7 +793,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   // ---- floor: polished checkered marble ----
   {
     // the hall's diagonal floor: cream and dove-grey marble (close values: the floor is a ground, not a checkerboard)
-    const F = marbleFloor(floor, clamp(Math.min(w, d) / 16, .5, .8), floor === 'cubes' ? ['cream', 'warmgrey', 'red'] : ['cream', 'dove']);
+    const F = marbleFloor(floor, clamp(Math.min(w, d) / 16, .5, .8), floor === 'cubes' ? ['cream', 'dove', 'warmgrey'] : ['cream', 'dove']);   // tumbling blocks in three stone greys (the red face read as a garish checker)
     // polished marble: the polish IS the surface (no clearcoat: a coat on top doubles the reflection and reads as
     // lacquer); 0.055–0.1 on the tiles, duller along the walking paths (traffic), 0.9 in the joints; each tile tilted a
     // fraction of a degree (lippage) so a mirrored window kinks between tiles; contact occlusion from walls/furniture
@@ -940,7 +941,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     FX.add(gilt, new THREE.CylinderGeometry(.012, .012, h + D.rise - yc - .3 * sCh, 6), Mx(D.x, (h + D.rise + yc + .3 * sCh) / 2, D.z));
     }   // (a fast preview leaves out the chandelier's metalwork, never its light: the light count, and so every shader, stays the same)
     // by day the candles are a warm accent, not the key (0.75 of their night strength in a hall with windows)
-    const L = new THREE.PointLight(0xffc68c, 7 * yc * yc / 4 * (hasWin ? .75 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
+    const L = new THREE.PointLight(0xffd9b8, 7 * yc * yc / 4 * (hasWin ? .75 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
   });
   // ---- the sun through the window wall: shadowed directional light + soft additive shafts ----
   if (hasWin) {

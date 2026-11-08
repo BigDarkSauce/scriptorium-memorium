@@ -2,6 +2,7 @@
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
 import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML } from '../util.js';
 import { SVGDEMO, SVG_TYPES, renderFigure } from './diagrams.js';
+import { prose } from './prose.js';
 import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
 import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
@@ -18,15 +19,8 @@ const toolStatus = st => (name, input) => { st.textContent = `Looking it up in $
 
 export const is3D = d => d && (d.type === 'scene' || Array.isArray(d.bodies) || !!DIO[String(d.type || '').toLowerCase()]);
 export const needsAuthoring = d => d && d.type === 'scene' && !Array.isArray(d.bodies);
-// prose with code in it: `backtick spans` and R/Python tokens (dat$TotalSleep, mean(x), x <- 1) become <code> (MathJax
-// never typesets inside <code>, so the $ of R's column operator is not read as maths); the rest is typeset with mathHTML
-export function prose(t) {
-  const out = []; String(t ?? '').split(/(`[^`\n]+`)/g).forEach((seg, i) => {
-    if (i % 2) { out.push('<code>' + esc(seg.slice(1, -1)) + '</code>'); return; }
-    seg.split(/((?:\b[A-Za-z_.][\w.]*\((?:[^()$]|(?<=\w)\$|\((?:[^()$]|(?<=\w)\$)*\))*\))|(?:[A-Za-z_.][\w.]*\$[\w.$]+(?:\[[^\]\s]*\])?))/g).forEach((x, j) => out.push(j % 2 ? '<code>' + esc(x) + '</code>' : mathHTML(x)));
-  });
-  return out.join('');
-}
+// prose with code and maths in it (js/room/prose.js): TeX spans first, then R / Python tokens as <code>, the rest typeset
+export { prose };
 const KIND_ABBR = { definition: 'DEF', axiom: 'AX', postulate: 'POST', lemma: 'LEM', theorem: 'THM', result: 'RES', derivation: '⇒', formula: 'EQ', example: 'EX', remark: 'REM' };
 
 export class Reader {

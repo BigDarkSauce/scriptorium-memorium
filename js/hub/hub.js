@@ -39,7 +39,7 @@ export class Hub {
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
     // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
-    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .9, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .004 });   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .9, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .002, sat: .9 });   /* sat .9: the warm lamps on warm plaster and giallo compound into ochre; a touch less chroma keeps stucco cream */   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120); this.ao.camera = this.camera;
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
@@ -205,6 +205,14 @@ export class Hub {
   // face, on the side of the nearer corner; the view is then turned along the wall, so the hero scrolls and the plaque
   // sit in the left (or right) third, the near corner is the frame edge, and the rest of the hall recedes on the other side.
   frameHero() {
+    const R = this.lib.hub, cam = this.camera;
+    // the opening view is the hall's own composition: from the middle of the entrance end, eye height, looking down the
+    // carpet to the window wall (symmetric: windows, columns, the bookcases either side). A view jammed against one
+    // bookcase hid the room it belongs to; the hero scrolls get the warm pool of light instead (syncGlow)
+    { const c = this.caseDepth() + .5, z = Math.max(0, R.d / 2 - c - .35), eye = 1.6; cam.position.set(0, eye, z); this.controls.target.set(0, eye + .25, Math.min(z - 4, -R.d / 2 + c)); this.controls.update(); return; }
+    // (the hero framing below is kept for a direct call by name: heroView)
+  }
+  heroView() {
     const R = this.lib.hub, cam = this.camera, s = this.heroShelf(), o = s && this.shelfObjs.get(s.id);
     if (!o) { cam.position.set(R.w * .07, 1.7, R.d * .28); this.controls.target.set(-R.w * .29, 1.75, -R.d * .22); this.controls.update(); return; }
     o.updateMatrixWorld(true); const u = o.userData, M = o.matrixWorld, n = V3(0, 0, 1).transformDirection(M), t = V3(1, 0, 0).transformDirection(M);
@@ -636,6 +644,7 @@ export class Hub {
     O.S0 = Math.max(0, O.tFly - O.path.D); O.tUn = Math.max(O.tFly, O.S0 + O.path.D) + .1;
     O.qd = new THREE.Quaternion().setFromUnitVectors(O.d0, O.d1);
     this.scene.attach(sc);   // reparent to the hall so it can float free
+    if (b.hang) { const sid = so.userData.shelfId; setChains(so, this.lib.books.filter(x => x.shelf === sid && x.hang && x !== b).flatMap(x => chainItems(so, x))); O.chainsOff = sid; }   // its chains go with it (no ends left dangling while it is out)
     // facing: the scroll's axis (local z) across the view, its front (local −x) toward the viewer, kept level
     O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.liftTo.clone().add(outward), O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
     O.sheet = makeSheet(.42, .6, b.title); sc.add(O.sheet);
@@ -651,8 +660,10 @@ export class Hub {
     so.updateMatrixWorld(true); const inv = so.matrixWorld.clone().invert();
     const caseBox = localBox(so, inv, o => !isUnder(o, sc) && o.name !== 'slot-ghost'), own = localBox(sc, inv), P0 = sc.position.clone();
     const hanging = !!sc.userData.hanging, rise = hanging ? 0 : .03, zClear = caseBox.max.z + .03;   // off the chain hooks: straight forward (the knob tops fall away from the hooks)
-    const slide = Math.max(zClear - own.min.z + .02, .62 - P0.z), y1 = wp.y + rise, liftY = Math.max(1.62, y1), up = liftY - y1;
-    const dUp = clamp(.45 + .4 * up, .5, 1.1), T = { rise: [0, .35], slide: [.25, 1.25], up: [1.1, 1.1 + dUp], turn: [1.22, Math.max(2.1, 1.22 + dUp)] };
+    // the reading height: 1.5 m (rod a hand below the case top), also for a scroll taken from a high tier or its chains (held up at the cornice's height
+    // it sat across the dentils, the sheet hanging over the case top); never below the top of the case's lower body
+    const slide = Math.max(zClear - own.min.z + .02, .62 - P0.z), y1 = wp.y + rise, liftY = 1.5, up = liftY - y1;
+    const dUp = clamp(.45 + .4 * Math.abs(up), .5, 1.1), T = { rise: [0, .35], slide: [.25, 1.25], up: [1.1, 1.1 + dUp], turn: [1.22, Math.max(2.1, 1.22 + dUp)] };
     return { A: wp.clone(), out: outward.clone(), rise, slide, up, T, D: Math.max(T.up[1], T.turn[1]), zClear, end: wp.clone().addScaledVector(outward, slide).setY(liftY) };
   }
   // the scroll's pose at s seconds along its way out (each leg eased with smootherstep: still at both ends)
@@ -674,7 +685,7 @@ export class Hub {
     this.scrollPose(O, C.ps * (1 - Math.min(1, C.t / C.dur)));
     S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = e3 > .002; this.glowAt(O, e3);
     if (C.t < C.dur) return;
-    O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ);
+    O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ); if (O.chainsOff != null) this.refill(O.chainsOff);
     sc.remove(O.sheet, O.light); this.trash([O.sheet]); O.light.dispose();
     sc.userData.paper.emissiveIntensity = 0; this.gfx.bloom.strength = this.scene.userData.look.bloom;
     this.opening = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update();

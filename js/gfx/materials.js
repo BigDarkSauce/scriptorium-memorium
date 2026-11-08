@@ -27,7 +27,7 @@
 // a half-opaque vellum sheet. Each hook variant carries its own `defines`, which keeps three's program cache
 // keys distinct (patchMaterial gives every patched material of one type the same customProgramCacheKey).
 import * as THREE from 'three';
-import { paper, parchment, leather, stone, plaster, companions, patinaTex } from './textures.js';
+import { paper, parchment, leather, stone, plaster, companions, patinaTex, marbleSet as statuarySet } from './textures.js';
 import { surface, patchSurface } from './surfaces.js';
 import { woodSet, brushed, smudge, castIron, paperSet, feltSet, marbleSet, relief, variation } from './proc.js';
 import { aaaMaterial, AAA } from './aaa.js';
@@ -147,7 +147,7 @@ export function makeMaterial(spec = {}, opts = {}) {
     case 'rubber': { const R = relief('rubber'); m = P({ color: 0x232323, roughness: .82, normalMap: R.normalMap, normalScale: new THREE.Vector2(.45, .45), sheen: .5, sheenRoughness: .55, sheenColor: new THREE.Color(0x808080) }); break; }
     case 'ceramic': { const R = relief('peel'); m = P({ color: 0xf2efe8, roughness: .45, clearcoat: 1, clearcoatRoughness: .05, clearcoatNormalMap: R.normalMap, clearcoatNormalScale: new THREE.Vector2(.18, .18) }); break; }
     case 'stone': { const R = relief('stone'); m = P({ map: stone(), normalMap: R.normalMap, normalScale: new THREE.Vector2(.9, .9), roughnessMap: R.roughnessMap, color: 0xffffff, roughness: 1 }); break; }
-    case 'marble': { const M = marbleSet(); m = surface(P({ map: M.map, roughnessMap: M.roughnessMap, color: new THREE.Color(.92, .92, .92), roughness: .3, clearcoat: .6, clearcoatRoughness: .08 }), { sss: [.85, .56, .4, .38], macro: [.9, .06, .2] }); break; }   // the strongly veined white marble of proc.js (pedestals), translucent wrap, a softer polishing coat
+    case 'marble': { const M = statuarySet('statuary', { size: 512, seed: 4 }); m = surface(P({ map: M.map, roughnessMap: M.roughnessMap, normalMap: M.normalMap, normalScale: new THREE.Vector2(M.normalScale || .5, M.normalScale || .5), color: new THREE.Color(.9, .9, .89), roughness: 2.6, clearcoat: .6, clearcoatRoughness: .08 }), { sss: [.85, .56, .4, .38], macro: [.9, .06, .2] }); break; }   // white statuary marble with the soft branching veins of textures.js (the hall's own marble; proc.js's veins read as contour lines), translucent wrap, a softer polishing coat
     case 'plaster': m = stack(plaster(), { roughness: 1 }); break;
     case 'fabric': { const R = relief('weave'); m = P({ color: 0x7a2e24, roughness: .95, normalMap: R.normalMap, normalScale: new THREE.Vector2(.5, .5), sheen: 1, sheenColor: new THREE.Color(0xffc0a0), sheenRoughness: .55 }); break; }
     case 'felt': { const F = feltSet(); m = P({ map: F.map, normalMap: F.normalMap, normalScale: new THREE.Vector2(.6, .6), color: 0x2f4a36, roughness: 1, sheen: .8, sheenRoughness: .8, sheenColor: new THREE.Color(0x9ab09a) }); break; }

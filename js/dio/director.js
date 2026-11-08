@@ -121,6 +121,7 @@ export class Director {
     // subject size: its mesh box, grown to include its label point and (for explanations) the other named objects
     v.scene && v.scene.updateMatrixWorld(true);
     let box = null; if (b.focus) { box = new THREE.Box3().setFromObject(b.focus); if (box.isEmpty()) box = null; }
+    if (box && b.extra && b.kind === 'lesson') { const eb = new THREE.Box3(); b.extra.forEach(a => { if (a.obj) { eb.setFromObject(a.obj); if (!eb.isEmpty() && eb.getSize(V3()).length() < R * 1.2) box.union(eb); } else { const q = a.getPos && a.getPos(); if (q) box.expandByPoint(q); } }); }
     if (box) { box.expandByPoint(p); if (kind === 'medium') (b.names || []).slice(0, 2).forEach(a => { const q = a.getPos && a.getPos(); if (q) box.expandByPoint(q); }); p = box.getCenter(V3()); }
     let r = box ? box.getSize(V3()).length() * .5 : .8;
     if (kind === 'close' && b.kind === 'event') { const a0 = b.anchor && b.anchor(); if (a0) { p = a0.clone(); r = Math.min(r, R * .14); } }   // a close-up is about where it happens
@@ -138,8 +139,14 @@ export class Director {
     // the free part of the frame (minus the instruction panel and the readouts), and the subject on one of its thirds
     const W = innerWidth, fr = this.freeFrame(W), sxPx = (p.clone().project(cam).x * .5 + .5) * W;
     const want = fr[0] + (fr[1] - fr[0]) * (sxPx < (fr[0] + fr[1]) / 2 ? 1 / 3 : 2 / 3), xd = want / W * 2 - 1;
-    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), hw = dist * Math.tan(half) * aspect;
-    const target = p.clone().addScaledVector(right, -xd * hw);
+    // the free band vertically (below the title and the top buttons, above the time bar and, on a phone, the callout's
+    // bottom sheet): the subject is centred in it, and the distance grows until the subject fits across the band and
+    // across the free width (a portrait phone is narrow: its width, not its height, limits the shot)
+    const H = innerHeight, fy = this.freeBand(H), bandF = Math.max(.25, (fy[1] - fy[0]) / H), wideF = Math.max(.25, (fr[1] - fr[0]) / W);
+    if (!b.dist) dist = Math.max(dist, Math.min(R * 1.6, r / Math.tan(half) * 1.12 / bandF, r / (Math.tan(half) * Math.min(1, aspect)) * 1.12 / wideF));
+    const yd = 1 - (fy[0] + fy[1]) / H;   /* NDC y of the band's centre */
+    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), hw = dist * Math.tan(half) * aspect, up2 = V3().crossVectors(dir, right).normalize();
+    const target = p.clone().addScaledVector(right, -xd * hw).addScaledVector(up2, -yd * dist * Math.tan(half));
     const pos = target.clone().addScaledVector(dir, dist);
     if (b.poseOnly) return { target, pos, fov };
     if (kind === 'push') {
@@ -154,15 +161,19 @@ export class Director {
   // when they would not fit across it. Returns {target, pos} (the orbit pivot pans with the view).
   wideKey(W = innerWidth) {
     const v = this.v, k = v.ds.overviewKey(), R = v.ds.orb ? v.ds.orb.r : 10, target = k.target.clone(), pos = target.clone().addScaledVector(k.dir, R);
-    const fr = this.freeFrame(W, true); if (fr[1] - fr[0] < 120 || (fr[0] <= 80 && fr[1] >= W - 30)) return { target, pos };
+    const H = innerHeight, phone = W < 760, fr = this.freeFrame(W, true), fy = this.freeBand(H), sideOK = !(fr[1] - fr[0] < 120 || (fr[0] <= 80 && fr[1] >= W - 30));
+    if (!sideOK && !phone) return { target, pos };
     const c = this._wc || (this._wc = new THREE.PerspectiveCamera()); c.fov = this.baseFov(); c.aspect = v.camera.aspect || 1.6; c.near = .05; c.far = 1e3; c.position.copy(pos); c.lookAt(target); c.updateProjectionMatrix(); c.updateMatrixWorld();
     v.scene.updateMatrixWorld(true);
-    let x0 = 1e9, x1 = -1e9; const q = V3(), bx = new THREE.Box3();
-    v.ds.actors.forEach(a => { if (!a.obj) return; bx.setFromObject(a.obj); if (bx.isEmpty() || bx.getSize(q).length() > R * 1.6) return; for (let i = 0; i < 8; i++) { q.set(i & 1 ? bx.max.x : bx.min.x, i & 2 ? bx.max.y : bx.min.y, i & 4 ? bx.max.z : bx.min.z).project(c); if (q.z > 1) continue; const sx = (clamp(q.x, -1.6, 1.6) * .5 + .5) * W; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); } });
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; const q = V3(), bx = new THREE.Box3();
+    v.ds.actors.forEach(a => { if (!a.obj) return; bx.setFromObject(a.obj); if (bx.isEmpty() || bx.getSize(q).length() > R * 1.6) return; for (let i = 0; i < 8; i++) { q.set(i & 1 ? bx.max.x : bx.min.x, i & 2 ? bx.max.y : bx.min.y, i & 4 ? bx.max.z : bx.min.z).project(c); if (q.z > 1) continue; const sx = (clamp(q.x, -1.6, 1.6) * .5 + .5) * W, sy = (-clamp(q.y, -1.6, 1.6) * .5 + .5) * H; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); } });
     if (!(x1 > x0)) return { target, pos };
-    const fw = fr[1] - fr[0], grow = clamp((x1 - x0) / (fw * .92), 1, 1.6), dist = R * grow, hw = dist * Math.tan(rad(c.fov / 2)) * c.aspect;
-    const shiftPx = ((x0 + x1) / 2 - W / 2) / grow - ((fr[0] + fr[1]) / 2 - W / 2), right = V3().crossVectors(V3(0, 1, 0), k.dir).normalize();   // positive: the bodies sit right of the free centre
-    target.addScaledVector(right, shiftPx / W * 2 * hw); pos.copy(target).addScaledVector(k.dir, dist);
+    const fw = sideOK ? fr[1] - fr[0] : W - 32, fcx = sideOK ? (fr[0] + fr[1]) / 2 : W / 2, fh = fy[1] - fy[0];
+    const grow = clamp(Math.max((x1 - x0) / (fw * .92), phone ? (y1 - y0) / (fh * .92) : 1), 1, phone ? 2.2 : 1.6), dist = R * grow, hh = dist * Math.tan(rad(c.fov / 2)), hw = hh * c.aspect;
+    const shiftPx = ((x0 + x1) / 2 - W / 2) / grow - (fcx - W / 2), right = V3().crossVectors(V3(0, 1, 0), k.dir).normalize();   // positive: the bodies sit right of the free centre
+    target.addScaledVector(right, shiftPx / W * 2 * hw);
+    if (phone) { const up2 = V3().crossVectors(k.dir, right).normalize(), shiftY = ((y0 + y1) / 2 - H / 2) / grow - ((fy[0] + fy[1]) / 2 - H / 2); target.addScaledVector(up2, -shiftY / H * 2 * hh); }   /* positive shiftY: the bodies sit below the band's centre */
+    pos.copy(target).addScaledVector(k.dir, dist);
     return { target, pos };
   }
   // the subject of each beat gets a soft accent light (the "hero" key of docs/research/presentation-craft.md §1)
@@ -444,6 +455,9 @@ export class Director {
   baseFov() { return this.v.baseFov || 40; }
   // the free part of the frame, from the panels' final layout (offsets ignore the slide/fold transforms in progress)
   freeFrame(W, raw) { const v = this.v, P = v.panel, Rp = v.readPanel, ox = P && P.offsetParent ? P.offsetParent.getBoundingClientRect().left : 0; const L = P && !P.hidden && !P.classList.contains('folded') ? ox + P.offsetLeft + P.offsetWidth + 12 : 70; const R = Rp && !Rp.hidden && Rp.offsetWidth ? ox + Rp.offsetLeft - 12 : W - 24; return raw || R - L > W * .35 ? [L, R] : [0, W]; }   // raw: the gap itself, however narrow
+  // the free band of the frame vertically: [top, bottom] in px. Top: below the title and the top button row. Bottom: above
+  // the time bar, and on a phone above the callout's bottom sheet (its last measured height, else a typical one)
+  freeBand(H = innerHeight) { const phone = innerWidth < 760, top = phone ? 70 : 64; const bot = phone ? H - 128 - (this._sheetH || 170) - 10 : H - 84; return bot - top > H * .25 ? [top, bot] : [top, Math.max(top + H * .25, bot)]; }
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {
@@ -473,11 +487,12 @@ export class Director {
     // process arrows supplied by the model for this event (DIO.<type>.flows): what pushes what, where
     b.flowEls = (b.flows || []).slice(0, 4).map(f => {
       const path = mk(f.vec ? 'guide vec' : 'guide flow', 'dir-ah-c'), t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'guide-label');
+      const pill = document.createElementNS(NS, 'rect'); pill.setAttribute('class', 'guide-pill'); pill.setAttribute('rx', '9'); pill.style.opacity = 0; this.svg.append(pill); b.guides.push(pill);
       const full = mathText(String(f.label || '')), short = mathText(f.short || shortLabel(String(f.label || ''))),   /* typeset (plain Unicode: SVG tspan, compared by text) */ tip = document.createElementNS(NS, 'title'), vis = document.createElementNS(NS, 'tspan');
       tip.textContent = full; vis.textContent = full; t.append(tip, vis); this.svg.append(t); b.guides.push(t);
       // widths measured once (one layout read per beat): the placement then works on numbers
       const wF = t.getComputedTextLength ? t.getComputedTextLength() : full.length * 7; vis.textContent = short; const wS = short === full ? wF : (t.getComputedTextLength ? t.getComputedTextLength() : short.length * 7); vis.textContent = full;
-      return { f, path, t, vis, full, short, wF: wF || full.length * 7, wS: wS || short.length * 7 };
+      return { f, path, t, vis, pill, full, short, wF: wF || full.length * 7, wS: wS || short.length * 7 };
     });
   }
   showGuides(b, on) { (b.guides || []).forEach(g => { g.style.display = on ? '' : 'none'; }); b.gOff = !on; }
@@ -546,28 +561,31 @@ export class Director {
       setLine(L2.path, pts);
     });
     // labels: greedy, in flow order; obstacles are every arrow (padded), the labels already placed, the pins, the callout and the frame
-    const LH = 17, pad = 5, placed = [], boxes = [];
-    (b.rects || []).forEach(r => boxes.push([r.left - b.ox, r.top - b.oy, r.width, r.height]));
+    const LH = 17, pad = 5, placed = [], boxes = [], pins = [];
+    (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));   // the pins (a label over a pin hides its name): weighed more than an arrow
     if (b.box) boxes.push(b.box);
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
     if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
     const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 50;
       for (const s of segs) if (segRect(s[0], s[1], x - pad, y - pad, wd + 2 * pad, LH + 2 * pad)) c += 10;
       for (const B of boxes.concat(placed)) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 10; }
+      for (const B of pins) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 30; }
       return c; };
     FE.forEach(F => {
-      if (!F.pts || !F.full) { F.t.style.opacity = 0; return; }
+      if (!F.pts || !F.full) { F.t.style.opacity = 0; if (F.pill) F.pill.style.opacity = 0; return; }
       const [[ax, ay], [cx, cy]] = F.pts, L = Math.hypot(cx - ax, cy - ay) || 1, ux = (cx - ax) / L, uy = (cy - ay) / L, side0 = F.lane ? 1 : (F.side || 1);
       const cand = [];
       [F.full, F.short].forEach((txt, vi) => { if (vi && txt === F.full) return; const wd = vi ? F.wS : F.wF;
-        [.5, .32, .68].forEach(k => [side0, -side0].forEach(sd => { const nx = -uy * sd, ny = ux * sd, off = 9 + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi }); })); });
+        [.5, .32, .68, 1, 0].forEach(k => [side0, -side0].forEach(sd => [0, 1, 2].forEach(far => {   // beside the shaft, and out past either end, in up to three rows (a crowded body: pins, other arrows) const nx = -uy * sd, ny = ux * sd, off = 9 + far * (LH + 8) + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi, far }); }))); });
       // keep last frame's choice while it is still clear (no flicker); otherwise the first clear candidate, else the least bad
-      let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd);
+      let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd && c.far === F.lc.far);
       if (keep && cost(keep.x, keep.y, keep.wd) === 0) best = keep;
-      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 2 + (c.k !== .5 ? 1 : 0); if (k < bc) { bc = k; best = c; if (k === 0) break; } }
-      F.lc = { vi: best.vi, k: best.k, sd: best.sd }; if (!F.lane) F.side = best.sd;
+      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 2 + (c.k !== .5 ? 1 : 0) + (c.k === 1 || c.k === 0 ? 2 : 0) + c.far * 3; if (k < bc) { bc = k; best = c; if (k === 0) break; } }
+      F.lc = { vi: best.vi, k: best.k, sd: best.sd, far: best.far }; if (!F.lane) F.side = best.sd;
       if (F.vis.textContent !== best.txt) F.vis.textContent = best.txt;
       F.t.setAttribute('x', (best.x + best.wd / 2).toFixed(0)); F.t.setAttribute('y', (best.y + LH - 4).toFixed(0)); F.t.style.opacity = ease > .6 ? 1 : 0;
+      // the backing: a dark translucent pill behind the text, so it reads on grass, sky or a bright model alike
+      if (F.pill) { F.pill.setAttribute('x', (best.x - 6).toFixed(0)); F.pill.setAttribute('y', (best.y - 1).toFixed(0)); F.pill.setAttribute('width', (best.wd + 12).toFixed(0)); F.pill.setAttribute('height', LH + 2); F.pill.style.opacity = ease > .6 ? 1 : 0; }
       placed.push([best.x, best.y, best.wd, LH]);
     });
   }
@@ -585,6 +603,13 @@ export class Director {
     { const L = v.accentLight; if (L) { const goal = this.beat && this.cinematic ? (L.userData.goal || 0) : 0; L.intensity += (goal - L.intensity) * Math.min(1, dt * 2); } }
     // cut dip (≈0.18 s down, 0.3 s up through a dark grade)
     const g = v.gfx && v.gfx.grade && v.gfx.grade.uniforms;
+    // a cut never shows a freeze: while the frame dips to dark the camera glides on with the motion it had (decaying),
+    // instead of stopping dead on the first frame of the dip (a zoom, a ride or a dolly ends when the cut is called)
+    { const cam = v.camera; if (cam && dt > 0) {
+      if (this.dip && !this.dip.done) { if (this._cv) { this._cv.multiplyScalar(Math.exp(-dt * 5)); cam.position.addScaledVector(this._cv, dt); } }
+      else if (!this.dip) { const R = v.ds && v.ds.orb ? v.ds.orb.r : 10; if (this._cp) { const vel = (this._cv || (this._cv = V3())).subVectors(cam.position, this._cp).divideScalar(dt); if (vel.length() > R * 2.5) vel.set(0, 0, 0); }   /* a teleport (a cut) is not a motion */
+        (this._cp || (this._cp = V3())).copy(cam.position); }
+      else { this._cp = null; if (this._cv) this._cv.set(0, 0, 0); } } }
     if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
     // a push: slow dolly, eased, then it simply holds
     if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e);
@@ -610,7 +635,7 @@ export class Director {
       const panel = v.panel && !v.panel.hidden ? (v.panel.classList.contains('folded') ? 74 : 380) : 24, phone = w < 760;   // (right of the folded panel's tab too)
       // layout is read at most every 0.25 s (callout size, pins, panels), never between this frame's writes
       if (!b.rects || b.t - (b.rectT || -1) > .25) {
-        b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin.in') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
+        b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()).filter(r => r.width > 1); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
         const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height }; };
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
         b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip].map(R).filter(Boolean);
@@ -635,7 +660,7 @@ export class Director {
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
         if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
       let [x, y] = place(C[b.side]);
-      if (phone) { x = 10; y = h - ch - 128; }   // phones: a bottom sheet above the time bar
+      if (phone) { x = 10; y = h - ch - 128; this._sheetH = ch; }   // phones: a bottom sheet above the time bar
       else {
         // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
         for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {

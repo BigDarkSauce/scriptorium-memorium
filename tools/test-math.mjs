@@ -5,7 +5,8 @@
 // Each case gives the input text and the expected result in a compact "flat" notation of the HTML output:
 //   *x*  italic        ^{…} superscript     _{…} subscript      [n|d] stacked fraction     √{…} radical (vinculum over …)
 //   everything else is the literal text; thin spaces are written ' (U+2009), narrow no-break spaces ~ (U+202F).
-// mode 'label' = compact one-line target (fractions with a solidus); default 'html' = running text (stacked fractions).
+// mode 'label' = compact one-line target (fractions with a solidus, no MathJax); default 'html' = running text (fractions
+// with a solidus too, so a paragraph's line spacing never opens); 'display' = a line of its own (stacked fractions).
 import { mathHTML, mathRuns, mathText } from '../js/util.js';
 
 // parse the (well-formed, generated) HTML into a tree and flatten it
@@ -50,16 +51,16 @@ const C = [
   ['x^2', '*x*^{2}'], ['x**2 + y**2', '*x*^{2} + *y*^{2}'], ['x^(n+1)', '*x*^{*n* + 1}'], ['x^-1', '*x*^{−1}'], ['e^-x', 'e^{−*x*}'],
   ['sqrt(x^2+y^2)', '√{*x*^{2} + *y*^{2}}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}', 'label'],
   ['cbrt(V)', '∛{*V*}'], ['exp(-x^2/2)', 'e^{−*x*^{2}/2}'], ['abs(v)', '|*v*|'], ['abs(x - y)', '|*x* − *y*|'],
-  ['ln(2)/c', "[ln'2|*c*]"], ['log10(I/I0)', 'log₁₀(*I*/*I*_{0})'], ['sin(theta)', "sin'*θ*"], ['cos(omega*t + phi)', 'cos(*ωt* + *φ*)'],
+  ['ln(2)/c', "[ln'2|*c*]", 'display'], ['log10(I/I0)', 'log₁₀(*I*/*I*_{0})'], ['sin(theta)', "sin'*θ*"], ['cos(omega*t + phi)', 'cos(*ωt* + *φ*)'],
   ['sin(2x)', "sin'2*x*"], ['a*sin(x)*cos(y)', "*a*'sin'*x*'cos'*y*"], ['atan2(y, x)', 'atan2(*y*, *x*)'],
   ['pow(r, 3)', '*r*^{3}'], ['hypot(dx, dy)', '√{(d*x*)^{2} + (d*y*)^{2}}'],
-  ['F = G*m1*m2/r^2', '*F* = [*Gm*_{1}*m*_{2}|*r*^{2}]'],
+  ['F = G*m1*m2/r^2', '*F* = [*Gm*_{1}*m*_{2}|*r*^{2}]', 'display'],
   ['F = G*m1*m2/r^2', '*F* = *Gm*_{1}*m*_{2}/*r*^{2}', 'label'],
   ['E = 1/2*m*v^2', '*E* = ½*mv*^{2}'], ['KE = 0.5*m*v**2', '*KE* = 0.5*mv*^{2}'],
-  ['(x+1)/(x-1)', '[*x* + 1|*x* − 1]'], ['(x+1)/(x-1)', '(*x* + 1)/(*x* − 1)', 'label'],
+  ['(x+1)/(x-1)', '[*x* + 1|*x* − 1]', 'display'], ['(x+1)/(x-1)', '(*x* + 1)/(*x* − 1)', 'label'],
   ['2*3 = 6', '2'+"'×'"+'3 = 6'], ['x*2', '*x*·2'], ['3*(a+b)', '3(*a* + *b*)'], ['(a+b)*(c+d)', '(*a* + *b*)(*c* + *d*)'],
-  ['dy/dx = -k*y', '[d*y*|d*x*] = −*ky*'], ['theta_0 = 0.3', '*θ*_{0} = 0.3'], ['Delta T = T_max - T_min', 'Δ*T* = *T*_{max} − *T*_{min}'],
-  ['omega0 = sqrt(k/m)', '*ω*_{0} = √{*k*/*m*}'], ['v = d/t', '*v* = [*d*|*t*]'], ['n! / (k!(n-k)!)', '[*n*!|*k*!(*n* − *k*)!]'],
+  ['dy/dx = -k*y', '[d*y*|d*x*] = −*ky*', 'display'], ['theta_0 = 0.3', '*θ*_{0} = 0.3'], ['Delta T = T_max - T_min', 'Δ*T* = *T*_{max} − *T*_{min}'],
+  ['omega0 = sqrt(k/m)', '*ω*_{0} = √{*k*/*m*}'], ['v = d/t', '*v* = [*d*|*t*]', 'display'], ['n! / (k!(n-k)!)', '[*n*!|*k*!(*n* − *k*)!]', 'display'],
   // --- relations and operators
   ['x <= 2', '*x* ≤ 2'], ['y >= 0', '*y* ≥ 0'], ['a != b', '*a* ≠ *b*'], ['x -> 0', '*x* → 0'], ['v ~= 3.2', '*v* ≈ 3.2'], ['x = 2 +- 0.1', '*x* = 2 ± 0.1'],
   ['A + B -> C', 'A + B → C'], ['C → A + B', 'C → A + B'], ['2H2 + O2 -> 2H2O', '2H_{2} + O_{2} → 2H_{2}O'],
@@ -86,11 +87,18 @@ const C = [
   ['h = P/(ρ_Hg g) = 101 325 Pa ÷ (13 595 kg/m³ × 9.81 m/s²)', "*h* = *P*/(*ρ*_{Hg}*g*) = 101'325~Pa ÷ (13'595~kg/m³ × 9.81~m/s²)", 'label', 'digit groups stay one number'],
   // --- LaTeX: kept for MathJax in running text, converted to plain notation in labels; stray commands become symbols
   [String.raw`so \[T_0=2\pi\sqrt{L/g}\] holds`, String.raw`so \[T_0=2\pi\sqrt{L/g}\] holds`], [String.raw`$\frac{a}{b}$ label`, '[*a*|*b*] label'.replace('[*a*|*b*]', '*a*/*b*'), 'label'],
-  [String.raw`\theta = 0 at rest`, '*θ* = 0 at rest'], ['S/S(16 °C)', '[*S*|*S*(16~°C)]'], ['S/S(16 °C)', '*S*/*S*(16~°C)', 'label'], ['m = -di/do', '*m* = −[*di*|*do*]'], ['which way does p* move?', 'which way does *p*^{∗} move?'], ['a 4*4 grid', "a 4'×'4 grid"], ['10:30 am', '10:30 am'], ['Chapter 3-4', 'Chapter 3-4'],
+  [String.raw`\theta = 0 at rest`, '*θ* = 0 at rest'], ['S/S(16 °C)', '[*S*|*S*(16~°C)]', 'display'], ['S/S(16 °C)', '*S*/*S*(16~°C)', 'label'], ['m = -di/do', '*m* = −[*di*|*do*]', 'display'], ['which way does p* move?', 'which way does *p*^{∗} move?'], ['a 4*4 grid', "a 4'×'4 grid"], ['10:30 am', '10:30 am'], ['Chapter 3-4', 'Chapter 3-4'],
   // --- Greek names only inside expressions
   ['alpha = 0.5', '*α* = 0.5'], ['the alpha particle', 'the alpha particle'], ['theta1 - theta2', '*θ*_{1} − *θ*_{2}'],
-  ['z = f(x,y)', '*z* = *f*(*x*, *y*)'], ['Q = [C]/([A][B])', '*Q* = [[*C*]|[*A*][*B*]]'], ['2 ln 2 / c = 4.62 s', "[2'ln'2|*c*] = 4.62~s"],
-  ['ln(|Δθ₂|/ε)/t', "[ln(|Δ*θ*_{2}|/*ε*)|*t*]"],
+  ['z = f(x,y)', '*z* = *f*(*x*, *y*)'], ['Q = [C]/([A][B])', '*Q* = [[*C*]|[*A*][*B*]]', 'display'], ['2 ln 2 / c = 4.62 s', "[2'ln'2|*c*] = 4.62~s", 'display'],
+  ['ln(|Δθ₂|/ε)/t', "[ln(|Δ*θ*_{2}|/*ε*)|*t*]", 'display'],
+  // --- running text ('html', the default) keeps fractions on the line with a solidus; only 'display' stacks them
+  ['F = G*m1*m2/r^2', '*F* = *Gm*_{1}*m*_{2}/*r*^{2}'], ['(x+1)/(x-1)', '(*x* + 1)/(*x* − 1)'], ['dy/dx = -k*y', 'd*y*/d*x* = −*ky*'], ['v = d/t', '*v* = *d*/*t*'],
+  ['sin θ − θ³/6', "sin'*θ* − *θ*³/6"], ['θ^3/6', '*θ*^{3}/6'], ['T = 2*pi*sqrt(L/g)', '*T* = 2π√{*L*/*g*}', 'display'], ['ln(2)/c', "(ln'2)/*c*"],
+  // --- Unicode subscripts written by authors: vₓ, vᵧ (ᵧ for y), θ₀ are a variable with its index
+  ['vₓ', '*v*_{*x*}'], ['vᵧ', '*v*_{*y*}'], ['apex: vᵧ = 0 at t = 1.44 s', 'apex: *v*_{*y*} = 0 at *t* = 1.44~s', 'label'], ['θ₀ is small', '*θ*_{0} is small'],
+  // --- angle brackets (mean values) are drawn, so every font shows them: ⟨KE⟩
+  ['⟨KE⟩', '⟨KE⟩', 'label'],
 ];
 
 let fail = 0, n = 0;

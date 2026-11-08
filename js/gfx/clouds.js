@@ -89,7 +89,7 @@ void main(){
   bool fine = false; int thin = 0, tick = 0; float od = 0.;
   float cosT = dot(rd, L); float ph0 = mix(hg(cosT, -.3), hg(cosT, .8), .5), ph1 = mix(hg(cosT, -.15), hg(cosT, .4), .5), ph2 = mix(hg(cosT, -.07), hg(cosT, .2), .5); float backlit = smoothstep(.1, .95, cosT);
   vec3 albedo = mix(vec3(1.), vec3(.37, .4, .47), uGrey); albedo = mix(albedo, vec3(.2, .215, .26), uStorm*.85); vec3 albTop = mix(vec3(.96, .97, 1.), albedo, .4 + .25*uGrey);
-  vec3 sunCol = uSunCol*.4, skyCol = uSkyCol*.7, bounce = uGndCol*.9 + uSunCol*.02;   // more key than fill: lit crowns, shaded bellies
+  vec3 sunCol = uSunCol*.36, skyCol = uSkyCol*.5, bounce = uGndCol*.75 + uSunCol*.015;   // more key than fill: lit crowns, shaded grey-blue bellies (cumulus, not cotton wool)
   float T = 1.; vec3 col = vec3(0.); float l0 = uSize*.09 + .03;
   for (int i = 0; i < MAX_STEPS*2; i++){
     if (t >= tF || T < .02) break;
@@ -106,7 +106,7 @@ void main(){
       float lum = exp(-od)*ph0*powder + .45*exp(-od*.3)*ph1 + .22*exp(-od*.1)*ph2;
       float hf = heightFrac(p.y), depth = clamp(-sd/(uSize*.7), 0., 1.), amo = mix(1., .3, depth)*(.55 + .45*exp(-od*.35));
       vec3 Lin = sunCol*lum + mix(bounce, skyCol, smoothstep(0., .85, hf))*amo;
-      Lin *= 1. - (1. - smoothstep(.02, .7, hf))*(.32 + uGrey*.4 + uStorm*.5);   // shaded, flat-ish bases
+      Lin *= 1. - (1. - smoothstep(.02, .75, hf))*(.46 + uGrey*.35 + uStorm*.45);   // shaded, flat-ish bases
       float Tr = exp(-dens*sigma*ds); col += T*mix(albedo, albTop, smoothstep(.4, 1., hf)*.5)*Lin*(1. - Tr); T *= Tr;
     } else if (fine && ++thin > 4){ fine = false; ds = dsC; }
     t += ds;

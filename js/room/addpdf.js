@@ -55,10 +55,22 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
   box.append(el('h3', { text: 'Add a PDF scroll' }), steps, body, foot);
   const STEP = ['The PDF', 'Place', 'Pages', 'Breakdown', 'Analyse']; let at = 0;
   const go = k => { at = k; render(); };
+  // The dialog sits at the bottom of the screen (its bottom edge never moves; js/hub/hub.js frameAt puts a framed place in
+  // the upper third, "clear of a dialog at the bottom"), and its height eases from one step to the next instead of jumping.
+  let hT = 0;
   function render() {
+    const h0 = box.isConnected ? box.getBoundingClientRect().height : 0;
     steps.innerHTML = ''; STEP.forEach((t, k) => steps.append(el('li', { class: k === at ? 'on' : k < at ? 'done' : '', text: (k + 1) + ' · ' + t, 'data-step': k })));
     body.innerHTML = ''; foot.innerHTML = '';
+    veil.classList.toggle('placing', at === 1); box.dataset.step = at;
     [stepFile, stepPlace, stepPages, stepBreakdown, stepRun][at]();
+    clearTimeout(hT); box.style.transition = 'none'; box.style.height = '';
+    const h1 = box.getBoundingClientRect().height, calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (h0 && Math.abs(h1 - h0) > 2 && !calm) {
+      box.style.height = h0 + 'px'; void box.offsetHeight;
+      box.style.transition = 'height .32s cubic-bezier(.2,.8,.2,1)'; box.style.height = h1 + 'px';
+      hT = setTimeout(() => { box.style.transition = ''; box.style.height = ''; }, 360);
+    } else box.style.transition = '';
   }
   const btn = (text, on, cls = '') => el('button', { class: 'btn ' + cls, type: 'button', text, onclick: on });
   const nav = (next, ok = true) => { foot.append(btn(at ? 'Back' : 'Cancel', () => at ? go(at - 1) : close())); if (next) { const b = btn(next, () => go(at + 1), 'primary'); b.disabled = !ok; b.dataset.next = '1'; foot.append(b); } };
@@ -90,15 +102,22 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
     if (!list.length) { body.append(el('p', { text: 'There is no bookcase yet: the scroll goes on a new one.' })); nav('Next'); return; }
     if (!S.place) { const s0 = list.find(s => s.caseId === shelfId) || list[0]; const r0 = s0.rows.find(r => r.slots.some(x => x.free)) || s0.rows[0]; const x0 = r0 && r0.slots.find(x => x.free); S.place = { caseId: s0.caseId, row: r0 ? r0.row : 0, slot: x0 ? x0.slot : 0, hang: false }; }
     const sel = el('select', { class: 'field', 'aria-label': 'Bookcase' }, list.map(s => el('option', { value: s.caseId, text: `${s.title} (${s.kind || ''}, ${s.rows.reduce((a, r) => a + r.slots.filter(x => x.free).length, 0)} free)`, selected: s.caseId === S.place.caseId })));
-    const grid = el('div', { class: 'ap-grid', role: 'grid', 'aria-label': 'Rows and places' }), info = el('div', { class: 'dim small' });
+    const grid = el('div', { class: 'ap-grid', role: 'grid', 'aria-label': 'Rows and places' }), info = el('div', { class: 'dim small ap-info' });
     const hang = el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.place.hang, onchange: e => { S.place.hang = e.target.checked; show(); } }), ' Hang it on the front of the bookcase (marks it important)']);
     const show = () => {
       const s = list.find(x => x.caseId === S.place.caseId) || list[0]; grid.innerHTML = '';
-      s.rows.forEach(r => grid.append(el('div', { class: 'ap-row', role: 'row' }, [el('span', { class: 'ap-rl', text: 'row ' + r.label }), ...r.slots.map(x => { const on = S.place.row === r.row && S.place.slot === x.slot; const b = el('button', { type: 'button', role: 'gridcell', class: 'ap-slot' + (x.free ? '' : ' taken') + (on ? ' on' : ''), title: x.free ? `Row ${r.label}, place ${x.slot + 1}` : 'Taken', 'aria-label': `Row ${r.label}, place ${x.slot + 1}${x.free ? '' : ', taken'}`, disabled: !x.free, 'data-row': r.row, 'data-slot': x.slot }); b.onclick = () => { S.place = { ...S.place, row: r.row, slot: x.slot }; show(); }; return b; })])));
-      const res = preview(hub, S.place); info.textContent = `Row ${(s.rows.find(r => r.row === S.place.row) || {}).label || ''}, place ${S.place.slot + 1}` + (res && res.free === false ? ' — taken, the nearest free place will be used' : '') + (S.place.hang ? ', hanging' : '');
+      // one line per row: its label, then its places in a strip that scrolls sideways when the row is longer than the
+      // dialog (never wrapped onto an unlabelled second line); each place shows its number
+      const strips = [];
+      s.rows.forEach(r => { const strip = el('div', { class: 'ap-slots' }, r.slots.map(x => { const on = S.place.row === r.row && S.place.slot === x.slot; const b = el('button', { type: 'button', role: 'gridcell', class: 'ap-slot' + (x.free ? '' : ' taken') + (on ? ' on' : ''), title: x.free ? `Row ${r.label}, place ${x.slot + 1}` : 'Taken', 'aria-label': `Row ${r.label}, place ${x.slot + 1}${x.free ? '' : ', taken'}`, 'aria-selected': String(on), disabled: !x.free, 'data-row': r.row, 'data-slot': x.slot, text: String(x.slot + 1) }); b.onclick = () => { S.place = { ...S.place, row: r.row, slot: x.slot }; const k = strip.scrollLeft; show(); const ns = grid.querySelectorAll('.ap-slots')[s.rows.indexOf(r)]; if (ns) ns.scrollLeft = k; }; return b; }));
+        strips.push(strip); grid.append(el('div', { class: 'ap-row', role: 'row' }, [el('span', { class: 'ap-rl', text: 'Row ' + r.label }), strip])); });
+      // the chosen place is scrolled into its strip's view
+      requestAnimationFrame(() => strips.forEach(st => { const on = st.querySelector('.ap-slot.on'); if (on && (on.offsetLeft < st.scrollLeft || on.offsetLeft + on.offsetWidth > st.scrollLeft + st.clientWidth)) st.scrollLeft = on.offsetLeft - st.clientWidth / 2 + on.offsetWidth / 2; }));
+      const res = preview(hub, S.place); info.textContent = `Row ${(s.rows.find(r => r.row === S.place.row) || {}).label || ''}, place ${S.place.slot + 1}` + (res && res.free === false ? ' — taken, the nearest free place will be used' : '') + (S.place.hang ? ', hanging' : '') + (res && res.ok ? ' · marked by the glowing ghost scroll above' : '');
     };
     sel.onchange = () => { const s = list.find(x => x.caseId === sel.value); const r = s.rows.find(rr => rr.slots.some(x => x.free)) || s.rows[0]; const x = r && r.slots.find(y => y.free); S.place = { caseId: s.caseId, row: r ? r.row : 0, slot: x ? x.slot : 0, hang: S.place.hang }; show(); };
-    body.append(el('label', { text: 'Bookcase' }), sel, el('label', { text: 'Row and place (the bookcase shows a glowing ghost scroll there)' }), grid, info, hang); show(); nav('Next');
+    sel.id = 'ap-case';
+    body.append(el('div', { class: 'ap-pick' }, [el('label', { class: 'ap-lab', for: 'ap-case', text: 'Bookcase' }), sel]), el('div', { class: 'ap-pick-head' }, [el('span', { class: 'ap-lab', text: 'Row and place' }), info]), grid, hang); show(); nav('Next');
   }
   // 3 · the pages: from–to, or chapters of the outline
   function stepPages() {
@@ -120,16 +139,18 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
   }
   // 4 · the breakdown level
   function stepBreakdown() {
-    const parts = chosenParts(), mk = (v, t, d) => el('label', { class: 'ap-level' + (S.level === v ? ' on' : '') }, [el('input', { type: 'radio', name: 'aplevel', value: v, checked: S.level === v, onchange: () => { S.level = v; render(); } }), el('b', { text: t }), el('span', { class: 'dim small', text: d })]);
+    // each choice is one row: the radio, then its title with the description under it (the same layout and type for all three)
+    const radio = v => el('input', { type: 'radio', name: 'aplevel', value: v, id: 'aplevel-' + v, checked: S.level === v, onchange: () => { S.level = v; render(); } });
+    const parts = chosenParts(), mk = (v, t, d) => el('label', { class: 'ap-level' + (S.level === v ? ' on' : ''), for: 'aplevel-' + v }, [radio(v), el('b', { class: 'ap-lt', text: t }), el('span', { class: 'ap-ld', text: d })]);
     const minN = parts.reduce((a, p) => a + Math.max(1, (p.subsections || []).length), 0); if (S.n < minN) S.n = minN;
     const N = el('input', { type: 'number', class: 'field small num', min: minN, max: 400, value: S.n, 'aria-label': 'Number of steps', disabled: S.level !== 'exact' });
-    const alloc = el('div', { class: 'dim small' });
+    const alloc = el('span', { class: 'ap-alloc' });
     const showAlloc = () => { if (S.level !== 'exact') { alloc.textContent = ''; return; } const A = allocateSteps(parts.map((p, i) => ({ ...p, id: 'k' + i })), S.n); alloc.textContent = 'Spread over the parts: ' + parts.map((p, i) => `${p.title.slice(0, 28)} ${A['k' + i]}`).join(' · '); };
     N.oninput = () => { S.n = Math.max(minN, +N.value || minN); showAlloc(); };
     body.append(
       mk('complete', 'Complete chain', 'Every definition, rule, worked example, table, figure, code block and panel item gets its own explained step. Length from the content; never coarser than the PDF.'),
       mk('essential', 'Essential chain', 'The spine: at least one explained step per subsection, keeping everything later steps build on.'),
-      el('div', { class: 'ap-level' + (S.level === 'exact' ? ' on' : '') }, [el('label', {}, [el('input', { type: 'radio', name: 'aplevel', value: 'exact', checked: S.level === 'exact', onchange: () => { S.level = 'exact'; render(); } }), el('b', { text: ' Exact number of steps ' })]), N, el('span', { class: 'dim small', text: ` for the whole range (at least ${minN}: one per subsection).` }), alloc]),
+      el('div', { class: 'ap-level' + (S.level === 'exact' ? ' on' : ''), onclick: e => { if (S.level !== 'exact' && e.target.tagName !== 'INPUT') { S.level = 'exact'; render(); } } }, [radio('exact'), el('label', { class: 'ap-lt', for: 'aplevel-exact', text: 'Exact number of steps' }), el('span', { class: 'ap-ld' }, [N, ` for the whole range (at least ${minN}: one per subsection).`]), alloc]),
       el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.dioramas, onchange: e => { S.dioramas = e.target.checked; } }), ' Build the dioramas each part needs (one per dynamic or spatial idea, more for complex parts)']),
       el('p', { class: 'dim small', text: aiAvailable() ? `Your Claude writes each part${evidenceAvailable() ? ', with your research connectors for sources and extra examples' : ''}; a quality check rewrites any step that pastes the PDF or does not explain, and every paragraph gets a figure.` : 'Claude is not reachable from this view: each part\'s prompt is shown for you to run in any AI and paste back; figures and dioramas are then completed here.' }));
     showAlloc(); nav('Next');

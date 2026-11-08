@@ -34,6 +34,7 @@ function lineFrom(points, color, dashed) { const g = new T.BufferGeometry().setF
 const ARW = { r: .026, hr: .072, hl: .2 }, ARW_SHAFT = new T.CylinderGeometry(1, 1, 1, 10).translate(0, .5, 0), ARW_HEAD = new T.ConeGeometry(1, 1, 16).translate(0, -.5, 0);
 ARW_SHAFT.userData.shared = ARW_HEAD.userData.shared = true;
 const _UP = new T.Vector3(0, 1, 0), _dn = new T.Vector3();
+const vecMuted = o => { for (let r = o.parent; r; r = r.parent) if (r.userData && r.userData.vecMute) return true; return false; };   // any ancestor (the diorama's scene, wherever it is mounted)
 class VecArrow extends T.Group {
   constructor(dir = V3(0, 1, 0), origin = V3(0, 0, 0), len = 1, color = 0xffd27a) {
     super(); const m = new T.MeshBasicMaterial({ color }); this.position.copy(origin);
@@ -42,9 +43,12 @@ class VecArrow extends T.Group {
     this.setDirection(dir); this.setLength(len);
   }
   setDirection(d) { if (d.y > .99999) this.quaternion.set(0, 0, 0, 1); else if (d.y < -.99999) this.quaternion.set(1, 0, 0, 0); else this.quaternion.setFromUnitVectors(_UP, _dn.copy(d).normalize()); return this; }
-  setLength(L) { let r = this; while (r.parent) r = r.parent; const on = !(r.userData && r.userData.vecMute); if (this.shaft.visible !== on) this.shaft.visible = this.head.visible = on;   // muted while the director's guides draw the same quantity
+  setLength(L) { const on = !vecMuted(this); if (this.shaft.visible !== on) this.shaft.visible = this.head.visible = on;   // muted while the director's guides draw the same quantity
     L = Math.max(L, .05); const hl = Math.min(ARW.hl, L * .45); this.shaft.scale.set(ARW.r, Math.max(1e-3, L - hl), ARW.r); this.head.scale.set(ARW.hr, hl, ARW.hr); this.head.position.y = L; return this; }
   setColor(c) { this.shaft.material.color.set(c); return this; }
+  // the mute is also checked every frame (the renderer updates every matrix before it draws): a model paused while its
+  // instruction is read never calls setLength, and its arrow must still step aside for the guide drawing the same quantity
+  updateMatrixWorld(force) { const on = !vecMuted(this); if (this.shaft.visible !== on) this.shaft.visible = this.head.visible = on; super.updateMatrixWorld(force); }
 }
 function vecArrow(dir, origin, len, color) { return new VecArrow(dir, origin, len, color); }
 const alen = (q, ref, max = 1.3) => { const r = Math.abs(q) / Math.max(ref, 1e-9); return Math.max(.28, max * (r <= 1 ? r : 1 + .25 * Math.tanh((r - 1) / .5))); };
@@ -179,6 +183,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
     if(Math.sign(th)!==Math.sign(lastTh)&&lastTh!==0)ev('lowest point: speed v = Lω = '+fx(Math.abs(p.L*w),2)+' m/s',V3(piv.x,piv.y-Lv,0),{color:0x88c0ff,sound:'whoosh'});
     lastW=w;lastTh=th},
    visual(){SW.rotation.z=th;GH.rotation.z=gth;tr.add(bobW(bp));D.push(th*DEG);
+    {const sep=Lv*Math.hypot(Math.sin(gth)-Math.sin(th),Math.cos(gth)-Math.cos(th)),k=Math.min(1,Math.max(0,(sep-BR*1.6)/(BR*1.4)));ghost.material.opacity=.32*k*k*(3-2*k);ghost.visible=k>.01}   // the small-angle ghost shows only once it has drifted clear of the real bob (no grey crescent peeking out behind it)
     const a=arcG.attributes.position;for(let i=0;i<=40;i++){const s=th*i/40;a.setXYZ(i,piv.x+.9*Math.sin(s),piv.y-.9*Math.cos(s),.02)}a.needsUpdate=true},
    readouts(){const E=.5*p.L*p.L*w*w+p.g*p.L*(1-Math.cos(th));return[['θ',fx(th*DEG,1)+'°'],['ω',fx(w,2)+' rad/s'],['T measured',isFinite(Tm)?fx(Tm,3)+' s':'…'],['T exact 4√(L/g)·K',fx(Tex,3)+' s'],['T₀ = 2π√(L/g)',fx(T0,3)+' s'],['T/T₀',isFinite(Tm)?fx(Tm/T0,3):'…'],['E/m',fx(E,3)+' J/kg']]}}}};
 {const B=()=>PEN.bob?PEN.bob():V3(0,2,0),whole=()=>[0,(PEN.piv?PEN.piv.y:5.6)-(PEN.Lv||3.1)*.55,0];
@@ -532,7 +537,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const flame=put(new T.Mesh(new T.ConeGeometry(.12,.6,16,1,true),new T.MeshBasicMaterial({color:new T.Color(.5,.9,3),transparent:true,opacity:.7,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false})),'flame',BU);flame.position.set(XC,.98,0);flame.userData.noContact=true;
   // molecules (instanced, coloured by speed) and one tracked molecule with its own mesh and trail
   const mols=put(new T.InstancedMesh(new T.SphereGeometry(r,16,12),makeMaterial({preset:'plastic',color:'#ffffff',roughness:.25}),N),'molecules',VS);mols.castShadow=true;mols.userData.noInk=true;mols.frustumCulled=false;
-  const TM=part('molecule · m',W,true);const tm=put(ball(r*1.25,makeMaterial('gold')),'tracked molecule',TM);const ttr=put(trail(240,0xffd27a),'tracked molecule trail',guides);
+  const TM=part('molecule · m',W,true);const tm=put(ball(r*1.25,new T.MeshPhysicalMaterial({color:new T.Color().setRGB(1,.773,.307,T.LinearSRGBColorSpace),metalness:1,roughness:.3,envMapIntensity:1.1})),'tracked molecule',TM);tm.geometry.dispose();tm.geometry=new T.SphereGeometry(r*1.25,96,64);   /* plain polished gold: the preset's brushed normals and curvature wear band in facet rows when the zoom fills the frame with it */const ttr=put(trail(240,0xffd27a),'tracked molecule trail',guides);
   const P=new Float64Array(N*3),Vv=new Float64Array(N*3),gauss=()=>Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(2*Math.PI*Math.random()),B=[(XR-XL)/2-r,BY-r,BZ-r],C=[XC,0,0];
   for(let i=0;i<N;i++){for(let d=0;d<3;d++){P[i*3+d]=(Math.random()*2-1)*B[d];Vv[i*3+d]=gauss()*Math.sqrt(p.T)}}
   Vv[0]=1.2*Math.sqrt(p.T)*(Math.random()<.5?-1:1);Vv[1]=.5*gauss()*Math.sqrt(p.T);Vv[2]=.5*gauss()*Math.sqrt(p.T); // the tracked molecule: a typical speed, mostly along x
@@ -1162,7 +1167,21 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
   const atoms=put(new T.InstancedMesh(new T.SphereGeometry(1,20,14),makeMaterial({preset:'plastic',color:'#ffffff',roughness:.22}),CAP*2),'molecules (A red, B blue, C = A–B)',CELL);atoms.castShadow=false;atoms.userData.noInk=true;atoms.frustumCulled=false;
   const cA=new T.Color(0xd2553c),cB=new T.Color(0x3c78d2),m4=new T.Matrix4(),q4=new T.Quaternion(),s4=V3(1,1,1),p4=V3(0,0,0);
   // the tracked molecule: a halo that rides with one A (and with the C it becomes)
-  const TRK=part('tracked molecule',W,true);const halo=put(new T.Mesh(new T.TorusGeometry(.26,.025,8,32),new T.MeshBasicMaterial({color:new T.Color(2.2,2,1),toneMapped:false})),'halo',TRK);const ttr=put(trail(260,0xffe08a),'tracked molecule trail',guides);
+  const TRK=part('tracked molecule',W,true);const halo=put(new T.Mesh(new T.TorusGeometry(.26,.025,8,32),new T.MeshBasicMaterial({color:new T.Color(2.2,2,1),toneMapped:false})),'halo',TRK);const ttr=put(trail(70,0xffe08a),'tracked molecule trail',guides);   // a short tail (a long zigzag across the cell read as a chart)
+  // the energy profile on its own card beside the cell (not drawn through the molecules): reactants A + B, the barrier Ea
+  // above them, the product C = AB lower by ΔE = Eb − Ea, the reverse barrier Eb measured from C; built from the parameters
+  {const PF=part('energy profile',CELL);const cw=1024,chh=720,tex=ctex(cw,chh,(g,w,h)=>{g.fillStyle='rgba(12,22,24,.92)';g.fillRect(0,0,w,h);g.strokeStyle='rgba(127,255,216,.5)';g.lineWidth=4;g.strokeRect(6,6,w-12,h-12);
+    const Ea=p.Ea,Eb=p.Eb,lo=Math.min(0,Ea-Eb),hi=Math.max(Ea,.4),x0=120,x1=w-60,yb=h-120,yt=150,sc=(yb-yt)/(hi-lo+.25),lev=e=>yb-(e-lo+.1)*sc,eR=lev(0),eP=lev(Ea),eC=lev(Ea-Eb);   /* levels relative to A + B: the peak at Ea, C at Ea − Eb */
+    g.fillStyle='#cfeee6';g.font='italic 46px Georgia, serif';g.textAlign='left';g.fillText('energy along the reaction',x0-40,90);
+    g.strokeStyle='rgba(207,238,230,.55)';g.lineWidth=3;g.beginPath();g.moveTo(x0-30,yt-20);g.lineTo(x0-30,yb+20);g.lineTo(x1,yb+20);g.stroke();
+    const X=t=>x0+(x1-x0)*t,Y=t=>{const b=Math.exp(-Math.pow((t-.5)/.12,2));return t<.5?eR+(eP-eR)*b:eC+(eP-eC)*b};
+    g.strokeStyle='#ffd98a';g.lineWidth=7;g.beginPath();for(let i=0;i<=120;i++){const t=i/120;i?g.lineTo(X(t),Y(t)):g.moveTo(X(t),Y(t))}g.stroke();
+    const arrow=(x,ya,yb2,lab)=>{g.strokeStyle='#9fe3ff';g.fillStyle='#9fe3ff';g.lineWidth=4;g.beginPath();g.moveTo(x,ya);g.lineTo(x,yb2);g.stroke();const d=Math.sign(yb2-ya)||1;g.beginPath();g.moveTo(x,yb2);g.lineTo(x-12,yb2-18*d);g.lineTo(x+12,yb2-18*d);g.fill();g.font='italic 44px Georgia, serif';g.textAlign='left';const ym=(ya+yb2)/2+14;g.fillText('E',x+16,ym);g.font='italic 30px Georgia, serif';g.fillText(lab,x+16+g.measureText('E').width*1.45,ym+10)};
+    if(Ea>.05)arrow(X(.3),eR,eP+8,'a');if(Eb>.05)arrow(X(.7),eC,eP+8,'b');
+    g.fillStyle='#ffffff';g.font='600 50px Georgia, serif';g.textAlign='center';g.fillText('A + B',X(.08),eR-26);g.fillText('C = AB',X(.9),eC-26);
+    g.fillStyle='rgba(207,238,230,.75)';g.font='italic 36px Georgia, serif';g.fillText('reaction coordinate →',(x0+x1)/2,yb+80)});
+   const card=put(new T.Mesh(new T.PlaneGeometry(2.6,2.6*chh/cw),new T.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false,depthWrite:false})),'energy profile card',PF);card.userData.noInk=true;card.userData.noContact=true;
+   PF.position.set(BX+1.75,Y0+.2,0);PF.rotation.y=-.32;RXN.prof=()=>V3(BX+1.75,Y0+.2,0)}
   let Tk=p.T,tr=0,nf=0,nb=0,flashT=0,enc=0,encOK=0,firstRev=false,eqd=false,tAcc=0,samp=0,tLast=0;const hist=new Float32Array(400);let hn=0;
   const cnt=k=>{let c=0;for(let i=0;i<n;i++)if(K[i]===k)c++;return c};const Vbox=8*BX*BY*BZ,theory=()=>(1+p.Ea/p.T)*Math.exp(-p.Ea/p.T),kr=1.5*Math.exp(-p.Eb/p.T);
   const mp=(i,v)=>v.set(P[i*3],P[i*3+1]+Y0,P[i*3+2]);
@@ -1188,7 +1207,7 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
     let s2=0;for(let i=0;i<n;i++){const mm=K[i]===2?2:1;s2+=mm*(Vv[i*3]*Vv[i*3]+Vv[i*3+1]*Vv[i*3+1]+Vv[i*3+2]*Vv[i*3+2])}const Tn=s2/(3*n);Tk=Tn;const fT=1+(Math.sqrt(p.T/Math.max(.02,Tn))-1)*(1-Math.exp(-h/.5));for(let i=0;i<n*3;i++)Vv[i]*=fT;
     // equilibrium: N_C sampled every 0.1 s; the last 8 s and the 8 s before agree within noise
     tAcc+=h;if(tAcc-tLast>=.1){tLast=tAcc;hist[hn%400]=cnt(2);hn++;if(!eqd&&hn>=160&&tAcc>12){let a=0,b=0;for(let k=0;k<80;k++){a+=hist[(hn-1-k)%400];b+=hist[(hn-81-k)%400]}a/=80;b/=80;const tol=Math.max(1.5,Math.sqrt(Math.max(a,1))*.6);
-      if(Math.abs(a-b)<tol){eqd=true;const A=cnt(0),Bn=cnt(1),C=cnt(2);ev('dynamic equilibrium: [C] steady at ≈ '+Math.round(a)+' (A '+A+', B '+Bn+'): forward and reverse rates balance, Q = '+fx(A&&Bn?C*Vbox/(A*Bn):NaN,2),V3(0,Y0,0),{color:0x88c0ff,sound:'chime'})}}}},
+      if(Math.abs(a-b)<tol){eqd=true;const A=cnt(0),Bn=cnt(1),C=cnt(2);let ci=-1;for(let i=0;i<n;i++)if(K[i]===2&&i!==tr){ci=i;break}ev('dynamic equilibrium: [C] steady at ≈ '+Math.round(a)+' (A '+A+', B '+Bn+'): forward and reverse rates balance, Q = '+fx(A&&Bn?C*Vbox/(A*Bn):NaN,2),ci>=0?mp(ci,V3(0,0,0)):V3(0,Y0,0),{color:0x88c0ff,sound:'chime'})}}}},
    visual(dt){let k=0;for(let i=0;i<n;i++){const x=P[i*3],y=P[i*3+1]+Y0,z=P[i*3+2];if(K[i]===2){const ax=AX[i*3]*.085,ay=AX[i*3+1]*.085,az=AX[i*3+2]*.085;m4.makeScale(.12,.12,.12);m4.setPosition(x+ax,y+ay,z+az);atoms.setMatrixAt(k,m4);atoms.setColorAt(k++,cA);m4.makeScale(.12,.12,.12);m4.setPosition(x-ax,y-ay,z-az);atoms.setMatrixAt(k,m4);atoms.setColorAt(k++,cB)}
       else{m4.makeScale(.11,.11,.11);m4.setPosition(x,y,z);atoms.setMatrixAt(k,m4);atoms.setColorAt(k++,K[i]?cB:cA)}}
     m4.makeScale(0,0,0);for(;k<CAP*2;k++)atoms.setMatrixAt(k,m4);atoms.instanceMatrix.needsUpdate=true;if(atoms.instanceColor)atoms.instanceColor.needsUpdate=true;

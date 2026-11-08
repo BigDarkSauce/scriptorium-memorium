@@ -116,14 +116,14 @@ export function plaster(tone = [214, 200, 176], key = 'plaster', amp = .22) {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = n.fbm(x / 90, y / 90, 0, 4) * .5 + n(x / 9, y / 9) * .12, o = (y * w + x) * 4, k = 1 + v * amp; img.data[o] = tone[0] * k; img.data[o + 1] = tone[1] * k; img.data[o + 2] = tone[2] * k; img.data[o + 3] = 255; }
     g.putImageData(img, 0, 0);
     // a few hairline cracks and settled dust in them (drawn by the same walk as the relief below)
-    plasterCracks(K).forEach(pts => { g.strokeStyle = 'rgba(70,58,44,.32)'; g.lineWidth = .8; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); });
+    plasterCracks(K).forEach(pts => { g.strokeStyle = 'rgba(110,100,88,.07)'; g.lineWidth = .5; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); });
   }), () => plasterComp(K), { name: 'plaster', size: k => [512 * k, 512 * k], normalScale: .4, roughness: 1, r: .9 });
 }
-function plasterCracks(K) { const r = mulberry(K.length * 13 + 5), out = []; for (let c = 0; c < 5; c++) { let x = r() * 512, y = r() * 512, a = r() * 6.28; const pts = [[x, y]]; for (let k = 0; k < 20 + r() * 40; k++) { a += (r() - .5) * 1.1; x += Math.cos(a) * 3; y += Math.sin(a) * 3; pts.push([x, y]); } out.push(pts); } return out; }
+function plasterCracks(K) { const r = mulberry(K.length * 13 + 5), out = []; for (let c = 0; c < 2; c++) { let x = r() * 512, y = r() * 512, a = r() * 6.28; const pts = [[x, y]]; for (let k = 0; k < 20 + r() * 40; k++) { a += (r() - .5) * 1.1; x += Math.cos(a) * 3; y += Math.sin(a) * 3; pts.push([x, y]); } out.push(pts); } return out; }
 // lime plaster: trowel undulation (~0.4–0.6 m waves at the walls' 4.5 m tile), sand grit, hairline cracks; matte
 function plasterComp(K) {
   const S = 512 * compRes(), f = S / 512, H = fieldF(S, S, (u, v) => pfbm(u, v, 9, 9, 3, 61) * 1.6 + pfbm(u, v, 96, 96, 2, 62) * .45 + (pn(u * 256, v * 256, 256, 256, 63) > .82 ? .25 : 0)), R = fieldF(S, S, (u, v) => .86 + .1 * pfbm(u, v, 12, 12, 2, 64));
-  plasterCracks(K).forEach(pts => pts.forEach(([x, y]) => { const i = ((Math.round(y * f) % S + S) % S) * S + ((Math.round(x * f) % S + S) % S); H[i] -= .6; }));
+  plasterCracks(K).forEach(pts => pts.forEach(([x, y]) => { const i = ((Math.round(y * f) % S + S) % S) * S + ((Math.round(x * f) % S + S) % S); H[i] -= .1; }));
   return { normalMap: nrmTex(K + '-n', blurF(H, S, S, 1), S, S, 1.4), roughnessMap: greyTex(K + '-r', R, S, S), normalScale: .4, roughness: 1 };
 }
 export function stone(key = 'stone') {
@@ -205,7 +205,7 @@ export function gradientSky(top = '#1a2a44', bottom = '#e8b07a', key) {
 // rocaille stucco, book spines, damask. All canvas-drawn, tileable where they repeat, cached by key, ≤ 1024².
 // ---------------------------------------------------------------------------------------------------------------
 export const MARBLES = {
-  rose: { base: '#d6a59b', cloud: ['#ecc9be', '#bf7d73', '#f4e2d6', '#a9625b', '#dcb0a4'], vein: '#7c3a35', vein2: '#f7ebe2' },
+  rose: { base: '#d3b2aa', cloud: ['#e6d0c8', '#bb928a', '#f0e4dc', '#a87c75', '#d8bcb4'], vein: '#7e514c', vein2: '#f4ece6' },   // a dusty, greyed rose (a vivid salmon read as plastic under the warm lamps)
   teal: { base: '#4f8886', cloud: ['#72a7a2', '#2f6061', '#a3c9c1', '#3d7072', '#5b9690'], vein: '#1b3a3c', vein2: '#dcefe8' },
   dark: { base: '#3b312d', cloud: ['#4c3f39', '#2a2220', '#5c4c44', '#332a26'], vein: '#dcd2c4', vein2: '#8e7d6c' },
   statuary: { base: '#ece8e1', cloud: ['#f7f4ef', '#ddd7ce', '#e6e1d9', '#f2eee8'], vein: '#a7a19a', vein2: '#cfc8bf', faint: true },
@@ -219,7 +219,7 @@ export const MARBLES = {
   // the antique marbles of the columns (Roman spolia): giallo antico (Chemtou: warm yellow, rust veins), verde antico
   // (Thessalian breccia: dark green with white and black fragments), rosso antico (Taenarum: deep oxblood, fine dark
   // veins) and pavonazzetto (Docimium: white with violet veins and clasts)
-  giallo: { base: '#d8b878', cloud: ['#e8cd92', '#c49a52', '#f0dcaa', '#b98a48', '#dcbd80'], vein: '#8a4a22', vein2: '#f3e2b8' },
+  giallo: { base: '#d4c19e', cloud: ['#e3d4b6', '#c0a77c', '#ece2cc', '#b29a72', '#d8c6a4'], vein: '#8a5e3c', vein2: '#f1e8d6' },   // pale, weathered giallo antico: honey-cream, not mustard
   verde: { base: '#2c4a3b', cloud: ['#3e6550', '#1b2f26', '#5d8a70', '#24382e', '#e6eee6', '#0f1814'], vein: '#e8efe8', vein2: '#0c1410' },
   rosso: { base: '#7a221d', cloud: ['#8d2e26', '#5e1714', '#9c3b30', '#6a1c18'], vein: '#3a0c0a', vein2: '#c46a58' },
   pavonazzetto: { base: '#ece6df', cloud: ['#f6f2ee', '#d9cfd2', '#c9b4bf', '#efe9e4', '#b89aab'], vein: '#6e4a66', vein2: '#a17c95' }
@@ -494,12 +494,33 @@ export function damaskTex(base = '#7a2e3a', key = 'damask') {
   }, { name: 'damask', size: () => [256, 256], normalScale: .6, roughness: 1, sheen: true, r: .65 });
 }
 const DAM = {};
-// Bright morning sky seen through the tall windows.
+// Bright morning sky seen through the tall windows: a soft photographic landscape, not a cartoon. A graded sky with
+// soft cumulus, then three hazy hill bands (aerial perspective: the far band palest and coolest, the near one darker
+// and green, with a speckle of woods), each band's ridge an fBm line, its body textured by noise and fading into haze
+// at its foot. The colours are pre-divided by the window's HDR boost ([3.4, 4.1, 5.4], bmat 'sky'), which is bluer
+// than it is red: hills drawn neutral would come out as flat saturated blue.
 export function windowSkyTex() {
-  return canvasTex('winsky', 256, 512, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#9fbbd8'); gr.addColorStop(.6, '#e9dcc0'); gr.addColorStop(1, '#f6e7c6'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    const r = mulberry(12); for (let i = 0; i < 26; i++) { const x = r() * w, y = h * (.15 + r() * .45), rad = 14 + r() * 30, c = g.createRadialGradient(x, y, 0, x, y, rad); c.addColorStop(0, 'rgba(255,252,245,.8)'); c.addColorStop(1, 'rgba(255,252,245,0)'); g.fillStyle = c; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); }
-    g.fillStyle = '#9aa6a0'; g.beginPath(); g.moveTo(0, h * .86); for (let x = 0; x <= w; x += 8) g.lineTo(x, h * .82 - Math.sin(x / 30) * 14 - Math.sin(x / 11) * 5); g.lineTo(w, h); g.lineTo(0, h); g.fill();
+  return canvasTex('winsky2', 512, 1024, (g, w, h) => {
+    const n = makeNoise(17), r = mulberry(12);
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#93b0cc'); gr.addColorStop(.45, '#c9d2d4'); gr.addColorStop(.72, '#e8dfca'); gr.addColorStop(1, '#efe4cc'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    // cumulus: clusters of soft puffs, lit tops, slightly greyer bases
+    for (let k = 0; k < 9; k++) { const cx = r() * w, cy = h * (.1 + r() * .42), sz = 30 + r() * 60;
+      for (let i = 0; i < 9; i++) { const x = cx + (r() - .5) * sz * 2.4, y = cy + (r() - .6) * sz * .7, rad = sz * (.35 + r() * .45), c = g.createRadialGradient(x, y - rad * .2, 0, x, y, rad); c.addColorStop(0, 'rgba(255,253,248,.55)'); c.addColorStop(.6, 'rgba(236,236,236,.28)'); c.addColorStop(1, 'rgba(225,228,232,0)'); g.fillStyle = c; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); } }
+    // hill bands, far to near: [ridge height (fraction of h), amplitude, colour top, colour foot, texture strength]
+    const bands = [[.77, .035, [176, 172, 160], [196, 190, 176], .04], [.81, .03, [148, 146, 122], [172, 168, 146], .07], [.86, .022, [116, 118, 88], [132, 130, 100], .12]];
+    const img = g.getImageData(0, 0, w, h), D = img.data;
+    bands.forEach(([y0, amp, ct, cf, tx], bi) => {
+      for (let x = 0; x < w; x++) {
+        const ridge = h * (y0 - amp * (n.fbm(x / (120 - bi * 25) + bi * 7, bi * 3.1, 0, 5) * 1.6 + .2 * Math.sin(x / 90 + bi)));
+        for (let y = Math.max(0, Math.floor(ridge) - 1); y < h; y++) {
+          const o = (y * w + x) * 4, edge = Math.min(1, Math.max(0, y - ridge + .5)), k = Math.min(1, (y - ridge) / (h * .12)), haze = Math.min(1, (y - ridge) / (h * .1)) * .35;
+          let v = 1 + tx * (n.fbm(x / 9, y / 6 + bi * 13, bi, 3) * 1.4) + (bi === 2 ? tx * .9 * (n(x / 2.5, y / 2.5) > .55 ? -1 : 0) : 0);   // texture; the near band speckled with woods
+          for (let c = 0; c < 3; c++) { const col = (ct[c] + (cf[c] - ct[c]) * k) * v, hz = col + (226 - col) * haze; D[o + c] = D[o + c] * (1 - edge) + hz * edge; }
+        }
+      }
+    });
+    g.putImageData(img, 0, 0);
+    g.filter = 'blur(1.2px)'; g.drawImage(g.canvas, 0, 0); g.filter = 'none';   // a lens's softness: no hard cut-out edges
   });
 }
 // Additive light-shaft texture: bright at the window (v=1), fading to the floor, soft at the edges, faint dust streaks.

@@ -35,8 +35,9 @@ export function makeBookcase(shelf) {
   // carcass
   [-1, 1].forEach(s => B(car, s * (w / 2 - t / 2), h / 2, 0, t, h, d));
   B(back, 0, .13 + (h - .13) / 2, -d / 2 + .02, w - 2 * t, h - .13, .02);
-  B(car, 0, .115, -.005, w - 2 * t, .03, d - .05);   // boards stop 5 mm before the back panel's rear face
-  for (let i = 1; i < tiers; i++) { const top = .13 + i * tierH; B(car, 0, top - .0125, -.01, w - 2 * t, .025, d - .05); B(gilt, 0, top - .0125, (d - .05) / 2 - .01 + .004, w - 2 * t, .014, .008); }
+  const board = fin === 'cream' ? bmat('cream-board') : car;   // the tier boards: matte painted wood (a lacquered top mirrored the sky as cold lavender)
+  B(board, 0, .115, -.005, w - 2 * t, .03, d - .05);   // boards stop 5 mm before the back panel's rear face
+  for (let i = 1; i < tiers; i++) { const top = .13 + i * tierH; B(board, 0, top - .0125, -.01, w - 2 * t, .025, d - .05); B(gilt, 0, top - .0125, (d - .05) / 2 - .01 + .004, w - 2 * t, .014, .008); }
   B(car, 0, h - .015, -.005, w - 2 * t, .03, d - .05);
   // fluted pilasters on the stiles, gilt bases and capitals
   [-1, 1].forEach(s => {
@@ -106,15 +107,15 @@ function globeTex() {
 let _restGeo, _restMat;
 function restGeo() {
   if (_restGeo) return _restGeo;
-  const hw = .035, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
+  const hw = .025, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
     a0 = Math.atan2(-Math.sqrt(rr * rr - hw * hw), hw), yE = AXIS + rr * Math.sin(a0), s = new THREE.Shape();
   s.moveTo(-hw, -.001); s.lineTo(hw, -.001); s.lineTo(hw, yE); s.absarc(0, AXIS, rr, a0, -Math.PI - a0, true); s.lineTo(-hw, -.001);
-  const g = new THREE.ExtrudeGeometry(s, { depth: .026, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.013);
+  const g = new THREE.ExtrudeGeometry(s, { depth: .018, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.009);
   g.userData.shared = true; return (_restGeo = g);
 }
 function scrollRests(o) {
   const u = o.userData, n = u.tiers * u.slotsPerTier * 2; if (!n) return null;
-  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x3a2420, roughness: .92, sheen: .35, sheenColor: new THREE.Color(0x8a6a58), sheenRoughness: .6 })); mat.userData.shared = true;
+  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x8c6c58, roughness: .95, sheen: .5, sheenColor: new THREE.Color(0xd8b8a0), sheenRoughness: .7 }))   /* a soft camel velvet a few steps below the board's cream: low contrast, warm */; mat.userData.shared = true;
   const im = new THREE.InstancedMesh(restGeo(), mat, n);
   im.castShadow = false; im.receiveShadow = true; im.name = 'scroll-rests'; o.add(im); u.rests = im;
   setRestTiers(o, null); return im;
