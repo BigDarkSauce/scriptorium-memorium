@@ -604,7 +604,14 @@ i { font-style: italic; }
 .modal .ap-lab { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); letter-spacing: .06em; }
 .ap-pick { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
 .ap-pick-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; } .ap-pick-head .ap-info { font-size: 12px; }
-@media (max-width: 560px) { .ap-pick { grid-template-columns: 1fr; gap: 4px; } }
+@media (max-width: 560px) {
+  .ap-pick { grid-template-columns: 1fr; gap: 4px; }
+  /* phones, Place step: the step list and the hint give way so all rows fit below the framed ghost */
+  .addpdf-veil.placing .ap-steps, .addpdf-veil.placing .ap-pick-head .ap-info { display: none; }
+  .addpdf-veil.placing > .addpdf { padding-top: 12px; padding-bottom: 12px; gap: 8px; max-height: min(calc(100dvh - 32px), max(300px, 60dvh)); }
+  .addpdf-veil.placing .ap-body { gap: 6px; } .addpdf-veil.placing .ap-pick { grid-template-columns: 70px minmax(0, 1fr); }
+  .addpdf-veil.placing .ap-grid { gap: 2px; }
+}
 .ap-steps { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--ink-3); }
 .ap-steps li.on { color: var(--brass); } .ap-steps li.done { color: var(--ink-2); }
 .ap-body { display: grid; gap: 10px; }
