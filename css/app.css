@@ -498,7 +498,7 @@ i { font-style: italic; }
 .dir-scale i { display: block; height: 6px; border: 2px solid var(--ink); border-top: 0; box-shadow: 0 2px 3px rgba(0,0,0,.6); transition: width .15s linear; }
 .dir-scale.flash span { animation: scale-flash .9s var(--ease); }
 @keyframes scale-flash { 0% { color: #ffd98a; transform: scale(1.25); } 100% { color: var(--ink); transform: none; } }
-.dir-chip { position: absolute; left: 50%; top: calc(74px + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(18,14,10,.82); border: 1px solid rgba(255,217,138,.45); color: var(--ink); font: 13px var(--f-mono); white-space: nowrap; transition: opacity .6s var(--ease); }
+.dir-chip { position: absolute; left: 50%; top: calc(74px + var(--lv-shift, 0px) + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(18,14,10,.82); border: 1px solid rgba(255,217,138,.45); color: var(--ink); font: 13px var(--f-mono); white-space: nowrap; transition: opacity .6s var(--ease); }
 .dir-chip b { color: var(--brass); font-weight: 500; }
 .dir-chip.out { opacity: 0; }
 .dir-edge { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -13px 0 0 -13px; color: #ffd98a; filter: drop-shadow(0 0 4px rgba(0,0,0,.9)); }
@@ -529,7 +529,7 @@ i { font-style: italic; }
 @media (max-width: 560px) {
   .dio-time { flex-wrap: wrap; row-gap: 4px; border-radius: 22px; right: calc(var(--gut) + env(safe-area-inset-right,0px)); justify-content: center; }
   .dio-reads { bottom: calc(var(--gut) + 104px + env(safe-area-inset-bottom,0px)); max-height: calc(50vh - 132px); }
-  .dir-scale { bottom: auto; top: calc(66px + env(safe-area-inset-top,0px)); }   /* at the top: the bottom belongs to the time bar and the callout sheet */
+  .dir-scale { bottom: auto; top: calc(66px + var(--lv-shift, 0px) + env(safe-area-inset-top,0px)); }   /* at the top: the bottom belongs to the time bar and the callout sheet */
   .dio-reads.under-sheet { visibility: hidden; }   /* a callout sheet is up (director.js): it takes the readouts' place */   /* stays in the lower half: the open panel owns the upper half (polish gate, phone) */
   .pov-bar { bottom: calc(var(--gut) + 108px + env(safe-area-inset-bottom,0px)); }
   .dio-time .sep { display: none; }

@@ -83,7 +83,7 @@ export class Ops {
     if (co) { if (!this.co || this.co.parentNode !== co) { this.dropCo(); this.co = el('div', { class: 'co-ops' }); const k = co.querySelector('.co-step') || co.querySelector('.co-kicker'); if (k) k.after(this.co); else co.prepend(this.co); this.co._h = null; } if (this.co._h !== html) { this.co._h = html; this.co.innerHTML = html; b.rectT = -1; } this.chip.hidden = true; return; }
     this.dropCo(); if (this.chip._h !== html) { this.chip._h = html; this.chip.innerHTML = html; this.chip._w = 0; } this.chip.hidden = false;
     const w = innerWidth, h = innerHeight; if (!this.chip._w) { this.chip._w = this.chip.offsetWidth || 260; this.chip._hh = this.chip.offsetHeight || 30; }
-    const fr = d ? d.freeFrame(w) : [0, w], cw = this.chip._w, ch = this.chip._hh; let x = clamp((fr[0] + fr[1]) / 2 - cw / 2, fr[0] + 8, Math.max(fr[0] + 8, fr[1] - cw - 8)), y = 74;
+    const fr = d ? d.freeFrame(w) : [0, w], cw = this.chip._w, ch = this.chip._hh; let x = clamp((fr[0] + fr[1]) / 2 - cw / 2, fr[0] + 8, Math.max(fr[0] + 8, fr[1] - cw - 8)), y = 74 + (w < 760 && this.lv && this.lv.slotB ? Math.max(0, this.lv.slotB + 8 - 66) : 0);
     for (let k = 0; k < 8 && this.hits(x, y, cw, ch); k++) y += 30;
     if (w < 760) { x = 10; y = h - 128 - ch - 10; }
     const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (this.chip._tf !== tf) { this.chip._tf = tf; this.chip.style.transform = tf; }
@@ -480,9 +480,10 @@ export class Ops {
       // a phone: a reserved slot right under the title (one or two lines), left-aligned; the director keeps its free band and
       // the callout sheet below this slot (freeBand, the sheet's top), so nothing is stepped over it and it never hides
       const t = v.titleEl && !v.titleEl.hidden ? v.titleEl.getBoundingClientRect() : null; x = 10; y = Math.round(Math.max(64, t && t.height ? t.bottom + 6 : 64));
-      Lv.slotB = y + Lv.box._hh; const tf = `translate(${x}px,${y}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; } return;
+      Lv.slotB = y + Lv.box._hh; const tf = `translate(${x}px,${y}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; }
+      this.lvShift(Math.max(0, Lv.slotB + 8 - 66)); return;   /* the top-anchored chips and the zoom scale bar move below the slot (CSS --lv-shift) */
     }
-    Lv.slotB = 0;
+    Lv.slotB = 0; this.lvShift(0);
     const bel = v.dir.beat && v.dir.beat.el, HR = this.hud().filter(r => !(bel && bel.isConnected && (() => { const q = bel.getBoundingClientRect(); return Math.abs(q.left - 8 - r[0]) < 1 && Math.abs(q.top - 8 - r[1]) < 1; })()));   /* the callout steps round the indicator (director), not the other way */
     for (let k = 0; k < 10 && this.hits(x, y, Lv.box._w, Lv.box._hh, HR); k++) y -= 28;
     const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; }
@@ -492,5 +493,6 @@ export class Ops {
     if (on) { Lv.ghost = []; a.obj.traverse(m => { if (!m.isMesh || m.userData.isInk || keep.has(m) || m.userData._peelMat || m.userData._povMat) return; const ms = [].concat(m.material); if (ms.some(x => x.transparent && x.opacity < .6)) return; m.userData._lvMat = m.material; const k = ms.map(x => { const c = cloneMat(x); c.transparent = true; c.opacity = .16; c.depthWrite = false; return c; }); m.material = Array.isArray(m.material) ? k : k[0]; Lv.ghost.push(m); }); }
     else { (Lv.ghost || []).forEach(m => { if (!m.userData._lvMat) return; [].concat(m.material).forEach(x => x.dispose()); m.material = m.userData._lvMat; delete m.userData._lvMat; }); Lv.ghost = null; }
   }
-  endLevels() { const Lv = this.lv; if (!Lv) return; if (Lv.ghost) this.ghost(Lv, false); Lv.box.remove(); this.lv = null; }
+  lvShift(px) { const s = px ? px.toFixed(0) + 'px' : ''; if (this._lvs !== s) { this._lvs = s; if (s) document.documentElement.style.setProperty('--lv-shift', s); else document.documentElement.style.removeProperty('--lv-shift'); } }
+  endLevels() { const Lv = this.lv; if (!Lv) return; this.lvShift(0); if (Lv.ghost) this.ghost(Lv, false); Lv.box.remove(); this.lv = null; }
 }
