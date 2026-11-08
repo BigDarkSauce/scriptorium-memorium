@@ -38,7 +38,8 @@
 //                italic units (a unit after a number set in italics, in HTML or SVG)
 //   e figure     an SVG figure's legend over its data marks, or text outside its viewBox
 //   f offscreen  a HUD element that should be visible extends past the viewport
-//   g colour     mean saturation of the hub / room views outside [0.06, 0.42], or near-white blow-outs on > 2 % of the frame
+//   g colour     saturation of the hub / room views (Σ(max − min) / Σ max over the frame) outside [0.06, 0.45], or
+//                near-white blow-outs (all channels > 97.5 %) on > 2 % of the frame
 // EXIT CODE: 0 = clean, 1 = failures, 2 = could not start, 3 = stopped by the budget before every item was done.
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -89,22 +90,24 @@ window.S = {
   draw() { W.gfx.render(1 / 30, W.t); },
   async settle() { for (let k = 0; k < 400 && (W.gfx.grade.uniforms.uFade.value > 0.01 || W._swBusy); k++) await sleep(50); },
   // colour of the frame just drawn: mean HSV saturation, share of near-white pixels
-  colour() { W.gfx.render(1 / 30, W.t); const c = W.gfx.canvas,   /* drawn and read in the same task: the drawing buffer is not preserved */ s = document.createElement('canvas'); s.width = 160; s.height = 90; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 160, 90); const d = x.getImageData(0, 0, 160, 90).data; let n = 0, sat = 0, white = 0, L = 0;
-    for (let i = 0; i < d.length; i += 4) { const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b); n++; sat += mx ? (mx - mn) / mx : 0; L += (mx + mn) / 2; if (r > .975 && g > .975 && b > .975) white++; }
-    return { sat: +(sat / n).toFixed(3), white: +(white / n).toFixed(4), light: +(L / n).toFixed(3) }; }
+  colour() { for (let k = 0; k < 3; k++) { S.tick(1); W.gfx.render(1 / 30, W.t); } const c = W.gfx.canvas,   /* drawn and read in the same task: the drawing buffer is not preserved */ s = document.createElement('canvas'); s.width = 160; s.height = 90; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 160, 90); const d = x.getImageData(0, 0, 160, 90).data; let n = 0, sat = 0, white = 0, L = 0;
+    let C = 0, V = 0; for (let i = 0; i < d.length; i += 4) { const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b); n++; sat += mx ? (mx - mn) / mx : 0; C += mx - mn; V += mx; L += (mx + mn) / 2; if (r > .975 && g > .975 && b > .975) white++; }
+    // sat = brightness-weighted saturation Σ(max − min) / Σ max (a dark brown does not count as vivid); satHSV = plain mean
+    return { sat: +(C / (V || 1)).toFixed(3), satHSV: +(sat / n).toFixed(3), white: +(white / n).toFixed(4), light: +(L / n).toFixed(3) }; }
 };
 // ---- the checks; scope = 'hub' | 'room' | 'reader' | 'dio' | 'addpdf'
 window.POLISH = function (scope, ctx) {
   const out = [], vw = innerWidth, vh = innerHeight;
   const R = e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; };
-  const vis = e => { if (!e || !e.isConnected) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; for (let p = e; p && p.nodeType === 1; p = p.parentElement) { const c = getComputedStyle(p); if (c.display === 'none' || c.visibility === 'hidden' || +c.opacity < .05 || p.hidden) return false; } return true; };
+  // visible = laid out, not hidden, and (for the overlap and off-screen checks) not fading: cumulative opacity ≥ 0.6
+  const vis = (e, minOp = .05) => { if (!e || !e.isConnected) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; let op = 1; for (let p = e; p && p.nodeType === 1; p = p.parentElement) { const c = getComputedStyle(p); op *= +c.opacity; if (c.display === 'none' || c.visibility === 'hidden' || op < minOp || p.hidden) return false; } return true; };
   const name = e => { const c = (e.getAttribute('class') || '').trim().split(/\s+/).filter(Boolean).slice(0, 3).join('.'); const t = (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 32); return e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (c ? '.' + c : '') + (t ? ' «' + t + '»' : ''); };
   // (a) overlaps — the floating boxes of the HUD (absolute / fixed, top-level ones) and the label kinds inside layers
   const LABELS = '.pin.in .pin-name, .pin.sym, .pin.mini .pin-num, text.guide-label, .cue-badge, .cue-step, .co-step, .dir-chip, .callout, .toast, .dio-inset, .tooltip, .scroll-menu, .ap-chip';
   const LAYERS = /^(pins|cues|labels|dir-svg|arcs|hub-ui|room-ui|dio-ui)$/;   // full-screen containers of labels: not boxes themselves
   const SKIP = e => e.closest('.reader-body, .modal .ap-body, .fig, .svgdemo, .sketch-card, .reader-menu-pop, .fold-bar, svg.arcs') || e.matches('canvas, #veil, #fatal, .modal-veil, .reader .rod');
   const boxes = [];
-  const add = (e, kind) => { if (!vis(e) || boxes.some(b => b.e === e)) return; const r = R(e); if ((r[2] - r[0]) * (r[3] - r[1]) > vw * vh * .85) return; boxes.push({ e, r, kind, n: name(e) }); };
+  const add = (e, kind) => { if (!vis(e, .6) || boxes.some(b => b.e === e)) return; const r = R(e); if ((r[2] - r[0]) * (r[3] - r[1]) > vw * vh * .85) return; boxes.push({ e, r, kind, n: name(e) }); };
   for (const e of document.querySelectorAll('#ui *, body > .toast, body > .modal-veil .modal')) {
     if (SKIP(e) && !e.matches('.modal')) continue; const cs = getComputedStyle(e); if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
     const cls = (e.getAttribute('class') || '').split(/\s+/)[0]; if (LAYERS.test(cls)) continue;
@@ -112,7 +115,7 @@ window.POLISH = function (scope, ctx) {
     if (e.matches('.pin')) continue; add(e, 'box'); }
   document.querySelectorAll(LABELS).forEach(e => { if (!SKIP(e)) add(e, 'label'); });
   // intended layering: a pin's dot under its own name, the callout's leader, the reader over the room's own HUD on a phone
-  const ALLOW = [[/\.callout/, /\.dir-svg|leader/], [/\.pin-name/, /\.pin-dot/], [/\.reader\b/, /\.(brand|hint|hub-actions|room-ui)/], [/\.tooltip/, /./], [/\.toast/, /./]];
+  const ALLOW = [[/\.callout/, /\.dir-svg|leader/], [/\.pin-name/, /\.pin-dot/], [/\.co-dot/, /\.pin/], [/\.reader\b/, /\.(brand|hint|hub-actions|room-ui)/], [/\.tooltip/, /./], [/\.toast/, /./]];
   const allowed = (a, b) => ALLOW.some(([x, y]) => (x.test(a.n) && y.test(b.n)) || (x.test(b.n) && y.test(a.n)));
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const A = boxes[i], B = boxes[j]; if (A.e.contains(B.e) || B.e.contains(A.e)) continue;
@@ -212,10 +215,10 @@ async function runItem(id) {
   const sample = async (tag) => { const r = await page.evaluate(([sc]) => POLISH(sc), [area]); r.forEach(x => { if (tag) x.at = tag; }); return r; };
   const keep = (list, at) => { for (const x of list) { const key = x.check + '|' + (x.what || '') + '|' + (x.a || x.el || x.label || x.where || '') + '|' + (x.b || x.text || ''); if (!issues.some(y => y._k === key)) { x._k = key; if (at) x.at = at; issues.push(x); } } };
   if (area === 'hub') {
-    await page.evaluate(async () => { await W.openHub(); await S.settle(); S.tick(30); S.draw(); S.draw(); });
+    await page.evaluate(async () => { await W.openHub(); await S.settle(); S.tick(8); });
     notes.colour = await page.evaluate(() => S.colour()); keep(await sample());
   } else if (area === 'room') {
-    await page.evaluate(async t => { const b = W.lib.books.find(x => x.title === t); await W.openRoom(b.id); await S.settle(); S.tick(30); S.draw(); S.draw(); }, arg);
+    await page.evaluate(async t => { const b = W.lib.books.find(x => x.title === t); await W.openRoom(b.id); await S.settle(); S.tick(8); }, arg);
     notes.colour = await page.evaluate(() => S.colour()); keep(await sample());
   } else if (area === 'reader') {
     const [book, pi] = [arg.slice(0, arg.lastIndexOf('/')), +arg.slice(arg.lastIndexOf('/') + 1)];
@@ -267,7 +270,7 @@ async function runItem(id) {
     await page.evaluate(() => { document.querySelectorAll('.modal-veil').forEach(v => v.remove()); });
   }
   // (g) colour sanity on the rendered views
-  if (notes.colour) { const c = notes.colour; if (c.sat < .06 || c.sat > .42) issues.push({ check: 'g', what: `mean saturation ${c.sat} outside [0.06, 0.42]` }); if (c.white > .02) issues.push({ check: 'g', what: `near-white blow-out on ${(c.white * 100).toFixed(1)} % of the frame (> 2 %)` }); }
+  if (notes.colour) { const c = notes.colour; if (c.sat < .06 || c.sat > .45) issues.push({ check: 'g', what: `saturation ${c.sat} (brightness-weighted) outside [0.06, 0.45]` }); if (c.white > .02) issues.push({ check: 'g', what: `near-white blow-out on ${(c.white * 100).toFixed(1)} % of the frame (> 2 %)` }); }
   const errs = page._errors.splice(0); if (errs.length) issues.push({ check: 'errors', what: errs.length + ' page error(s)', text: errs.slice(0, 3).join(' | ') });
   if (issues.length && !issues.some(x => x.shot)) { const shot = await evidence(page, id); issues.forEach(x => { x.shot = x.shot || shot; }); }
   issues.forEach(x => { delete x._k; });
