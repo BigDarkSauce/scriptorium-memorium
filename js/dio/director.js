@@ -454,7 +454,7 @@ export class Director {
     const p = s && s.getPos && s.getPos(); if (!p) { if (!this.edge.hidden) this.edge.hidden = true; return; }
     const q = this._a.copy(p).project(v.camera), behind = q.z > 1; let x = behind ? -q.x : q.x, y = behind ? -q.y : q.y;
     if (!behind && Math.abs(x) < .95 && Math.abs(y) < .95) { if (!this.edge.hidden) this.edge.hidden = true; return; }
-    const m = Math.max(Math.abs(x), Math.abs(y), 1e-6); x /= m; y /= m; const w = innerWidth, h = innerHeight, px = (x * .5 + .5) * (w - 80) + 40, py = (-y * .5 + .5) * (h - 200) + 100;
+    const m = Math.max(Math.abs(x), Math.abs(y), 1e-6); x /= m; y /= m; const w = innerWidth, h = innerHeight, px = (x * .5 + .5) * (w - 80) + 40, py = (-y * .5 + .5) * (h - (w < 760 ? 270 : 200)) + 100;   /* (a phone's time bar is two rows tall) */
     this.edge.hidden = false; this.edge.style.transform = `translate(${px.toFixed(0)}px,${py.toFixed(0)}px) rotate(${Math.atan2(-y, x).toFixed(3)}rad)`;
     this.edge.title = 'Toward ' + s.name;
   }
