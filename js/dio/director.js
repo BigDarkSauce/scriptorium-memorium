@@ -725,11 +725,11 @@ export class Director {
       }
       const offHard = (yy, xx = x) => !(b.hard || []).some(A => xx < A.x + A.w && xx + cw > A.x && yy < A.y + A.h && yy + ch > A.y);   // the late steps below never move onto the HUD
       // still over its own anchor dot (clamped against the panel or the frame): step above or below the dot instead
-      if (on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) {   /* (24: the measured height may lag the text by a line) */
+      if (sheetB == null && on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) {   /* (a phone sheet stays on the time bar: the dot hides under it instead) (24: the measured height may lag the text by a line) */
         const [xa, xb] = bounds(y), P = [[x, sy + 24], [x, sy - 24 - ch], [sx + 24, y], [sx - 24 - cw, y]].filter(([px, py]) => py >= topAt(px) - .5 && py <= h - ch - 16 && px >= xa - .5 && px <= xb + .5 && offHard(py, px));
         if (P.length) [x, y] = P.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y))[0]; }
       // still over an object's name: step just above or below that name (if that stays in the frame and off the dot)
-      for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
+      if (sheetB == null) for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
         const ys = [ry - ch - 8, ry + r.height + 8].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && offHard(yy) && !(on && x < sx + 14 && x + cw > sx - 14 && yy < sy + 24 && yy + ch > sy - 24)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; break; }
       // the glide after a change of side: from where it was drawn toward where it now belongs
       if (sheetB != null) b.tw = null;   // (a sheet never glides: it stays on the time bar)
