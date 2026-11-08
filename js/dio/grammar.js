@@ -444,6 +444,8 @@ export class Ops {
     const Lv = this.lv, v = this.v, cam = v.camera, bx = Lv._b || (Lv._b = new THREE.Box3()); Lv.t += dt;
     if (!Lv.fixed && (!Lv._ct || Lv.t - Lv._ct > .2)) { Lv._ct = Lv.t; let cur = 0;
       Lv.L.forEach((x, i) => { if (!x.a || !x.a.obj) return; this.boxOf(x.a.obj, bx); if (bx.isEmpty()) return; const r = Math.max(.01, bx.getSize(this._q).length() * .5), dd = cam.position.distanceTo(bx.getCenter(this._p)); if (dd < r * 4.2) cur = Math.max(cur, i); });
+      // the zoom's own target counts as reached once the dolly is near its end (an actor drawn as a crowd has no single box)
+      const Z = v.dir.zoom; if (Z && Z.a && Z.d <= Z.d1 * 1.6) { const k = Lv.L.findIndex(x => x.a && (x.a === Z.a || x.a.obj === Z.a.obj || x.a.name === Z.a.name)); if (k >= 0) cur = Math.max(cur, k); }
       Lv.cur = cur; }
     // the landmark: a ghost while the camera is near or inside it (hysteresis: on at 1.15 ×, off at 1.5 × its box)
     if (Lv.anchor && Lv.anchor.obj) { this.boxOf(Lv.anchor.obj, bx); const c = bx.getCenter(this._p), r = bx.getSize(this._q).length() * .5, dd = cam.position.distanceTo(c); const want = Lv.ghost ? dd < r * 1.5 : dd < r * 1.15; if (want && !Lv.ghost) this.ghost(Lv, true); else if (!want && Lv.ghost) this.ghost(Lv, false); }
