@@ -180,7 +180,7 @@ window.POLISH = function (scope, ctx) {
 // [regex over "check · what · element(s) · text", why]. Keep this list short and specific.
 const JUSTIFIED = [
   [/^g · saturation 0\.(4[5-9]|5[0-6])\d* \(brightness-weighted\)/, 'a book room framed almost wholly on walnut cases and leather spines measures 0.45–0.56 (the hall 0.30, a room with its pedestals in view 0.38): the material palette of the book rooms, not a grading fault; above 0.56 still fails'],
-  [/ops-cap/, 'grammar.js compare captions (another worker\'s operation, in progress this round): they avoid the HUD but not yet the lesson callout — handed over to that work'],
+  [/^a · overlap · (.*(callout|dio-reads).*ops-cap|.*ops-cap.*(callout|dio-reads))/, 'grammar.js compare captions (another worker\'s operation, in progress this round): they step up off the HUD but not yet off the lesson callout, and a few px into the readouts — handed over to that work (object labels now keep off them)'],
 ];
 const justify = x => { const k = [x.check, x.what, x.a, x.b, x.el, x.label, x.where, x.text].filter(Boolean).join(' · '); const j = JUSTIFIED.find(([re]) => re.test(k)); if (j) x.justified = j[1]; return x; };
 const failing = r => (r.issues || []).filter(x => !x.justified);
