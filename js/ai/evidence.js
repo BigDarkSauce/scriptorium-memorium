@@ -10,7 +10,7 @@
 // really exist. Afterwards, every cited reference is checked against OpenAlex and marked verified / not found.
 // Outside claude.ai (or with no connector), prompts still ask for sources and they are shown as "unverified".
 let MCP = null, SERVERS = new Set(), ready;
-const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'], SciSpace: ['search'], Hugging_Face: ['hf_fs'], Clinical_Trials: ['search_trials'] };
+const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'], SciSpace: ['search'], 'Hugging Face': ['hf_fs'], 'Clinical Trials': ['search_trials'] };
 
 export function initEvidence() {
   ready = (async () => {
@@ -78,12 +78,12 @@ export async function searchSciSpace(query) {
 }
 // Hugging Face: hf_fs search over papers (arXiv) or docs. {results:[{status,result:{entries:[{title,description,url,arxiv_url,published_at}]}}]} (observed)
 export async function searchComputing(query, scope = 'papers') {
-  const p = await call('Hugging_Face', 'hf_fs', { operations: [{ cmd: 'search', args: ['hf://' + (scope === 'docs' ? 'docs' : 'papers'), cut(query, 200), '--limit', '6'] }] });
+  const p = await call('Hugging Face', 'hf_fs', { operations: [{ cmd: 'search', args: ['hf://' + (scope === 'docs' ? 'docs' : 'papers'), cut(query, 200), '--limit', '6'] }] });
   const ent = (((p && p.results) || [])[0] || {}).result; const E = (ent && ent.entries) || [];
   return E.map(e => ({ title: String(e.title || e.name || '').replace(/\s+/g, ' '), year: e.published_at ? +String(e.published_at).slice(0, 4) : null, authors: '', venue: e.arxiv_url ? 'arXiv' : 'Hugging Face', url: e.arxiv_url || e.url || '', abstract: cut(e.description, 450), source: 'Hugging Face' }));
 }
 export async function searchTrials(condition, intervention) {
-  const p = await call('Clinical_Trials', 'search_trials', { condition: cut(condition, 200), ...(intervention ? { intervention: cut(intervention, 120) } : {}), page_size: 5 });
+  const p = await call('Clinical Trials', 'search_trials', { condition: cut(condition, 200), ...(intervention ? { intervention: cut(intervention, 120) } : {}), page_size: 5 });
   const S = (p && (p.items || p.studies || p.trials || p.results)) || [];   // observed: {items:[{nct_id,title,status,phase,conditions,interventions,sponsor,enrollment,start_date}]}
   return S.slice(0, 5).map(s => { const id = s.nct_id || s.nctId || (s.protocolSection && s.protocolSection.identificationModule && s.protocolSection.identificationModule.nctId) || '';
     return { title: s.title || s.brief_title || s.briefTitle || id, year: +String(s.start_date || s.startDate || '').slice(0, 4) || null, authors: s.sponsor || '', venue: 'ClinicalTrials.gov ' + (s.status || s.overall_status || ''), url: id ? 'https://clinicaltrials.gov/study/' + id : '', abstract: cut(s.brief_summary || s.summary || [[].concat(s.phase || []).join('/'), s.conditions && [].concat(s.conditions).join(', '), s.interventions && 'intervention: ' + [].concat(s.interventions).join(', '), s.enrollment && 'n = ' + s.enrollment].filter(Boolean).join(' · '), 400), source: 'ClinicalTrials.gov' }; });
@@ -96,8 +96,8 @@ export function evidenceTools() {
   if (SERVERS.has('Consensus')) T.push({ name: 'search_evidence', description: 'Semantic search over peer-reviewed papers for a plain-language research question ("how large is global land evaporation?"). Returns ranked papers with abstracts. Use it for empirical claims and measured values.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchConsensus(i.query) });
   if (SERVERS.has('PubMed')) T.push({ name: 'search_biomedical', description: 'Search PubMed (medicine, physiology, molecular and cell biology, pharmacology only). Returns articles with DOIs and abstracts.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchPubMed(i.query) });
   if (SERVERS.has('SciSpace')) T.push({ name: 'search_any_discipline', description: 'Search SciSpace (280M papers in every discipline). Best for the humanities and social sciences (history, philosophy, law, literature, linguistics, education, art) and as a second source anywhere. Write a full question.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchSciSpace(i.query) });
-  if (SERVERS.has('Hugging_Face')) T.push({ name: 'search_computing', description: 'Search arXiv-linked papers (scope "papers") or library documentation (scope "docs") on Hugging Face: computer science, AI/ML, statistics software, programming, computer graphics.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['papers', 'docs'] } }, required: ['query'] }, execute: i => searchComputing(i.query, i.scope) });
-  if (SERVERS.has('Clinical_Trials')) T.push({ name: 'search_clinical_trials', description: 'Search ClinicalTrials.gov registered trials by condition (and optional intervention). Medicine and pharmacology only.', inputSchema: { type: 'object', properties: { condition: { type: 'string' }, intervention: { type: 'string' } }, required: ['condition'] }, execute: i => searchTrials(i.condition, i.intervention) });
+  if (SERVERS.has('Hugging Face')) T.push({ name: 'search_computing', description: 'Search arXiv-linked papers (scope "papers") or library documentation (scope "docs") on Hugging Face: computer science, AI/ML, statistics software, programming, computer graphics.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['papers', 'docs'] } }, required: ['query'] }, execute: i => searchComputing(i.query, i.scope) });
+  if (SERVERS.has('Clinical Trials')) T.push({ name: 'search_clinical_trials', description: 'Search ClinicalTrials.gov registered trials by condition (and optional intervention). Medicine and pharmacology only.', inputSchema: { type: 'object', properties: { condition: { type: 'string' }, intervention: { type: 'string' } }, required: ['condition'] }, execute: i => searchTrials(i.condition, i.intervention) });
   return T;
 }
 export const EVIDENCE_RULES = `GROUNDING. Tools that search the scholarly record may be available (search_literature, search_evidence, search_biomedical, search_any_discipline, search_computing, search_clinical_trials). Pick by field: maths/physics/chemistry/earth science → search_literature + search_evidence; biology/medicine → add search_biomedical (trials: search_clinical_trials); humanities/social sciences → search_any_discipline + search_literature; computing/AI/programming/graphics → search_computing + search_literature. When they are:
