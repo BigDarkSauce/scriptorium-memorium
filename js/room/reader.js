@@ -124,10 +124,12 @@ export class Reader {
   }
   unfold(m = 1, quiet = false) {
     const n = this.folds.length; if (this.shown >= n) return; const wrap = this.el.querySelector('.chain'), prevH = wrap ? wrap.offsetHeight : 0;
+    const hadFocus = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.fold-bar'));
     this.shown = Math.min(n, this.shown + m); this.persistFolds();
     if (!quiet && this.app.sfx) this.app.sfx.play('unroll', { gain: .35 });
     this.applyFolds(!quiet && m === 1, prevH);
-    const b = this.foldBar.querySelector('button.unroll'); if (b && !quiet && document.activeElement && document.activeElement.closest && document.activeElement.closest('.fold-bar')) b.focus({ preventScroll: true });
+    // the keyboard stays on the rod (Enter, Enter, … unrolls the scroll fold by fold); at the end, on "Roll it up again"
+    const b = this.foldBar.querySelector('button'); if (b && hadFocus) b.focus({ preventScroll: true });
   }
   unfoldAll() { this.unfold(this.folds.length, true); }
   rollUp() { this.shown = 1; this.persistFolds(); if (this.app.sfx) this.app.sfx.play('paper', { gain: .5 }); this.applyFolds(false); if (this.body) this.body.scrollTo({ top: 0, behavior: 'smooth' }); }

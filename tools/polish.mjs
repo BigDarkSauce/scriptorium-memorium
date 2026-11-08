@@ -104,7 +104,7 @@ window.POLISH = function (scope, ctx) {
   for (const e of document.querySelectorAll('#ui *, body > .toast, body > .modal-veil .modal')) {
     if (SKIP(e) && !e.matches('.modal')) continue; const cs = getComputedStyle(e); if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
     const cls = (e.getAttribute('class') || '').split(/\s+/)[0]; if (LAYERS.test(cls)) continue;
-    let p = e.parentElement, inBox = false; for (; p && p.id !== 'ui'; p = p.parentElement) { const pc = getComputedStyle(p); if ((pc.position === 'absolute' || pc.position === 'fixed') && !LAYERS.test((p.getAttribute('class') || '').split(/\s+/)[0])) { inBox = true; break; } } if (inBox) continue;
+    let p = e.parentElement, inBox = false; for (; p && p.id !== 'ui'; p = p.parentElement) { const pc = getComputedStyle(p); if ((pc.position === 'absolute' || pc.position === 'fixed') && !LAYERS.test((p.getAttribute('class') || '').split(/\s+/)[0])) { const pr = p.getBoundingClientRect(); if (pr.width * pr.height > vw * vh * .85) continue; inBox = true; break; } } if (inBox) continue;
     if (e.matches('.pin')) continue; add(e, 'box'); }
   document.querySelectorAll(LABELS).forEach(e => { if (!SKIP(e)) add(e, 'label'); });
   // intended layering: a pin's dot under its own name, the callout's leader, the reader over the room's own HUD on a phone
@@ -170,7 +170,7 @@ const VIEWPORTS = { desktop: { viewport: { width: 1280, height: 720 }, deviceSca
 const pages = {};
 async function pageFor(view) {
   if (pages[view] && !pages[view].isClosed()) return pages[view];
-  const ctx = await browser.newContext({ ...VIEWPORTS[view], reducedMotion: 'reduce' }); const page = await ctx.newPage(); page._errors = [];
+  const ctx = await browser.newContext({ ...VIEWPORTS[view] }); const page = await ctx.newPage(); page._errors = [];
   page.on('pageerror', e => page._errors.push('uncaught: ' + e.message)); page.on('console', m => { if (m.type() === 'error' && !/GL Driver|ReadPixels|favicon|KHR_parallel/.test(m.text())) page._errors.push('console: ' + m.text().slice(0, 200)); });
   await page.goto(URL0, { timeout: 60000 });
   await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 240000 });

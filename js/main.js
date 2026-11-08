@@ -16,6 +16,7 @@ import { groundChain } from './seeds-sources.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
 import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
+import { installBVH, BVH } from './gfx/bvh.js';
 
 const LIB_KEY = 'library.v3';
 class App {
@@ -348,5 +349,6 @@ Return {"format":"scriptorium-room/1","book":{"title":str,"pages":n},"room":{"pa
 App.prototype.addPdfDialog = function (opts = {}) { return openAddPdf(this, opts); };
 App.prototype.cancelJob = function (bookId) { try { cancelJobFor(bookId); } catch (e) { console.warn(e); } };   // removing a book stops its analysis (js/hub/hub.js removeBook)
 Hub.prototype.pickPDF = function (shelfId) { return openAddPdf(this.app, { hub: this, shelfId: shelfId || this.selShelf || null }); };
-const app = new App(); window.__scriptorium = app;
+installBVH();   // accelerated raycasts (three-mesh-bvh); off with ?bvh=0, falls back to three's own raycast if it cannot load
+const app = new App(); window.__scriptorium = app; app.bvh = BVH;
 app.boot().catch(e => { console.error(e); app.fatal('Could not start: ' + e.message); });
