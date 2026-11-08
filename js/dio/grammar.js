@@ -40,7 +40,7 @@ const CSS = `
 .ops-key i{font-style:normal;white-space:nowrap}.ops-key i.now{color:var(--brass,#d8b46a)}.ops-key i.done{color:var(--ink,#f3ead8)}
 .co-ops{margin:-1px 0 6px;font:12px var(--f-mono,monospace);color:var(--ink-2,#cbbfa6);line-height:1.45}.co-ops .ops-key{justify-content:flex-start;margin-top:3px}
 .ops-div{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(rgba(255,217,138,0),rgba(255,217,138,.8) 12%,rgba(255,217,138,.8) 88%,rgba(255,217,138,0));box-shadow:0 0 6px rgba(0,0,0,.6)}
-.ops-cap{position:absolute;left:0;top:0;padding:4px 12px;border-radius:999px;background:rgba(18,14,10,.84);border:1px solid rgba(255,217,138,.5);color:var(--ink,#f3ead8);font:12px var(--f-mono,monospace);white-space:nowrap}
+.ops-cap{position:absolute;left:0;top:0;padding:4px 12px;border-radius:14px;max-width:calc(50vw - 24px);white-space:normal;text-align:center;line-height:1.45;background:rgba(18,14,10,.84);border:1px solid rgba(255,217,138,.5);color:var(--ink,#f3ead8);font:12px var(--f-mono,monospace)}
 .ops-cap b{color:var(--brass,#d8b46a);font-weight:500}
 .ops-level{position:absolute;left:0;top:0;display:flex;align-items:center;gap:2px;padding:3px 10px;border-radius:999px;background:rgba(18,14,10,.78);border:1px solid rgba(255,217,138,.35);color:var(--ink-2,#cbbfa6);font:11px var(--f-mono,monospace);white-space:nowrap;transition:opacity .4s}
 .ops-level i{font-style:normal;padding:0 3px}.ops-level i.now{color:#1d140b;background:var(--brass,#d8b46a);border-radius:999px;padding:0 7px}.ops-level s{text-decoration:none;opacity:.55}
@@ -160,6 +160,7 @@ export class Ops {
     if (cue.inspect) this.startInspect(cue.inspect);
     if (cue.progression) this.startProgression(cue.progression);
     if (cue.scaleTo) this.startScale(cue.scaleTo);
+    if (cue.hide && cue.hide.length) { this.hid = cue.hide.filter(x => x && x.obj).map(x => ({ o: x.obj, v: x.obj.visible })); this.hid.forEach(h => { h.o.visible = false; }); }   // actors set aside for the step (a meter standing in front of a section)
     this.startLevels(l, cue);
     if (this.cmp) this.frameCompare();
   }
@@ -171,7 +172,7 @@ export class Ops {
   ownsFrame() { return !!((this.cmp && this.cmp.pose) || (this.sc && this.sc.phase !== 'wait')); }
   noAnchor() { return !!(this.cmp && this.cmp.mode === 'side'); }   // side by side: a callout leader into one half would point at the wrong state
   hidePins() { return !!(this.cmp || this.sc || (this.ex && /^(out|hold|in)$/.test(this.ex.phase))); }   // the parts' own callouts replace the pins while they are apart
-  endStep() { this.endExplode(); this.endAssemble(); this.endInspect(); this.endProgression(); this.endScale(); this.endCompare(); this.endLevels(); this.legend(null); }
+  endStep() { if (this.hid) { this.hid.forEach(h => { h.o.visible = h.v; }); this.hid = null; } this.endExplode(); this.endAssemble(); this.endInspect(); this.endProgression(); this.endScale(); this.endCompare(); this.endLevels(); this.legend(null); }
   reset() { this.endStep(); this.clearOff(); }
   update(dt) {
     if (!this.on && !this.off.size) return;
@@ -193,7 +194,8 @@ export class Ops {
   startExplode(E, host) {
     const parts = (E.parts || []).filter(a => a && a.obj).slice(0, 12); if (parts.length < 2) return;
     this.ensure(); this.v.scene.updateMatrixWorld(true);
-    const all = new THREE.Box3(), bx = new THREE.Box3(), homes = parts.map(a => { this.boxOf(a.obj, bx); all.union(bx); return { c: bx.getCenter(V3()), s: bx.getSize(V3()) }; });
+    const objs = new Set(parts.map(a => a.obj)), own = (o, out) => { out.makeEmpty(); const q = new THREE.Box3(); o.updateWorldMatrix(true, true); o.traverse(m => { if (!m.isMesh || m.userData.isInk) return; for (let p = m; p && p !== o; p = p.parent) if (objs.has(p)) return; if (!m.geometry.boundingBox) m.geometry.computeBoundingBox(); q.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld); out.union(q); }); if (out.isEmpty()) this.boxOf(o, out); return out; };   /* a part's OWN box: a beam group that holds the weights does not count them */
+    const all = new THREE.Box3(), bx = new THREE.Box3(), homes = parts.map(a => { own(a.obj, bx); all.union(bx); return { c: bx.getCenter(V3()), s: bx.getSize(V3()) }; });
     const C0 = all.getCenter(V3()), R = Math.max(.2, all.getSize(V3()).length() * .5);
     const ax = Array.isArray(E.axis) ? V3(+E.axis[0] || 0, +E.axis[1] || 0, +E.axis[2] || 0).normalize() : E.axis === 'x' ? V3(1, 0, 0) : E.axis === 'z' ? V3(0, 0, 1) : E.axis === 'y' ? V3(0, 1, 0) : null;
     const anchor = E.anchor ? this.actor(E.anchor) : null;
@@ -202,7 +204,7 @@ export class Ops {
       // a stack along the axis: rank by position along it (ties share a rank), the lowest (or the named anchor) stays
       const pr = homes.map((h, i) => ({ i, t: h.c.dot(ax) })).sort((a, b) => a.t - b.t); let rank = 0, last = null; const rk = [];
       pr.forEach(o => { if (last != null && o.t - last > R * .04) rank++; rk[o.i] = rank; last = o.t; });
-      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, d = (+E.distance || .35) * R;
+      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, gap = Math.max(...homes.map(h => Math.abs(h.s.dot(ax)))), d = Math.max((+E.distance || .35) * R, gap * 1.6);   /* every rank clears the tallest part along the axis: visible gaps */
       dirs = rk.map(r => ax.clone().multiplyScalar((r - base) * d));
     } else {
       const d = (+E.distance || .55) * R;
@@ -405,9 +407,10 @@ export class Ops {
   }
   updateCompare(dt) {
     const K = this.cmp, w = innerWidth, h = innerHeight, half = w / 2; K.t += dt;
-    const lab = (s, side, ds) => { if (!s) return ''; let t = `<b>${side}</b> · ${mathHTML(s.label || '', 'label')}`; if (s.read) { const r = (ds.readouts() || []).find(x => String(x[0]).toLowerCase().startsWith(String(s.read).toLowerCase())); if (r) t += ' · ' + mathHTML(r[0] + ' ' + r[1], 'label'); } return t; };
+    const lab = (s, side, ds) => { if (!s) return ''; let t = `<b>${side}</b> · ${mathHTML(s.label || '', 'label')}`; if (s.read) { const r = (ds.readouts() || []).find(x => String(x[0]).toLowerCase().startsWith(String(s.read).toLowerCase())); if (r) t += ' · ' + (/^…$|^\.\.\.$/.test(String(r[1]).trim()) ? mathHTML(r[0], 'label') + ' measuring…' : mathHTML(r[0] + ' ' + r[1], 'label')); } return t; };
     if (!K._rt || K.t - K._rt > .25) { K._rt = K.t; const a = lab(K.C.a, 'A', this.v.ds), b = lab(K.C.b, 'B', K.B); if (K.capA._h !== a) { K.capA._h = a; K.capA.innerHTML = a; K.capA._w = 0; } if (K.capB._h !== b) { K.capB._h = b; K.capB.innerHTML = b; K.capB._w = 0; } }
     K.div.style.left = half.toFixed(0) + 'px';
+    { const P = this.v.readPanel; if (P && K.mode === 'side' && P.style.visibility !== 'hidden') { K.rp0 = P.style.visibility; P.style.visibility = 'hidden'; } }   // side by side, the captions carry the readout: the panel would cover the right half's subject
     // the captions: bottom of the free band, centred in each half, stepped up off the HUD
     const band = this.v.dir.freeBand(h), place = (e, cx) => { if (!e._w) { e._w = e.offsetWidth || 160; e._h = e.offsetHeight || 26; } let x = clamp(cx - e._w / 2, 8, w - e._w - 8), y = band[1] - e._h - 8; for (let k = 0; k < 10 && this.hits(x, y, e._w, e._h); k++) y -= 30; const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (e._tf !== tf) { e._tf = tf; e.style.transform = tf; } };
     place(K.capA, half / 2); place(K.capB, half * 1.5);
@@ -423,7 +426,7 @@ export class Ops {
     const keep = new Set(); this.v.ds.world.traverse(o => { if (o.geometry) keep.add(o.geometry); [].concat(o.material || []).forEach(m => { keep.add(m); for (const k in m) if (m[k] && m[k].isTexture) keep.add(m[k]); }); });
     Object.values(this.v.ds.mats || {}).forEach(m => keep.add(m));
     K.B.world.traverse(o => { if (o.geometry && !keep.has(o.geometry) && !(o.geometry.userData && o.geometry.userData.shared)) o.geometry.dispose(); [].concat(o.material || []).forEach(m => { if (!m || keep.has(m) || (m.userData && m.userData.shared)) return; for (const k in m) if (m[k] && m[k].isTexture && !keep.has(m[k]) && !(m[k].userData && m[k].userData.shared)) m[k].dispose(); m.dispose(); }); });
-    K.div.remove(); K.capA.remove(); K.capB.remove();
+    K.div.remove(); K.capA.remove(); K.capB.remove(); if (K.rp0 != null && this.v.readPanel) this.v.readPanel.style.visibility = K.rp0;
   }
 
   // ================================================================ levels (the camera knows which level it is on)

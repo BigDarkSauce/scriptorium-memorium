@@ -371,6 +371,7 @@ export class DioramaView {
       const at = Array.isArray(S.at) ? new THREE.Vector3(+S.at[0] || 0, +S.at[1] || 0, +S.at[2] || 0) : S.at && B(S.at) ? B(S.at).getPos() : null;
       if (on.length) out.peel = { layers: on.slice(0, 6), mode: 'clip', axis: S.axis, at: at && at.isVector3 ? at : null, keep: list(S.keep, B), sweep: S.sweep || 1.6, depth: S.depth, dwell: S.dwell || 2.4, restore: S.restore || 'step', kicker: 'Section' }; }
     out.levels = this.spec.levels || D.levels || null;
+    if (l.section && typeof l.section === 'object' && Array.isArray(l.section.hide)) out.hide = list(l.section.hide, B);
     if (l.track && l.track !== 'actor') { let T = typeof l.track === 'string' ? (this.spec.tracks || D.tracks || {})[l.track] : l.track; if (Array.isArray(T)) T = { points: T }; if (T && Array.isArray(T.points) && T.points.length >= 2) out.track = Object.assign({ name: typeof l.track === 'string' ? l.track : 'the track' }, T); }
     return out;
   }
@@ -392,7 +393,7 @@ export class DioramaView {
     const link = a => C ? C.links.findIndex(x => x.a === a) : -1;
     const score = (a, i) => { const pin = this.pins.get(a.name), r = R.get(a.name); return (pin && pin.classList.contains('hot') ? 1e7 : 0) + (C && C.front === a ? 5e6 : 0) + (r && now - r.t < r.min ? 1e6 : 0) + (a === this.lessonActor ? 5e5 : 0) + (r ? 1e3 + r.t : -i); };
     const full = new Set(A.map((a, i) => [a, score(a, i)]).sort((p, q) => q[1] - p[1]).slice(0, 4).map(x => x[0].name));
-    this.pins.forEach((pin, name) => { const a = pin._actor; if (!a) return; const k = link(a); const isFull = full.has(name); this.setMini(pin, !isFull && k >= 0, k + 1); pin._quiet = !isFull && k < 0 && A.length > 4; });
+    this.pins.forEach((pin, name) => { const a = pin._actor; if (!a) return; const k = link(a); const isFull = full.has(name); const badge = k >= 0 && C.badges[k] && !C.badges[k].hidden; this.setMini(pin, !isFull && k >= 0 && !badge, k + 1); pin._quiet = !isFull && ((k < 0 && A.length > 4) || badge); });   // a link whose chain badge is on screen carries its number there: no second, numbered pin beside it
   }
   setMini(pin, on, n) {
     if (on) { let s = pin._num; if (!s) { s = pin._num = el('span', { class: 'pin-num' }); pin.prepend(s); } const tx = String(n || ''); if (s.textContent !== tx) s.textContent = tx; }
