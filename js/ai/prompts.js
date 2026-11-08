@@ -21,6 +21,8 @@ OPTIONAL EXPLAINER CUES on a lesson (actor names spelled as in "focus"; see EXPL
  "peel":{"layers":["outermost actor",…],"mode":"ghost|lift|clip","order":"out-in|in-out","dwell":2.2,"restore":"step|beat|never"} reveals an inside one named layer at a time ("Layer k of n"), at most 6 layers, restored in reverse
  "zoom":{"to":"small actor","from":"wide|current","perDecade":3,"fovEnd":30,"stations":[{"at":"actor","hold":2}],"back":false} one continuous zoom into a small part, pausing at stations named after the levels of organisation (leave "shot" out: "zoom" is the shot); the diorama needs "scale":{"m":<metres per world unit>} for its scale bar
  "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.
+ "cameraMode":"global|object|component|mechanism|frame" the explanatory level of the beat: the whole environment (wide) | one object (medium) | a subsystem (push in) | a static frame that holds while parts interact | ride the subject (POV); "level":"name" the level of the scene's "levels" the beat is on
+ OPERATIONS (name one per lesson; the app knows how to draw them): "explode":{"parts":["actor",…],"axis":"y|x|z|auto","distance":0.35,"labels":true|"numbered","hold":3,"reassemble":true} parts move apart with guides to their seats, numbered, then back · "assemble":{"parts":[{"a":"actor","caption":"…"},…]} parts arrive in historical/assembly order, each captioned · "inspect":{"parts":[{"a":"actor","note":"its job"},…]} close-up of each component, then back to the whole · "section":{"on":["actor"]|"all","axis":"x|y|z","at":[x,y,z]|"actor","keep":["actor"],"caption":"…"} a cut swept in, capped in ink · "compare":{"mode":"side|split","a":{"set":{…},"label":"…"},"b":{"set":{…},"label":"…","read":"readout name"}} two states, one camera · "progression":{"stages":[{"label":"normal|initiating event|structural change|impairment|consequence|intervention","set":{…},"caption":"…"}]} · "scaleTo":{"items":[{"name","r","color"}],"unit":"km","source":"…"} one common size, then true relative size; "zoom" with "anchor":"landmark actor" and stations with "level" keeps the landmark as a ghost; "explainBack":"a question the learner answers in their own words"
 ${MATH_NOTATION}`;
 
 // Authoring rules for the explainer cues (docs/research/explainer-animation.md §7; the evidence for each is there).
@@ -34,7 +36,10 @@ export const EXPLAINER_RULES = `EXPLAINER RULES (how a 3D demo's lessons show a 
 7. Put a worked number with its unit on every mechanism that has one (a ratio, a period, a rate), in "explain" or a readout, e.g. 7:56 × 8:60 = 1:60.
 8. At most one counterfactual ("what if it weren't there") per diorama, marked as hypothetical.
 9. Name what is left out ("there are many parts; here are the three that matter").
-10. Keep 3–6 lessons, each with ≤ 8 chain links and on-object labels of ≤ 4 words (definitions go in the text); expand every acronym at first use.`;
+10. Keep 3–6 lessons, each with ≤ 8 chain links and on-object labels of ≤ 4 words (definitions go in the text); expand every acronym at first use.
+11. Choose the operation by the KIND of knowledge: structure → explode; inside → section/inspect; cause → chain with "cameraMode":"mechanism"; scale → zoom with stations and "level", or scaleTo; history/assembly → assemble; change or disease → compare/progression; movement through a system → track; a point of view → "cameraMode":"frame".
+12. Never show an inside without its place in the whole: a section, inspect or zoom comes after (or inside) a global/object beat.
+13. Motion must mean something: say which motion explains (the clot that breaks off) and which is only background (blood that always flows); never move a part only to look busy.`;
 
 export const SCENE_SPEC = `SCENE SPEC (type "scene") — a universal 3D diorama on a round display plinth (radius 7, top at y=0, units ≈ metres; keep content within |x|,|z| < 6.5, 0 < y < 8).
 {
@@ -75,6 +80,107 @@ CODE API (spec.code is the body of function(api), no imports/DOM/network):
  api.trail(maxPoints, hex) -> line with .add(vec3) (add it to api.world); api.world (Group)
 RULES: physics/maths must be correct; every definition must be attached to visible bodies and to events; actors are the bodies the explanation is about (2–7 of them), decor gives place and scale and may react through behaviors (trees sway with wind, windows glow at night); lessons are 3–6 short steps, each changing something and pointing at what to watch, each settling one question and opening the next; keep code under ~200 lines.
 ${LESSON_FORMAT}`;
+
+// ---------------------------------------------------------------- the didactic planner (docs/PEDAGOGY.md, "The didactic planner")
+// Before a 3D demo is authored, the model writes a short PLAN: the question, the kind of knowledge, the levels of the
+// multiscale scene graph, and Jared Owen's explanatory sequence as a planning algorithm (recursive inside a beat through
+// "sub"), each beat naming an operation of the visual grammar (js/dio/grammar.js) by name and a camera mode. The plan is
+// validated (checkPlan), the scene and its lessons are written from it, and a cheap self-critique weighs "could someone
+// explain the concept after watching?" above "is it attractive" (critiquePrompt).
+export const OWEN_STAGES = ['curiosity', 'orientation', 'decomposition', 'inspection', 'mechanism', 'intuition', 'reconstruction', 'understanding'];
+export const CAMERA_MODES = ['global', 'object', 'component', 'mechanism', 'frame'];
+// the operations, each with the kinds of knowledge it serves ("any": usable in every plan)
+export const OPERATIONS = {
+  establish: { kinds: ['any'], does: 'the whole object or environment, still: the establishing shot' },
+  explode: { kinds: ['structural'], does: 'parts move apart along an axis with guides to their seats, numbered, then reassemble' },
+  assemble: { kinds: ['history', 'structural'], does: 'parts arrive in order (assembly or history), each with its caption' },
+  inspect: { kinds: ['internal', 'structural'], does: 'close-up of each component in turn, then back to the whole' },
+  section: { kinds: ['internal'], does: 'a cut plane swept in, capped in ink, the whole kept in view' },
+  peel: { kinds: ['internal', 'structural'], does: 'outer layers ghosted, lifted or clipped one at a time' },
+  isolate: { kinds: ['any'], does: 'everything but the acting subsystem dimmed' },
+  chain: { kinds: ['causal', 'movement'], does: 'a highlight travels the actors in the order of cause, numbered' },
+  zoom: { kinds: ['scale', 'internal'], does: 'one continuous zoom through stations named after levels, a landmark kept as a ghost' },
+  scaleTo: { kinds: ['scale'], does: 'a lineup at one size, then each at its true relative size' },
+  compare: { kinds: ['pathology', 'causal'], does: 'two states side by side (or split) through one camera' },
+  progression: { kinds: ['pathology', 'history', 'causal'], does: 'normal → initiating event → structural change → impairment → consequence → intervention' },
+  track: { kinds: ['movement', 'perspective'], does: 'follow one particle along its path (a ride on a rail)' },
+  pov: { kinds: ['perspective', 'movement'], does: 'outside → follow → inside: the camera takes the subject\'s frame of reference' },
+  analogy: { kinds: ['any'], does: 'a familiar thing that works the same way, with where it stops working' },
+  answer: { kinds: ['any'], does: 'back to the whole; the opening question answered in one sentence' }
+};
+export const KNOWLEDGE_KINDS = ['structural', 'internal', 'causal', 'scale', 'history', 'pathology', 'movement', 'perspective'];
+const INTERNAL_OPS = new Set(['section', 'peel', 'inspect', 'zoom']), MOVING_OPS = new Set(['chain', 'track', 'pov', 'progression', 'compare']);
+export const PLAN_FORMAT = `PLAN (a black-and-white storyboard; short: ≤ 8 beats, ≤ 20 words a field):
+{"question":"the one question the demo answers","knowledgeKind":["structural|internal|causal|scale|history|pathology|movement|perspective", …] (primary first),
+ "levels":["Organism","Organ","Tissue","Cell","Molecule"] or ["System","Subsystem","Part","Mechanism"] (only the levels it visits; or [{"name":"Vessel","at":"actor"}]),
+ "sequence":[{"stage":"${OWEN_STAGES.join('|')}","technique":"<one OPERATION>","cameraMode":"${CAMERA_MODES.join('|')}","purpose":"why this beat","answers":"the sub-question it settles","opens":"the question it raises","on":["actor"],"lesson":<index of the lesson that plays it>,"motion":{"explanatory":["what moves to explain"],"background":["what only moves to make it alive"]},"sub":[…the same, recursively, inside one beat]}],
+ "analogy":{"familiar":"…","maps":"what corresponds to what","limit":"where it breaks"},
+ "comprehensionCheck":{"explainBack":"what the learner must explain in their own words","misconceptionToAvoid":"the wrong answer to rule out","answer":"the correct explanation in 1–2 sentences"}}
+OPERATIONS (by name only; never describe how to animate them): ${Object.entries(OPERATIONS).map(([k, o]) => k + ' = ' + o.does + ' [' + o.kinds.join(', ') + ']').join('; ')}.
+STAGES in Owen order (skip what the subject does not need; repeat a stage for several beats; recurse with "sub"): curiosity = a question that opens a gap; orientation = the whole first (establishing); decomposition = functional parts; inspection = one part's inside, located in the whole; mechanism = the causal process, motion with meaning; intuition = analogy or scale comparison; reconstruction = back to the whole working; understanding = the answer.
+RULES: choose each technique by the kind of knowledge (structure → explode; inside → section/inspect; cause → chain; scale → zoom/scaleTo; history → assemble; change/disease → compare/progression; movement → track; viewpoint → pov); an inside (section, peel, inspect, zoom) only after a global or object beat; every mechanism beat says which motion explains and which is background; the analogy names its limit.`;
+export function planPrompt(req, context = '') {
+  return `Plan a 3D explanatory demo BEFORE it is built (no scene yet: only the plan).
+WHAT IT MUST SHOW: ${req.request || req.title}
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}${req.issues ? 'FIX THESE PROBLEMS OF THE LAST PLAN: ' + req.issues + '\n' : ''}${PLAN_FORMAT}
+Return ONLY the JSON plan.`;
+}
+// the self-critique: can someone explain the concept after watching? (weighed above attractiveness); a short answer that only
+// patches lesson texts, never the scene
+export function critiquePrompt(plan, spec) {
+  const L = (spec.lessons || []).map((l, i) => ({ i, title: l.title, question: l.question, text: l.text, explain: l.explain, opens: l.opens, cameraMode: l.cameraMode, ops: ['explode', 'assemble', 'inspect', 'section', 'compare', 'progression', 'scaleTo', 'zoom', 'track', 'chain', 'peel'].filter(k => l[k] != null) }));
+  return `Critique an explanatory 3D demo against its plan. The first test outweighs the second: (1) after these lessons, could a newcomer correctly answer the comprehension check, without the misconception? (2) is it attractive?
+PLAN: ${JSON.stringify({ question: plan.question, comprehensionCheck: plan.comprehensionCheck, sequence: (plan.sequence || []).map(b => ({ stage: b.stage, technique: b.technique, lesson: b.lesson, answers: b.answers })) })}
+LESSONS: ${JSON.stringify(L)}
+Check: every beat's sub-question is answered by its lesson's "explain" with the numbers; the thread is unbroken (each "question" = the previous "opens"); the last lesson answers the plan's question; the misconception is ruled out explicitly somewhere.
+Return ONLY JSON: {"canExplain":0-1,"attractive":0-1,"verdict":"pass|revise","issues":["≤ 15 words each"],"patch":[{"i":<lesson index>,"text":"…","explain":"…","explainBack":"…"}]} (patch only the fields that must change; [] when it passes).`;
+}
+const ACT = n => String(n || '').toLowerCase().split(' · ')[0].trim();
+// a plan's faults and warnings; lessons (optional) are the demo's lessons, names (optional) its actors
+export function checkPlan(plan, lessons = null, names = null) {
+  const out = [], F = issue => out.push({ level: 'fault', issue }), W = issue => out.push({ level: 'warn', issue });
+  if (!plan || typeof plan !== 'object') { F('no plan'); return out; }
+  if (!plan.question || String(plan.question).trim().length < 5) F('"question" is missing: the plan starts from the question the demo answers');
+  const kinds = [].concat(plan.knowledgeKind || []).map(String); if (!kinds.length) F('"knowledgeKind" is missing'); kinds.forEach(k => { if (!KNOWLEDGE_KINDS.includes(k)) F(`knowledgeKind "${k}" is not one of ${KNOWLEDGE_KINDS.join(', ')}`); });
+  if (plan.levels != null && (!Array.isArray(plan.levels) || plan.levels.some(x => !(typeof x === 'string' ? x : x && x.name)))) F('"levels" must be a list of level names (or {name, at})');
+  const seq = Array.isArray(plan.sequence) ? plan.sequence : []; if (!seq.length) F('"sequence" is empty');
+  if (seq.length > 10) W(`the sequence has ${seq.length} beats: keep a plan short (≤ 8)`);
+  const known = n => !names || n === 'all' || names.some(a => { const x = ACT(a), s = ACT(n); return x === s || x.includes(s) || s.includes(x); });
+  let context = false; const used = new Set();
+  const walk = (list, path) => {
+    let last = -1;
+    list.forEach((b, i) => {
+      const at = `${path}${i + 1}`; if (!b || typeof b !== 'object') { F(`beat ${at} is not an object`); return; }
+      const st = OWEN_STAGES.indexOf(b.stage); if (st < 0) F(`beat ${at}: stage "${b.stage}" is not an Owen stage (${OWEN_STAGES.join(', ')})`); else { if (st < last) W(`beat ${at}: "${b.stage}" comes after a later stage (recurse with "sub" instead)`); last = Math.max(last, st); }
+      const op = OPERATIONS[b.technique]; if (!op) F(`beat ${at}: technique "${b.technique}" is not an operation (${Object.keys(OPERATIONS).join(', ')})`);
+      else { used.add(b.technique); if (!op.kinds.includes('any') && kinds.length && !op.kinds.some(k => kinds.includes(k))) W(`beat ${at}: "${b.technique}" serves ${op.kinds.join('/')} knowledge, not ${kinds.join('/')}`); }
+      if (!CAMERA_MODES.includes(b.cameraMode)) F(`beat ${at}: cameraMode "${b.cameraMode}" (${CAMERA_MODES.join(', ')})`);
+      if (!b.purpose || String(b.purpose).trim().length < 4) F(`beat ${at}: no "purpose" (why this beat)`);
+      if (!b.answers || String(b.answers).trim().length < 4) F(`beat ${at}: no "answers" (the sub-question it settles)`);
+      if (b.cameraMode === 'global' || b.cameraMode === 'object' || b.technique === 'establish') context = true;
+      if (INTERNAL_OPS.has(b.technique) && !context) F(`beat ${at}: "${b.technique}" reveals an inside before any global or object beat has located it in the whole`);
+      if ((MOVING_OPS.has(b.technique) || b.stage === 'mechanism') && b.technique !== 'establish') { const M = b.motion; if (!M || !Array.isArray(M.explanatory) || !M.explanatory.length) F(`beat ${at}: say which motion explains ("motion":{"explanatory":[…],"background":[…]})`); else if (M.background != null && !Array.isArray(M.background)) F(`beat ${at}: "motion.background" must be a list`); }
+      (b.on || []).forEach(n => { if (!known(n)) W(`beat ${at}: "${n}" is not an actor of this demo`); });
+      if (lessons && b.lesson != null && !(Number.isInteger(+b.lesson) && +b.lesson >= 0 && +b.lesson < lessons.length)) F(`beat ${at}: "lesson":${b.lesson} is not a lesson of this demo`);
+      if (Array.isArray(b.sub)) walk(b.sub, at + '.');
+    });
+  };
+  walk(seq, '');
+  if (seq.length) { const f = OWEN_STAGES.indexOf(seq[0].stage), l = OWEN_STAGES.indexOf(seq[seq.length - 1].stage); if (f > 1) W('the sequence does not open with curiosity or orientation (the whole, or the question, first)'); if (l >= 0 && l < 6) W('the sequence does not end in reconstruction or understanding (back to the whole, the question answered)'); }
+  if (kinds.length && ![...used].some(t => OPERATIONS[t].kinds.includes(kinds[0]))) W(`no beat uses an operation for the primary kind "${kinds[0]}"`);
+  const A = plan.analogy; if (A != null) { if (!A.familiar) F('"analogy" needs "familiar"'); if (!A.limit) F('"analogy" needs "limit": where the analogy stops working'); }
+  if (seq.some(b => b && b.technique === 'analogy') && !A) F('a beat uses "analogy" but the plan has no "analogy" with its limit');
+  const K = plan.comprehensionCheck; if (!K || !K.explainBack) F('"comprehensionCheck.explainBack" is missing: what must the learner be able to explain?'); if (!K || !K.misconceptionToAvoid) F('"comprehensionCheck.misconceptionToAvoid" is missing');
+  // the lessons against the plan: every operation a lesson uses appears in a beat of that lesson
+  if (lessons) lessons.forEach((l, i) => { if (!l) return; ['explode', 'assemble', 'inspect', 'section', 'compare', 'progression', 'scaleTo', 'zoom', 'track', 'chain', 'peel'].forEach(op => { if (l[op] == null) return; const flat = []; const fl = L => L.forEach(b => { if (b) { flat.push(b); if (Array.isArray(b.sub)) fl(b.sub); } }); fl(seq); if (!flat.some(b => +b.lesson === i && (b.technique === op || (op === 'zoom' && b.technique === 'zoom')))) W(`lesson ${i + 1} uses "${op}", which no beat of the plan names for it`); }); if (l.cameraMode != null && !CAMERA_MODES.includes(l.cameraMode)) F(`lesson ${i + 1}: cameraMode "${l.cameraMode}"`); });
+  return out;
+}
+// plans of every demo of a chain that carries one
+export function checkPlans(A) {
+  const out = [];
+  (A.chain || []).forEach(st => (st.demos || []).forEach((d, i) => { if (!d || !d.plan) return; const B = BUILTIN_MODELS[String(d.type || '').toLowerCase()], names = B ? B.actors : Array.isArray(d.bodies) ? d.bodies.flatMap(b => [b.id, b.name, b.label].filter(Boolean)) : null; checkPlan(d.plan, Array.isArray(d.lessons) ? d.lessons : null, names).forEach(x => out.push({ step: st.id, demo: i, type: d.type, ...x })); }));
+  return out;
+}
 
 // The built-in 3D models (js/dio/models.js): their params, the actor names their code labels (D.label; symbol pins
 // such as θ or F are left out) and the fixed parts of the event texts they log (ev / D.event; "<n>" = a number).
@@ -435,6 +541,18 @@ export function checkCues(A) {
         }
       }
       if (l.track != null && l.track !== 'actor') { const T = typeof l.track === 'string' ? (d.tracks || {})[l.track] : l.track, pts = Array.isArray(T) ? T : T && T.points; if (!Array.isArray(pts) || pts.length < 2 || pts.some(p => !Array.isArray(p) || p.length !== 3 || p.some(v => !isFinite(+v)))) F('"track" needs "points": at least two [x,y,z]'); }
+      // the operations of the visual grammar (js/dio/grammar.js)
+      if (l.cameraMode != null && !CAMERA_MODES.includes(l.cameraMode)) F(`"cameraMode":"${l.cameraMode}" (${CAMERA_MODES.join(', ')})`);
+      ['explode', 'assemble', 'inspect'].forEach(op => { const X = l[op]; if (X == null) return; const parts = Array.isArray(X) ? X : X && X.parts; if (!Array.isArray(parts) || !parts.length) { F(`"${op}" needs "parts"`); return; }
+        parts.forEach((p, k) => { const n = typeof p === 'string' ? p : p && (p.a || p.at || p.name); if (!known(n)) F(`${op} part ${k + 1} "${n}" is not an actor`); });
+        if (op === 'explode' && parts.length < 2) F('"explode" needs at least 2 parts'); if (op === 'explode' && X.axis != null && !Array.isArray(X.axis) && !['auto', 'x', 'y', 'z'].includes(X.axis)) F(`explode "axis":"${X.axis}" (auto, x, y, z or [x,y,z])`); });
+      if (l.section != null) { const S = l.section || {}; if (S.on !== 'all' && S.on !== '*') { const on = [].concat(S.on || l.focus || []); if (!on.length) F('"section" needs "on" (actors, or "all")'); on.forEach(n => { if (!known(n)) F(`section "on" names "${n}", which is not an actor`); }); } if (S.axis != null && !Array.isArray(S.axis) && !['x', 'y', 'z'].includes(S.axis)) F(`section "axis":"${S.axis}" (x, y, z or [x,y,z])`); (S.keep || []).forEach(n => { if (!known(n)) F(`section "keep" names "${n}", which is not an actor`); }); }
+      if (l.compare != null) { const C = l.compare || {}; if (!C.b || !C.b.set || typeof C.b.set !== 'object') F('"compare" needs "b":{"set":{param:value},"label":…}: the second state'); if (C.mode && !['side', 'split'].includes(C.mode)) F(`compare "mode":"${C.mode}" (side or split)`); if (B && C.b && C.b.set) Object.keys(C.b.set).forEach(k => { if (!B.params.split(/[,;\s]+/).includes(k)) F(`compare sets "${k}", which is not a parameter of ${t}`); }); if (!(C.a && C.a.label) || !(C.b && C.b.label)) W('compare: label both states ("a":{"label"}, "b":{"label"}) so the two halves can be told apart'); }
+      if (l.progression != null) { const st = Array.isArray(l.progression) ? l.progression : l.progression && l.progression.stages; if (!Array.isArray(st) || st.length < 2) F('"progression" needs at least 2 "stages"'); else st.forEach((x, k) => { if (!x || !(x.label || x.caption)) F(`progression stage ${k + 1} has no "label"`); }); }
+      if (l.scaleTo != null) { const S = l.scaleTo || {}; if (!Array.isArray(S.items) || S.items.length < 2 || S.items.some(x => !x || !x.name || !(+x.r > 0))) F('"scaleTo" needs at least 2 "items" with "name" and a size "r" > 0'); if (!S.source) W('scaleTo: give the "source" of the true sizes'); }
+      if (l.zoom && l.zoom.anchor && !known(l.zoom.anchor)) F(`zoom "anchor":"${l.zoom.anchor}" is not an actor`);
+      // never an inside without its place in the whole: an earlier (or this) beat is global/object, or the zoom starts wide
+      if ((l.section != null || l.inspect != null || l.peel != null || (l.zoom && l.zoom.from === 'current')) && !d.lessons.slice(0, j + 1).some(x => x && (x.cameraMode === 'global' || x.cameraMode === 'object' || x.shot === 'wide'))) W('reveals an inside before any lesson has shown the whole (give an earlier or this lesson "cameraMode":"global" or "object")');
       const rides = l.shot === 'pov' || l.pov || l.track;
       if (rides && micro && DIRECTED.test(words) && !/random|diffus|brownian|jostl|collid/.test(words)) W('a POV in a micro or diffusive scene describes directed motion ("travels to", "heads for", "seeks", "finds") without "random" or "diffuses": molecules do not aim (Jantzen et al. 2024)');
     });
@@ -662,7 +780,7 @@ WHAT IT MUST SHOW: ${req.request || req.title}
 ${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT (the study step it illustrates): ' + context : ''}
 Preferred technique: ${req.technique || 'choose the best'}.
 Make it beautiful and alive like a living miniature under glass: a composed scene with 2–7 actors (the bodies the idea is about, each with a clear label and one-line "describe"), scenic decor that gives place and scale and reacts to the simulation through behaviors, scene-appropriate environment and lighting, correct dynamics in code, events at the meaningful moments, readouts and a live plot of the telling quantity, and 3–6 lessons that each change something and say what to watch.
-Use the numbers of the study step (the book's own values) for params and readouts. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
+${req.plan ? 'DIDACTIC PLAN (written first; follow it): ' + JSON.stringify(req.plan) + '\nBuild the scene and its lessons FROM this plan: one lesson per beat (or per few beats), in its order; each lesson gives the beat\'s "cameraMode" and its operation as the lesson field of the same name (explode, assemble, inspect, section, compare, progression, scaleTo, zoom, track, chain, pov); its "question" is the beat\'s "answers", its "opens" the beat\'s "opens"; the last lesson carries "explainBack" = the plan\'s comprehensionCheck.explainBack and its "explain" rules out the misconception. Copy the plan into the spec as "plan" and its levels as "levels". Background motion stays calm (behaviors); explanatory motion happens in the lesson that explains it.\n' : ''}Use the numbers of the study step (the book's own values) for params and readouts. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
 Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI. Values that are not in the study step are additions from outside the book: list them in a top-level "extra" array ({what, source}).
 ${SCENE_SPEC}
 ${EXPLAINER_RULES}

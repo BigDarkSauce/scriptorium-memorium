@@ -25,7 +25,9 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 3. \`07-fill-gaps.md\`: only when the coverage check finds a missing or coarse subsection: a small call with just that subsection's text.
 3b. \`08-repair-steps.md\`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. \`09-figures.md\`: only for paragraphs and teaching boxes that still lack a figure.
-4. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`).
+4. \`10-didactic-plan.md\`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with \`node tools/verify-chain.mjs plan.json\`.
+4b. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`), built from the plan (paste the plan into the request's "plan").
+4c. \`11-self-critique.md\`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
 5. \`04-edit-diorama.md\`: change an existing diorama.
 6. \`05-sub-scroll.md\`: expand one step into a detailed sub-scroll.
 7. \`06-whole-room.md\`: everything in one answer (for AIs with large outputs).
@@ -89,6 +91,18 @@ ${P.LESSON_FORMAT}
 For 3D scenes not covered by the built-in models, put {"type":"scene","title":str,"purpose":str,"technique":"card|sweep|topdown","request":"precise description"}; the app (or prompt 03) authors them later.`) + `
 Import the file in the app with *Import / export → Import JSON*. It appears as a new scroll on your first bookcase. Open each scroll once with the PDF attached to the book to run the coverage check.
 `);
+// the didactic planner (docs/PEDAGOGY.md, "The didactic planner") and the self-critique, shown with placeholders
+w('prompts/10-didactic-plan.md', `# Plan a 3D demo before building it
+
+The app sends this before it authors a scene (stage 5 of the pipeline). The plan is short (about 1.5k tokens): the demo's question, the kind of knowledge, the levels of its multiscale scene graph, Jared Owen's sequence (curiosity → orientation → decomposition → inspection → mechanism → intuition → reconstruction → understanding, recursive inside a beat) with one operation of the visual grammar and one camera mode per beat, an analogy with its limit, and the comprehension check. Operations are named, never described: the app already knows how to explode, section, compare, zoom, track and so on. \`node tools/verify-chain.mjs plan.json\` checks a plan; the built-in models' own plans are in \`../js/dio/plans.js\` (\`node tools/verify-chain.mjs --builtins\`).
+
+` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>' }, '<the study step it illustrates>')));
+w('prompts/11-self-critique.md', `# Check a demo against its plan
+
+Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the verdict on the scene as \`critique\`.
+
+` + block(P.critiquePrompt({ question: '<the plan question>', comprehensionCheck: { explainBack: '<what the learner must explain>', misconceptionToAvoid: '<the wrong answer>' }, sequence: [{ stage: 'orientation', technique: 'establish', lesson: 0, answers: '<…>' }] }, { lessons: [{ title: '<lesson 1>', question: '<…>', text: '<…>', explain: '<…>', opens: '<…>', cameraMode: 'global' }] })));
+
 // the follow-up, shown with a small mock chain so its structure is visible
 // one coarse gap (1.1 already has S1) and one missing gap (1.2), so both kinds of thread instruction are shown
 const mockA = { question: '<the part question>', chain: [{ id: 'S1', section: '<1.1>', title: '<existing step>', answers: '<…>', opens: '<question S1 opens>' }] };

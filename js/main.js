@@ -90,11 +90,21 @@ class App {
     // example rooms saved before grounding existed get their verified sources and teaching fields once
     const b = this.lib && this.lib.books.find(x => x.id === id);
     // example rooms saved before the authored diorama lessons existed get them once (matched by demo type + title)
-    if (b && b.example && r.lessonsV !== 4) {
+    if (b && b.example && (r.lessonsV || 0) < 4) {
       const L = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
       walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) L.set(d.type + '|' + d.title, d.lessons); });
       walk(r.parts, d => { const l = L.get(d.type + '|' + d.title); if (l && !(d.lessons && d.lessons.length)) d.lessons = JSON.parse(JSON.stringify(l)); });
       r.lessonsV = 4; store.set('room:' + id, r);
+    }
+    // v5 (the explanatory grammar, js/dio/grammar.js): example demos whose lessons are still the authored ones (every title is
+    // a seed title, now or before v5) get the new lessons with their operations, the demo's levels and its didactic plan;
+    // lessons a learner or an AI has changed are kept
+    if (b && b.example && (r.lessonsV || 0) < 5) {
+      const OLD = new Set(['Heat the lake', 'Ride a parcel of air', 'Wind to the ridge', 'Over the crest', 'Calm air', 'Evening']), N = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
+      walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) N.set(d.type + '|' + d.title, d); }); FLAGSHIPS.forEach(d => N.set(d.type + '|' + d.title, d));
+      walk(r.parts, d => { const n = N.get(d.type + '|' + d.title); if (!n || !Array.isArray(n.lessons)) return; const T = new Set(n.lessons.map(l => l.title));
+        if (!(d.lessons && d.lessons.length) || d.lessons.every(l => l && (T.has(l.title) || OLD.has(l.title)))) { d.lessons = JSON.parse(JSON.stringify(n.lessons)); if (n.plan) d.plan = JSON.parse(JSON.stringify(n.plan)); if (n.levels) d.levels = JSON.parse(JSON.stringify(n.levels)); } });
+      r.lessonsV = 5; store.set('room:' + id, r);
     }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,

@@ -114,6 +114,9 @@ export class Director {
     // callout, it does not cut away (a cut would end the zoom or the ride half-way)
     // (nor during the pull-out after a ride or a POV, nor while a dolly is still on its way: the next shot waits for it)
     if (b.kind === 'event' && !b.poseOnly && ((this.zoom && this.zoom.phase !== 'back') || this.track || (this.bracket && this.bracket.phase !== 'pre') || this.move)) return;
+    // the beat's camera mode (grammar.js): global, object and mechanism shots hold while the process plays (an event is read in
+    // its callout, the frame stays); an operation that owns the frame (a comparison, an exploded view, a lineup) holds it too
+    if (b.kind === 'event' && !b.poseOnly && ((this.mode && /^(global|object|mechanism)$/.test(this.mode)) || (v.ops && v.ops.holdShot()))) return;
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');

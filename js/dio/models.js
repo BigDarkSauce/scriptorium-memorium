@@ -7,6 +7,7 @@
 import * as T from 'three';
 import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { useEnvironment } from './environments.js';
+import { PLANS } from './plans.js';
 import { clamp, fmt, lerp, mod, mulberry, compile } from '../util.js';
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
 import { aaaMaterial } from '../gfx/aaa.js';
@@ -1039,12 +1040,13 @@ DIO.weatherglass={params:{T:[-5,35,16,'°C','air temperature'],P:[960,1050,1013,
   'rain begins':[{from:[-1.6,5.2,-4.9],to:[-1.6,1.4,-4.6],label:'rain from the thickening cloud'}]};}
 // 1 world unit = 5 cm (the storm glass is about 20 cm tall): the scale bar of the zoom into the crystals
 DIO.weatherglass.scale={m:.05};
+DIO.weatherglass.levels=[{name:'Room'},{name:'Instrument',at:'storm glass'},{name:'Crystals',at:'crystals'},{name:'Seed bed',at:'seed bed'}];
 // Default lessons (used when a weatherglass demo brings none). Same format as the lessons at the end of this file;
 // every `until` was checked by stepping the model headlessly from its default parameters, and the numbers in
 // "explain" are the ones that run produces.
 DIO.weatherglass.lessons=[
  {title:'Read the barometer',question:'What holds the mercury column up?',focus:'mercury column',set:{auto:0,P:1013,T:15,P0:1013},run:8,shot:'close',
-  peel:{layers:['mercury barometer'],mode:'ghost',dwell:2,restore:'step'},
+  cameraMode:'object',section:{on:['mercury barometer'],axis:'z',sweep:1.6,keep:['mercury column'],caption:'The walnut case cut open: a glass tube standing in a cistern of mercury, vacuum above the column.'},
   text:'Auto weather is switched off and the outside pressure is held at 1013 hPa. Look at the top of the mercury column in the brass window and read it against the scale. The walnut case of the mercury barometer fades for a moment, so you can follow the mercury down to its cistern.',
   explain:'Above the mercury there is vacuum, so only the air pressing on the open cistern holds the column up: h = P/(ρ_Hg g) = 101 325 Pa ÷ (13 595 kg/m³ × 9.81 m/s²) ≈ 760 mm. Each hPa of air pressure holds 0.75 mm of mercury, so the barometer reads the weight of the air directly, in absolute terms.',
   opens:'What does the Goethe glass do when the outside pressure falls?'},
@@ -1058,7 +1060,7 @@ DIO.weatherglass.lessons=[
   explain:'Warming raises the pressure of the trapped air by about 3.5 hPa per kelvin for the air itself and 1.3 hPa per kelvin from extra water vapour, so 5 K of warming imitates a fall of about 24 hPa: the spout settles near 148 mm although the pressure is normal. A Goethe glass mixes temperature and pressure; only the barometer reads pressure alone.',
   opens:'What makes crystals appear in the sealed storm glass?'},
  {title:'A cold night',question:'What makes crystals appear in the sealed storm glass?',focus:'storm glass',set:{T:12},until:'event:crystals nucleate',run:40,
-  zoom:{to:'seed bed',from:'wide',perDecade:2.5,stations:[{at:'storm glass',hold:1.5},{at:'crystals',hold:1.5}]},
+  zoom:{to:'seed bed',from:'wide',perDecade:2.5,anchor:'storm glass',stations:[{at:'storm glass',hold:1.5,level:'Instrument'},{at:'crystals',hold:1.5,level:'Crystals'}]},
   text:'Cool the air to 12 °C and watch the clear liquid of the storm glass on the right, down to the seed bed at the bottom. (The Goethe glass reacts too: its trapped air cools and shrinks, the spout water sinks below the bend, and outside air bubbles in.)',
   explain:'The sealed tube never feels the outside pressure, only the temperature. Camphor dissolves less in cold liquid (its solubility changes by about 7 % per kelvin in this model), so once the liquid has followed the air down (it lags by about an hour and a half), it holds more camphor than it can keep: the supersaturation σ = c/S − 1 passes 0.04 and fern fronds nucleate (σ was about 0.07 when they appeared in our run).',
   opens:'Do the crystals vanish again when it warms?'},
@@ -1407,12 +1409,13 @@ DIO.pendulum.lessons=[
   chain:[{a:'pivot',note:'holds the top fixed'},{a:'string · L',note:'keeps the bob on an arc'},{a:'bob · m',note:'gravity pulls it back down'}],chainPace:1.1,
   text:'Pull the bob only 8° aside and let it go. The pivot holds the string, and the string keeps the bob on its arc. Watch it swing there and back; the period is the time for one full there-and-back.',
   explain:'One full swing took 2.84 s. Near the bottom, the part of gravity that pulls the bob along its arc grows in step with how far it is from the bottom, just as a spring pulls harder the more it is stretched. That makes the period 2π√(L/g) = 2π√(2 m ÷ 9.81 m/s²) = 2.84 s, and it does not depend on how far you pulled it, as long as the swing is small.',
-  opens:'Does a really wide swing take longer?'},
- {title:'A wide swing',question:'Does a wide swing take longer?',focus:'bob',set:{theta0:150},until:'event:period measured',run:15,isolate:['bob · m','string · L','angle scale'],
-  text:'Now release the same bob from 150°, almost upside down. Compare the measured period with the small-swing period 2π√(L/g) in the readouts.',
+  opens:'Does a wide swing take longer?'},
+ {title:'A wide swing',question:'Does a wide swing take longer?',focus:'bob',set:{theta0:8},run:16,cameraMode:'object',
+  compare:{mode:'side',a:{label:'released at 8°',read:'T measured'},b:{set:{theta0:150},label:'released at 150°',read:'T measured'}},
+  text:'Two copies of the same pendulum, side by side and seen through one camera: on the left released from 8°, on the right from 150°, almost upside down. Watch which one comes back first, and read the period measured under each.',
   explain:'The swing took 5.00 s, 1.76 times the small-swing 2.84 s. Far out on the arc, gravity\'s pull along the path grows more slowly than the distance (it goes like sin θ, not θ), so the bob is pulled back more gently and lingers near the top. The exact result 4√(L/g)·K(sin(θ₀/2)) = 5.00 s matches the measurement.',
   opens:'Where is the bob fastest, and where does it stop?'},
- {title:'Ride the bob',question:'Where is the bob fastest, and where does it stop?',focus:'bob',set:{theta0:40},shot:'pov',pov:'bob',until:'event:period measured',run:12,
+ {title:'Ride the bob',question:'Where is the bob fastest, and where does it stop?',focus:'bob',set:{theta0:40},shot:'pov',pov:'bob',cameraMode:'frame',until:'event:period measured',run:12,
   text:'Sit on the bob for a full swing from 40°. Feel it rush through the bottom and pause at each end.',
   explain:'At the bottom you passed at 3.03 m/s; at each end you stopped for an instant. All the height lost on the way down, L(1 − cos 40°) = 0.47 m, became speed: v = √(2·9.81·0.47) = 3.03 m/s. On the way up the same speed is turned back into height, so the bob stops at the same 40° on the other side. The 40° swing took 2.93 s, 3 % longer than a small swing.',
   opens:'What does the length of the string do?'},
@@ -1493,6 +1496,13 @@ DIO.orbit.lessons=[
  {title:'Escape',question:'How fast must it go to escape?',focus:'planet',set:{vfactor:1.45},until:'event:left the diorama',run:20,
   text:'Launch at 1.45 times the circular speed, a little above √2 ≈ 1.41.',
   explain:'Now ε = v²/2 − GM/r is positive (+0.21): the planet has more kinetic energy than gravity can take back, so it never returns and leaves along an open curve (a hyperbola). Escape speed is √2 times the circular speed.',
+  opens:'How big are real planets next to their star?'},
+ {title:'Real planets, true size',question:'How big are real planets next to their star?',focus:'star',set:{vfactor:.8},run:4,cameraMode:'global',
+  scaleTo:{unit:'km',hold:4,source:'mean radii, NASA Planetary Fact Sheet',items:[{name:'Sun',r:695700,color:'#ffcf6b',star:true},{name:'Mercury',r:2440,color:'#a39b91'},{name:'Venus',r:6052,color:'#e3c48f'},{name:'Earth',r:6371,color:'#5d8fd6'},{name:'Mars',r:3390,color:'#c4673e'},{name:'Jupiter',r:69911,color:'#d4b18a'},{name:'Saturn',r:58232,color:'#e2cf9a'},{name:'Uranus',r:25362,color:'#9fd6dc'},{name:'Neptune',r:24622,color:'#4f73c9'}],
+   captions:{common:'The classroom picture: the Sun and the eight planets drawn the same size, side by side.',true:'Each radius to scale: the Sun is 109 Earths across, and Jupiter, the largest planet, is a tenth of the Sun.'}},
+  text:'The diorama steps aside for a lineup of the real Solar System: first the textbook picture, every body drawn the same size; then each one resized to its true radius.',
+  explain:'Our diorama draws star and planet at a convenient size; the real ratios are far more extreme. The Sun\'s radius is 695 700 km, 109 times the Earth\'s 6 371 km; even Jupiter (69 911 km) is only a tenth of the Sun. That is why the star in an orbit diagram can be treated as a fixed point holding almost all the mass (99.86 % of the Solar System). (Distances, not shown, are larger still: the Earth orbits 23 500 Earth radii from the Sun.)',
+  explainBack:'Why does a planet keep missing the star instead of falling in, and why can the star be treated as fixed?',
   opens:'Explore: try vfactor 0.5 for a stretched orbit that dives close to the star.'}];
 
 DIO.collision.lessons=[
@@ -1560,13 +1570,14 @@ DIO.wave.lessons=[
 // molecules in air at room conditions (n ≈ 2.5 × 10²⁵ m⁻³, n^(−1/3) ≈ 3.4 nm). The drawn molecules (r = 0.09) are about twice
 // real size; the burner, piston and gauge are symbols, not to scale. Used only for the scale bar of the zoom (S4).
 DIO.gas.scale={m:3.4e-9};
+DIO.gas.levels=[{name:'Room'},{name:'Vessel',at:'glass vessel'},{name:'Molecule',at:'molecule · m'}];
 DIO.gas.lessons=[
  {title:'Into the gas',question:'Where does a gas\'s pressure come from?',focus:'molecule',set:{N:70,T:1,V:1},until:'event:tracked molecule strikes',run:12,
-  zoom:{to:'molecule · m',from:'wide',perDecade:3,stations:[{at:'glass vessel',hold:1.5}]},
+  zoom:{to:'molecule · m',from:'wide',perDecade:3,anchor:'glass vessel',stations:[{at:'glass vessel',hold:1.5,level:'Vessel'}]},
   text:'Zoom from the glass vessel down to the gold molecule. Up close the gas is a crowd: every molecule flies at random, in a straight line until it hits another molecule or a wall.',
   explain:'The scale bar reads nanometres: these 70 molecules sit about 3.4 nm apart, the spacing of the molecules in the air of a room (about 2.5 × 10²⁵ per cubic metre), and they are drawn about twice their real size, so most of the box is empty space. In real air each one flies at about 500 m/s and changes direction at every collision. Every hit on a wall is a tiny push; the pressure is the sum of all of them.',
   opens:'What does one molecule do to the wall it hits?'},
- {title:'Ride a molecule',question:'What does one molecule do to the wall it hits?',focus:'molecule',shot:'pov',pov:'molecule',until:'event:tracked molecule strikes',run:10,
+ {title:'Ride a molecule',question:'What does one molecule do to the wall it hits?',focus:'molecule',shot:'pov',pov:'molecule',cameraMode:'frame',until:'event:tracked molecule strikes',run:10,
   text:'Ride the gold molecule, knocked about at random by the others, until it hits a wall.',
   explain:'When you hit the wall your sideways speed reversed, and the wall received a push of 2mvₓ. A gas is millions of molecules doing this; each push is tiny but they add up to a steady force on every square centimetre: the pressure.',
   opens:'Does the measured pressure match the gas law?'},
@@ -1618,7 +1629,12 @@ DIO.doublependulum.lessons=[
   opens:'Explore: heavier lower bob (m₂ = 5) or a longer lower arm.'}];
 
 DIO.lever.lessons=[
- {title:'Which way will it tip?',question:'Which way will the lever tip?',focus:'beam',set:{m1:3,x1:-2.5,m2:2,x2:3,fulcrum:0,beam:1},until:'event:strikes the ground',run:6,
+ {title:'What is a lever made of?',question:'What is a lever made of, and which part does what?',focus:'beam',set:{m1:3,x1:-2.5,m2:2,x2:3.75,fulcrum:0,beam:1},run:3,cameraMode:'object',
+  explode:{parts:['fulcrum','beam','mass 1','mass 2'],axis:'y',labels:true,hold:3.5,reassemble:true,caption:'Four parts: 1 the fulcrum, a stone wedge the beam turns on; 2 the oak beam, a rigid bar; 3 and 4 the two iron weights that load it. Each dashed line leads back to where the part sits.'},
+  text:'Before anything moves, take the lever apart. The fulcrum, the beam and the two weights lift off along the vertical, each with its number, then drop back onto their seats.',
+  explain:'A lever is a rigid beam that can only turn about one point, the fulcrum. Everything that happens next is about turning: each weight tries to turn the beam about the fulcrum, and how hard it turns depends on its weight and on how far from the fulcrum it sits.',
+  opens:'Which way will the lever tip?'},
+ {title:'Which way will it tip?',question:'Which way will the lever tip?',cameraMode:'mechanism',focus:'beam',set:{m1:3,x1:-2.5,m2:2,x2:3,fulcrum:0,beam:1},until:'event:strikes the ground',run:6,
   chain:[{a:'mass 1 · m₁',note:'moment 3 × 2.5 = 7.5'},{a:'beam',note:'turns toward the larger moment'},{a:'fulcrum',note:'both moments act about it'},{a:'mass 2 · m₂',note:'moment 2 × 3 = 6.0'}],chainPace:1.1,
   text:'Mass 1, 3 kg, sits 2.5 m left of the fulcrum; mass 2, 2 kg, sits 3 m to the right. The heavier weight is closer in. Let go and watch the beam.',
   explain:'The left side went down and hit the ground. What turns the beam is weight × distance (the moment): 3 kg × 2.5 m = 7.5 against 2 kg × 3 m = 6.0. The left moment is larger by 1.5 kg·m, 14.7 N·m, so the beam turns that way.',
@@ -1634,6 +1650,7 @@ DIO.lever.lessons=[
  {title:'Move the fulcrum',question:'Can moving the pivot balance the original weights?',focus:'fulcrum',set:{m2:2,x2:3,fulcrum:-.25},until:'event:still balanced',run:6,isolate:['fulcrum','beam'],
   text:'Put the 2 kg back at 3 m and slide the fulcrum 0.25 m toward the heavier weight.',
   explain:'Balanced: the arms are now 2.25 m and 3.25 m. 3 × 2.25 = 6.75 and 2 × 3.25 = 6.5, and the 1 kg beam, whose middle is now 0.25 m right of the pivot, adds 0.25: 6.5 + 0.25 = 6.75. A real beam\'s own weight counts as a weight at its centre.',
+  explainBack:'Why does the lever balance now, although the two weights are unequal and the fulcrum is not in the middle?',
   opens:'Explore: make the beam heavy (5 kg) and find the new balance point.'}];
 
 // the same convention as the gas: 120 molecules in a 6.4 × 4 × 4 cell sit about 0.95 units apart; as a gas near
@@ -1689,12 +1706,22 @@ DIO.circuit.tracks={discharge:{label:'the discharge current along the wire',dur:
  points:[[-5.7,1.7,-.2],[-5.6,1.55,1.4],[-5.2,1.5,3.2],[-3.6,1.5,3.6],[0,1.5,3.6],[3.6,1.5,3.6],[5.2,1.5,3.2],[5.6,1.5,1.4],[5.6,1.5,-1.4],[5.2,1.5,-3.2],[3.6,1.5,-3.6],[2.4,1.5,-3.8],[1.4,1.5,-4.4],[0,1.5,-4.5],[-1.2,1.55,-4.4]],
  look:[[-4.5,.6,.2],[-4.5,.45,1.4],[-4.3,.45,2.4],[-3.0,.45,2.5],[0,.45,2.5],[3.0,.45,2.5],[4.3,.45,2.4],[4.5,.45,1.0],[4.5,.45,-1.0],[4.3,.45,-2.4],[3.0,.45,-2.5],[1.8,.45,-2.6],[1.5,.45,-3.2],[0,.45,-3.3],[-1.5,.45,-3.2]]}};
 DIO.circuit.lessons=[
- {title:'How fast does it charge?',question:'How fast does a capacitor charge?',focus:'capacitor',set:{V:9,R:5,C:.6,closed:1},until:'event:t = τ',run:8,
+ {title:'What is in the loop?',question:'What does each part of the circuit do?',focus:'battery',set:{V:9,R:5,C:.6,closed:1},run:4,cameraMode:'component',
+  inspect:{parts:[{a:'battery · ε',note:'Battery: pushes charge round the loop with an emf of 9 V.'},{a:'switch',note:'Switch: closes the loop through the battery, or bypasses it.'},{a:'resistor · R',note:'Resistor: 5 kΩ that limits how much current can flow.'},{a:'capacitor · C',note:'Capacitor: two metal plates with an insulating gap; charge piles up on them.'},{a:'voltmeter (across C)',note:'Voltmeter: reads the voltage across the capacitor.'}]},
+  text:'The camera visits each part of the circuit in turn, then returns to the whole loop. Note what each one does before anything is explained.',
+  explain:'Five parts, one loop: the battery pushes, the switch decides the path, the resistor limits the current, the capacitor stores the charge that arrives, and the voltmeter reads how full it is. The question is how fast it fills.',
+  opens:'How fast does a capacitor charge?'},
+ {title:'How fast does it charge?',question:'How fast does a capacitor charge?',focus:'capacitor',set:{V:9,R:5,C:.6,closed:1},until:'event:t = τ',run:8,cameraMode:'mechanism',
   chain:[{a:'battery · ε',note:'ε = 9 V drives it'},{a:'switch',note:'closes the loop'},{a:'resistor · R',note:'limits the current'},{a:'capacitor · C',note:'charge piles up on its plates'},{a:'voltmeter',note:'reads V_C rising'}],chainPace:1,
   text:'Close the switch: the 9 V battery charges the capacitor through the 5 kΩ resistor. Watch the voltmeter.',
   explain:'After τ = RC = 5 kΩ × 0.6 mF = 3.00 s the capacitor was at 5.69 V, 63.2 % of 9 V. The current is driven by the difference between the battery and the capacitor (ε − V_C)/R; as the capacitor fills, the difference shrinks, so it fills ever more slowly: V_C = ε(1 − e^(−t/RC)).',
+  opens:'Where does the charge actually go inside the capacitor?'},
+ {title:'Inside the capacitor',question:'Where does the charge actually go inside the capacitor?',focus:'capacitor',run:6,cameraMode:'object',
+  section:{on:['capacitor · C'],axis:'y',sweep:1.6,caption:'Cut open: two steel plates and the insulating sheet between them. No charge crosses the sheet.'},
+  text:'Keep the switch closed. The capacitor is cut open from the top while the whole loop stays in view: watch the two plates glow as charge piles up, red (+) on one, blue (−) on the other.',
+  explain:'The charge never crosses the gap: electrons pile up on one plate and leave the other, so the plates carry +q and −q with q = C·V_C. At 5.69 V the 0.6 mF capacitor holds q = 0.6 mF × 5.69 V ≈ 3.4 mC. The more charge on the plates, the more they push back against the battery, which is why the current dies away.',
   opens:'How long until it is full, and what does an electron do meanwhile?'},
- {title:'Ride an electron',question:'How long until it is full, and what does an electron do meanwhile?',focus:'tracked electron',set:{R:2},shot:'pov',pov:'tracked electron',until:'event:t = 5τ',run:10,
+ {title:'Ride an electron',question:'How long until it is full, and what does an electron do meanwhile?',focus:'tracked electron',set:{R:2},shot:'pov',pov:'tracked electron',until:'event:t = 5τ',run:10,cameraMode:'frame',
   text:'With a 2 kΩ resistor (τ = 1.2 s), ride one electron around the wires.',
   explain:'You raced at first, slowed, and nearly stopped after 5τ = 6.0 s, when V_C reached 8.94 V, within 0.7 % of 9 V. Electrons drift opposite to the conventional current, and they never cross the gap between the plates: they pile up on one plate and leave the other, which is what charging is. (Real drift is about 0.1 mm/s; it is drawn far faster.)',
   opens:'What does a bigger resistor do?'},
@@ -1702,9 +1729,10 @@ DIO.circuit.lessons=[
   text:'Use 10 kΩ instead.',
   explain:'Now τ = 10 kΩ × 0.6 mF = 6.00 s: the capacitor took twice as long to reach the same 63 %. The resistor limits the current, I = (ε − V_C)/R, so the same charge takes longer to arrive.',
   opens:'What happens when the battery is switched out?'},
- {title:'Discharge',question:'What happens when the battery is switched out?',focus:'capacitor',set:{closed:0},until:'event:t = τ',run:10,track:'discharge',
+ {title:'Discharge',question:'What happens when the battery is switched out?',focus:'capacitor',set:{closed:0},until:'event:t = τ',run:10,track:'discharge',cameraMode:'frame',
   text:'Flip the switch to the bypass wire. The charged capacitor is now the only source in the loop: ride along the wire with the discharge current, from the capacitor back through the resistor.',
   explain:'The capacitor drove the current back through the resistor, the other way round, and after one τ = 6.00 s its voltage had fallen 63.2 % of the way to zero. With nothing to oppose it, the plates\' charge flows back until they are equal: V_C = V₀ e^(−t/RC). The stored energy ½CV² becomes heat in the resistor.',
+  explainBack:'Why does the capacitor charge quickly at first and ever more slowly later, and what sets the time scale?',
   opens:'Explore: change C and predict τ before you run it.'}];
 
 DIO.lens.lessons=[
@@ -1729,3 +1757,5 @@ DIO.lens.lessons=[
   text:'Swap in a diverging lens, f = −3.',
   explain:'The rays spread out even more after the lens; traced back they meet 1.71 units in front of it, in a small upright virtual image (m = 0.43). A diverging lens always does this, wherever the object is: it is how glasses for short sight work.',
   opens:'Explore: try a stronger converging lens (f = 1.5) with the candle at 6.'}];
+// the didactic plans of the built-in models (js/dio/plans.js): the comprehension check the explore panel offers at the end
+for (const k in PLANS) if (DIO[k]) DIO[k].plan = PLANS[k];

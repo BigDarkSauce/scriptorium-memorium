@@ -19,6 +19,7 @@ const BITS = (1 << L_ISO) | (1 << L_PAST) | (1 << L_FRONT) | (0b111 << L_BG) | (
 const SIDE = m => m && m.side === THREE.BackSide ? 1 : m && m.side === THREE.DoubleSide ? 2 : 0;
 const NS = 'http://www.w3.org/2000/svg';
 const smoother = x => x * x * x * (x * (x * 6 - 15) + 10);
+const POCHE_ON = { value: 1 }, POCHE_OFF = { value: 0 };   // the per-clone poché switch of a clip (see swap)
 const BIG_RE = /sky|backdrop|ground|meadow|plinth|floor|hill|cloud|haze|terrain|sea|ocean|stars|lake|valley|table|desk/i;
 
 // Material.clone() does not carry onBeforeCompile or an instance customProgramCacheKey over (three.js r170): a plain
@@ -212,14 +213,19 @@ export class Cues {
     // a layer never takes the inner subject, nor another actor that sits inside it (the mercury column inside the
     // barometer case), with it: their meshes stay as they are
     const inside = (o, root) => { for (let q = o; q; q = q.parent) if (q === root) return true; return false; };
-    const keep = new Set((host ? this.meshesOf(host) : []).concat(...ds.actors.filter(x => x.obj && !layers.some(l => l.obj === x.obj) && layers.some(l => inside(x.obj, l.obj))).map(x => this.meshesOf(x))));
+    // (a section cuts through everything in its layers, nested actors too, except what it names in "keep")
+    const keep = new Set((host ? this.meshesOf(host) : []).concat(...(P.kicker === 'Section' ? (P.keep || []).filter(x => x && x.obj) : ds.actors.filter(x => x.obj && !layers.some(l => l.obj === x.obj) && layers.some(l => inside(x.obj, l.obj)))).map(x => this.meshesOf(x))));
     const L = layers.map((a, i) => {
-      const bx = new THREE.Box3().setFromObject(a.obj), c = bx.getCenter(V3()), r = Math.max(.05, bx.getSize(V3()).length() * .5);
+      const bx = new THREE.Box3().setFromObject(a.obj), c = bx.getCenter(V3()); let r = Math.max(.05, bx.getSize(V3()).length() * .5);
       const out = c.clone().sub(C0); out.y = Math.max(out.y, 0); if (out.lengthSq() < 1e-6) out.set(0, 1, 0); out.normalize();
       const meshes = this.meshesOf(a).filter(m => !keep.has(m) && ![].concat(m.material).some(x => x && (x.transmission > 0 || (x.transparent && x.opacity < .6))));   // thin-shell glass is already see-through: skip it
+      if (P.at && P.at.isVector3) { r = Math.max(r, c.distanceTo(P.at) + .05); c.copy(P.at); }   // a section through a given point: every layer is cut by the same plane
       return { a, i, c, r, out, meshes, k: 0, goal: 0, off: V3(), lastOff: V3(), ap: V3(), has: false, plane: new THREE.Plane(V3(1, 0, 0), 1e5), swapped: false };
     });
-    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1 };
+    // a section (grammar.js "section"): clip mode with a fixed world axis (the normal points away from the half cut off),
+    // a sweep time and a depth (0.5 = through the middle), labelled "Section k of n"
+    const ax = Array.isArray(P.axis) ? V3(+P.axis[0] || 0, +P.axis[1] || 0, +P.axis[2] || 0) : { x: V3(1, 0, 0), y: V3(0, -1, 0), z: V3(0, 0, -1) }[P.axis] || null;
+    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1, axisV: ax && ax.lengthSq() > 1e-9 ? ax.normalize() : null, sweep: clamp(+P.sweep || 1.2, .4, 6), depth: clamp(P.depth ?? .5, .1, 1), kicker: P.kicker || 'Layer' };
     this.peel.ord = this.peel.order === 'out-in' ? L : L.slice().reverse();
     if (this.peel.order === 'in-out') L.forEach(l => { l.k = l.goal = 1; this.swap(l, true); });   // build up: start from the bare inside
     if (!this.meshes.length || this.stale()) this.gather(); this.dirty = true;
@@ -228,13 +234,16 @@ export class Cues {
     const P = this.peel; if (on === l.swapped) return; l.swapped = on;
     if (P.mode === 'lift') return;
     if (on) {
-      if (P.mode === 'clip') { const U = this.v.ds.U; if (P.poche0 == null) { P.poche0 = U.uPoche.value; } U.uPoche.value = 1; }
       l.meshes.forEach(m => {
         if (m.userData._povMat) { this.v.povFade(m, false); this.v.pov && this.v.pov.faded && this.v.pov.faded.delete(m); }   // one material swap per mesh at a time
         m.userData._peelMat = m.material; m.userData._peelRO = m.renderOrder;
         const ms = [].concat(m.material).map(x => { const k = cloneMat(x); k.userData._op0 = x.opacity ?? 1;
           if (P.mode === 'ghost') { k.transparent = true; k.depthWrite = false; k.side = THREE.FrontSide; }
-          else { k.clippingPlanes = [l.plane]; if (!k.transparent) k.side = THREE.DoubleSide; }
+          else { k.clippingPlanes = [l.plane]; if (!k.transparent) k.side = THREE.DoubleSide;
+            // the cut is capped with poché (the inside of a closed solid seen through the cut is drawn in ink) on this clone
+            // only: its own uPoche uniform (same GLSL, so the same program); thin sheets (instanced blades, alpha-cut leaves)
+            // get none, and the rest of the scene keeps its back faces as they were
+            const ob = k.onBeforeCompile, on = !m.isInstancedMesh && !(x.alphaTest > 0); k.onBeforeCompile = function (sh, r) { if (ob) ob.call(this, sh, r); if (sh.uniforms && sh.uniforms.uPoche) sh.uniforms.uPoche = on ? POCHE_ON : POCHE_OFF; }; }
           return k; });
         m.material = Array.isArray(m.material) ? ms : ms[0];
         if (P.mode === 'ghost') {
@@ -260,7 +269,7 @@ export class Cues {
   preStep() { const P = this.peel; if (!P || P.mode !== 'lift') return; for (const l of P.L) { if (!l.has) continue; const p = l.a.obj.position; if (p.equals(l.ap)) p.sub(l.lastOff); l.has = false; } }
   layerBeat(l) {
     const P = this.peel, d = this.v.dir, a = l.a, nm = a.name.split(' · ')[0], idx = P.order === 'out-in' ? l.i : P.n - 1 - l.i;
-    d.push({ kind: 'explain', kicker: `Layer ${idx + 1} of ${P.n}`, noShot: true, title: nm, text: (a.describe ? nm + ': ' + a.describe : nm), anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
+    d.push({ kind: 'explain', kicker: `${P.kicker} ${idx + 1} of ${P.n}`, noShot: true, title: nm, text: (a.describe ? nm + ': ' + a.describe : nm), anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
     this.v.touchLabels && this.v.touchLabels([a]);
   }
   updatePeel(dt) {
@@ -280,13 +289,13 @@ export class Cues {
     if (P.phase === 'held' && P.holdT != null) { P.holdT -= dt; if (P.holdT <= 0) { P.holdT = null; this.restorePeel(); } }
     if (P.phase === 'restore') { P.t += dt; const k = Math.min(P.rorder.length, Math.floor(P.t / .45) + 1); for (let i = 0; i < k; i++) P.rorder[i].goal = 0; }
     // animate every layer toward its goal: ghost 0.8 s, lift 0.9 s, clip 1.2 s (restore at 2× speed)
-    const dur = P.mode === 'ghost' ? .8 : P.mode === 'lift' ? .9 : 1.2, cam = this.v.camera;
+    const dur = P.mode === 'ghost' ? .8 : P.mode === 'lift' ? .9 : P.sweep, cam = this.v.camera;
     for (const l of P.L) {
       if (l.k !== l.goal) { l.k = l.goal > l.k ? Math.min(l.goal, l.k + dt * P.speed / dur) : Math.max(l.goal, l.k - dt * P.speed / dur); }
       if (l.k > 0) this.swap(l, true); else if (l.swapped) this.swap(l, false);
       const e = smoother(l.k);
       if (P.mode === 'ghost' && l.swapped) l.meshes.forEach(m => { [].concat(m.material).forEach(x => { x.opacity = x.userData._op0 + (.12 - x.userData._op0) * e; }); const ln = m.userData._peelLine; if (ln) ln.material.opacity = .5 * e; });
-      else if (P.mode === 'clip' && l.swapped) { const n = this._q.copy(l.c).sub(cam.position); n.y = 0; if (n.lengthSq() < 1e-6) n.set(0, 0, -1); n.normalize(); l.plane.normal.copy(n); l.plane.constant = l.r * (1 - e) - n.dot(l.c) + 1e-4; }
+      else if (P.mode === 'clip' && l.swapped) { const n = P.axisV ? this._q.copy(P.axisV) : this._q.copy(l.c).sub(cam.position); if (!P.axisV) { n.y = 0; if (n.lengthSq() < 1e-6) n.set(0, 0, -1); n.normalize(); } l.plane.normal.copy(n); l.plane.constant = l.r * (1 - 2 * P.depth * e) - n.dot(l.c) + 1e-4; }
       else if (P.mode === 'lift' && l.k > 0) { const p = l.a.obj.position; l.off.copy(l.out).multiplyScalar(1.2 * l.r * e); p.add(l.off); l.lastOff.copy(l.off); l.ap.copy(p); l.has = true; }
     }
     if (P.phase === 'restore' && P.L.every(l => l.k === 0)) { P.L.forEach(l => { this.unlift(l); this.swap(l, false); }); this.peel = null; this.dirty = true; }
