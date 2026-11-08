@@ -555,7 +555,7 @@ export class Director {
     if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts) || !!(v.ops && v.ops.muteVectors());   // (runs after update()'s own mute: an exploded view or a lineup keeps the arrows off with Guides on too)
     // links: subject → each named actor, one bend at most, trimmed off both bodies
     (b.links || []).forEach(L2 => {
-      const q = p && L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; }   // (no anchor, no subject to link from) const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }
+      const q = p && L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; } const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }   // (no anchor: no subject to link from)
       const dx = t.x - sx, dy = t.y - sy, d = Math.hypot(dx, dy); if (d < 40) { setLine(L2.path, null); return; }
       const r0 = 12, r1 = (L2.rimT == null || b.t - L2.rimT > .5) ? (L2.rimT = b.t, L2.rim = rimOf(L2.a.obj) + 6) : L2.rim;
       let pts;
