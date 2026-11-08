@@ -245,7 +245,7 @@ async function runItem(id) {
       window._pKeys = null; window._pSeen = null; await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(3); }, [kind, key]);
     const nLessons = Math.min(QUICK ? 1 : 99, await page.evaluate(() => (W.mode.lessons ? W.mode.lessons() : []).length)); notes.beats = 0;
     notes.lessons = nLessons; notes.ms.open = Date.now() - tOpen; let ts = Date.now(); keep(await sample(), 'idle'); notes.ms.sample = Date.now() - ts; notes.ms.ticks = 0; notes.ms.samples = 0;
-    let shots = 0; const tItem = Date.now(), ITEM_MS = QUICK ? 150000 : 240000;
+    let shots = 0; const tItem = Date.now(), ITEM_MS = QUICK ? 120000 : 150000;
     for (const guides of [true, false]) for (let li = 0; li < Math.max(1, nLessons); li++) {
       if (!nLessons || notes.cut) break;
       await page.evaluate(([g, li]) => { const v = W.mode; v.setPref('guides', g); if (v.dir) v.dir.guides = g; v.runLesson(li); }, [guides, li]);
