@@ -97,7 +97,7 @@ export class Director {
     this.v.highlightPins && this.v.highlightPins([b.host, ...(b.names || [])].filter(Boolean));
   }
   endBeat(all) {
-    const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
+    const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (this.v.readPanel) this.v.readPanel.classList.remove('under-sheet'); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
     this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; this.tsV = 0; this.targetScale = 1; return; } this.nextBeat();
   }
   // ---------- shots ----------
@@ -675,7 +675,7 @@ export class Director {
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
         if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
       let [x, y] = place(C[b.side]);
-      if (phone) { const chp = e.offsetHeight || ch, rr = b.readR, tb = Math.min(b.timeR ? b.timeR.y : h - 128, rr && rr.h > 4 ? rr.y : 1e9);   /* above the time bar and the readouts */ x = 10; y = Math.max(84, tb - chp - 8); this._sheetH = chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
+      if (phone) { const chp = e.offsetHeight || ch, tb = b.timeR ? b.timeR.y : h - 128; if (v.readPanel && !v.readPanel.classList.contains('under-sheet')) v.readPanel.classList.add('under-sheet');   /* the readouts step aside while the sheet is up (no room for both on a phone) */ x = 10; y = Math.max(84, tb - chp - 8); this._sheetH = chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
       else {
         // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
         for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {

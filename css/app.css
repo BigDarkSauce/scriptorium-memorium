@@ -527,7 +527,8 @@ i { font-style: italic; }
 @media (max-width: 560px) {
   .dio-time { flex-wrap: wrap; row-gap: 4px; border-radius: 22px; right: calc(var(--gut) + env(safe-area-inset-right,0px)); justify-content: center; }
   .dio-reads { bottom: calc(var(--gut) + 104px + env(safe-area-inset-bottom,0px)); max-height: calc(50vh - 132px); }
-  .dir-scale { bottom: calc(var(--gut) + 108px + env(safe-area-inset-bottom,0px)); }   /* above the two-row time bar */   /* stays in the lower half: the open panel owns the upper half (polish gate, phone) */
+  .dir-scale { bottom: calc(var(--gut) + 108px + env(safe-area-inset-bottom,0px)); }   /* above the two-row time bar */
+  .dio-reads.under-sheet { visibility: hidden; }   /* a callout sheet is up (director.js): it takes the readouts' place */   /* stays in the lower half: the open panel owns the upper half (polish gate, phone) */
   .pov-bar { bottom: calc(var(--gut) + 108px + env(safe-area-inset-bottom,0px)); }
   .dio-time .sep { display: none; }
   .nav-box { max-width: calc(100vw - 2 * var(--gut)); }
