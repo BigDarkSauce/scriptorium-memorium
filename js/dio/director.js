@@ -311,7 +311,7 @@ export class Director {
     }
     if (Z.phase === 'done') {
       // after arrival the learner may orbit; until they grab the camera it keeps following (and swinging clear of) the subject
-      if (Z.follow && v.running != null && this.hold <= 0) { const dx = Z.c.x - c0x, dy = Z.c.y - c0y, dz = Z.c.z - c0z; v.controls.target.copy(Z.c); if (Z.sw) { cam.position.copy(Z.c).addScaledVector(Z.axis, cam.position.distanceTo(Z.c) || Z.d); cam.lookAt(Z.c); } else { cam.position.x += dx; cam.position.y += dy; cam.position.z += dz; } }
+      if (Z.follow && (v.running != null || (this.beat && this.beat.kind === 'explain')) && this.hold <= 0) { const dx = Z.c.x - c0x, dy = Z.c.y - c0y, dz = Z.c.z - c0z; v.controls.target.copy(Z.c); if (Z.sw) { cam.position.copy(Z.c).addScaledVector(Z.axis, cam.position.distanceTo(Z.c) || Z.d); cam.lookAt(Z.c); } else { cam.position.x += dx; cam.position.y += dy; cam.position.z += dz; } }
     } else if (Z.phase === 'hold') this.zoomPose(true);
     if (Z.phase === 'ring') { if (Z.t >= .5) { Z.phase = 'centre'; Z.t = 0; } }
     else if (Z.phase === 'centre') { const k = Math.min(1, Z.t / .6); this._m4.lookAt(cam.position, Z.c, UP); Z.qT.setFromRotationMatrix(this._m4); cam.quaternion.slerpQuaternions(Z.q0, Z.qT, k * k * (3 - 2 * k)); if (k >= 1) { Z.phase = 'travel'; Z.t = 0; } }
