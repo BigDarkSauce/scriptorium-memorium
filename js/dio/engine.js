@@ -274,7 +274,7 @@ export class DioramaView {
     const others = this.ds.actors, i = others.indexOf(a);
     this.povBar.innerHTML = ''; this.povBar.hidden = false;
     this.povBar.append(el('button', { class: 'ibtn', 'aria-label': 'Previous object', text: '‹', onclick: () => this.setPOV(others[(i - 1 + others.length) % others.length]) }),
-      el('span', { html: `Seeing as <b>${esc(a.name.split(' · ')[0])}</b> · drag to look · Esc to leave` }),
+      el('span', { html: `Seeing as <b>${esc(a.name.split(' · ')[0])}</b> · drag to look · Esc to leave`, title: `Seeing as ${a.name.split(' · ')[0]} · drag to look · Esc to leave` }),   // (cut with an ellipsis on a phone: the whole line is its tooltip)
       el('button', { class: 'ibtn', 'aria-label': 'Next object', text: '›', onclick: () => this.setPOV(others[(i + 1) % others.length]) }),
       el('button', { class: 'btn small', text: 'Leave', onclick: () => this.exitPOV(false, true) }));
   }

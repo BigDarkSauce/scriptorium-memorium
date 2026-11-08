@@ -654,7 +654,7 @@ export class Director {
         const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox - 8, y: r.top - b.oy - 8, w: r.width + 16, h: r.height + 16 }; };   // inflated by the 8 px HUD margin: closer than 8 px counts as an overlap
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
         b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box].map(R).filter(Boolean);   /* (the level indicator of grammar.js)*/
-        const ch0 = R(this.chipEl); b.chipR = ch0; b.titleR = R(v.titleEl); b.panR = v.panel && !v.panel.hidden ? R(v.panel) : null;
+        const ch0 = R(this.chipEl); b.chipR = ch0; b.titleR = R(v.titleEl); b.timeR = R(v.ui && v.ui.querySelector('.dio-time')); b.panR = v.panel && !v.panel.hidden ? R(v.panel) : null;
       }
       const cw = b.cw, ch = b.ch;
       // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
@@ -675,7 +675,7 @@ export class Director {
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
         if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
       let [x, y] = place(C[b.side]);
-      if (phone) { x = 10; y = h - ch - 128; this._sheetH = ch; }   // phones: a bottom sheet above the time bar
+      if (phone) { const chp = e.offsetHeight || ch, tb = b.timeR ? b.timeR.y : h - 128; x = 10; y = Math.max(84, tb - chp - 8); this._sheetH = chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
       else {
         // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
         for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {
