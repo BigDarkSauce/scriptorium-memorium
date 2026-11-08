@@ -120,7 +120,9 @@ window.POLISH = function (scope, ctx) {
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const A = boxes[i], B = boxes[j]; if (A.e.contains(B.e) || B.e.contains(A.e)) continue;
     const x = Math.min(A.r[2], B.r[2]) - Math.max(A.r[0], B.r[0]), y = Math.min(A.r[3], B.r[3]) - Math.max(A.r[1], B.r[1]);
-    if (x > 2 && y > 2 && !allowed(A, B)) out.push({ check: 'a', what: 'overlap', a: A.n, b: B.n, ra: A.r, rb: B.r, by: [x, y] });
+    if (x > 2 && y > 2 && !allowed(A, B)) { const f = { check: 'a', what: 'overlap', a: A.n, b: B.n, ra: A.r, rb: B.r, by: [x, y] }; const bt = W.mode && W.mode.dir && W.mode.dir.beat;
+      if (bt && /callout/.test(A.n + B.n) && bt.box) f.callout = { box: bt.box.map(Math.round), ch: bt.ch, side: bt.side, hard: (bt.hard || []).map(H => [H.x, H.y, H.w, H.h].map(Math.round)), chip: bt.chipR && [bt.chipR.x, bt.chipR.y, bt.chipR.w, bt.chipR.h].map(Math.round), kind: bt.kind };   // the director's own view of the callout, for diagnosis
+      out.push(f); }
   }
   // (b) guide labels and their own arrows
   const dir = W.mode && W.mode.dir, beat = dir && dir.beat;
