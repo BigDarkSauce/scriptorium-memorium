@@ -42,7 +42,7 @@ const CSS = `
 .ops-div{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(rgba(255,217,138,0),rgba(255,217,138,.8) 12%,rgba(255,217,138,.8) 88%,rgba(255,217,138,0));box-shadow:0 0 6px rgba(0,0,0,.6)}
 .ops-cap{position:absolute;left:0;top:0;padding:4px 12px;border-radius:14px;max-width:calc(50vw - 24px);white-space:normal;text-align:center;line-height:1.45;background:rgba(18,14,10,.84);border:1px solid rgba(255,217,138,.5);color:var(--ink,#f3ead8);font:12px var(--f-mono,monospace)}
 .ops-cap b{color:var(--brass,#d8b46a);font-weight:500}
-.ops-level{position:absolute;left:0;top:0;display:flex;align-items:center;gap:2px;padding:3px 10px;border-radius:999px;background:rgba(18,14,10,.78);border:1px solid rgba(255,217,138,.35);color:var(--ink-2,#cbbfa6);font:11px var(--f-mono,monospace);white-space:nowrap;transition:opacity .4s}
+.ops-level{position:absolute;left:0;top:0;max-width:calc(100vw - 76px);display:flex;align-items:center;gap:2px;padding:3px 10px;border-radius:999px;background:rgba(18,14,10,.78);border:1px solid rgba(255,217,138,.35);color:var(--ink-2,#cbbfa6);font:11px var(--f-mono,monospace);white-space:nowrap;transition:opacity .4s}
 .ops-level i{font-style:normal;padding:0 3px}.ops-level i.now{color:#1d140b;background:var(--brass,#d8b46a);border-radius:999px;padding:0 7px}.ops-level s{text-decoration:none;opacity:.55}
 .ops-level em{font-style:normal;margin-left:6px;color:var(--ink,#f3ead8);opacity:.85}`;
 function injectCSS() { if (document.getElementById('ops-css')) return; const s = document.createElement('style'); s.id = 'ops-css'; s.textContent = CSS; document.head.append(s); }
@@ -461,7 +461,13 @@ export class Ops {
     if (Lv.box._h !== html) { Lv.box._h = html; Lv.box.innerHTML = html; Lv.box._w = 0; }
     if (!Lv.box._w) { Lv.box._w = Lv.box.offsetWidth || 200; Lv.box._hh = Lv.box.offsetHeight || 22; }
     const w = innerWidth, h = innerHeight, fr = v.dir.freeFrame(w); let x = Math.max(fr[0] + 18, 12), y = h - 96 - 36 - Lv.box._hh;
-    if (w < 760) { x = 10; y = 64; }
+    if (w < 760) {
+      // a phone: a reserved slot right under the title (one or two lines), left-aligned; the director keeps its free band and
+      // the callout sheet below this slot (freeBand, the sheet's top), so nothing is stepped over it and it never hides
+      const t = v.titleEl && !v.titleEl.hidden ? v.titleEl.getBoundingClientRect() : null; x = 10; y = Math.round(Math.max(64, t && t.height ? t.bottom + 6 : 64));
+      Lv.slotB = y + Lv.box._hh; const tf = `translate(${x}px,${y}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; } return;
+    }
+    Lv.slotB = 0;
     const bel = v.dir.beat && v.dir.beat.el, HR = this.hud().filter(r => !(bel && bel.isConnected && (() => { const q = bel.getBoundingClientRect(); return Math.abs(q.left - 8 - r[0]) < 1 && Math.abs(q.top - 8 - r[1]) < 1; })()));   /* the callout steps round the indicator (director), not the other way */
     for (let k = 0; k < 10 && this.hits(x, y, Lv.box._w, Lv.box._hh, HR); k++) y -= 28;
     const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (Lv.box._tf !== tf) { Lv.box._tf = tf; Lv.box.style.transform = tf; }
