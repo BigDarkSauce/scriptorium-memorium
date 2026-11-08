@@ -12,6 +12,7 @@
 //      --budget=540   stop cleanly after this many seconds (exit code 3: run again to continue)
 //      --reset        forget earlier results and start over (a --quick run always starts over unless --resume)
 //      --resume       (with --quick) keep earlier quick results
+//      --redo=regex   walk the matching finished items again;  --redo-failed: walk again every item with findings
 //      --no-report    do not write docs/qa/polish-report.md
 //   Environment: POLISH_OUT=dir (state.json, results.json, failure screenshots; default <tmp>/scriptorium-polish),
 //                POLISH_REPORT=path (default docs/qa/polish-report.md; the quick run writes no report).
@@ -63,6 +64,9 @@ async function loadPlaywright() {
 // state: written atomically after every item
 let state = { version: VERSION, url: URL0, items: null, done: {} };
 if (existsSync(STATE) && !opt('reset') && !(QUICK && !opt('resume'))) { try { const s = JSON.parse(readFileSync(STATE, 'utf8')); if (s.version === VERSION) state = s; } catch (e) { } }
+// --redo=regex: walk those finished items again; --redo-failed: walk again every item that had findings
+if (opt('redo') && opt('redo') !== true) { const re = new RegExp(opt('redo')); Object.keys(state.done).forEach(k => { if (re.test(k)) delete state.done[k]; }); }
+if (opt('redo-failed')) Object.keys(state.done).forEach(k => { if (state.done[k].issues.length) delete state.done[k]; });
 const saveState = () => { const tmp = STATE + '.tmp'; writeFileSync(tmp, JSON.stringify(state, null, 1)); renameSync(tmp, STATE); };
 
 // a small valid PDF (three pages, numbered headings) for the Add-PDF walk, written on the fly
@@ -85,7 +89,7 @@ window.S = {
   draw() { W.gfx.render(1 / 30, W.t); },
   async settle() { for (let k = 0; k < 400 && (W.gfx.grade.uniforms.uFade.value > 0.01 || W._swBusy); k++) await sleep(50); },
   // colour of the frame just drawn: mean HSV saturation, share of near-white pixels
-  colour() { const c = W.gfx.canvas, s = document.createElement('canvas'); s.width = 160; s.height = 90; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 160, 90); const d = x.getImageData(0, 0, 160, 90).data; let n = 0, sat = 0, white = 0, L = 0;
+  colour() { W.gfx.render(1 / 30, W.t); const c = W.gfx.canvas,   /* drawn and read in the same task: the drawing buffer is not preserved */ s = document.createElement('canvas'); s.width = 160; s.height = 90; const x = s.getContext('2d'); x.drawImage(c, 0, 0, 160, 90); const d = x.getImageData(0, 0, 160, 90).data; let n = 0, sat = 0, white = 0, L = 0;
     for (let i = 0; i < d.length; i += 4) { const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b); n++; sat += mx ? (mx - mn) / mx : 0; L += (mx + mn) / 2; if (r > .975 && g > .975 && b > .975) white++; }
     return { sat: +(sat / n).toFixed(3), white: +(white / n).toFixed(4), light: +(L / n).toFixed(3) }; }
 };
@@ -232,10 +236,11 @@ async function runItem(id) {
     const [kind, key] = arg.split(':');
     await page.evaluate(async ([kind, key]) => { let spec; if (kind === 'flag') { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); spec = FLAGSHIPS[+key]; } else spec = { type: key };
       await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(3); }, [kind, key]);
-    const nLessons = await page.evaluate(() => (W.mode.lessons ? W.mode.lessons() : []).length);
+    const nLessons = Math.min(QUICK ? 1 : 99, await page.evaluate(() => (W.mode.lessons ? W.mode.lessons() : []).length)); notes.beats = 0;
     notes.lessons = nLessons; keep(await sample(), 'idle');
+    let shots = 0; const tItem = Date.now(), ITEM_MS = QUICK ? 150000 : 240000;
     for (const guides of [true, false]) for (let li = 0; li < Math.max(1, nLessons); li++) {
-      if (!nLessons) break;
+      if (!nLessons || notes.cut) break;
       await page.evaluate(([g, li]) => { const v = W.mode; v.setPref('guides', g); if (v.dir) v.dir.guides = g; v.runLesson(li); }, [guides, li]);
       // run the lesson; sample once per beat (after 1.2 s) and once per chain step
       for (let round = 0; round < 40; round++) {
@@ -244,7 +249,11 @@ async function runItem(id) {
             if (b && b.t > 1.2 && key && !seen.has(key)) { seen.add(key); return { beat: key }; } if (ckey && c.ft > .6 && !seen.has(ckey)) { seen.add(ckey); return { beat: ckey }; } if (v.running == null && k > 30) return { end: true }; }
           return { end: true, timeout: true }; });
         if (st.end) { notes['L' + li + (guides ? 'g' : '')] = st.timeout ? 'timeout' : 'done'; break; }
-        const tag = `lesson ${li + 1}, guides ${guides ? 'on' : 'off'}, ${st.beat}`; const r = await sample(); if (r.length) { const shot = issues.length < 40 && !issues.some(x => x.shot && x.at === tag) ? await evidence(page, id, issues.length) : null; r.forEach(x => { if (shot) x.shot = shot; }); keep(r, tag); }
+        const tag = `lesson ${li + 1}, guides ${guides ? 'on' : 'off'}, ${st.beat}`; const r = await sample(); notes.beats++;
+        // a screenshot only for a finding not seen before in this item, at most 3 per item (a software-rendered frame is slow)
+        const fresh = r.filter(x => !issues.some(y => y.check === x.check && y.what === x.what && (y.a || y.el || y.label || y.where) === (x.a || x.el || x.label || x.where)));
+        if (fresh.length) { const shot = shots < 3 ? (shots++, await evidence(page, id, issues.length)) : null; fresh.forEach(x => { if (shot) x.shot = shot; }); keep(fresh, tag); }
+        if (Date.now() - tItem > ITEM_MS) { notes.cut = 'item time cap reached'; break; }
       }
       await page.evaluate(() => { window._pSeen = null; const v = W.mode; if (v.running != null && v.stopLesson) v.stopLesson(); });
     }

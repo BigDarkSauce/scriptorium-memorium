@@ -348,7 +348,7 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .gfx-opt.on { background: radial-gradient(120% 100% at 50% 0%, rgba(255,217,138,.4), rgba(255,217,138,.14)); color: var(--brass-hi); }
 .gfx-opt.on::before, .gfx-opt.on + .gfx-opt::before { opacity: 0; }
 .gfx-note { margin: 9px 2px 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
-body:has(.reader:not([hidden])) .gfx-btn, body:has(.reader:not([hidden])) .gfx-card { display: none; }
+body:has(.reader:not([hidden])) .gfx-btn, body:has(.reader:not([hidden])) .gfx-card, body:has(.reader:not([hidden])) .nav-box { display: none; }   /* the walk / speed box would sit under the sheet */
 /* documentary framing during a step: compact readouts */
 .dio-reads.compact { width: 240px; }
 .dio-reads.compact .reads { grid-template-columns: 1fr; }

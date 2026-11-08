@@ -117,6 +117,7 @@ export class Director {
     // the beat's camera mode (grammar.js): global, object and mechanism shots hold while the process plays (an event is read in
     // its callout, the frame stays); an operation that owns the frame (a comparison, an exploded view, a lineup) holds it too
     if (b.kind === 'event' && !b.poseOnly && ((this.mode && /^(global|object|mechanism)$/.test(this.mode)) || (v.ops && v.ops.holdShot()))) return;
+    if (!b.poseOnly && v.ops && v.ops.ownsFrame()) return;   // a comparison or a lineup has its own fixed framing for the whole step
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');

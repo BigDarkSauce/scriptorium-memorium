@@ -110,6 +110,12 @@ export class Ops {
     P.position.copy(c); P.scale.set(Math.max(s.x, 1e-3), Math.max(s.y, 1e-3), Math.max(s.z, 1e-3)); P.updateMatrixWorld(true);
     return this.v.dir.frame({ poseOnly: true, kind: 'explain', shot, focus: P, anchor: () => c, names: [], host: null });
   }
+  // the same pose turned round its target until nothing opaque stands between the lens and the part (the director's ray test)
+  clearPose(pose, a) {
+    if (!pose) return pose; const d = this.v.dir, c = pose.target, ax = pose.pos.clone().sub(c), dist = ax.length(); if (dist < 1e-6) return pose; ax.divideScalar(dist);
+    const bx = this.boxOf(a.obj), rs = Math.max(.02, bx.isEmpty() ? .2 : bx.getSize(V3()).length() * .3);
+    try { const occ = d.occluders(a), nx = d.clearAxis(bx.isEmpty() ? c : bx.getCenter(V3()), ax, dist, dist, rs, occ, 105); return { target: c, pos: c.clone().addScaledVector(nx, dist), fov: pose.fov }; } catch (e) { return pose; }
+  }
   // an eased camera glide (a moving shot: smoothstep position, slerped heading, so start and stop are gentle and the turn
   // rate stays bounded); Calm turns it into a cut through a dip
   glide(pose, dur) {
@@ -154,11 +160,12 @@ export class Ops {
     if (this.cmp) this.frameCompare();
   }
   // the simulation is frozen while parts are apart (exploding contradicts the dynamics) and during a lineup
-  simRate() { const E = this.ex; return (E && E.phase !== 'done' && E.phase !== 'wait') || (this.sc && this.sc.phase !== 'wait') ? 0 : 1; }
+  simRate() { const E = this.ex; return (E && E.phase !== 'done' && E.phase !== 'wait') || (this.sc && this.sc.phase !== 'wait' && !this.sc.done) ? 0 : 1; }
   busy() { return !!((this.ex && this.ex.phase !== 'done') || (this.as && !this.as.done) || (this.ins && !this.ins.done) || (this.pr && !this.pr.done) || (this.sc && !this.sc.done)); }
   holdShot() { return !!(this.cmp || this.sc || (this.ex && this.ex.phase !== 'done') || (this.ins && !this.ins.done)); }   // the director does not cut away for an event while one of these owns the frame
+  ownsFrame() { return !!((this.cmp && this.cmp.pose) || (this.sc && this.sc.phase !== 'wait')); }
   noAnchor() { return !!(this.cmp && this.cmp.mode === 'side'); }   // side by side: a callout leader into one half would point at the wrong state
-  hidePins() { return !!(this.cmp || this.sc); }
+  hidePins() { return !!(this.cmp || this.sc || (this.ex && /^(out|hold|in)$/.test(this.ex.phase))); }   // the parts' own callouts replace the pins while they are apart
   endStep() { this.endExplode(); this.endAssemble(); this.endInspect(); this.endProgression(); this.endScale(); this.endCompare(); this.endLevels(); this.legend(null); }
   reset() { this.endStep(); this.clearOff(); }
   update(dt) {
@@ -266,7 +273,7 @@ export class Ops {
       S.i++; S.t = 0;
       if (S.i >= S.parts.length) { S.done = true; const k = d.wideKey(); this.glide({ target: k.target, pos: k.pos, fov: d.baseFov() }); this.legend(null); return; }   // back to the whole: an internal part is never left without its place in it
       const p = S.parts[S.i], txt = p.note || (short(p.a) + (p.a.describe ? ': ' + p.a.describe : ''));
-      this.glide(this.poseFor(this.boxOf(p.a.obj), 'close')); S.wait = Math.max(+S.I.hold || 2.2, d.readTime(txt)) + 1.2;
+      this.glide(this.clearPose(this.poseFor(this.boxOf(p.a.obj), 'close'), p.a)); S.wait = Math.max(+S.I.hold || 2.2, d.readTime(txt)) + 1.2;
       d.push({ kind: 'explain', kicker: `Part ${S.i + 1} of ${S.parts.length}`, noShot: true, opsBeat: true, title: short(p.a), text: txt, anchor: () => p.a.getPos(), focus: p.a.obj, host: p.a, names: [] }); this.v.touchLabels && this.v.touchLabels([p.a]);
     }
     if (!S.done) this.legend(`<b>Component by component</b>` + this.keyHTML(S.names, S.i, S.i - 1));
@@ -371,7 +378,7 @@ export class Ops {
   // one framing for both: the whole model centred, fitted to a half-width frame (side) or to the full frame (split)
   frameCompare() {
     const K = this.cmp, v = this.v, ds = v.ds, cam = v.camera, R0 = ds.orb ? ds.orb.r : 10, bx = new THREE.Box3(), all = new THREE.Box3();
-    v.scene.updateMatrixWorld(true); ds.actors.forEach(a => { if (!a.obj) return; this.boxOf(a.obj, bx); if (!bx.isEmpty() && bx.getSize(V3()).length() < R0 * 1.6) all.union(bx); });
+    v.scene.updateMatrixWorld(true); ds.actors.concat(K.B.actors || []).forEach(a => { if (!a.obj) return; this.boxOf(a.obj, bx); if (!bx.isEmpty() && bx.getSize(V3()).length() < R0 * 1.6) all.union(bx); });
     if (all.isEmpty()) all.setFromCenterAndSize(ds.center.clone(), V3(4, 4, 4));
     const c = all.getCenter(V3()), r = Math.max(.5, all.getSize(V3()).length() * .5), fov = v.dir.baseFov(), asp = (cam.aspect || 1.6) / (K.mode === 'side' ? 2 : 1);
     const off = cam.position.clone().sub(v.controls.target); off.y = 0; if (off.lengthSq() < 1e-6) off.set(0, 0, 1); off.normalize(); const el2 = THREE.MathUtils.degToRad(12), dir = off.multiplyScalar(Math.cos(el2)); dir.y = Math.sin(el2);
