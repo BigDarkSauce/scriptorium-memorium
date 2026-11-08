@@ -457,7 +457,7 @@ export class DioramaView {
     // one callout per kind of event: per step while a step runs, once per visit while exploring freely; after the awaited event, the ticker only
     const evKey = Director.evKey(ev.text), keys = this.running != null ? (this._stepKeys = this._stepKeys || new Set()) : (this._freeKeys = this._freeKeys || new Set());
     const repeat = keys.has(evKey); keys.add(evKey);
-    if (this.dir.cinematic && this.stage === 'explore' && !offTopic && !repeat && !this.awaitIdle) {
+    if (this.dir.cinematic && this.stage === 'explore' && !offTopic && !repeat && !this.awaitIdle && !this.ops.noAnchor()) {   // (side by side, an event of one state would sit over the other: the log and readouts carry it)
       // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
