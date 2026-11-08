@@ -117,7 +117,7 @@ export function promptBox(text, value = '', okLabel = 'Save') {
 // Collects the geometries, materials and textures an object tree uses.
 export function gpuSet(roots, set = new Set()) {
   const addMat = m => { if (!m || set.has(m)) return; set.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) set.add(v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) set.add(v); } };
-  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.isLight && o.shadow) set.add(o);   /* a shadow-casting light owns its shadow-map render target */ if (o.isReflector) set.add(o);   /* Reflector.dispose() frees its render target (framebuffer, MSAA) and material */ if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
+  [].concat(roots).forEach(r => { if (!r || !r.traverse) return; r.traverse(o => { if (o.isLight && o.shadow) set.add(o);   /* a shadow-casting light owns its shadow-map render target */ if (o.isReflector) set.add(o);   /* Reflector.dispose() frees its render target (framebuffer, MSAA) and material */ if (o.userData && o.userData.gpu) o.userData.gpu.forEach(x => { if (x) set.add(x); });   /* textures an object holds outside its materials (cabin.js vitrine backdrop) */ if (o.geometry) set.add(o.geometry); if (o.material) [].concat(o.material).forEach(addMat); });
     if (r.isScene) { if (r.userData.__trt) r.userData.__trt.forEach(t => set.add(t)); if (r.background && r.background.isTexture) set.add(r.background); if (r.environment && r.environment.isTexture) set.add(r.environment); } });
   return set;
 }

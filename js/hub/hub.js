@@ -743,7 +743,7 @@ export class Hub {
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
     this.gfx.canvas.removeEventListener('contextmenu', this.onCtx, true); removeEventListener('pointerdown', this.onDocDown, true); clearTimeout(this._lpT);
-    this.closeMenu(); this.closeMove(); this.dropGhost();
+    this.closeMenu(); this.closeMove(); this.dropGhost(); if (this.ghost) { disposeTree(this.ghost); this.ghost = null; }   // off the scene graph after dropGhost: the scene's disposal never sees it
     this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = ''; this.gfx.renderer.shadowMap.autoUpdate = true;
     this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
   }

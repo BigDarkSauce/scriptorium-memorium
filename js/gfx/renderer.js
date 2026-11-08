@@ -11,15 +11,17 @@ import { envScene } from './proc.js';
 import { AAA, initAAA, detectQuality, setQuality as setAAAQuality, prebake, rebakeAll, AtmospherePass, aaaFrame, QUALITY } from './aaa.js';
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uRes: { value: new THREE.Vector2(1280, 800) } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uContrast,uSat,uLift,uTilt,uTiltR,uPunch;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
   if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*uTiltR*uRes.y/800.;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
   if(uPunch>0.){vec3 pc=pow(max(c.rgb,0.),vec3(1.+.3*uPunch))*(1.+.1*uPunch);float pl=dot(pc,vec3(.2126,.7152,.0722));c.rgb=max(pl+(pc-pl)*(1.+.25*uPunch),0.);}
   float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,uSat);
   c.rgb=clamp(c.rgb+uLift,0.,1.);c.rgb=mix(c.rgb,c.rgb*c.rgb*(3.-2.*c.rgb),clamp((uContrast-1.)*2.5,0.,1.));
+  if(uWB!=vec3(1.)||uWBMid>0.||uWBHi>0.){c.rgb=pow(pow(c.rgb,vec3(2.2))*uWB,vec3(1./2.2));float wl=dot(c.rgb,vec3(.2126,.7152,.0722));
+    c.rgb*=1.+uWBHi*pow(clamp((wl-.45)/.55,0.,1.),2.)*vec3(-.04,0.,.08);c.b+=uWBMid*clamp(wl*(1.-wl)*4.,0.,1.);c.rgb=clamp(c.rgb,0.,1.);}
   float v=1.-uVignette*smoothstep(.25,.85,length(d*vec2(1.15,1.)));
   c.rgb*=v;c.rgb+=vec3(uWarm,uWarm*.4,-uWarm*.6)*(1.-length(d));
   float g=(h(vUv*vec2(1920.,1080.)+fract(uTime*7.))-.5)*uGrain;c.rgb+=g;
@@ -88,7 +90,9 @@ export class Gfx {
   // Per-scene look: scenes may set scene.userData.look = {contrast, sat, vignette, grain, warm, exposure}; others get the house look.
   applyLook(L = {}) {
     const u = this.grade.uniforms; u.uContrast.value = L.contrast ?? 1; u.uSat.value = L.sat ?? 1; u.uLift.value = L.lift ?? 0;
-    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;   // tiltRadius: miniature look, blur radius (px at 800 px height) at the frame's top and bottom
+    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
+    // white balance (display-referred, von Kries in linear light): wb = [r, g, b] gains or {gain, mid (blue lift in the midtones), hi (cooler highlights)}
+    const wb = Array.isArray(L.wb) ? { gain: L.wb } : (L.wb || {}), wg = wb.gain || [1, 1, 1]; u.uWB.value.set(wg[0] ?? 1, wg[1] ?? 1, wg[2] ?? 1); u.uWBMid.value = wb.mid ?? 0; u.uWBHi.value = wb.hi ?? 0;   // tiltRadius: miniature look, blur radius (px at 800 px height) at the frame's top and bottom
     if (L.exposure != null) this.renderer.toneMappingExposure = L.exposure;
     if (L.bloom != null) this.bloom.strength = L.bloom;
     this.bloom.threshold = L.bloomThreshold ?? .86; this.bloom.radius = L.bloomRadius ?? .55;
@@ -98,7 +102,9 @@ export class Gfx {
   // low in these scenes (its grey reflections in lacquer, scagliola and the polished floor were the milky veil; gilt
   // compensates with its own envMapIntensity); bloom only on real highlights (flames, windows); a little contrast.
   static get HOUSE() {
-    return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping };
+    // wb: the room probes (candles, late-morning sun, gilt and scagliola bounce) cast the halls orange (mean blue 67 → 43);
+    // these linear gains bring plaster and marble back to a warm white (hall: plaster B/R .31 → ~.6, floor marble .50 → ~.95)
+    return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping, wb: { gain: [.84, 1.45, 3.4], mid: 0, hi: 0 } };
   }
   setView(scene, camera) {
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);

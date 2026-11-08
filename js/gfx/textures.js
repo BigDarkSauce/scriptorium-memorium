@@ -236,17 +236,47 @@ function marbleCanvas(name, size, seed = 1, mode = 'color') {
   const blobs = []; for (let i = 0; i < 90; i++) blobs.push([r() * size, r() * size, (30 + r() * 150) * s, P.cloud[i % P.cloud.length], .12 + r() * .3]);
   if (!mask) blobs.forEach(([x, y, rad, col, a]) => wrapDraw(g, size, size, () => { const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, col); gr.addColorStop(1, col + '00'); g.globalAlpha = a; g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); }));
   g.globalAlpha = 1;
-  const veins = [], nV = P.faint ? 7 : 12;
+  // Veins as in real marble: a few main veins that swell and pinch along their run (width from a smooth random profile),
+  // fork into tapering branches, sit in a wide soft halo, over a cloudy secondary veining; each vein's colour drifts
+  // between the vein tones and the ground along its length. All geometry is drawn from r() first, so the 'mask' pass
+  // replays exactly the same shapes (R: vein core, G: halo and cloudy veining).
+  const hx = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }, B0 = hx(P.base);
+  const mixc = (A, Bc, t) => `rgb(${Math.round(A[0] + (Bc[0] - A[0]) * t)},${Math.round(A[1] + (Bc[1] - A[1]) * t)},${Math.round(A[2] + (Bc[2] - A[2]) * t)})`;
+  const walk = (x, y, a, steps, step, turn) => { const pts = [[x, y]], f = [.03 + r() * .04, .1 + r() * .07, .3 + r() * .25], ph = [r() * 6.3, r() * 6.3, r() * 6.3]; let d = 0; for (let k = 0; k < steps; k++) { d = d * .6 + (r() - .5) * turn * .5; const h = a + turn * (1.4 * Math.sin(k * f[0] + ph[0]) + .8 * Math.sin(k * f[1] + ph[1]) + .35 * Math.sin(k * f[2] + ph[2])) + d; x += Math.cos(h) * step; y += Math.sin(h) * step; pts.push([x, y]); } return pts; };   // the heading meanders about its main direction (smooth, bounded): long flowing runs, no loops or hair
+  const profile = (n, w0, taper) => { const f1 = r() * 6, f2 = r() * 6, p1 = 2 + r() * 3, p2 = 5 + r() * 7; return Array.from({ length: n }, (_, k) => { const t = k / Math.max(1, n - 1), sw = .6 + .4 * Math.sin(t * p1 + f1) + .3 * Math.sin(t * p2 + f2); return Math.max(.15, w0 * sw * (taper ? 1 - t * .85 : Math.min(1, t * 6, (1 - t) * 6 + .25))); }); };
+  const veins = [], nV = P.faint ? 4 : 6;
   for (let i = 0; i < nV; i++) {
-    let x = r() * size, y = r() * size, a = -.6 + r() * .5 + (i % 3 === 0 ? 1.4 : 0); const pts = [[x, y]];
-    for (let k = 0; k < 70 + r() * 90; k++) { a += (r() - .5) * .55; x += Math.cos(a) * 7 * s; y += Math.sin(a) * 7 * s; pts.push([x, y]); }
-    veins.push({ pts, lw: (.5 + r() * (i < 3 ? 2.6 : 1.3)) * s, col: mask ? '#fff' : (i % 4 === 3 ? P.vein2 : P.vein), a: (P.faint ? .25 : .45) + r() * .35 });
+    const a0 = -.6 + r() * .5 + (i % 3 === 0 ? 1.4 : 0), pts = walk(r() * size, r() * size, a0, Math.round(90 + r() * 80), 6.5 * s, .32);
+    const w0 = (i < 3 ? 3.5 + r() * 4 : 1.6 + r() * 2) * s, col = hx(i % 4 === 3 ? P.vein2 : P.vein), str = (P.faint ? .45 : .7) + r() * .3, drift = r();
+    const V = { pts, w: profile(pts.length, w0, false), col, str, drift, kids: [] }; veins.push(V);
+    if (i < 3) for (let q = 0; q < 1 + Math.floor(r() * 2); q++) {   // frayed: a thin sister strand wandering beside the main vein
+      const side = (r() < .5 ? -1 : 1) * (1.5 + r() * 2.5) * w0, ph = r() * 6, k0 = Math.floor(r() * pts.length * .4), k1 = Math.min(pts.length - 1, k0 + Math.floor(pts.length * (.3 + r() * .4)));
+      const sp = []; for (let k = k0 + 1; k <= k1; k++) { const [ax, ay] = pts[k - 1], [bx2, by2] = pts[k], dx = bx2 - ax, dy = by2 - ay, L = Math.hypot(dx, dy) || 1, o = side * (.6 + .4 * Math.sin(k * .07 + ph)); sp.push([bx2 - dy / L * o, by2 + dx / L * o]); }
+      if (sp.length > 4) V.kids.push({ pts: sp, w: profile(sp.length, w0 * (.25 + r() * .2), false), col, str: str * .8, drift: r() });
+    }
+    const nb = 1 + Math.floor(r() * (i < 3 ? 4 : 2.5));   // forks: leave at an angle, thinner, tapering to nothing
+    for (let b = 0; b < nb; b++) {
+      const k0 = 5 + Math.floor(r() * (pts.length - 10)), [bx, by] = pts[k0], dir = Math.atan2(pts[k0 + 1][1] - by, pts[k0 + 1][0] - bx) + (r() < .5 ? -1 : 1) * (.35 + r() * .7);
+      const bp = walk(bx, by, dir, Math.round(16 + r() * 44), 5 * s, .45); V.kids.push({ pts: bp, w: profile(bp.length, V.w[k0] * (.45 + r() * .3), true), col, str: str * (.7 + r() * .3), drift: r() });
+    }
   }
-  const stroke = (v, lw, a, col) => { g.globalAlpha = a; g.strokeStyle = col || v.col; g.lineWidth = lw; g.beginPath(); v.pts.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); };
-  g.lineJoin = g.lineCap = 'round';
-  g.filter = `blur(${2.5 * s}px)`; veins.forEach(v => wrapDraw(g, size, size, () => stroke(v, v.lw * 4, v.a * .35, mask ? '#0f0' : null)));
-  if (mask) g.globalCompositeOperation = 'lighter';
-  g.filter = 'none'; veins.forEach(v => wrapDraw(g, size, size, () => stroke(v, v.lw, mask ? 1 : v.a, mask ? '#f00' : null)));
+  const cloudy = []; for (let i = 0; i < (P.faint ? 10 : 16); i++) { const pts = walk(r() * size, r() * size, r() * 6.3, Math.round(25 + r() * 40), 11 * s, .4); cloudy.push({ pts, lw: (14 + r() * 30) * s, col: hx(P.cloud[i % P.cloud.length]), t: .35 + r() * .5 }); }
+  const layer = () => { const L = document.createElement('canvas'); L.width = L.height = size; const x = L.getContext('2d'); x.lineJoin = x.lineCap = 'round'; return x; };
+  // a vein drawn segment by segment (its width changes along the run); opaque on its layer, so joints never darken
+  const segs = (x, v, wk, colAt) => { for (let k = 1; k < v.pts.length; k++) { x.lineWidth = Math.max(.3, v.w[k] * wk); x.strokeStyle = colAt(k / v.pts.length); x.beginPath(); x.moveTo(v.pts[k - 1][0], v.pts[k - 1][1]); x.lineTo(v.pts[k][0], v.pts[k][1]); x.stroke(); } };
+  const all = []; veins.forEach(v => { all.push(v); v.kids.forEach(k => all.push(k)); });
+  // seamless tiling without drawing every shape 9 times: only the copies whose box (padded by the stroke) meets the tile
+  const wrapBox = (x, pts, pad, fn) => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; pts.forEach(([px, py]) => { x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py); });
+    for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) { if (x1 + dx + pad < 0 || x0 + dx - pad > size || y1 + dy + pad < 0 || y0 + dy - pad > size) continue; x.save(); x.translate(dx, dy); fn(); x.restore(); } };
+  const veinCol = v => t => mask ? '#fff' : mixc(B0, v.col, v.str * (.55 + .45 * Math.sin((t + v.drift) * 5.2) ** 2));   // colour drift along the vein
+  const put = (x, blur, alpha, tint) => { if (mask) { x.globalCompositeOperation = 'source-in'; x.fillStyle = tint; x.fillRect(0, 0, size, size); } g.save(); g.filter = blur > 0 ? `blur(${blur}px)` : 'none'; g.globalAlpha = alpha; if (mask) g.globalCompositeOperation = 'lighter'; for (const dx of blur > 0 ? [-size, 0, size] : [0]) for (const dy of blur > 0 ? [-size, 0, size] : [0]) g.drawImage(x.canvas, dx, dy); g.restore(); };   // blurred: the neighbours' copies bleed across the seams so the tile stays seamless
+  // 1 cloudy secondary veining: wide, very soft drifts of the cloud tones
+  { const x = layer(); cloudy.forEach(c => wrapBox(x, c.pts, c.lw, () => { x.globalAlpha = mask ? .35 : c.t; x.strokeStyle = mask ? '#fff' : mixc(c.col, hx(P.vein), .45); x.lineWidth = c.lw; x.beginPath(); c.pts.forEach(([px, py], k) => k ? x.lineTo(px, py) : x.moveTo(px, py)); x.stroke(); })); put(x, 10 * s, mask ? .5 : .4, '#0f0'); }
+  // 2 halos: each vein in a wide soft band of its own colour
+  { const x = layer(); all.forEach(v => wrapBox(x, v.pts, 20 * s, () => segs(x, v, 4.5, veinCol(v)))); put(x, 5 * s, mask ? .8 : .38, '#0f0'); }
+  // 3 cores: the veins themselves, softened (never a hairline scratch)
+  { const x = layer(); all.forEach(v => wrapBox(x, v.pts, 8 * s, () => segs(x, v, 1, veinCol(v)))); put(x, 1.3 * s, mask ? 1 : .8, '#f00'); }
+  g.filter = 'none'; g.globalCompositeOperation = mask ? 'lighter' : 'source-over';
   g.globalAlpha = 1; for (let i = 0; i < 2600 * s * s; i++) { const lt = r() < .5, x = r() * size, y = r() * size; if (!mask) { g.fillStyle = lt ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.07)'; g.fillRect(x, y, 1.5, 1.5); } }
   if (mask) { const r2 = mulberry(seed * 7 + 3); g.fillStyle = '#00f'; for (let i = 0; i < 260 * s * s; i++) { const x = r2() * size, y = r2() * size, d = (.6 + r2() * 1.6) * s; g.beginPath(); g.arc(x, y, d, 0, 7); g.fill(); } }
   g.globalCompositeOperation = 'source-over';

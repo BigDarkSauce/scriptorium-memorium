@@ -165,13 +165,13 @@ export function buildVitrine({ min = [-6.7, -.85, -5.2], max = [6.7, 6.6, 5.2], 
   fr.onBeforeRender = (r, scene, cam) => {
     if (!cam.isPerspectiveCamera) return;
     const p = cam.position, inside = p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1 && p.y < y1, cur = scene.background;
-    if (!sky && cur && cur !== bg && cur.isTexture) sky = scene.userData.skyBackground || cur;
+    if (!sky && cur && cur !== bg && cur.isTexture) { sky = scene.userData.skyBackground || cur; g.userData.gpu.push(sky); }   // freed with the group even while the backdrop is up
     if (sky && (cur === sky || cur === bg)) scene.background = inside ? sky : bg;   // never touch the paper background of the drawing stage
     if (!skyOnly) { skyOnly = []; scene.traverse(o => { if (o.userData.skyOnly) skyOnly.push(o); }); }
     skyOnly.forEach(o => { o.visible = inside; });
     const A = scene.userData.aaaAtmos; if (A) { if (!atm0) atm0 = { skyFog: A.skyFog, god: A.god }; A.skyFog = inside ? atm0.skyFog : 0; A.god = inside ? atm0.god : 0; A.vitrineK = inside ? 1 : .2; }   // a specimen seen from outside has no aerial perspective
   };
   fr.frustumCulled = false;
-  g.userData.vitrine = { min, max, backdrop: bg };
+  g.userData.vitrine = { min, max, backdrop: bg }; g.userData.gpu = [bg];   // util.js gpuSet: disposed with the group (whichever of the two is not the scene background)
   return g;
 }
