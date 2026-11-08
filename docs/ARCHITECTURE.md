@@ -19,6 +19,8 @@ The post chain follows Weatherglass's miniature look:
 - an OutputPass with AgX tone mapping;
 - a grade pass for vignette, grain, warm lift and the fade between modes.
 
+Raycasts (picking, the director's clear-view search, the POV clear view) go through `js/gfx/bvh.js`: three-mesh-bvh 0.9.16 trees built lazily per geometry (≥ 256 triangles, index untouched, dropped for deforming geometry); `?bvh=0` turns it off (see `docs/research/tooling-decision.md`).
+
 Shadows are soft (PCF). Resolution adapts to keep frames under about 22 ms. Environment lighting comes from a pre-filtered RoomEnvironment map. All textures are drawn in code (`textures.js`). Materials come from about 40 PBR presets (`materials.js`).
 
 Diorama realism (v4):
