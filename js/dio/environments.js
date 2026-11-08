@@ -293,7 +293,7 @@ function buildEnvironment(R, scene, gfx, env) {
         const y = Math.max(-.1, sunV.y), sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
         R.sun.intensity = 4.4 * sm(-.035, .07, y) * (.68 + .32 * sm(.1, .55, y)) * (1 - storm * .75); hemi.intensity = .2 + day * .45 * (1 - storm * .5);
         _c1.setRGB(1, .43, .2).lerp(_c2.setRGB(1, .68, .38), sm(.0, .14, y)); R.sun.color.copy(_c1).lerp(_c2.setRGB(1, .94, .86), sm(.2, .45, y)); u.rayleigh.value = 2.2 + storm * 2; u.turbidity.value = 2.5 + storm * 14;
-        gfx.renderer.toneMappingExposure = (.62 + day * .4) * (env.exposure ?? 1);   // a little brighter than AgX base: the grade's punch look restores the contrast R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));
+        gfx.renderer.toneMappingExposure = (.62 + day * .4) * (env.exposure ?? 1); R.fog.color.setHSL(.58, .2 * (1 - storm), .15 + .55 * day * (1 - storm * .6));   // exposure a little brighter than AgX base: the grade's punch look restores the contrast
         R.skyTint = _sky; placeCascades(R); skyBounce(R, ground, .15, storm);
         if (R.atmos) { R.atmos.density = (.012 + storm * .03) * (R.atmos.vitrineK ?? 1); if (R.atmos.vitrineK == null) R.atmos.god = .45 * (1 - storm * .8); }
       };

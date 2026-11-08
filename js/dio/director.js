@@ -494,7 +494,8 @@ export class Director {
     const grow = Math.min(1, b.t / 1.2), ease = grow * grow * (3 - 2 * grow);
     // motion: from how the subject moves in the WORLD (camera moves don't count), shown only when it really moves
     {
-      const hs = bodyOf(b.host && b.host.obj), wp = hs ? hs.center.clone() : (b.host && b.host.getPos && b.host.getPos()) || p, tr = b.wtrail;   // the body itself (its label anchor floats above it) if (wp) tr.push([wp.clone(), b.t]); while (tr.length > 2 && b.t - tr[0][1] > .6) tr.shift();
+      const hs = bodyOf(b.host && b.host.obj), wp = hs ? hs.center.clone() : (b.host && b.host.getPos && b.host.getPos()) || p, tr = b.wtrail;   // the body itself (its label anchor floats above it)
+      if (wp) tr.push([wp.clone(), b.t]); while (tr.length > 2 && b.t - tr[0][1] > .6) tr.shift();
       const a0 = tr[0]; let pts = null;
       if (wp && a0 && b.t - a0[1] > .2) {
         const hq = scr(wp), dW = wp.clone().sub(a0[0]), sp = dW.length() / (b.t - a0[1]);

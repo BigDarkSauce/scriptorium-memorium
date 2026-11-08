@@ -6,6 +6,7 @@ import { buildBody, buildShape } from './builder.js';
 import { setupEnvironment } from './environments.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { makeFrontUniforms, patchTree } from '../gfx/materialize.js';
+import { resetCloudShadows } from '../gfx/clouds.js';
 import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -55,7 +56,7 @@ export class DioramaScene {
     if (isSceneSpec(spec) && !(spec.camera && spec.camera.r) && !this._camSet) { this.orb.r = Math.max(8, this.radius * 2.35); this.orb.target.copy(this.center).setY(Math.max(1, this.center.y * .8)); }
     this._camSet = true;
   }
-  bodyCtx() { return { seedOf: id => hashStr(String(id)), params: this.p }; }
+  bodyCtx() { return { seedOf: id => hashStr(String(id)), params: this.p, headless: this.headless }; }
   addActor(name, getPos, obj, describe = '', id) { if (!name) return; if (this.actors.some(a => a.name === name)) return; this.actors.push({ name, getPos, obj, describe, id: id || name }); }
   centerOf(o) { const b = new THREE.Box3().setFromObject(o); return b.isEmpty() ? o.getWorldPosition(V3()) : b.getCenter(V3()); }
   buildModel() {
@@ -218,6 +219,6 @@ export class DioramaScene {
   }
   rebuildKeepView() { const keep = this.p; this.build(); }
   dispose() {
-    disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
+    resetCloudShadows(); disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
   }
 }

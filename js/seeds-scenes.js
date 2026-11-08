@@ -181,7 +181,8 @@ api.onFrame((dt)=>{ dt=Math.min(dt,.1);
   const sd=sunDir(api.param('hour')).multiplyScalar(11.5); sun.position.set(sd.x,Math.max(.6,sd.y),sd.z);   // outside the glass case: a warm lamp in the studio, not a disc floating inside the case
   { const hr=api.param('hour'); if(hr!==lastHr){ lastHr=hr; paintSky(Math.max(0,Math.sin((hr-6)/12*Math.PI))); const cab=api.body('house'); if(cab&&cab.userData.cabin) cab.userData.cabin.setGlow(api.clamp((hr-16.5)/2.5,0,1)); } if(dome) dome.visible=false; }   // evening: the cabin's windows glow
   const w=api.param('wind'), lift0=Math.PI/2*Math.min(1,w/7)*.95; api.scene.userData.wind=[w*.12,-w*.42];   // grass, reeds, trees and the lake's waves follow the wind
-  { const rv=api.body('stream'); if(rv&&rv.userData.river) rv.userData.river.setFlow(.35+.5*Math.min(1,rainSlope/2)); }   // runoff: rain on the ridge swells the stream and its waterfall pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
+  { const rv=api.body('stream'); if(rv&&rv.userData.river) rv.userData.river.setFlow(.35+.5*Math.min(1,rainSlope/2)); }   // runoff: rain on the ridge swells the stream and its waterfall
+  pivot.rotation.set(Math.PI+lift0+Math.sin(api.time()*7)*.05*Math.min(1,w/3),0,0);
 });
 
 const atLake=()=>C.find(c=>c&&c.over), onRidge=()=>C.filter(c=>c&&!c.over).sort((a,b)=>b.L-a.L)[0];

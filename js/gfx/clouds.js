@@ -116,15 +116,16 @@ void main(){
 }`;
 
 // ---- shadow splat: one driver per scene, ~15 Hz ----
-const REG = new Set(); let SH = null, lastSplat = -1;
+const REG = new Set(); let SH = null, lastSplat = -1, lastScene = '';
 function shadowTex() { if (SH) return SH; const N = 128; SH = { N, a: new Float32Array(N * N), b: new Float32Array(N * N), half: new Uint16Array(N * N) }; SH.tex = new THREE.DataTexture(SH.half, N, N, THREE.RedFormat, THREE.HalfFloatType); SH.tex.magFilter = SH.tex.minFilter = THREE.LinearFilter; SH.tex.userData.shared = true; SH.tex.needsUpdate = true; return SH; }
 const _v = new THREE.Vector3(), _c = new THREE.Vector3();
 function splat(scene) {
-  const t = AAA.uniforms.uAaaTime.value; if (Math.abs(t - lastSplat) < 1 / 15) return; lastSplat = t;
+  const t = AAA.uniforms.uAaaTime.value; if (scene.uuid === lastScene && Math.abs(t - lastSplat) < 1 / 15) return; lastSplat = t; lastScene = scene.uuid;
+  CLOUD_SH_U.uCloudShOn.value = 0;   // only this scene's clouds count (a sketch render of another scene must not leave its shadows on)
   const S = shadowTex(), N = S.N, M = CLOUD_SH_U.uCloudShM.value, x0 = M.x, z0 = M.y, cw = 1 / M.z / N, cd = 1 / M.w / N; S.a.fill(0);
   let ySum = 0, yN = 0, any = false;
   for (const m of REG) {
-    if (!m.parent || !m.visible) continue; let vis = true; m.traverseAncestors(a => { if (!a.visible) vis = false; }); if (!vis || a0(m)) continue;
+    if (!m.parent || !m.visible || sceneOf(m) !== scene) continue; let vis = true; m.traverseAncestors(a => { if (!a.visible) vis = false; }); if (!vis || a0(m)) continue;
     const C = m.userData.cloud, mw = m.matrixWorld, sc = mw.getMaxScaleOnAxis();
     const k = C.U.uFade.value * (1 + C.U.uGrey.value * 1.6 + C.U.uStorm.value);
     for (const p of C.puffs) { _c.set(p[0], p[1], p[2]).applyMatrix4(mw); const r = p[3] * sc * .9; ySum += _c.y; yN++; any = true;
@@ -143,6 +144,8 @@ function driver(scene) {
   d.onBeforeRender = (r, sc) => { skyFrom(sc); for (const m of REG) if (!m.parent || !sceneOf(m)) REG.delete(m); splat(sc); };
   scene.add(d); scene.userData._cloudDriver = d;
 }
+// called when a diorama scene is disposed (js/dio/scene.js): no cloud shadows on whatever renders next until its own clouds splat
+export function resetCloudShadows() { CLOUD_SH_U.uCloudShOn.value = 0; lastSplat = -1; lastScene = ''; }
 const sceneOf = o => { let p = o; while (p.parent) p = p.parent; return p.isScene ? p : null; };
 
 // spec: { r, puffs, seed, color?, region:[minX, minZ, maxX, maxZ] (shadow texture rect) }, field (optional, terrain occlusion)
@@ -176,5 +179,6 @@ export function buildCloudVolume(shape = {}, seed = 3, field = null) {
     _p.copy(cam.position).applyMatrix4(U.uInv.value); U.uInside.value = _p.x > mn.x && _p.x < mx.x && _p.y > mn.y && _p.y < mx.y && _p.z > mn.z && _p.z < mx.z ? 1 : 0;
   };
   m.addEventListener('removed', () => REG.delete(m));
+  mat.addEventListener('dispose', () => { REG.delete(m); resetCloudShadows(); });   // its scene was disposed (disposeTree): forget it, shadows off until a live cloud splats again
   return m;
 }

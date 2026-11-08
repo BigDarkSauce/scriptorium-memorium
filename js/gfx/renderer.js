@@ -88,7 +88,7 @@ export class Gfx {
   // Per-scene look: scenes may set scene.userData.look = {contrast, sat, vignette, grain, warm, exposure}; others get the house look.
   applyLook(L = {}) {
     const u = this.grade.uniforms; u.uContrast.value = L.contrast ?? 1; u.uSat.value = L.sat ?? 1; u.uLift.value = L.lift ?? 0;
-    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2;   // miniature look: blur radius (px at 800 px height) at the frame's top and bottom u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
+    u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;   // tiltRadius: miniature look, blur radius (px at 800 px height) at the frame's top and bottom
     if (L.exposure != null) this.renderer.toneMappingExposure = L.exposure;
     if (L.bloom != null) this.bloom.strength = L.bloom;
     this.bloom.threshold = L.bloomThreshold ?? .86; this.bloom.radius = L.bloomRadius ?? .55;
