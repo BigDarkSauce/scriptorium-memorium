@@ -111,10 +111,10 @@ export class Ops {
   }
   clearBadges() { (this._badges || []).forEach(b => { b.e.remove(); b.ln.remove(); }); this._badges = null; }
   // a pose that frames a world box like the director's medium (thirds, free frame), or close
-  poseFor(box, shot = 'medium') {
+  poseFor(box, shot = 'medium', fit = false) {
     const c = box.getCenter(V3()), s = box.getSize(V3()), P = this._proxy || (this._proxy = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)));
     P.position.copy(c); P.scale.set(Math.max(s.x, 1e-3), Math.max(s.y, 1e-3), Math.max(s.z, 1e-3)); P.updateMatrixWorld(true);
-    return this.v.dir.frame({ poseOnly: true, kind: 'explain', shot, focus: P, anchor: () => c, names: [], host: null });
+    return this.v.dir.frame({ poseOnly: true, kind: 'explain', shot, fit, focus: P, anchor: () => c, names: [], host: null });
   }
   // the same pose turned round its target until nothing opaque stands between the lens and the part (the director's ray test)
   clearPose(pose, a) {
@@ -222,7 +222,7 @@ export class Ops {
   }
   updateExplode(dt) {
     const X = this.ex, v = this.v, d = v.dir; let go = false;
-    if (X.phase === 'wait') { if (!this.ready()) return; X.phase = 'frame'; X.t = 0; this.glide(this.poseFor(X.fin.clone().expandByScalar(X.R * .15)), 2.2); X.lines.material.opacity = 0; }
+    if (X.phase === 'wait') { if (!this.ready()) return; X.phase = 'frame'; X.t = 0; this.glide(this.poseFor(X.fin.clone().expandByScalar(X.R * .04), 'medium', true), 2.2);   /* the whole exploded assembly fitted to the safe area at the real aspect */ X.lines.material.opacity = 0; }
     X.t += dt;
     if (X.phase === 'frame') { if (!d.move && !d.dip || X.t > 4.5) { X.phase = 'out'; X.t = 0; if (this.reduced()) { X.k = X.k.map(() => 1); d.dip = { t: 0, done: false, apply: () => { } }; } } }
     else if (X.phase === 'out') { const dur = .9; X.parts.forEach((a, i) => { X.k[i] = this.reduced() ? 1 : clamp((X.t - i * X.stagger) / dur, 0, 1); }); if (X.k.every(k => k >= 1)) { X.phase = 'hold'; X.t = 0; this.explodeBeat(); } }

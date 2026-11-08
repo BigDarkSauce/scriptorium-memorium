@@ -150,6 +150,7 @@ export class Director {
     // bottom sheet): the subject is centred in it, and the distance grows until the subject fits across the band and
     // across the free width (a portrait phone is narrow: its width, not its height, limits the shot)
     const H = innerHeight, fy = this.freeBand(H), bandF = Math.max(.25, (fy[1] - fy[0]) / H), wideF = Math.max(.25, (fr[1] - fr[0]) / W);
+    if (b.fit && box) return this.fitBox(b, box, dir, fov, kind, subj);   /* an operation that needs the whole box in view (an exploded assembly): fitted exactly, no distance cap */
     if (!b.dist) dist = Math.max(dist, Math.min(R * 1.6, r / Math.tan(half) * 1.12 / bandF, r / (Math.tan(half) * Math.min(1, aspect)) * 1.12 / wideF));
     const yd = 1 - (fy[0] + fy[1]) / H;   /* NDC y of the band's centre */
     const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), hw = dist * Math.tan(half) * aspect, up2 = V3().crossVectors(dir, right).normalize();
@@ -162,6 +163,34 @@ export class Director {
       this.last = { kind, moving: true, subj, t: this.clock, evKey: b.evKey };
     } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey }; }
     this.accent(p, r);
+  }
+  // the safe rectangle of the frame in px [x0, y0, x1, y1]: below the title and the top buttons, above the time bar and (on a
+  // phone) the callout sheet, beside the instruction panel and the readouts, and (on a phone) clear of the round side buttons
+  safeRect() {
+    const v = this.v, W = innerWidth, H = innerHeight, phone = W < 760, fr = this.freeFrame(W), fy = this.freeBand(H);
+    let x0 = phone ? 10 : fr[0], x1 = phone ? W - 10 : fr[1], y0 = fy[0];
+    const t = v.titleEl && !v.titleEl.hidden ? v.titleEl.getBoundingClientRect() : null; if (t && t.height) y0 = Math.max(y0, t.bottom + 8);
+    if (phone) [document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].forEach(e => { const r = e && e.getBoundingClientRect(); if (r && r.width && r.bottom > y0 && r.top < fy[1]) x1 = Math.min(x1, r.left - 8); });
+    return [x0, y0, x1, Math.max(y0 + H * .2, fy[1])];
+  }
+  // a pose that holds a whole box inside the safe rectangle, for the actual aspect: every corner of the box is projected and
+  // the distance is the smallest one at which all of them land inside (the box centred in the rectangle); badges above the
+  // parts get a margin at the top
+  fitBox(b, box, dir, fov, kind, subj) {
+    const v = this.v, cam = v.camera, W = innerWidth, H = innerHeight, aspect = cam.aspect || W / H, th = Math.tan(THREE.MathUtils.degToRad(fov / 2)), ka = th * aspect;
+    const [px0, py0, px1, py1] = this.safeRect(), pad = 14, top = 34;
+    const x0 = (px0 + pad) / W * 2 - 1, x1 = (px1 - pad) / W * 2 - 1, y1 = 1 - (py0 + top) / H * 2, y0 = 1 - (py1 - pad) / H * 2, xd = (x0 + x1) / 2, yd = (y0 + y1) / 2;
+    const p = box.getCenter(V3()), right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), up2 = V3().crossVectors(dir, right).normalize(), q = V3();
+    let D = 1e-3;
+    for (let i = 0; i < 8; i++) {
+      q.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(p);
+      const cx = q.dot(right), cy = q.dot(up2), cz = q.dot(dir);   /* corner relative to the centre, in the camera's axes (cz toward the lens) */
+      /* NDC x of the corner = (xd·D·ka + cx) / ((D − cz)·ka): inside [x0, x1] gives a lower bound on D for each side */
+      D = Math.max(D, (cx + x1 * cz * ka) / (ka * (x1 - xd)), (-cx - x0 * cz * ka) / (ka * (xd - x0)), (cy + y1 * cz * th) / (th * (y1 - yd)), (-cy - y0 * cz * th) / (th * (yd - y0)), cz + .05);
+    }
+    const target = p.clone().addScaledVector(right, -xd * D * ka).addScaledVector(up2, -yd * D * th), pos = target.clone().addScaledVector(dir, D);
+    if (b.poseOnly) return { target, pos, fov };
+    this.cutTo(target, pos, fov, true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey };
   }
   // the establishing view framed in the FREE part of the screen (not under the instruction panel or the readouts): the
   // model's overview, panned sideways so the significant bodies sit in the middle of the free frame, and pulled back
