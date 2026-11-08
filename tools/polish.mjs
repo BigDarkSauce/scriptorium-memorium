@@ -146,6 +146,7 @@ window.POLISH = function (scope, ctx) {
   for (let n; (n = walker.nextNode());) {
     const t = n.textContent; if (!t || t.trim().length < 2) continue; const p = n.parentElement; if (!p || p.closest('script, style, code, pre, textarea, input, select, option, mjx-container, .code-lines, .code-out, .code-step, .cl, a[href], .src, title, .unf-hidden, [hidden], noscript, .MathJax') || !vis(p)) continue;
     if (!p.closest('#ui, body > .modal-veil, body > .toast')) continue;
+    if (p.closest('svg') && /mono/i.test(getComputedStyle(p).fontFamily)) continue;   // a figure label set as code (R / Python, verbatim)
     for (const [re, what] of RAW) { const m = re.exec(t); if (m) { const k = what + '|' + t.slice(0, 40); if (seen.has(k)) continue; seen.add(k); out.push({ check: 'd', what: 'raw notation: ' + what, el: name(p), text: t.slice(Math.max(0, m.index - 25), m.index + 30) }); } }
   }
   // italic units: an italic token that is a unit and follows a number (or %/ or /), in HTML (<i>) and SVG (italic tspan)
