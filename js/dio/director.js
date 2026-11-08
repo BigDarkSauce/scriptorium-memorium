@@ -85,7 +85,7 @@ export class Director {
     if (this.cinematic && inStep && this.hold <= 0 && !b.noShot) this.frame(b);   // noShot: a label beat inside a move (peel layers) keeps the camera
     // the callout, beside what it describes
     b.el = el('div', { class: 'callout k-' + b.kind }, [
-      el('div', { class: 'co-kicker', mathLabel: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part : '') }),
+      el('div', { class: 'co-kicker', mathLabel: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part.replace('/', ' of ') : '') }),   // "1 of 2": a typeset "1/2" read as the fraction ½
       b.question ? el('div', { class: 'co-q' }, [el('b', { text: 'Q' }), ' ', el('span', { math: b.question })]) : null,
       el('div', { class: 'co-text', math: b.text }),
       b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + mathHTML(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
