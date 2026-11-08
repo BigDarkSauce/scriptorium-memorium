@@ -205,7 +205,7 @@ export function gradientSky(top = '#1a2a44', bottom = '#e8b07a', key) {
 // rocaille stucco, book spines, damask. All canvas-drawn, tileable where they repeat, cached by key, ≤ 1024².
 // ---------------------------------------------------------------------------------------------------------------
 export const MARBLES = {
-  rose: { base: '#d0b8b2', cloud: ['#e3d3cd', '#b89b95', '#eee5df', '#a5877f', '#d6c2bc'], vein: '#7d5a55', vein2: '#f3ede8' },   // a dusty, greyed rose (a vivid salmon read as plastic under the warm lamps)
+  rose: { base: '#cfbfba', cloud: ['#e2d7d3', '#b8a39e', '#ede7e3', '#a58f89', '#d5c8c4'], vein: '#7d625d', vein2: '#f3eeeb' },   // a dusty, greyed rose (a vivid salmon read as plastic under the warm lamps)
   teal: { base: '#4f8886', cloud: ['#72a7a2', '#2f6061', '#a3c9c1', '#3d7072', '#5b9690'], vein: '#1b3a3c', vein2: '#dcefe8' },
   dark: { base: '#3b312d', cloud: ['#4c3f39', '#2a2220', '#5c4c44', '#332a26'], vein: '#dcd2c4', vein2: '#8e7d6c' },
   statuary: { base: '#ece8e1', cloud: ['#f7f4ef', '#ddd7ce', '#e6e1d9', '#f2eee8'], vein: '#a7a19a', vein2: '#cfc8bf', faint: true },
@@ -215,7 +215,7 @@ export const MARBLES = {
   // not the highest-contrast thing in view (presentation-craft value check)
   dove: { base: '#bdb0a1', cloud: ['#c9bdaf', '#aea192', '#c4b8a9', '#b3a696'], vein: '#8a7d70', vein2: '#ddd3c6' },
   grey: { base: '#8e8a85', cloud: ['#a19d97', '#76726d', '#9a958e'], vein: '#55514c', vein2: '#c4bfb7' },
-  red: { base: '#a3645a', cloud: ['#b8796c', '#8a4d44', '#c58c7f', '#97564c'], vein: '#5a2a24', vein2: '#e6c2b4' },
+  red: { base: '#9c6a62', cloud: ['#b07f75', '#85544d', '#bd9288', '#915d55'], vein: '#5a302a', vein2: '#e4c8bd' },   // a muted rosso (the vivid salmon read as orange under the lamps)
   // the antique marbles of the columns (Roman spolia): giallo antico (Chemtou: warm yellow, rust veins), verde antico
   // (Thessalian breccia: dark green with white and black fragments), rosso antico (Taenarum: deep oxblood, fine dark
   // veins) and pavonazzetto (Docimium: white with violet veins and clasts)
