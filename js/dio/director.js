@@ -684,9 +684,11 @@ export class Director {
           if (opts.length) { opts.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y)); [x, y] = opts[0]; }
         }
       }
-      const offHard = yy => !(b.hard || []).some(A => x < A.x + A.w && x + cw > A.x && yy < A.y + A.h && yy + ch > A.y);   // the late steps below never move onto the HUD
+      const offHard = (yy, xx = x) => !(b.hard || []).some(A => xx < A.x + A.w && xx + cw > A.x && yy < A.y + A.h && yy + ch > A.y);   // the late steps below never move onto the HUD
       // still over its own anchor dot (clamped against the panel or the frame): step above or below the dot instead
-      if (on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) { const ys = [sy + 24, sy - 24 - ch]   /* (24: the measured height may lag the text by a line) */.filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && offHard(yy)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; }
+      if (on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) {   /* (24: the measured height may lag the text by a line) */
+        const [xa, xb] = bounds(y), P = [[x, sy + 24], [x, sy - 24 - ch], [sx + 24, y], [sx - 24 - cw, y]].filter(([px, py]) => py >= topAt(px) - .5 && py <= h - ch - 16 && px >= xa - .5 && px <= xb + .5 && offHard(py, px));
+        if (P.length) [x, y] = P.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y))[0]; }
       // still over an object's name: step just above or below that name (if that stays in the frame and off the dot)
       for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
         const ys = [ry - ch - 8, ry + r.height + 8].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && offHard(yy) && !(on && x < sx + 14 && x + cw > sx - 14 && yy < sy + 24 && yy + ch > sy - 24)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; break; }
@@ -696,7 +698,7 @@ export class Director {
       const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       // an anchor under the HUD (the title, the panel tab, the readouts, the buttons): no dot and no leader onto it
-      const dotOn = on && ![...(b.hard || []), b.titleR, b.panR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
+      const dotOn = on && ![...(b.hard || []), b.titleR, b.panR, b.timeR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = dotOn ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
       b.line.setAttribute('d', dotOn ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
