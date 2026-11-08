@@ -682,8 +682,8 @@ export class Director {
       // hysteresis: the side changes only when another is far better (less than half the cost, by a real margin) for 0.6 s
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
         if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
-      let [x, y] = place(C[b.side]);
-      if (phone) { const chp = e.offsetHeight || ch, tbe = v.ui && v.ui.querySelector('.dio-time'), tbr = tbe && tbe.getBoundingClientRect(), tb = Math.min(tbr && tbr.height ? tbr.top - this.layer.getBoundingClientRect().top : h, w <= 560 ? h - 110 : h - 64);   /* (on a narrow phone the bar may wrap to two rows any frame: keep room for both) */   /* read every frame: the bar rewraps */ if (v.readPanel && !v.readPanel.classList.contains('under-sheet')) v.readPanel.classList.add('under-sheet');   /* the readouts step aside while the sheet is up (no room for both on a phone) */ x = 10; y = Math.max(84, tb - chp - 8); this._sheetH = chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
+      let [x, y] = place(C[b.side]), sheetB = null;   // sheetB: a phone sheet's bottom edge (it is drawn from its bottom up)
+      if (phone) { const chp = e.offsetHeight || ch, tbe = v.ui && v.ui.querySelector('.dio-time'), tbr = tbe && tbe.getBoundingClientRect(), tb = Math.min(tbr && tbr.height ? tbr.top - this.layer.getBoundingClientRect().top : h, w <= 560 ? h - 110 : h - 64);   /* (on a narrow phone the bar may wrap to two rows any frame: keep room for both) */   /* read every frame: the bar rewraps */ if (v.readPanel && !v.readPanel.classList.contains('under-sheet')) v.readPanel.classList.add('under-sheet');   /* the readouts step aside while the sheet is up (no room for both on a phone) */ x = 10; y = Math.max(84, tb - chp - 8); this._sheetH = chp; sheetB = y + chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
       else {
         // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
         for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {
@@ -701,10 +701,13 @@ export class Director {
       for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
         const ys = [ry - ch - 8, ry + r.height + 8].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && offHard(yy) && !(on && x < sx + 14 && x + cw > sx - 14 && yy < sy + 24 && yy + ch > sy - 24)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; break; }
       // the glide after a change of side: from where it was drawn toward where it now belongs
+      if (sheetB != null) b.tw = null;   // (a sheet never glides: it stays on the time bar)
       if (b.tw) { b.tw.t += dt; const k = Math.min(1, b.tw.t / .35), s = k * k * (3 - 2 * k); x = b.tw.x0 + (x - b.tw.x0) * s; y = b.tw.y0 + (y - b.tw.y0) * s; if (k >= 1) b.tw = null; }
       b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
       const right = x > sx - cw / 2;
-      e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
+      // a phone sheet hangs from its bottom edge (just above the time bar): text that grows after this frame's measure (a
+      // step line or a legend added to the callout later in the frame, a reflow) extends it upward, never onto the bar
+      e.style.transform = sheetB != null ? `translate(${x.toFixed(0)}px,${sheetB.toFixed(0)}px) translateY(-100%)` : `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       // an anchor under the HUD (the title, the panel tab, the readouts, the buttons): no dot and no leader onto it
       const dotOn = on && !(phone && sx > x - 4 && sx < x + cw + 4 && sy > y - 4 && sy < y + ch + 4) && ![...(b.hard || []), b.titleR, b.panR, b.timeR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = dotOn ? 1 : 0;
