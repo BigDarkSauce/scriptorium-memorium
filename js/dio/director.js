@@ -43,7 +43,7 @@ export class Director {
     this.trail = new Map();      // object → recent screen positions (for motion arrows)
     this._f = V3(); this._qI = new THREE.Quaternion(); this._qL = new THREE.Quaternion(); this._m4 = new THREE.Matrix4(); this.tsV = 0;
   }
-  dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }
+  dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { if (!(this.v.app && this.v.app.switching)) g.uFade.value = 0; if (this.dip.dark && this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }   // (a switch disposes under its own veil: leave it up)
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
   userGrab() { this.hold = 6; this.move = null; if (this.zoom) { this.zoom.follow = false; this.zoom.sw = null; } this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase === 'back') { this.restoreLens(); this.zoom = null; if (this.sbar) this.sbar.hidden = true; if (this.ring) this.ring.style.opacity = 0; } else if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(true); }   // grabbing ends rides at once (no delayed snap-back)
 
@@ -626,7 +626,14 @@ export class Director {
       else if (!this.dip) { const R = v.ds && v.ds.orb ? v.ds.orb.r : 10; if (this._cp) { const vel = (this._cv || (this._cv = V3())).subVectors(cam.position, this._cp).divideScalar(dt); if (vel.length() > R * 2.5) vel.set(0, 0, 0); }   /* a teleport (a cut) is not a motion */
         (this._cp || (this._cp = V3())).copy(cam.position); }
       else { this._cp = null; if (this._cv) this._cv.set(0, 0, 0); } } }
-    if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
+    // timed by the wall clock when the app's loop drives the frame (a slow frame never keeps the view dark longer than the
+    // dip: each frame advances it by its real duration, at most 0.2 s so the dark frame is still drawn once); while the
+    // mode switch holds its veil the cut is applied at once and the veil is left to the switch (never two writers on it)
+    if (this.dip) { const d = this.dip, app = v.app, wd = app && app.loopDt;
+      if (app && app.switching) { if (!d.done) { d.done = true; d.apply(); } if (d.dark && g && this._fc) g.uFadeColor.value.copy(this._fc); this.dip = null; }
+      else { d.t += wd > 0 ? Math.max(dt, Math.min(.2, wd)) : dt; if (g && !d.dark) { d.dark = true; this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); }
+        if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) g.uFade.value = a;
+        if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } } }
     // a push: slow dolly, eased, then it simply holds
     if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e);
       if (m.q0) { this._m4.lookAt(v.camera.position, m.t0, UP); this._qL.setFromRotationMatrix(this._m4); v.camera.quaternion.slerpQuaternions(m.q0, this._qL, e); } else v.camera.lookAt(m.t0);   // q0: turn from the previous heading over the move
@@ -654,7 +661,7 @@ export class Director {
         b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()).filter(r => r.width > 1); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
         const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox - 8, y: r.top - b.oy - 8, w: r.width + 16, h: r.height + 16 }; };   // inflated by the 8 px HUD margin: closer than 8 px counts as an overlap
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
-        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box].map(R).filter(Boolean);   /* (the level indicator of grammar.js)*/
+        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box, ...(v.ops && v.ops.layer ? [...v.ops.layer.querySelectorAll('.ops-cap, .ops-badge')].filter(E => E.style.opacity !== '0' && +getComputedStyle(E).opacity > .05) : [])].map(R).filter(Boolean);   /* grammar.js: the level indicator, the compare captions (their own slots) and the lineup / explode badges (on their subjects); the anchor dot also hides under them (dotOn) */
         const ch0 = R(this.chipEl); b.chipR = ch0; b.titleR = R(v.titleEl); b.timeR = R(v.ui && v.ui.querySelector('.dio-time')); b.panR = v.panel && !v.panel.hidden ? R(v.panel) : null;
       }
       const cw = b.cw, ch = b.ch;

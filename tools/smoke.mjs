@@ -26,7 +26,7 @@
 //   ui           no "NaN", "undefined" or "[object Object]" in any visible text
 //   leaks        3 cycles hub → room → diorama → room → hub: GPU geometries/textures and DOM nodes stay flat
 //   context      WebGL context loss and restore: the app pauses, comes back and keeps running
-//   captures     two canvas captures (hub, diorama) are not blank
+//   captures     two canvas captures (hub, diorama) are not blank (taken once any fade or cut dip has finished)
 //   errors       no uncaught exceptions, unhandled promise rejections or console errors during the run
 //   polish       node tools/polish.mjs --quick (its own browser): one view per area — hub, a room, a scroll unfolded,
 //                a diorama lesson with Guides on and off, the Add-PDF steps — free of overlaps, a label far from its
@@ -212,7 +212,7 @@ report('context', !ctx.__error && (ctx.skipped || (ctx.paused && ctx.back && ctx
 
 // ---- canvas captures
 await page.setViewportSize({ width: 960, height: 600 });
-const capDio = await run(async () => { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); await W.openDiorama(JSON.parse(JSON.stringify(FLAGSHIPS[0])), { skipIntro: true }); await S.frames(3); return S.capture('diorama'); });
+const capDio = await run(async () => { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); await W.openDiorama(JSON.parse(JSON.stringify(FLAGSHIPS[0])), { skipIntro: true }); for (let k = 0; k < 60 && (W.gfx.grade.uniforms.uFade.value > .02 || (W.mode.dir && W.mode.dir.dip)); k++) await S.frames(1); await S.frames(3); return S.capture('diorama'); });   // (a cut still dipping through dark is a transition, not the view: wait for it, at most 60 frames)
 const caps = [capHub, capDio].filter(c => c && !c.__error);
 if (OUT) { mkdirSync(OUT, { recursive: true }); caps.forEach(c => writeFileSync(join(OUT, 'smoke-' + c.name + '.png'), Buffer.from(c.url.split(',')[1], 'base64'))); }
 report('captures', caps.length === 2 && caps.every(c => c.range > 30), caps.map(c => `${c.name} contrast ${c.range}`).join(', ') + (OUT ? ` → ${OUT}` : ''));

@@ -71,6 +71,10 @@ export class Ops {
     this._pins = []; v.labels && v.labels.querySelectorAll('.pin').forEach(P => { if (P.style.visibility === 'hidden') return; const n = P.querySelector('.pin-name') || P, r = n.getBoundingClientRect(); if (r.width > 1 && r.height > 1) this._pins.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); });   /* nor on an object's name */
     return (this._hud = R);
   }
+  // the HUD without the director's callout: an overlay that reserves its own slot (compare captions, the level indicator)
+  // ignores the callout, and the director steps the callout round it (its hard obstacles), so the two never chase each other.
+  // On a phone the callout is a fixed bottom sheet: everything keeps off it.
+  hudNoCallout() { const R = this.hud(), bel = this.v.dir && this.v.dir.beat && this.v.dir.beat.el; if (innerWidth < 760 || !bel || !bel.isConnected) return R; const q = bel.getBoundingClientRect(); return R.filter(r => !(Math.abs(q.left - 8 - r[0]) < 1 && Math.abs(q.top - 8 - r[1]) < 1)); }
   hits(x, y, w, h, R = this.hud()) { return R.some(r => x < r[2] && x + w > r[0] && y < r[3] && y + h > r[1]); }
   // the legend / timeline: inside the current callout under its kicker (never over text), else a chip at the top of the free frame
   legend(html) {
@@ -412,7 +416,7 @@ export class Ops {
     K.div.style.left = half.toFixed(0) + 'px';
     { const P = this.v.readPanel; if (P && K.mode === 'side' && P.style.visibility !== 'hidden') { K.rp0 = P.style.visibility; P.style.visibility = 'hidden'; } }   // side by side, the captions carry the readout: the panel would cover the right half's subject
     // the captions: bottom of the free band, centred in each half, stepped up off the HUD
-    const band = this.v.dir.freeBand(h), place = (e, cx) => { if (!e._w) { e._w = e.offsetWidth || 160; e._h = e.offsetHeight || 26; } let x = clamp(cx - e._w / 2, 8, w - e._w - 8), y = band[1] - e._h - 8; for (let k = 0; k < 10 && this.hits(x, y, e._w, e._h); k++) y -= 30; const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (e._tf !== tf) { e._tf = tf; e.style.transform = tf; } };
+    const band = this.v.dir.freeBand(h), place = (e, cx) => { if (!e._w) { e._w = e.offsetWidth || 160; e._h = e.offsetHeight || 26; } let x = clamp(cx - e._w / 2, 8, w - e._w - 8), y = band[1] - e._h - 8; const HR = this.hudNoCallout(); for (let k = 0; k < 10 && this.hits(x, y, e._w, e._h, HR); k++) y -= 30; const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (e._tf !== tf) { e._tf = tf; e.style.transform = tf; } };
     place(K.capA, half / 2); place(K.capB, half * 1.5);
   }
   // the second state runs in step with the first (same time scale)

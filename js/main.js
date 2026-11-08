@@ -123,7 +123,7 @@ class App {
     return (this._sw = (this._sw || Promise.resolve()).then(run, run));
   }
   async _switch(make) {
-    const g = this.gfx.grade.uniforms.uFade;
+    const g = this.gfx.grade.uniforms.uFade; this.switching = true;   // the switch owns the veil (uFade) until it has faded back in: a mode's own cut applies at once under it (director.js)
     // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
     const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
     if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
@@ -138,7 +138,10 @@ class App {
     // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
     if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
     this.gfx.resetAdapt();
-    await sleep(60); await fade(1, 0, 330); g.value = 0;
+    // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
+    // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
+    for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await sleep(60); await fade(1, 0, 330); g.value = 0; this.switching = false;
   }
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
   retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
@@ -162,7 +165,9 @@ class App {
     requestAnimationFrame(() => this.loop());
     const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
     if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)
+    this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
     if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
+    this.loopDt = 0;   // (an update driven by hand, outside this loop, steps by its own dt only)
     this.gfx.adapt(raw); this.gfx.render(dt, this.t);
     this.flushTrash();
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }

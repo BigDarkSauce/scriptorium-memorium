@@ -118,11 +118,15 @@ export class DioramaView {
   finishTour() {
     if (this.stage !== 'tour') return; this.stage = 'explore';
     this.ds.actors.forEach(a => this.ensurePin(a, false));
-    const k = this.ds.overviewKey(); this.flyTo(k.target, this.ds.orb.r * .95);
+    this.showExplore();
+    // the intro's last flight lands on the opening view itself (framed in the free part of the screen, the panels now laid
+    // out), so the re-frame after it has nothing left to change: no cut through a dip right after the intro
+    { const k = this.dir.wideKey(), c = this.camera; this.fly = { from: { p: c.position.clone(), t: this.controls.target.clone() }, to: { p: k.pos.clone(), t: k.target.clone() }, k: 0, dur: 1.7, lift: Math.min(2, c.position.distanceTo(k.pos) * .15) }; this.controls.enabled = false; }
     this.coach.innerHTML = ''; this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'All bodies introduced' }), el('div', { class: 'coach-text', text: 'Instructions are now on the left' })]));
     setTimeout(() => { if (this.stage === 'explore') this.coach.hidden = true; }, 3200);
-    this.showExplore();
   }
+  // the opening view is still being settled (the re-frame into the free frame, or its cut): the mode switch keeps its veil up
+  framing() { return this.stage === 'explore' && (!!this._wideFix || !!(this.dir && this.dir.dip)); }
   flyTo(target, dist, dur = 1.7, swingDeg = 0) {
     const c = this.camera, from = { p: c.position.clone(), t: this.controls.target.clone() };
     const dir = c.position.clone().sub(this.controls.target).normalize().lerp(V3(.55, .5, .7).normalize(), .35).normalize();
@@ -653,7 +657,7 @@ export class DioramaView {
     this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
     // the opening overview framed in the free part of the screen (not under the instruction panel), once the panel and the
     // readouts are laid out (second frame) and nothing else moves the camera
-    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(), big = this.camera.position.distanceTo(k.pos) > (this.ds.orb ? this.ds.orb.r : 10) * .04 || this.controls.target.distanceTo(k.target) > (this.ds.orb ? this.ds.orb.r : 10) * .04, put = () => { this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); }; if (big) this.dir.dip = { t: 0, done: false, apply: put }; else put(); } }   // a visible change of view goes through a dip, like any cut (never a bare jump)
+    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(), big = this.camera.position.distanceTo(k.pos) > (this.ds.orb ? this.ds.orb.r : 10) * .04 || this.controls.target.distanceTo(k.target) > (this.ds.orb ? this.ds.orb.r : 10) * .04, put = () => { this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); }; if (big && !this.app.switching) this.dir.dip = { t: 0, done: false, apply: put }; else put(); } }   // a visible change of view goes through a dip, like any cut (never a bare jump); under the opening veil (the mode switch) nothing is on screen yet, so it is put at once
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
     // panels are measured every 0.5 s (cheap); the callout moves every frame, so its drawn box is added fresh each frame
