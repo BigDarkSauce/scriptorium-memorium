@@ -405,7 +405,7 @@ export class BookRoom {
       w.traverse(o => { if (o.isLineSegments || (o.isMesh && [].concat(o.material).some(m => m && m.wireframe))) o.visible = false; });
       // what the mini leaves out is taken out of it, not just hidden: the station's bounds (layout checks, picking, the
       // probe's box) then measure the maquette, not a 250 m ground or hills 40–90 m out still hanging off the plinth
-      { const out = []; w.traverse(o => { if (o !== w && !o.visible && !o.isLight) out.push(o); }); out.filter(o => !out.includes(o.parent)).forEach(o => o.removeFromParent()); bay.cut = out.length; }
+      { const out = []; w.traverse(o => { if (o !== w && !o.visible && !o.isLight) out.push(o); }); { const top = out.filter(o => !out.includes(o.parent)); top.forEach(o => o.removeFromParent()); disposeTree(top); }   /* detached subtrees are freed here: the room's disposal never reaches them */ bay.cut = out.length; }
       let s = Math.min(bay.area.r / fit.rXZ, (bay.hMax || MINI_H) / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
       bay.mini.add(w);
       // never past its area: the model turns, so its farthest visible point from the turning axis must lie inside r
