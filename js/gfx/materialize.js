@@ -122,7 +122,7 @@ export function patchMaterial(mat, U) {
       #endif`);
       f = f.replace('#include <opaque_fragment>', `
       #ifdef OPAQUE
-      if(uPoche>0.5 && !gl_FrontFacing){ outgoingLight = mix(outgoingLight, uInk, max(isCard, .85)); }
+      if(uPoche>0.5 && !gl_FrontFacing){ outgoingLight = mix(outgoingLight * 1.15 + diffuseColor.rgb * .18, uInk, isCard); }   /* a section's cut face: the inner faces lit (double-sided, normal toward the lens) with a little lift of the material's own colour, so walnut reads as cut wood, not a black slab; a paper card keeps its ink */
       #endif
       outgoingLight += uFrontCol*seamV;
       #include <opaque_fragment>`);

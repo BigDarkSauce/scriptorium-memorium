@@ -1046,7 +1046,7 @@ DIO.weatherglass.levels=[{name:'Room'},{name:'Instrument',at:'storm glass'},{nam
 // "explain" are the ones that run produces.
 DIO.weatherglass.lessons=[
  {title:'Read the barometer',question:'What holds the mercury column up?',focus:'mercury column',set:{auto:0,P:1013,T:15,P0:1013},run:8,shot:'close',
-  cameraMode:'object',section:{on:['mercury barometer'],axis:'z',sweep:1.6,keep:['mercury column'],caption:'The walnut case cut open: a glass tube standing in a cistern of mercury, vacuum above the column.'},
+  cameraMode:'object',section:{on:['mercury barometer'],axis:'z',sweep:1.6,keep:['mercury column'],frame:['mercury barometer'],caption:'The walnut case cut open: a glass tube standing in a cistern of mercury, vacuum above the column.'},
   text:'Auto weather is switched off and the outside pressure is held at 1013 hPa. Look at the top of the mercury column in the brass window and read it against the scale. Then the walnut case of the mercury barometer is cut open, so you can follow the mercury down to its cistern.',
   explain:'Above the mercury there is vacuum, so only the air pressing on the open cistern holds the column up: h = P/(ρ_Hg g) = 101 325 Pa ÷ (13 595 kg/m³ × 9.81 m/s²) ≈ 760 mm. Each hPa of air pressure holds 0.75 mm of mercury, so the barometer reads the weight of the air directly, in absolute terms.',
   opens:'What does the Goethe glass do when the outside pressure falls?'},

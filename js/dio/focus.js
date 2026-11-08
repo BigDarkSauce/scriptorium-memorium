@@ -227,7 +227,7 @@ export class Cues {
     // a section (grammar.js "section"): clip mode with a fixed world axis (the normal points away from the half cut off),
     // a sweep time and a depth (0.5 = through the middle), labelled "Section k of n"
     const ax = Array.isArray(P.axis) ? V3(+P.axis[0] || 0, +P.axis[1] || 0, +P.axis[2] || 0) : { x: V3(1, 0, 0), y: V3(0, -1, 0), z: V3(0, 0, -1) }[P.axis] || null;
-    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1, axisV: ax && ax.lengthSq() > 1e-9 ? ax.normalize() : null, sweep: clamp(+P.sweep || 1.2, .4, 6), depth: clamp(P.depth ?? .5, .1, 1), kicker: P.kicker || 'Layer' };
+    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1, axisV: ax && ax.lengthSq() > 1e-9 ? ax.normalize() : null, sweep: clamp(+P.sweep || 1.2, .4, 6), depth: clamp(P.depth ?? .5, .1, 1), kicker: P.kicker || 'Layer', frame: (P.frame || []).filter(a => a && a.obj) };
     this.peel.ord = this.peel.order === 'out-in' ? L : L.slice().reverse();
     if (this.peel.order === 'in-out') L.forEach(l => { l.k = l.goal = 1; this.swap(l, true); });   // build up: start from the bare inside
     if (!this.meshes.length || this.stale()) this.gather(); this.dirty = true;
@@ -282,6 +282,9 @@ export class Cues {
   updatePeel(dt) {
     const P = this.peel; if (!P) return; const ord = P.ord;
     if (P.phase === 'run' && this.ready()) {
+      // a section that names what it shows (section.frame): the camera first glides to fit those parts (the cut and what the
+      // caption names stay in view), the cut starts once it has landed (ready() waits for the move)
+      if (P.idx < 0 && P.frame.length && !P.framed && this.v.ops) { P.framed = true; const bx = new THREE.Box3(), q = new THREE.Box3(); this.v.scene.updateMatrixWorld(true); P.frame.forEach(a => { q.setFromObject(a.obj); if (!q.isEmpty()) bx.union(q); }); if (!bx.isEmpty()) { this.v.ops.glide(this.v.ops.poseFor(bx, 'medium', true), 1.8); return; } }
       P.t += dt;
       if (P.idx < 0 || P.t >= P.wait) {
         P.idx++;

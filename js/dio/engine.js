@@ -373,7 +373,7 @@ export class DioramaView {
     if (l.section && !out.peel) { const S = typeof l.section === 'object' ? l.section : {}, ds = this.ds, all = S.on === 'all' || S.on === '*';
       const on = all ? [{ name: S.label || 'Section', obj: ds.world, getPos: () => ds.center.clone(), describe: S.caption || '' }] : list([].concat(S.on || S.layers || (host ? host.name : [])), B).map(a => S.caption ? Object.assign({}, a, { describe: S.caption }) : a);
       const at = Array.isArray(S.at) ? new THREE.Vector3(+S.at[0] || 0, +S.at[1] || 0, +S.at[2] || 0) : S.at && B(S.at) ? B(S.at).getPos() : null;
-      if (on.length) out.peel = { layers: on.slice(0, 6), mode: 'clip', axis: S.axis, at: at && at.isVector3 ? at : null, keep: list(S.keep, B), sweep: S.sweep || 1.6, depth: S.depth, dwell: S.dwell || 2.4, restore: S.restore || 'step', kicker: 'Section' }; }
+      if (on.length) out.peel = { layers: on.slice(0, 6), mode: 'clip', axis: S.axis, at: at && at.isVector3 ? at : null, keep: list(S.keep, B), sweep: S.sweep || 1.6, depth: S.depth, dwell: S.dwell || 2.4, restore: S.restore || 'step', kicker: 'Section', frame: list(S.frame, B) }; }
     out.levels = this.spec.levels || D.levels || null;
     if (l.section && typeof l.section === 'object' && Array.isArray(l.section.hide)) out.hide = list(l.section.hide, B);
     if (l.track && l.track !== 'actor') { let T = typeof l.track === 'string' ? (this.spec.tracks || D.tracks || {})[l.track] : l.track; if (Array.isArray(T)) T = { points: T }; if (T && Array.isArray(T.points) && T.points.length >= 2) out.track = Object.assign({ name: typeof l.track === 'string' ? l.track : 'the track' }, T); }
