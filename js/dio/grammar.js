@@ -204,7 +204,7 @@ export class Ops {
       // a stack along the axis: rank by position along it (ties share a rank), the lowest (or the named anchor) stays
       const pr = homes.map((h, i) => ({ i, t: h.c.dot(ax) })).sort((a, b) => a.t - b.t); let rank = 0, last = null; const rk = [];
       pr.forEach(o => { if (last != null && o.t - last > R * .04) rank++; rk[o.i] = rank; last = o.t; });
-      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, gap = Math.max(...homes.map(h => Math.abs(h.s.dot(ax)))), d = Math.max((+E.distance || .35) * R, gap * 1.6);   /* every rank clears the tallest part along the axis: visible gaps */
+      const a0 = anchor ? parts.indexOf(parts.find(p => p.obj === anchor.obj)) : -1, base = a0 >= 0 ? rk[a0] : 0, gap = Math.max(...homes.map(h => Math.abs(h.s.dot(ax)))), d = Math.max((+E.distance || .25) * R, gap * 1.8);   /* every rank clears the tallest part along the axis: visible gaps */
       dirs = rk.map(r => ax.clone().multiplyScalar((r - base) * d));
     } else {
       const d = (+E.distance || .55) * R;
@@ -218,7 +218,7 @@ export class Ops {
   }
   updateExplode(dt) {
     const X = this.ex, v = this.v, d = v.dir; let go = false;
-    if (X.phase === 'wait') { if (!this.ready()) return; X.phase = 'frame'; X.t = 0; this.glide(this.poseFor(X.fin.clone().expandByScalar(X.R * .05)), 2.2); X.lines.material.opacity = 0; }
+    if (X.phase === 'wait') { if (!this.ready()) return; X.phase = 'frame'; X.t = 0; this.glide(this.poseFor(X.fin.clone().expandByScalar(X.R * .15)), 2.2); X.lines.material.opacity = 0; }
     X.t += dt;
     if (X.phase === 'frame') { if (!d.move && !d.dip || X.t > 4.5) { X.phase = 'out'; X.t = 0; if (this.reduced()) { X.k = X.k.map(() => 1); d.dip = { t: 0, done: false, apply: () => { } }; } } }
     else if (X.phase === 'out') { const dur = .9; X.parts.forEach((a, i) => { X.k[i] = this.reduced() ? 1 : clamp((X.t - i * X.stagger) / dur, 0, 1); }); if (X.k.every(k => k >= 1)) { X.phase = 'hold'; X.t = 0; this.explodeBeat(); } }
