@@ -29,8 +29,13 @@ export class Reader {
     this.el = el('section', { class: 'reader' }); app.ui.append(this.el);
     requestAnimationFrame(() => this.el.classList.add('in'));
     this.render();
-    this.onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal-veil')) this.close(); }; addEventListener('keydown', this.onKey);
+    // Esc closes the ⋯ menu first when it is open (whatever holds the focus: on a one-fold scroll both items are disabled and
+    // the focus stays on ⋯), and the scroll only when no menu is open
+    this.onKey = e => { if (e.key !== 'Escape' || document.querySelector('.modal-veil')) return; if (this.menuOpen()) { e.preventDefault(); this.toggleMenu(false); const b = this.el.querySelector('.reader-menu-btn'); if (b) b.focus(); return; } this.close(); }; addEventListener('keydown', this.onKey);
+    // a press anywhere outside the menu and its ⋯ button closes the menu
+    this.onDown = e => { if (!this.menuOpen()) return; const m = this.el.querySelector('.reader-menu'); if (m && e.target && m.contains(e.target)) return; this.toggleMenu(false); }; addEventListener('pointerdown', this.onDown, true);
   }
+  menuOpen() { const pop = this.el.querySelector('.reader-menu-pop'); return !!(pop && !pop.hidden); }
   dock(mode, initial) {
     if (mode !== 'full') this.lastDock = mode; this.dockMode = mode;
     ['left', 'center', 'right', 'full'].forEach(k => this.el.classList.toggle('dock-' + k, k === mode));
@@ -38,7 +43,7 @@ export class Reader {
     if (!initial || mode !== 'full') { try { localStorage.setItem('scriptorium.readerDock', mode === 'full' ? (this.lastDock || 'right') : mode); } catch (e) { } }
   }
   close() {
-    if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
+    if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
   render() {
@@ -56,7 +61,8 @@ export class Reader {
     addEventListener('keydown', this._dockKey);
     const body = el('div', { class: 'reader-body' }); this.body = body;
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
-    if (!P.analysis) { this.renderEmpty(); return; }
+    if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
+    if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }   // analysed, but the chain came back empty: nothing to unfold
     const chain = this.renderChain(P.analysis); body.append(this.analyseBar(true), chain, this.foldBar);
   }
   // ---------- progressive unfolding ----------
@@ -111,7 +117,7 @@ export class Reader {
     if (k < n) {
       const go = el('button', { class: 'unroll', type: 'button', 'aria-label': `Unfold further: fold ${k + 1} of ${n}`, onclick: () => this.unfold(1) }, [el('span', { class: 'unroll-sheet', 'aria-hidden': 'true' }), el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'Unfold further' }), el('span', { class: 'unroll-prog', text: `fold ${k} of ${n} read` })])]);
       bar.append(go, el('div', { class: 'fold-dots', 'aria-hidden': 'true' }, this.folds.map((_, i) => el('i', { class: i < k ? 'on' : '' }))));
-    } else bar.append(el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null);
+    } else bar.append(...[el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null].filter(Boolean));   /* (append(null) would print the word "null" under a one-fold scroll's bar) */
     const mi = this.el.querySelector('.reader-menu-pop'); if (mi) this.fillMenu(mi);
     this.typesetShown();
     if (!animate) { requestAnimationFrame(() => drawArcs(wrap)); return; }
@@ -145,7 +151,7 @@ export class Reader {
   }
   fillMenu(pop) {
     const n = this.folds ? this.folds.length : 0; pop.innerHTML = '';
-    pop.append(el('div', { class: 'rm-kicker', text: n ? `Unrolled: fold ${this.shown} of ${n}` : 'Not analysed yet' }),
+    pop.append(el('div', { class: 'rm-kicker', text: n ? `Unrolled: fold ${this.shown} of ${n}` : this.part.analysis ? 'No steps to unfold' : 'Not analysed yet' }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Unfold all', disabled: !n || this.shown >= n, onclick: () => { this.unfoldAll(); this.toggleMenu(false); } }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Roll up', disabled: !n || this.shown <= 1, onclick: () => { this.rollUp(); this.toggleMenu(false); } }));
   }
@@ -157,12 +163,19 @@ export class Reader {
       el('p', { text: P.summary || 'Analyse it to rebuild the content as one logical chain: every definition, axiom and formula once, each step derived from the earlier ones, with showcases you can step into.' }),
       this.analyseBar(false)]));
   }
-  analyseBar(compact) {
+  renderNoSteps() {
+    const b = this.body;
+    b.append(el('div', { class: 'empty no-steps' }, [
+      el('h3', { html: '<span class="illum">N</span>o steps were found' }),
+      el('p', { text: 'The last analysis of this part came back without a single step, so there is nothing to unfold yet. Analyse it again (another depth may help), or paste a chain from another AI.' }),
+      this.analyseBar(false, 'Analyse again')]));
+  }
+  analyseBar(compact, label) {
     const depth = el('select', { class: 'field small', 'aria-label': 'Depth' }, [el('option', { value: 'complete', text: 'Complete chain (length from content)' }), el('option', { value: 'essential', text: 'Essential chain (length from content)' }), el('option', { value: 'exact', text: 'Exact number of steps…' })]);
     const n = el('input', { type: 'number', class: 'field small num', min: 3, max: 80, value: 16, hidden: true, 'aria-label': 'Number of steps' });
     depth.onchange = () => { n.hidden = depth.value !== 'exact'; };
     const st = el('div', { class: 'status' });
-    const go = el('button', { class: 'btn primary small', text: compact ? 'Re-analyse' : 'Analyse this part', onclick: () => this.analyse(depth.value, +n.value, st, go) });
+    const go = el('button', { class: 'btn primary small', text: label || (compact ? 'Re-analyse' : 'Analyse this part'), onclick: () => this.analyse(depth.value, +n.value, st, go) });
     const pasted = el('button', { class: 'btn small', text: 'Paste JSON from another AI', onclick: () => this.pasteJSON() });
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
