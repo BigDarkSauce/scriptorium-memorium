@@ -683,6 +683,8 @@ export class Director {
           if (opts.length) { opts.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y)); [x, y] = opts[0]; }
         }
       }
+      // still over its own anchor dot (clamped against the panel or the frame): step above or below the dot instead
+      if (on && x < sx + 14 && x + cw > sx - 14 && y < sy + 14 && y + ch > sy - 14) { const ys = [sy + 16, sy - 16 - ch].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; }
       // the glide after a change of side: from where it was drawn toward where it now belongs
       if (b.tw) { b.tw.t += dt; const k = Math.min(1, b.tw.t / .35), s = k * k * (3 - 2 * k); x = b.tw.x0 + (x - b.tw.x0) * s; y = b.tw.y0 + (y - b.tw.y0) * s; if (k >= 1) b.tw = null; }
       b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
