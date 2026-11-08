@@ -6,6 +6,7 @@ import { buildBody, buildShape } from './builder.js';
 import { setupEnvironment } from './environments.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { makeFrontUniforms, patchTree } from '../gfx/materialize.js';
+import { resetCloudShadows } from '../gfx/clouds.js';
 import { clamp, fmt, lerp, compile, hashStr, mulberry, makeNoise, disposeTree } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -55,9 +56,21 @@ export class DioramaScene {
     if (isSceneSpec(spec) && !(spec.camera && spec.camera.r) && !this._camSet) { this.orb.r = Math.max(8, this.radius * 2.35); this.orb.target.copy(this.center).setY(Math.max(1, this.center.y * .8)); }
     this._camSet = true;
   }
-  bodyCtx() { return { seedOf: id => hashStr(String(id)), params: this.p }; }
+  bodyCtx() { return { seedOf: id => hashStr(String(id)), params: this.p, headless: this.headless }; }
   addActor(name, getPos, obj, describe = '', id) { if (!name) return; if (this.actors.some(a => a.name === name)) return; this.actors.push({ name, getPos, obj, describe, id: id || name }); }
-  centerOf(o) { const b = new THREE.Box3().setFromObject(o); return b.isEmpty() ? o.getWorldPosition(V3()) : b.getCenter(V3()); }
+  // an actor's anchor (its pin, the director's aim): userData.anchor when the scene sets one (a summit, a spout), else the
+  // centre of what is actually drawn of it: hidden parts do not count, and an actor with nothing drawn (rain before it
+  // rains, a cloud not yet formed) has no anchor at all, so its pin hides instead of marking empty air
+  centerOf(o) {
+    const A = o.userData.anchor; if (A) return typeof A === 'function' ? A() : A.clone();
+    const b = this._cb || (this._cb = new THREE.Box3()), q = this._cq || (this._cq = new THREE.Box3()); b.makeEmpty(); let drawable = 0;
+    o.updateWorldMatrix(true, true);
+    const walk = n => { if (!n.visible && !n.userData.skyOnly) return;   /* (skyOnly: hidden only while the camera is outside a glass case) */ if (n.geometry && (n.isMesh || n.isPoints || n.isLine || n.isSprite)) { drawable++; if (!n.geometry.boundingBox) n.geometry.computeBoundingBox(); q.copy(n.geometry.boundingBox).applyMatrix4(n.matrixWorld); if (!q.isEmpty()) b.union(q); } for (const c of n.children) walk(c); };
+    const any = n => { let k = false; n.traverse(x => { if (x.geometry) k = true; }); return k; };
+    walk(o);
+    if (b.isEmpty()) return drawable || !any(o) ? o.getWorldPosition(V3()) : null;
+    return b.getCenter(V3());
+  }
   buildModel() {
     const self = this, spec = this.spec, def = DIO[spec.type];
     const D = {
@@ -213,11 +226,11 @@ export class DioramaScene {
   }
   overviewKey() {
     const o = this.orb, dir = V3(Math.sin(o.ph) * Math.sin(o.th), Math.cos(o.ph), Math.sin(o.ph) * Math.cos(o.th)).normalize();
-    const fov = 40, dist = o.r, frameH = 2 * dist * Math.tan(fov * Math.PI / 360);
+    const fov = o.fov || 40, dist = o.r, frameH = 2 * dist * Math.tan(fov * Math.PI / 360);   // api.camera({fov}) gives a scene its own overview lens
     return { target: o.target.clone(), dir, fov, frameH };
   }
   rebuildKeepView() { const keep = this.p; this.build(); }
   dispose() {
-    disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
+    resetCloudShadows(); disposeTree(this.scene);   // geometries, materials and their textures, except module caches marked userData.shared
   }
 }

@@ -1,0 +1,154 @@
+{
+ "type": "scene",
+ "title": "A predator's time budget",
+ "technique": "topdown",
+ "environment": {
+  "preset": "landscape",
+  "time": 15
+ },
+ "scale": {
+  "m": 1
+ },
+ "params": [
+  {
+   "key": "H",
+   "label": "prey density (prey on the field)",
+   "min": 4,
+   "max": 60,
+   "value": 12,
+   "unit": "prey",
+   "rebuild": true
+  },
+  {
+   "key": "Th",
+   "label": "handling time per prey",
+   "min": 0.2,
+   "max": 3,
+   "value": 1,
+   "unit": "s"
+  },
+  {
+   "key": "a",
+   "label": "search speed",
+   "min": 0.5,
+   "max": 3,
+   "value": 1.5,
+   "unit": "m/s"
+  }
+ ],
+ "bodies": [
+  {
+   "id": "field",
+   "name": "Field",
+   "role": "decor",
+   "shape": {
+    "kind": "disc",
+    "r": 6.4
+   },
+   "material": {
+    "preset": "grass"
+   },
+   "position": [
+    0,
+    0.01,
+    0
+   ]
+  },
+  {
+   "id": "predator",
+   "name": "predator",
+   "label": "Predator",
+   "role": "actor",
+   "describe": "Searches the field, then handles each catch for Th seconds.",
+   "shape": {
+    "kind": "cone",
+    "r": 0.35,
+    "h": 0.8
+   },
+   "material": {
+    "preset": "leather",
+    "color": "#8a4a2a"
+   },
+   "position": [
+    0,
+    0.4,
+    0
+   ],
+   "rotation": [
+    90,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "den",
+   "name": "Den",
+   "role": "decor",
+   "shape": {
+    "kind": "rock",
+    "r": 0.8,
+    "h": 0.6
+   },
+   "material": {
+    "preset": "stone"
+   },
+   "position": [
+    -5,
+    0.3,
+    -3
+   ]
+  }
+ ],
+ "tour": [
+  "predator"
+ ],
+ "code": "const P = api.body('predator'); const prey = []; const R = 6;\nconst place = o => { const r = R * Math.sqrt(api.rand()), t = 2 * Math.PI * api.rand(); o.position.set(r * Math.cos(t), 0.18, r * Math.sin(t)); };\nfor (let i = 0; i < Math.round(api.param('H')); i++) { const o = api.spawn({ shape: { kind: 'sphere', r: 0.16 }, material: { preset: 'plastic', color: '#f2e2b8' } }); place(o); prey.push(o); }\nlet handling = 0, eaten = 0, tHand = 0, target = null; const dir = api.V3(1, 0, 0);\napi.label('prey', () => prey[0] && prey[0].position, 'One of the prey: eaten prey are replaced, so the density stays H.');\napi.onFrame((dt, t) => {\n  if (handling > 0) { handling -= dt; tHand += dt; if (handling <= 0) api.event('handling done: back to searching', P.position, { id: 'search' }); return; }\n  if (!target || !target.visible) target = prey.reduce((b, o) => !b || o.position.distanceTo(P.position) < b.position.distanceTo(P.position) ? o : b, null);\n  if (!target) return; dir.copy(target.position).sub(P.position); dir.y = 0; const d = dir.length();\n  if (d < 0.3) { eaten++; handling = api.param('Th'); place(target); target = null; api.event('catch: handling for ' + api.fmt(api.param('Th')) + ' s', P.position, { id: 'catch' }); return; }\n  dir.normalize(); P.position.addScaledVector(dir, Math.min(d, api.param('a') * dt)); P.rotation.z = Math.atan2(dir.x, dir.z);\n});\napi.readout('catches per minute', () => api.time() > 1 ? api.fmt(eaten / api.time() * 60) : '—');\napi.readout('share of time handling', () => api.time() > 1 ? api.fmt(tHand / api.time() * 100) + ' %' : '—');\napi.readout('ceiling 60 / Th', () => api.fmt(60 / api.param('Th')) + ' per min');\napi.plot('catches', () => eaten);",
+ "lessons": [
+  {
+   "title": "Scarce prey",
+   "question": "Why does the catch rate level off as prey become common?",
+   "text": "With 6 prey on the field, watch how long the predator walks between catches.",
+   "set": {
+    "H": 6
+   },
+   "focus": "predator",
+   "run": 12,
+   "explain": "Most of the time goes into searching: catches rise almost in proportion to prey.",
+   "opens": "What happens when prey are everywhere?"
+  },
+  {
+   "title": "Abundant prey",
+   "question": "What happens when prey are everywhere?",
+   "text": "Raise the density to 50 and watch the share of time spent handling.",
+   "set": {
+    "H": 50
+   },
+   "focus": "predator",
+   "until": "event:catch",
+   "run": 14,
+   "explain": "Each catch is quickly found but costs Th: handling takes most of the time and the rate nears 60 / Th per minute.",
+   "opens": "What sets the ceiling?"
+  },
+  {
+   "title": "Slower handling",
+   "question": "What sets the ceiling?",
+   "text": "Double the handling time and compare the catch rate with the ceiling readout.",
+   "set": {
+    "H": 50,
+    "Th": 2
+   },
+   "focus": "predator",
+   "run": 14,
+   "explain": "The ceiling is T ÷ Th: doubling Th halves the most a predator can eat, as in Ha = aHT / (1 + aHTh).",
+   "opens": "How would learning or prey switching change the curve?"
+  }
+ ],
+ "sources": [
+  {
+   "title": "Some characteristics of simple types of predation and parasitism",
+   "authors": "Holling C S",
+   "year": 1959,
+   "doi": "10.4039/Ent91385-7"
+  }
+ ]
+}

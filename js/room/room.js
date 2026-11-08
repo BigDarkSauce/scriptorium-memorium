@@ -10,10 +10,12 @@ import { makeRoomShell } from '../gfx/roomshell.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { canvasTex, parchment, radialGlow, labelTex } from '../gfx/textures.js';
 import { bmat } from '../gfx/baroque.js';
+import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
 import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
-import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree } from '../util.js';
+import { bookBusy } from '../ai/pipeline.js';
+import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree, measureMath, canvasMath, mathText, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // The part of a diorama's world a pedestal should show. The diorama's actors (the bodies it names and points at)
@@ -96,16 +98,16 @@ function plateTex(text, aspect) {
   return canvasTex(null, W, H, g => {
     g.fillStyle = '#cfa95a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#7d5a22'; g.lineWidth = 4; g.strokeRect(5, 5, W - 10, H - 10);
     g.fillStyle = '#2a1a0a'; g.textAlign = 'center'; g.textBaseline = 'middle'; const F = fs => `600 ${fs}px "IM Fell English SC", Georgia, serif`, maxW = W - 36;
-    for (let fs = 44; fs >= 34; fs -= 2) { g.font = F(fs); if (g.measureText(text).width <= maxW) { g.fillText(text, W / 2, H / 2 + 2); return; } }
+    for (let fs = 44; fs >= 34; fs -= 2) { g.font = F(fs); if (measureMath(g, text) <= maxW) { canvasMath(g, text, W / 2, H / 2 + 2); return; } }
     const words = text.split(/\s+/);
     for (let fs = 40; fs >= 32; fs -= 2) {
       g.font = F(fs); let best = null;
-      for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(g.measureText(a).width, g.measureText(b).width); if (m <= maxW && (!best || m < best.m)) best = { a, b, m }; }
-      if (best && fs * 2.1 <= H - 10) { const lh = fs * 1.05; g.fillText(best.a, W / 2, H / 2 - lh / 2 + 2); g.fillText(best.b, W / 2, H / 2 + lh / 2 + 2); return; }
+      for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(measureMath(g, a), measureMath(g, b)); if (m <= maxW && (!best || m < best.m)) best = { a, b, m }; }
+      if (best && fs * 2.1 <= H - 10) { const lh = fs * 1.05; canvasMath(g, best.a, W / 2, H / 2 - lh / 2 + 2); canvasMath(g, best.b, W / 2, H / 2 + lh / 2 + 2); return; }
     }
-    g.font = F(32); const lh = 33.6; let a = '', i = 0; for (; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (g.measureText(t).width > maxW && a) break; a = t; }
-    let b = words.slice(i).join(' '); while (b.length > 1 && g.measureText(b + '…').width > maxW) b = b.slice(0, -1).trimEnd();
-    g.fillText(a, W / 2, H / 2 - lh / 2 + 2); g.fillText(b + (i < words.length && b !== words.slice(i).join(' ') ? '…' : ''), W / 2, H / 2 + lh / 2 + 2);
+    g.font = F(32); const lh = 33.6; let a = '', i = 0; for (; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (measureMath(g, t) > maxW && a) break; a = t; }
+    let b = words.slice(i).join(' '); while (b.length > 1 && measureMath(g, b + '…') > maxW) b = b.slice(0, -1).trimEnd();
+    canvasMath(g, a, W / 2, H / 2 - lh / 2 + 2); canvasMath(g, b + (i < words.length && b !== words.slice(i).join(' ') ? '…' : ''), W / 2, H / 2 + lh / 2 + 2);
   }, { aniso: 8 });
 }
 // the visible extent of a mini (meshes and lines; hidden parts and their children left out), in `frame`'s coordinates
@@ -128,18 +130,32 @@ function miniEmblem(title) {
 // a pedestal's walk-collision box: its plinth only (the turning models must not move the box)
 const st0 = o => { o.updateMatrixWorld(true); const b = new THREE.Box3(); o.children.forEach(c => { if (c.userData.solid) b.expandByObject(c); }); return b.isEmpty() ? new THREE.Box3().setFromObject(o) : b; };
 const SPACING = 2.9;
+// Floor-plan margins (metres): a plinth stands WALL_GAP clear of every wall (0.9 m walkway, and 0.6 m clear of the
+// 0.42 m wall bookcases); FURN_GAP clear of other plinths, the door and stairs (a full walkway: at 0.6 m the plinths
+// read as one crowded counter); scrolls at least STATION_MIN apart
+// (niche + pilaster) and CORNER_MIN from a corner; the door zone covers the double door, its frame and columns.
+const CASE_D = .42, WALL_GAP = Math.max(1, CASE_D + .6), FURN_GAP = 1.05, STATION_MIN = SPACING, CORNER_MIN = 1.2, DOOR_HALF = 2, DOOR_DEPTH = 1;
+// A pedestal's size from its number of demos: one (or none) is the round marble pedestal; several make a long plinth
+// with up to 4 bays a row. W × Dp is the marble body; Wf × Df the footprint with the top slab's lip.
+function plinthDims(n) {
+  if (n <= 1) return { single: true, Wf: .76, Df: .76 };
+  const cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4)), rows = Math.ceil(n / cols), B = clamp(2.38 / cols, .5, .72), W = cols * B + .12, Dp = rows * B + .12;
+  return { single: false, cols, rows, B, W, Dp, Wf: W + .07, Df: Dp + .07 };
+}
 // Station heights: every hanging scroll's lower rod sits at SHEET_BOTTOM, above the pedestal and its turning model
 // (PED_TOP + up to ~.4 m), so from the opening view (eye ~1.9 m, ~4.5 m back) the model never hides the sheet.
 const SHEET_BOTTOM = 1.3, PED_TOP = .965, SPOTS = 8;
 // mini models: fitted to ~80 % of the pedestal's card (or of a bay's model area), at most MINI_H tall
-const MINI_FIT = .8, MINI_H = .38;
+const MINI_FIT = .86, MINI_H = .4;
 
 export class BookRoom {
   constructor(app, book, data, opts = {}) {
     this.app = app; this.gfx = app.gfx; this.book = book; this.data = data; this.opts = opts;
     this.data.dims = this.data.dims || { w: 12, d: 10, h: 5.5 }; if (this.data.dims.h === 4.4) this.data.dims.h = 5.5; this.data.parts = this.data.parts || [];
-    this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .2; this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.65 }); // no window here: a touch more exposure than the hall
+    this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0907); this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .2; this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.3, warm: .006 }); // no window here: a touch more exposure than the hall (1.65 before the room's own probe lit it)
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .05, 120);
+    // the room's own reflections (surfaces.js): captured after every rebuild; GTAO at quality 'high'
+    this.probe = new RoomProbe(this.gfx); this.probeDirty = true; this.ao = new RoomAO(this.gfx, this.scene, this.camera);
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 12, maxPolarAngle: Math.PI * .56, rotateSpeed: .6 });
     this.stations = new Map(); this.keys = {};
@@ -189,7 +205,7 @@ export class BookRoom {
   // ---------- ingestion: split the PDF into parts (outline → headings → contents page → windows) ----------
   async ingest() {
     if (!this.book.hasPdf) { this.status('This book has no PDF attached. Import a room JSON or add parts with AI.'); return; }
-    const blob = await this.app.store.get('pdf:' + this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return; }
+    const blob = await this.app.store.get('pdf:' + this.book.id); if (blob && this.app.ingest.keyPDF) this.app.ingest.keyPDF(blob, this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return; }
     this.status('Finding the chapters…');
     try {
       const r = await this.app.ingest.splitBook(blob, { onProgress: k => this.status('Finding the chapters… ' + Math.round(k * 100) + '%') });
@@ -206,17 +222,49 @@ export class BookRoom {
   status(msg, ms) { this.statusEl.textContent = msg; this.statusEl.hidden = !msg; clearTimeout(this._st); if (ms) this._st = setTimeout(() => { this.statusEl.hidden = true; }, ms); }
   // ---------- layout along the walls, starting at the left wall ----------
   orderedParts() { const out = []; this.data.parts.filter(p => !p.subOf).forEach(p => { out.push(p); this.data.parts.filter(s => s.subOf === p.id).forEach(s => out.push(s)); }); this.data.parts.filter(s => s.subOf && !this.data.parts.some(p => p.id === s.subOf)).forEach(s => out.push(s)); return out; }
+  // Stations go round the walls in order (left wall from the front, back, right, front either side of the door). Each
+  // station's floor footprint is its plinth (bays, label plates and the top slab's lip: plinthDims) standing WALL_GAP
+  // out from its wall; a station is placed at the first spot along its wall where that footprint stays WALL_GAP from
+  // every wall, FURN_GAP from every other station's footprint, the door and the hall's stairs, and STATION_MIN from the
+  // previous scroll (niche + pilaster). Whatever does not fit makes the room grow (a fresh layout), except while the
+  // size sliders move (preview): then the stations that do not fit are hidden until the room is big enough.
   layout(preview = false) {
-    const D = this.data.dims, parts = this.orderedParts();
-    const capacity = () => { const L = Math.floor((D.d - 2.4) / SPACING) + 1, B = Math.floor((D.w - 2.4) / SPACING) + 1; return { L, B, F: Math.max(0, Math.floor((D.w - 2.4) / SPACING) - 1), total: 2 * L + B + Math.max(0, Math.floor((D.w - 2.4) / SPACING) - 1) }; };
-    let grew = false; while (!preview && capacity().total < parts.length && D.w < 80) { D.w += SPACING; D.d += SPACING * .6; grew = true; }
+    const D = this.data.dims, parts = this.orderedParts(), fps = parts.map(p => plinthDims(this.pedestalSpecs(p).length));
+    let r = this.fitStations(D, fps), grew = false;
+    while (!preview && r.slots.length < parts.length && D.w < 80) { D.w = +(D.w + SPACING).toFixed(2); D.d = +(D.d + SPACING * .6).toFixed(2); grew = true; r = this.fitStations(D, fps); }
     if (grew) { this.save(); toast('The room grew to fit every scroll'); }
-    const c = capacity(), slots = [];
-    for (let i = 0; i < c.L; i++) slots.push({ wall: 'left', p: V3(-D.w / 2, 0, D.d / 2 - 1.2 - i * SPACING), n: V3(1, 0, 0) });
-    for (let i = 0; i < c.B; i++) slots.push({ wall: 'back', p: V3(-D.w / 2 + 1.2 + i * SPACING, 0, -D.d / 2), n: V3(0, 0, 1) });
-    for (let i = 0; i < c.L; i++) slots.push({ wall: 'right', p: V3(D.w / 2, 0, -D.d / 2 + 1.2 + i * SPACING), n: V3(-1, 0, 0) });
-    for (let i = 0; i < c.F; i++) { const x = D.w / 2 - 1.2 - i * SPACING; if (Math.abs(x) < 1.4) continue; slots.push({ wall: 'front', p: V3(x, 0, D.d / 2), n: V3(0, 0, -1) }); }
-    this.slots = slots; this.placed = parts.map((p, i) => ({ part: p, slot: slots[i] })).filter(x => x.slot);
+    this.slots = r.slots; this.footprints = r.rects; this.placed = parts.map((p, i) => ({ part: p, slot: r.slots[i] })).filter(x => x.slot);
+  }
+  fitStations(D, fps) {
+    const walls = [
+      { wall: 'left', o: V3(-D.w / 2, 0, D.d / 2), u: V3(0, 0, -1), n: V3(1, 0, 0), L: D.d },
+      { wall: 'back', o: V3(-D.w / 2, 0, -D.d / 2), u: V3(1, 0, 0), n: V3(0, 0, 1), L: D.w },
+      { wall: 'right', o: V3(D.w / 2, 0, -D.d / 2), u: V3(0, 0, 1), n: V3(-1, 0, 0), L: D.d },
+      { wall: 'front', o: V3(D.w / 2, 0, D.d / 2), u: V3(-1, 0, 0), n: V3(0, 0, -1), L: D.w }];
+    // fixed furniture: the double door with its columns (front wall), and the hall's corner stairs when the shell has them
+    const fixed = [{ x0: -DOOR_HALF, x1: DOOR_HALF, z0: D.d / 2 - DOOR_DEPTH, z1: D.d / 2 }];
+    const sh = this.shell && this.shell.userData, bq = sh && sh.baroque, sd = sh && sh.dims;
+    if (bq && sd && sd.w === D.w && sd.d === D.d) (bq.obstacles || []).filter(q => q.kind === 'stair').forEach(q => fixed.push({ x0: q.x - q.r, x1: q.x + q.r, z0: q.z - q.r, z1: q.z + q.r }));
+    const rectAt = (Wl, c, f) => { const p = Wl.o.clone().addScaledVector(Wl.u, c), m = p.clone().addScaledVector(Wl.n, WALL_GAP + f.Df / 2), hu = f.Wf / 2, hn = f.Df / 2, ax = Math.abs(Wl.u.x) > .5;
+      return { x0: m.x - (ax ? hu : hn), x1: m.x + (ax ? hu : hn), z0: m.z - (ax ? hn : hu), z1: m.z + (ax ? hn : hu), p }; };
+    const gap = (a, b, g) => a.x0 < b.x1 + g && b.x0 < a.x1 + g && a.z0 < b.z1 + g && b.z0 < a.z1 + g;   // closer than g on both axes
+    const inside = q => q.x0 >= -D.w / 2 + WALL_GAP - 1e-6 && q.x1 <= D.w / 2 - WALL_GAP + 1e-6 && q.z0 >= -D.d / 2 + WALL_GAP - 1e-6 && q.z1 <= D.d / 2 - WALL_GAP + 1e-6;
+    const slots = [], rects = []; let wi = 0, prev = null;
+    for (const f of fps) {
+      let done = false;
+      while (!done && wi < walls.length) {
+        const Wl = walls[wi];
+        let c = Math.max(WALL_GAP + f.Wf / 2, CORNER_MIN, prev ? prev.c + Math.max(STATION_MIN, (prev.f.Wf + f.Wf) / 2 + FURN_GAP) : 0);
+        for (; c + f.Wf / 2 <= Wl.L - WALL_GAP + 1e-6 && c <= Wl.L - CORNER_MIN + 1e-6; c += .1) {
+          const q = rectAt(Wl, c, f); if (!inside(q)) continue;
+          if (rects.some(R => gap(q, R, FURN_GAP)) || fixed.some(R => gap(q, R, FURN_GAP))) continue;
+          slots.push({ wall: Wl.wall, p: q.p, n: Wl.n.clone() }); rects.push(q); prev = { c, f }; done = true; break;
+        }
+        if (!done) { wi++; prev = null; }
+      }
+      if (!done) break;
+    }
+    return { slots, rects };
   }
   buildShell(fast = false) {
     // Metten-like walnut-and-gilt wall bookcases; every hanging scroll gets an open, panelled niche in its bay
@@ -225,7 +273,7 @@ export class BookRoom {
     try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
-    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); return true;
+    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); if (!fast) this.probeDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
@@ -236,7 +284,17 @@ export class BookRoom {
     // dozens of lights; the pool follows the scrolls nearest the viewer (a spot only reaches 6 m anyway)
     const n = Math.min(SPOTS, this.stations.size); while ((this.spots || []).length > n) this.spots.pop().removeFromParent(); this.spots = this.spots || [];
     while (this.spots.length < n) { const L = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); this.scene.add(L); this.spots.push(L); }
-    this._spotT = -1; this.placeSpots(true);
+    this._spotT = -1; this.placeSpots(true); this.probeDirty = true;
+  }
+  // a probe at eye height in the middle of the room (no windows here: chandeliers, sconces and the scroll spots light it);
+  // pedestals and the hall's stairs darken the floor at their feet
+  captureProbe() {
+    this.probeDirty = false; const D = this.data.dims, sh = this.shell; if (!sh) return;
+    const info = sh.userData.baroque || {}, L = sh.userData.lights;
+    enrich(this.shell); this.stations.forEach(st => { if (st.ped) enrich(st.ped); });
+    const feet = footprints([...this.stations.values()].map(st => st.ped).filter(Boolean)).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
+    bindRoom(this.scene, this.probe, { w: D.w, d: D.d, floor: 0, cornice: info.ys || D.h * .83, ceiling: D.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.2], feet: feet.slice(0, 24) });
+    this.probe.begin(this.scene, { pos: V3(0, 1.7, 0), box: new THREE.Box3(V3(-D.w / 2, 0, -D.d / 2), V3(D.w / 2, D.h, D.d / 2)), fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .15, hide: [...this.stations.values()].flatMap(st => st.bays.map(b => b.mini)).filter(Boolean) });
   }
   makeStation(part, slot, i) {
     const g = new THREE.Group(); g.position.copy(slot.p); g.lookAt(slot.p.clone().add(slot.n)); this.scene.add(g);
@@ -273,16 +331,16 @@ export class BookRoom {
     const specs = this.pedestalSpecs(st.part), single = specs.length <= 1, ped = new THREE.Group(); st.group.add(ped);
     ped.userData = { station: st.part.id, kind: 'pedestal' }; st.ped = ped; st.bays = [];
     const marble = makeMaterial('marble'), solid = o => { o.userData.solid = true; o.castShadow = true; o.receiveShadow = true; ped.add(o); return o; };
+    const P = plinthDims(specs.length);   // the same footprint the floor plan reserved (layout → fitStations)
     if (single) {
-      ped.position.set(0, 0, 1.15);
+      ped.position.set(0, 0, WALL_GAP + P.Df / 2);
       const col = solid(new THREE.Mesh(new THREE.CylinderGeometry(.24, .3, PED_TOP - .065, 32), marble)); col.position.y = (PED_TOP - .065) / 2;
       const capM = solid(new THREE.Mesh(new THREE.CylinderGeometry(.38, .34, .06, 32), marble)); capM.position.y = PED_TOP - .035; capM.castShadow = false;
       const bay = this.makeBay(st, ped, 0, specs[0] || null, { x: 0, z: 0, card: .36, round: true });
       st.spec = bay.spec; st.mini = bay.mini; return;
     }
-    const n = specs.length, cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4)), rows = Math.ceil(n / cols), B = clamp(2.38 / cols, .5, .72), W = cols * B + .12, Dp = rows * B + .12;
-    const z0 = 1.15 - B / 2 - .06;   // the back edge (row 1, nearest the scroll) where the round pedestal's back was
-    ped.position.set(0, 0, z0 + Dp / 2);
+    const { cols, rows, B, W, Dp } = P;
+    ped.position.set(0, 0, WALL_GAP + P.Df / 2);   // the slab's back lip WALL_GAP from the wall
     const gilt = bmat('gilt'), wn = bmat('walnut-dark'), body = new THREE.Group();
     const box = (mat, w, h, d, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); o.position.set(x, y, z); return solid(o); };
     // plinth, body and top slab overlap a few mm (no two faces share a plane); the gilt fillets' tops and bottoms lie inside the body
@@ -309,7 +367,7 @@ export class BookRoom {
     const cm = new THREE.Mesh(round ? new THREE.CircleGeometry(card, 48) : new THREE.PlaneGeometry(card, card), paper); cm.rotation.x = -Math.PI / 2; cm.position.y = PED_TOP + (round ? 0 : .002); cm.receiveShadow = true; g.add(cm);
     let area = { r: card * MINI_FIT, dz: 0 };
     if (label && spec) {   // an engraved brass label at the bay's front edge, tilted toward the viewer (two lines when long)
-      const title = String(spec.d.title || spec.st.title || 'Demo'), lw = card * .86, lh = .085, pz = card / 2 - .05, tex = plateTex(`${i + 1} · ${title}`, lw / lh);
+      const title = String(spec.d.title || spec.st.title || 'Demo'), lw = card * .9, lh = .1, pz = card / 2 - .05, tex = plateTex(`${i + 1} · ${title}`, lw / lh);
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshStandardMaterial({ map: tex, metalness: .55, roughness: .38, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .08 }));
       plate.rotation.x = -Math.PI / 2 + .9; plate.position.set(0, PED_TOP + .006 + raise + lh / 2 * Math.sin(.9) + .004, pz); plate.name = 'label'; g.add(plate);
       const sh = .012 + raise, stand = new THREE.Mesh(new THREE.BoxGeometry(lw + .01, sh, .028), bmat('gilt')); stand.position.set(0, PED_TOP + .002 + sh / 2, pz + .006); g.add(stand);
@@ -343,6 +401,11 @@ export class BookRoom {
       // lines and sprites reaching well outside the model's box (field lines, guides, labels) are left out too
       const grow = fit.box.clone().expandByScalar(Math.max(fit.rXZ, fit.h) * .15), wb = new THREE.Box3(), winv = w.matrixWorld.clone().invert();
       w.traverse(o => { if (!(o.isLine || o.isSprite) || !o.visible || !o.geometry) return; wb.setFromObject(o).applyMatrix4(winv); if (isFinite(wb.min.x) && !grow.containsBox(wb)) o.visible = false; });
+      // helper wireframes (a cell's glowing edge lines, wireframe meshes) are diagram ink, not part of a maquette
+      w.traverse(o => { if (o.isLineSegments || (o.isMesh && [].concat(o.material).some(m => m && m.wireframe))) o.visible = false; });
+      // what the mini leaves out is taken out of it, not just hidden: the station's bounds (layout checks, picking, the
+      // probe's box) then measure the maquette, not a 250 m ground or hills 40–90 m out still hanging off the plinth
+      { const out = []; w.traverse(o => { if (o !== w && !o.visible && !o.isLight) out.push(o); }); { const top = out.filter(o => !out.includes(o.parent)); top.forEach(o => o.removeFromParent()); disposeTree(top); }   /* detached subtrees are freed here: the room's disposal never reaches them */ bay.cut = out.length; }
       let s = Math.min(bay.area.r / fit.rXZ, (bay.hMax || MINI_H) / fit.h); w.scale.setScalar(s); w.position.set(-fit.c.x * s, -fit.box.min.y * s + .004, -fit.c.z * s);
       bay.mini.add(w);
       // never past its area: the model turns, so its farthest visible point from the turning axis must lie inside r
@@ -360,7 +423,7 @@ export class BookRoom {
       const src = parchment('roomsheet', 512, 690).image; g.drawImage(src, 0, 0, w, h);
       g.fillStyle = '#2a1e15'; g.textAlign = 'center';
       g.font = '22px "IBM Plex Mono", monospace'; g.globalAlpha = .7; g.fillText(part.subOf ? 'SUB-SCROLL' : 'PART ' + (this.partIndex(part) + 1), w / 2, 70); g.globalAlpha = 1;
-      g.font = '600 44px "IM Fell English SC", Georgia, serif'; const words = String(part.title).split(/\s+/); let line = '', y = 140; const lines = [];
+      g.font = '600 44px "IM Fell English SC", Georgia, serif'; const words = mathText(String(part.title)).split(/\s+/); let line = '', y = 140; const lines = [];
       const fitW = t => { if (g.measureText(t).width <= w - 80) return t; while (t.length > 1 && g.measureText(t + '…').width > w - 80) t = t.slice(0, -1); return t + '…'; };   // one very long word is cut, not drawn off the sheet
       words.forEach(wd => { const t = line ? line + ' ' + wd : wd; if (g.measureText(t).width > w - 80 && line) { lines.push(line); line = wd; } else line = t; }); if (line) lines.push(line);
       if (lines.length > 5) { lines.length = 5; lines[4] = lines[4] + '…'; }
@@ -369,12 +432,15 @@ export class BookRoom {
       g.font = '24px "IBM Plex Mono", monospace'; g.fillStyle = '#5b4532';
       if (part.startPage) g.fillText(`pages ${part.startPage}–${part.endPage}`, w / 2, y + 44);
       g.fillText(A ? `${n} steps · analysed` : 'sealed · click to open', w / 2, y + 84);
-      if (A && A.summary) { g.font = 'italic 24px "Alegreya", Georgia, serif'; const ws = A.summary.split(/\s+/); let L = '', yy = y + 150; ws.forEach(wd => { const t = L ? L + ' ' + wd : wd; if (g.measureText(t).width > w - 90) { g.fillText(L, w / 2, yy); yy += 32; L = wd; } else L = t; }); if (yy < h - 60) g.fillText(L, w / 2, yy); }
+      if (A && A.summary) { g.font = 'italic 24px "Alegreya", Georgia, serif'; const ws = mathText(A.summary).split(/\s+/); let L = '', yy = y + 150; ws.forEach(wd => { const t = L ? L + ' ' + wd : wd; if (g.measureText(t).width > w - 90) { g.fillText(L, w / 2, yy); yy += 32; L = wd; } else L = t; }); if (yy < h - 60) g.fillText(L, w / 2, yy); }
       g.fillStyle = A ? '#9c3a28' : '#8f733a'; g.beginPath(); g.arc(w / 2, h - 70, 26, 0, 7); g.fill(); g.fillStyle = '#efe2c2'; g.font = '600 24px "IM Fell English SC", serif'; g.fillText(A ? '✓' : String(i + 1), w / 2, h - 62);
     });
   }
   refreshStation(part) {
     const st = this.stations.get(part.id); if (!st) { this.layout(); this.buildStations(); return; }
+    // a different number of demos changes the plinth's footprint: lay the floor out again so nothing overlaps
+    { const i = this.orderedParts().indexOf(part), f0 = this.footprints && this.footprints[i], f1 = plinthDims(this.pedestalSpecs(part).length), R = f0 && (Math.abs(f0.x1 - f0.x0) + Math.abs(f0.z1 - f0.z0)), want = f1.Wf + f1.Df;
+      if (f0 && Math.abs(R - want) > 1e-3) { const D0 = { ...this.data.dims }; this.layout(); if (D0.w !== this.data.dims.w || D0.d !== this.data.dims.d) this.buildShell(); this.buildStations(); return; } }
     const oldMap = st.sheet.material.map; st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part === part)); st.sheet.material.needsUpdate = true; if (oldMap) this.app.retire(() => oldMap.dispose()); this.buildPedestal(st);
   }
   // Live room size: each slider step stretches the built shell to the new size at once and moves every station to
@@ -430,8 +496,8 @@ export class BookRoom {
     if (this.reader || this.anim) return; const o = this.pick(e); this.gfx.canvas.style.cursor = o ? 'pointer' : '';
     if (o) {
       const p = this.data.parts.find(x => x.id === o.station), st = this.stations.get(p.id), b = st && st.bays[o.bay], many = st && st.bays.length > 1;
-      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${esc(b.spec.d.title || b.spec.st.title || 'Demo')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
-      this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(p.title)}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
+      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${mathHTML(b.spec.d.title || b.spec.st.title || 'Demo', 'label')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
+      this.tip.hidden = false; this.tip.innerHTML = `<b>${mathHTML(p.title, 'label')}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
     } else this.tip.hidden = true;
   }
   pointerUp(e) {
@@ -460,6 +526,9 @@ export class BookRoom {
   }
   // ---------- frame ----------
   update(dt, t) {
+    if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
+    this.probe.step();
+    this.ao.update();
     if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
       this.nav.update(dt, !!this.reader || !!this.unfold);
@@ -478,8 +547,10 @@ export class BookRoom {
   }
   dispose() {
     if (this.disposed) return; this.disposed = true;
+    if (this.app.ingest && this.app.ingest.closePDF && !bookBusy(this.book.id)) this.app.ingest.closePDF(this.book.id);   // its parsed PDF (pdf.js worker memory); a running analysis keeps it
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
+    this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
     this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }

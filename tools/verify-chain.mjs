@@ -22,6 +22,9 @@
 //   demos      checkDemos(): lesson threads, built-in lessons' "until" against the model's real event texts,
 //              repeated dioramas naming their actors in "bodies"
 //   links      "from" names earlier steps that exist; step ids are unique and in order; coverage lists real steps
+//   quality    qualityGate(): no more than 40 words pasted from the PDF, no step repeating another, every step explained,
+//              every code block explained line by line, every figure spec valid (faults); paragraphs or teaching boxes
+//              without a figure, and subsections short of their planned dioramas (warnings: the app completes them)
 //   cues       checkCues(): the explainer cues of every lesson (chain, isolate, peel, zoom, track): names must be the
 //              model's actors or the scene's bodies, enums and track points valid (faults); a chain link the lesson's
 //              text never names, a zoom without the diorama's "scale", and directed-motion wording ("travels to",
@@ -39,7 +42,7 @@ const readJSON = f => { try { return JSON.parse(readFileSync(f, 'utf8')); } catc
 
 // ---------------------------------------------------------------- a small draft 2020-12 validator (the subset the schemas use)
 const REG = new Map();
-for (const f of ['chain.schema.json', 'chain.strict.schema.json', 'room.schema.json', 'scene.schema.json']) { const s = JSON.parse(readFileSync(join(ROOT, 'schema', f), 'utf8')); REG.set(s.$id, s); }
+for (const f of ['chain.schema.json', 'chain.strict.schema.json', 'room.schema.json', 'scene.schema.json', 'figure.schema.json']) { const s = JSON.parse(readFileSync(join(ROOT, 'schema', f), 'utf8')); REG.set(s.$id, s); }
 const typeOf = v => v === null ? 'null' : Array.isArray(v) ? 'array' : Number.isInteger(v) ? 'integer' : typeof v;
 const isType = (v, t) => t === 'number' ? typeof v === 'number' && isFinite(v) : t === 'integer' ? Number.isInteger(v) : typeOf(v) === t;
 function resolve(ref, base) {
@@ -93,6 +96,10 @@ function check(A, sections, figures, label) {
   const B = JSON.parse(JSON.stringify(A));
   const secs = sections && sections.length ? sections : (A.coverage || []).map(c => ({ id: String(c.subsection), title: '', text: '' }));
   const rep = P.verifyChain(B, secs, figures || []); out.report = rep;
+  // the quality gate (pasted text, repeats, unexplained steps, code without explanations, figures; js/ai/prompts.js)
+  const QG = P.qualityGate(JSON.parse(JSON.stringify(B)), secs, figures || []); out.quality = QG;
+  QG.issues.filter(i => ['copied', 'duplicate', 'longQuote', 'unexplained', 'codeUnexplained', 'badFigure'].includes(i.kind)).forEach(i => F('quality', `${i.step || i.section}: ${i.kind}: ${i.detail}`));
+  QG.issues.filter(i => i.kind === 'noFigure' || i.kind === 'dioramas').forEach(i => W('quality', `${i.step || i.section}: ${i.detail}`));
   rep.missing.forEach(m => F('verify', `subsection ${m.id} ${m.title ? '"' + m.title + '" ' : ''}has no step`));
   rep.thin.forEach(t => F('verify', `subsection ${t.id} is coarser than the source: ${t.steps} step(s) for about ${t.expect}`));
   rep.unknownSections.forEach(id => F('verify', `${id}.section is not a subsection of this part`));

@@ -1,6 +1,8 @@
 // Grounding for the example library. Every reference below was checked against OpenAlex on 2026-11-03
 // (resolve_references: "exact" match by DOI or title), so the seed rooms show what a grounded chain looks like.
-// The teaching fields (terms, intuition, misconception, check) follow docs/PEDAGOGY.md.
+// The teaching fields (terms, intuition, misconception, check) follow docs/PEDAGOGY.md; their figures and the steps'
+// explanatory paragraphs are in seeds-figures.js.
+import { figureChain } from './seeds-figures.js';
 const W = (id, doi, authors, year, title, venue, note, cited) => ({ title, authors, year, doi, venue, note, url: doi ? 'https://doi.org/' + doi : 'https://openalex.org/' + id, openalex: 'https://openalex.org/' + id, verified: true, check: 'exact', cited_by: cited });
 export const REF = {
   nelson: W('W2043069373', '10.1119/1.14703', 'Nelson R A; Olsson M G', 1986, 'The pendulum—Rich physics from a simple system', 'American Journal of Physics', '', 205),
@@ -71,9 +73,10 @@ const G = {
 };
 const PART_REFS = { 'The water cycle': ['trenberth', 'oki', 'jasechko', 'koutsoyiannis', 'roe'], 'Galton board': ['galton', 'lecam'], 'Supply and demand': ['smith62', 'gode'], 'Osmosis': ['vanthoff', 'kedem', 'kramer', 'agre'] };
 
+// sources and teaching text (G), then the explanatory paragraphs and the figures of every teaching box (seeds-figures.js)
 export function groundChain(A) {
-  const g = G[A.title]; if (!g) return A;
-  for (const st of A.chain || []) { const x = g[st.id]; if (x) Object.assign(st, JSON.parse(JSON.stringify(x))); }
+  const g = G[A.title];
+  if (g) for (const st of A.chain || []) { const x = g[st.id]; if (x) Object.assign(st, JSON.parse(JSON.stringify(x))); }
   if (PART_REFS[A.title]) A.references = PART_REFS[A.title].map(k => ({ ...REF[k] }));
-  return A;
+  return figureChain(A);
 }

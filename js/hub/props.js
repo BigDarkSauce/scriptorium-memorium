@@ -13,7 +13,7 @@ export const SHELF_KINDS = {
   horizontal: { w: 3.2, h: 1.7, d: .5, tiers: 3 },
   vertical: { w: 1.15, h: 2.9, d: .5, tiers: 6 }
 };
-const SLOT = .17; // slot pitch along a tier (hub.js: per = floor((w - .2) / .17))
+export const SLOT = .17; // slot pitch along a tier (hub.js: per = floor((w - .2) / .17))
 // Scrolls: radius .058 m (0.116 m across: 54 mm between neighbours at the 0.17 m pitch, 38 mm between their ribbons),
 // lying in velvet cradles whose hollow (radius R + 3 mm) is centred on the scroll's axis, AXIS above the tier board
 // (the scroll's underside 14 mm above the board).
@@ -35,8 +35,9 @@ export function makeBookcase(shelf) {
   // carcass
   [-1, 1].forEach(s => B(car, s * (w / 2 - t / 2), h / 2, 0, t, h, d));
   B(back, 0, .13 + (h - .13) / 2, -d / 2 + .02, w - 2 * t, h - .13, .02);
-  B(car, 0, .115, -.005, w - 2 * t, .03, d - .05);   // boards stop 5 mm before the back panel's rear face
-  for (let i = 1; i < tiers; i++) { const top = .13 + i * tierH; B(car, 0, top - .0125, -.01, w - 2 * t, .025, d - .05); B(gilt, 0, top - .0125, (d - .05) / 2 - .01 + .004, w - 2 * t, .014, .008); }
+  const board = fin === 'cream' ? bmat('cream-board') : car;   // the tier boards: matte painted wood (a lacquered top mirrored the sky as cold lavender)
+  B(board, 0, .115, -.005, w - 2 * t, .03, d - .05);   // boards stop 5 mm before the back panel's rear face
+  for (let i = 1; i < tiers; i++) { const top = .13 + i * tierH; B(board, 0, top - .0125, -.01, w - 2 * t, .025, d - .05); B(gilt, 0, top - .0125, (d - .05) / 2 - .01 + .004, w - 2 * t, .014, .008); }
   B(car, 0, h - .015, -.005, w - 2 * t, .03, d - .05);
   // fluted pilasters on the stiles, gilt bases and capitals
   [-1, 1].forEach(s => {
@@ -98,28 +99,28 @@ function globeTex() {
     g.strokeStyle = 'rgba(90,60,30,.35)'; g.lineWidth = 1; for (let i = 1; i < 12; i++) { g.beginPath(); g.moveTo(i * w / 12, 0); g.lineTo(i * w / 12, h); g.stroke(); } for (let j = 1; j < 6; j++) { g.beginPath(); g.moveTo(0, j * h / 6); g.lineTo(w, j * h / 6); g.stroke(); }
   });
 }
-// The scroll rests: for every slot two low cradles (a saddle 7 cm wide with a hollow of radius R + 3 mm centred on the
-// scroll's axis, 18 mm high at its horns), under the scroll at 0.16 m either side of its middle, in a dark, matte
-// walnut-brown velvet close to the tier's own tone: quiet furniture, not a row of red accents. Shared geometry and
-// material, one draw call per bookcase; setRestTiers() shows them only on chosen tiers (hub.js: the tiers holding
-// scrolls and the one the next scroll goes to), the others stay plain lined shelves.
+// The scroll rests: for every slot of every tier one holder, a pair of low cradles (a saddle 7 cm wide with a hollow of
+// radius R + 3 mm centred on the scroll's axis, 18 mm high at its horns), under the scroll at 0.16 m either side of its
+// middle, in a dark, matte walnut-brown velvet close to the tier's own tone: quiet furniture, not a row of red accents.
+// Shared geometry and material, one draw call per bookcase. Every tier carries them (setRestTiers(o, null)), so a new
+// bookcase reads as ready for scrolls on all its rows.
 let _restGeo, _restMat;
 function restGeo() {
   if (_restGeo) return _restGeo;
-  const hw = .035, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
+  const hw = .025, rr = SCROLL_R + .006,   // (the 3 mm bevel narrows the hollow to R + 3 mm)
     a0 = Math.atan2(-Math.sqrt(rr * rr - hw * hw), hw), yE = AXIS + rr * Math.sin(a0), s = new THREE.Shape();
   s.moveTo(-hw, -.001); s.lineTo(hw, -.001); s.lineTo(hw, yE); s.absarc(0, AXIS, rr, a0, -Math.PI - a0, true); s.lineTo(-hw, -.001);
-  const g = new THREE.ExtrudeGeometry(s, { depth: .026, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.013);
+  const g = new THREE.ExtrudeGeometry(s, { depth: .018, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 2, curveSegments: 12 }); g.translate(0, 0, -.009);
   g.userData.shared = true; return (_restGeo = g);
 }
 function scrollRests(o) {
   const u = o.userData, n = u.tiers * u.slotsPerTier * 2; if (!n) return null;
-  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x3a2420, roughness: .92, sheen: .35, sheenColor: new THREE.Color(0x8a6a58), sheenRoughness: .6 })); mat.userData.shared = true;
+  const mat = _restMat || (_restMat = new THREE.MeshPhysicalMaterial({ color: 0x8c6c58, roughness: .95, sheen: .5, sheenColor: new THREE.Color(0xd8b8a0), sheenRoughness: .7 }))   /* a soft camel velvet a few steps below the board's cream: low contrast, warm */; mat.userData.shared = true;
   const im = new THREE.InstancedMesh(restGeo(), mat, n);
   im.castShadow = false; im.receiveShadow = true; im.name = 'scroll-rests'; o.add(im); u.rests = im;
   setRestTiers(o, null); return im;
 }
-// show the cradles on the given tiers only (a Set of tier indices; null: every tier)
+// show the cradles on the given tiers only (a Set of tier indices; null: every tier, the default the hub uses)
 export function setRestTiers(o, tiers) {
   const u = o.userData, im = u.rests; if (!im) return; const M = new THREE.Matrix4(); let i = 0;
   for (let t = 0; t < u.tiers; t++) { if (tiers && !tiers.has(t)) continue; for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-.16, .16].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); } }
@@ -128,21 +129,105 @@ export function setRestTiers(o, tiers) {
 // (kept for callers of the old API: the user's bookcases no longer get filler books)
 export function fillBookcase() { return null; }
 // Slot position (local to the bookcase) for tier i, slot j: scrolls lie horizontally, ends facing out.
+export const slotX = (u, slot) => -u.w / 2 + .14 + slot * SLOT;
+// SLOT_Z: the scroll's middle 9.5 cm before the case's centre, so its back knob (0.305 m behind the middle) stays 7 mm
+// before the silk liner instead of passing through the back board; the front knob and tag stand out past the face, as
+// on a scroll rack.
+export const SLOT_Z = .095;
 export function slotPos(shelfObj, tier, slot) {
-  const u = shelfObj.userData, y = .13 + tier * u.tierH + AXIS, x = -u.w / 2 + .14 + slot * SLOT;
-  return new THREE.Vector3(x, y, .02);
+  const u = shelfObj.userData, y = .13 + tier * u.tierH + AXIS, x = slotX(u, slot);
+  return new THREE.Vector3(x, y, SLOT_Z);
+}
+// ---------- hanging scrolls ----------
+// An important scroll can hang on two chains from the underside of the board above its tier (the top tier: from the
+// case's top board), its axis across the case (along x), its front and name tag toward the room, in front of the row of
+// cradles (z = HANG.z). Across the case it spans the roll and both knobs (±HALF = 0.305 m), so it reserves every slot
+// whose cradled scroll (radius R, tag ±0.076 m) would come within 1 cm of it: |slotX − hangX| < HANG.reach (5 slots at
+// the 0.17 m pitch; a whole tier of a vertical case). hangX keeps the knobs 2 cm inside the stiles.
+// The drop (board underside → axis) is limited by the tier: at least HANG.min (the roll and its seal clear the board
+// above by ≥ 4 cm), at most what keeps the hanging tag's lower edge ≥ 1.2 cm above the cradles' horns (HANG.below).
+export const HALF = SCROLL_L / 2 + SCROLL_R * .95;
+export const HANG = { z: .11, reach: .40, min: .11, below: .163 };
+export const METALS = {
+  brass: { label: 'Brass', color: 0xc9a253, rough: .36, metal: 1 },
+  iron: { label: 'Iron', color: 0x75716a, rough: .55, metal: 1 },
+  silver: { label: 'Silver', color: 0xdcdde0, rough: .26, metal: 1 },
+  gold: { label: 'Gold', color: 0xf2c25c, rough: .22, metal: 1 },
+  black: { label: 'Black', color: 0x1d1b19, rough: .42, metal: .85 }
+};
+export function tierSpan(so, t) { const u = so.userData, floor = .13 + t * u.tierH, ceil = t < u.tiers - 1 ? .13 + (t + 1) * u.tierH - .025 : u.h - .03; return { floor, ceil }; }
+export function hangLimits(so, t) { const { floor, ceil } = tierSpan(so, t); return { min: HANG.min, max: Math.max(HANG.min, ceil - floor - HANG.below) }; }
+export function hangX(so, slot) { const u = so.userData, lim = Math.max(0, u.w / 2 - .05 - HALF - .02); return Math.max(-lim, Math.min(lim, slotX(u, slot))); }
+// the slots a scroll hanging at `slot` reserves on its tier
+export function hangSlots(so, slot) { const u = so.userData, hx = hangX(so, slot), out = []; for (let j = 0; j < u.slotsPerTier; j++) if (Math.abs(slotX(u, j) - hx) < HANG.reach) out.push(j); return out; }
+export const hangDrop = (so, t, drop) => { const L = hangLimits(so, t); return Math.max(L.min, Math.min(L.max, drop == null ? (L.min + L.max) / 2 : +drop || L.min)); };
+// Put a scroll object (a child of its bookcase) in its pose: lying in its cradles, or hanging (book.hang = {metal, drop}).
+export function poseScroll(o, so, book) {
+  const u = o.userData, tag = u.tag, cord = u.cord, R = SCROLL_R;
+  if (tag && !u.tag0) u.tag0 = { p: tag.position.clone(), r: tag.rotation.clone(), cp: cord.position.clone(), cs: cord.scale.y, len: cord.userData.len };
+  const t = book.tier || 0, sl = book.slot || 0;
+  if (book.hang) {
+    const { ceil } = tierSpan(so, t), drop = hangDrop(so, t, book.hang.drop);
+    o.position.set(hangX(so, sl), ceil - drop, HANG.z); o.rotation.set(0, Math.PI / 2, 0);
+    // the tag hangs from the ribbon at the roll's middle, before its front (local −x faces the room)
+    const top = -R * .25; if (tag) { tag.position.set(-(R + .008), top - TAG_H / 2, 0); tag.rotation.set(0, -Math.PI / 2, 0);
+      const cl = -top + R * .2; cord.position.set(-(R + .005), top + cl / 2, 0); cord.scale.y = cl / u.tag0.len; }
+    u.hanging = true;
+  } else {
+    o.position.copy(slotPos(so, t, sl)); o.rotation.set(0, 0, 0);
+    if (tag) { tag.position.copy(u.tag0.p); tag.rotation.copy(u.tag0.r); cord.position.copy(u.tag0.cp); cord.scale.y = u.tag0.cs; }
+    u.hanging = false;
+  }
+  return o;
+}
+// The chains of a bookcase's hanging scrolls: two per scroll, from the board's underside to the tops of the knobs, in
+// small elongated links turned 90° each (pitch 10.6 mm). One InstancedMesh per metal in use on the bookcase (shared link
+// geometry and metal materials), in a group 'chains' on the bookcase. items: [{x, top, bot, metal}] in bookcase space.
+let _linkGeo; const _metalMat = {};
+const LINK_PITCH = .0106;
+function linkGeo() { if (_linkGeo) return _linkGeo; const g = new THREE.TorusGeometry(.0042, .00115, 4, 10); g.scale(1, 1.55, 1); g.userData.shared = true; return (_linkGeo = g); }
+export function metalMat(k) {
+  const M = METALS[k] || METALS.brass; if (_metalMat[k]) return _metalMat[k];
+  const m = new THREE.MeshStandardMaterial({ color: M.color, metalness: M.metal, roughness: M.rough, envMapIntensity: 3 }); m.userData.shared = true; return (_metalMat[k] = m);
+}
+export function setChains(so, items) {
+  let grp = so.userData.chains;
+  if (grp) { grp.children.forEach(c => c.dispose && c.dispose()); grp.clear(); } else { grp = new THREE.Group(); grp.name = 'chains'; so.add(grp); so.userData.chains = grp; }
+  const by = {}; items.forEach(it => (by[it.metal in METALS ? it.metal : 'brass'] ||= []).push(it));
+  const M = new THREE.Matrix4(), q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+  for (const k in by) {
+    const mats = []; by[k].forEach(it => { const n = Math.max(2, Math.round((it.top - it.bot) / LINK_PITCH)); for (let i = 0; i < n; i++) { q.setFromAxisAngle(Y, (i % 2) * Math.PI / 2); p.set(it.x, it.top - .004 - i * (it.top - it.bot - .006) / (n - 1), it.z); mats.push(M.compose(p, q, one).clone()); } });
+    const im = new THREE.InstancedMesh(linkGeo(), metalMat(k), mats.length); mats.forEach((m4, i) => im.setMatrixAt(i, m4));
+    im.castShadow = false; im.receiveShadow = false; im.name = 'chain-' + k; im.raycast = () => { }; im.computeBoundingSphere(); grp.add(im);
+  }
+  return grp;
+}
+// the chain items for one hanging scroll (knob tops at ±(L/2 + 0.4 R) along the roll, 0.55 R high)
+export function chainItems(so, book) {
+  const t = book.tier || 0, { ceil } = tierSpan(so, t), drop = hangDrop(so, t, book.hang && book.hang.drop), x = hangX(so, book.slot || 0), kx = SCROLL_L / 2 + SCROLL_R * .4, yc = ceil - drop;
+  return [-1, 1].map(s => ({ x: x + s * kx, z: HANG.z, top: ceil, bot: yc + SCROLL_R * .55 - .002, metal: (book.hang && book.hang.metal) || 'brass' }));
+}
+// A ghost of a scroll for previews (a slot chosen in a dialog, a drag in Arrange mode): a soft warm translucent roll.
+export function ghostScroll() {
+  const g = new THREE.Group(); g.name = 'slot-ghost';
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffcf86, transparent: true, opacity: .32, depthWrite: false, blending: THREE.AdditiveBlending });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(SCROLL_R * 1.05, SCROLL_R * 1.05, SCROLL_L + .1, 24, 1), mat); body.rotation.x = Math.PI / 2; g.add(body);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(SCROLL_R * 1.25, .0035, 6, 32), new THREE.MeshBasicMaterial({ color: 0xffe2a8, transparent: true, opacity: .7, depthWrite: false, blending: THREE.AdditiveBlending })); ring.position.z = SCROLL_L / 2 + .06; g.add(ring);
+  g.traverse(o => { if (o.isMesh) { o.raycast = () => { }; o.renderOrder = 6; o.castShadow = o.receiveShadow = false; } });
+  g.userData.mat = mat; return g;
 }
 const ribbonColors = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f4f'];
 // Name tag for a scroll end: an ivory card narrower than the slot pitch (0.152 m < 0.17 m, 18 mm between neighbours),
 // the title in a bold, open book face (Alegreya) wrapped on up to three lines and fitted as large as it will go, the
 // book's colour as a thin band with its short code. 512 px canvas (≈ 3.4 px/mm: crisp at 1.5–3 m). Cached per title/colour.
 const TAG_W = .152, TAG_H = .112;
-function tagTex(title, col, icon) {
-  return canvasTex('tag2|' + title + '|' + col + '|' + icon, 512, 376, (g, w, h) => {
+function tagTex(title, col, icon, star) {
+  return canvasTex('tag2|' + title + '|' + col + '|' + icon + (star ? '|*' : ''), 512, 376, (g, w, h) => {
     g.fillStyle = '#f7efdc'; g.fillRect(0, 0, w, h);
     const band = 44; g.fillStyle = col; g.fillRect(0, 0, w, band);
     g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(0, band, w, 4);
     g.fillStyle = '#f7efdc'; g.beginPath(); g.arc(w / 2, band / 2, 11, 0, 7); g.fill(); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3; g.stroke();
+    if (star) { g.fillStyle = '#f4d27a'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 7 : 16; g.lineTo(w - 30 + Math.cos(a) * r, band / 2 + 1 + Math.sin(a) * r); } g.fill(); }
     if (icon) { g.fillStyle = 'rgba(255,248,232,.95)'; g.font = '500 28px "IBM Plex Mono", monospace'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(String(icon).slice(0, 5), 18, band / 2 + 1); }
     g.strokeStyle = col; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
     g.fillStyle = '#1e140b'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -176,13 +261,13 @@ export function makeScroll(book, scale = 1) {
   const seal = m(new THREE.CylinderGeometry(R * .38, R * .4, R * .16, 20), new THREE.MeshStandardMaterial({ color: col, roughness: .35, metalness: .05 })); seal.position.set(0, R * 1.05, 0); g.add(seal);
   // name tag hanging below the front knob; odd slots sit a little forward and lower, so neighbours never share a plane
   const odd = (book.slot | 0) % 2, sc = scale;
-  const tagM = new THREE.MeshStandardMaterial({ map: tagTex(book.title || 'Untitled', col, book.icon || ''), roughness: .82, emissive: 0xffffff, emissiveIntensity: .16, polygonOffset: true, polygonOffsetFactor: -1 - odd, polygonOffsetUnits: -1 - odd });
+  const tagM = new THREE.MeshStandardMaterial({ map: tagTex(book.title || 'Untitled', col, book.icon || '', !!book.important), roughness: .82, emissive: 0xffffff, emissiveIntensity: .16, polygonOffset: true, polygonOffsetFactor: -1 - odd, polygonOffsetUnits: -1 - odd });
   tagM.emissiveMap = tagM.map;
   const tag = new THREE.Mesh(new THREE.PlaneGeometry(TAG_W * sc, TAG_H * sc), tagM);
   const zf = L / 2 + R * .4 + R * .55 + .006 * sc + odd * .007 * sc, yTop = -R * .5 - odd * .014 * sc;
   tag.position.set(0, yTop - TAG_H * sc / 2, zf); tag.rotation.x = -.1; tag.name = 'tag'; g.add(tag); g.userData.tag = tag;
   const cord = new THREE.Mesh(new THREE.CylinderGeometry(.0018 * sc, .0018 * sc, -yTop + .01 * sc, 4), new THREE.MeshStandardMaterial({ color: col, roughness: .8 }));
-  cord.position.set(0, yTop / 2 + .004 * sc, zf - .004 * sc); g.add(cord);
+  cord.position.set(0, yTop / 2 + .004 * sc, zf - .004 * sc); cord.userData.len = -yTop + .01 * sc; g.add(cord); g.userData.cord = cord;
   return g;
 }
 let _spiral; function spiralMat() { return _spiral || (_spiral = new THREE.MeshStandardMaterial({ map: spiralTex(), roughness: .8 })); }

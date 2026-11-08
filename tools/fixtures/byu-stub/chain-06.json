@@ -1,0 +1,1017 @@
+{
+ "title": "06 · Which test?",
+ "summary": "Bradley's tests-of-inference tree: start with the kind of data, then what you compare; read p, and know the two ways to be wrong.",
+ "question": "Which statistical test fits your data and your question, and how do you read its result?",
+ "chain": [
+  {
+   "section": "6.0",
+   "kind": "definition",
+   "title": "The decision tree",
+   "ref": "p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "Choose a test in two moves: first the kind of data (measured, weakly measured, categorical counts, two variables), then what you compare.",
+   "explain": [
+    {
+     "text": "Measured data are continuous and roughly normal; weakly measured data are ranks, scores or non-normal; categorical counts say how many land in each group; two variables ask whether y is related to x. Each branch then splits by the comparison (one sample, two independent, paired, three or more), and every leaf names an R function.",
+     "figure": {
+      "kind": "tree",
+      "caption": "Start with your data, then what you compare.",
+      "root": {
+       "label": "your data",
+       "children": [
+        {
+         "label": "measured",
+         "edge": "normal",
+         "children": [
+          {
+           "label": "t.test / aov"
+          }
+         ]
+        },
+        {
+         "label": "weakly measured",
+         "edge": "ranks",
+         "children": [
+          {
+           "label": "wilcox.test"
+          }
+         ]
+        },
+        {
+         "label": "categorical counts",
+         "edge": "counts",
+         "children": [
+          {
+           "label": "chisq.test"
+          }
+         ]
+        },
+        {
+         "label": "two variables",
+         "edge": "related?",
+         "children": [
+          {
+           "label": "lm / cor.test"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "test of inference",
+     "meaning": "a procedure that judges whether a pattern in a sample is likely to hold in the population"
+    }
+   ],
+   "intuition": "The tree is a key, like the keys used to identify plants.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Two questions, then the test.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "what data?"
+     },
+     {
+      "id": "n1",
+      "label": "what comparison?"
+     },
+     {
+      "id": "n2",
+      "label": "R function"
+     }
+    ]
+   },
+   "misconception": "Pick the test that gives a significant p. The data and the question choose the test before you see the result.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Choose first.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Try tests until p < 0.05."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Choose by data and question, then run once."
+    }
+   },
+   "check": {
+    "q": "Counts of flying and non-flying mammals in five danger levels: which branch?",
+    "a": "Categorical counts: a contingency table, χ² test of association.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Counts in a table.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "categorical counts"
+      },
+      {
+       "id": "n1",
+       "label": "two ways of grouping"
+      },
+      {
+       "id": "n2",
+       "label": "chisq.test(table(a, b))"
+      }
+     ]
+    }
+   },
+   "opens": "Which tests fit measured, roughly normal data?",
+   "id": "S1",
+   "answers": "Which statistical test fits your data and your question, and how do you read its result?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p6-1",
+   "kind": "result",
+   "title": "Measured data: Z, t and ANOVA",
+   "ref": "Measured data branch, p. 6",
+   "pages": [
+    6
+   ],
+   "figures": [
+    "fig-p6-1"
+   ],
+   "statement": "For continuous, roughly normal data (check with hist() and shapiro.test(): p > 0.05 is normal enough): one sample with σ known → Z test; σ unknown → t.test(x, mu = 1.9); paired → t.test(a, b, paired = TRUE); two independent → t.test(y ~ group, data = dat); three or more → summary(aov(y ~ group)).",
+   "explain": [
+    {
+     "text": "All these tests compare means against the variation within the data. A Z test uses a known population σ: compute z, then the two-sided p is 2 * pnorm(-abs(z)). Usually σ is unknown and estimated from the sample, which widens the reference curve: that is the t distribution. Paired samples (the same subjects before and after) are tested on their differences; independent groups compare two means; with three or more groups ANOVA asks whether any mean differs.",
+     "figure": {
+      "kind": "tree",
+      "caption": "The measured-data branch of the tree.",
+      "root": {
+       "label": "measured, normal",
+       "children": [
+        {
+         "label": "1 sample, σ known: Z"
+        },
+        {
+         "label": "1 sample, σ unknown: t.test(x, mu)"
+        },
+        {
+         "label": "2 paired: t.test(paired = TRUE)"
+        },
+        {
+         "label": "2 independent: t.test(y ~ group)"
+        },
+        {
+         "label": "3+: aov"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "shapiro.test(x)",
+      "explain": "are the data close to normal? p > 0.05: normal enough"
+     },
+     {
+      "code": "z <- 2.1; 2 * pnorm(-abs(z))",
+      "explain": "two-sided p for a Z test with z = 2.1"
+     },
+     {
+      "code": "t.test(x, mu = 1.9)",
+      "explain": "one-sample t test against the known mean 1.9"
+     },
+     {
+      "code": "t.test(y ~ group, data = dat)",
+      "explain": "two independent samples"
+     },
+     {
+      "code": "summary(aov(y ~ group))",
+      "explain": "three or more groups"
+     }
+    ],
+    "output": [
+     "[1] 0.03572884"
+    ],
+    "interpret": "z = 2.1 is significant at the 5% level (p = 0.036)."
+   },
+   "examples": [
+    {
+     "title": "A paired t test on the classic sleep data (added)",
+     "origin": "added",
+     "problem": "Ten patients took two sleep drugs; extra hours of sleep were recorded for each drug (R's built-in data sleep). Does the second drug give more sleep?",
+     "solution": [
+      {
+       "text": "Each patient took both drugs, so the samples are paired: test the ten differences."
+      },
+      {
+       "text": "with(sleep, t.test(extra[group == 1], extra[group == 2], paired = TRUE)) gives a mean difference of −1.58 h, t = −4.06, df = 9."
+      }
+     ],
+     "answer": "p = 0.0028: the second drug gives about 1.6 h more sleep; very unlikely by chance.",
+     "source": {
+      "title": "The probable error of a mean",
+      "authors": "Student",
+      "year": 1908,
+      "doi": "10.1093/biomet/6.1.1"
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "paired samples",
+     "meaning": "two measurements on the same subjects; test the differences"
+    },
+    {
+     "term": "ANOVA",
+     "meaning": "analysis of variance: compares three or more group means at once"
+    },
+    {
+     "term": "t distribution",
+     "meaning": "like the normal but with heavier tails, used when σ is estimated"
+    }
+   ],
+   "intuition": "A t test asks whether the gap between means is large compared with the noise.",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "t",
+    "params": {
+     "df": 9
+    },
+    "caption": "t with 9 df; the sleep data's t = −4.06 lies far out in the tail.",
+    "marks": [
+     {
+      "x": -4.06,
+      "label": "t = −4.06"
+     }
+    ],
+    "xlabel": "t"
+   },
+   "misconception": "Paired data can be tested as two independent samples. That ignores that each subject is its own control and wastes power.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Pairing matters.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Before and after = two groups."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Before and after = one set of differences."
+    }
+   },
+   "check": {
+    "q": "Weights of 12 rats before and after a diet: which call?",
+    "a": "t.test(before, after, paired = TRUE) (if the differences are roughly normal).",
+    "figure": {
+     "kind": "flow",
+     "caption": "Same rats twice.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "paired"
+      },
+      {
+       "id": "n1",
+       "label": "t.test(a, b, paired = TRUE)"
+      }
+     ]
+    }
+   },
+   "opens": "What if the data are ranks or not normal?",
+   "id": "S2",
+   "answers": "Which tests fit measured, roughly normal data?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": []
+  },
+  {
+   "section": "p6-2",
+   "kind": "result",
+   "title": "Weakly measured data: rank tests",
+   "ref": "Weakly measured branch, p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "For ranks, scores or non-normal data: two independent samples → Mann–Whitney U, wilcox.test(y ~ group); two paired samples → Wilcoxon signed-rank, wilcox.test(a, b, paired = TRUE).",
+   "explain": [
+    {
+     "text": "Rank tests replace the values by their ranks (1st, 2nd, 3rd …) and compare the ranks, so a few extreme values or a skewed shape cannot dominate. They ask whether one group tends to have larger values than the other, rather than comparing means.",
+     "figure": {
+      "kind": "flow",
+      "caption": "From values to ranks.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "values: 2.1, 9.8, 3.4"
+       },
+       {
+        "id": "n1",
+        "label": "ranks: 1, 3, 2"
+       },
+       {
+        "id": "n2",
+        "label": "compare rank sums"
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "wilcox.test(y ~ group, data = dat)",
+      "explain": "Mann–Whitney U: do two independent groups differ in their ranks?"
+     },
+     {
+      "code": "wilcox.test(a, b, paired = TRUE)",
+      "explain": "Wilcoxon signed-rank: ranks of the paired differences"
+     }
+    ],
+    "output": [],
+    "interpret": "Use these when the histogram is skewed or the scale is only ordinal."
+   },
+   "terms": [
+    {
+     "term": "rank",
+     "meaning": "the position of a value when all values are sorted"
+    },
+    {
+     "term": "non-parametric",
+     "meaning": "does not assume a specific distribution such as the normal"
+    }
+   ],
+   "intuition": "A race result keeps the order and forgets the times.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Values versus ranks.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "One extreme value drags the mean."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Ranks: the extreme value is just \"1st\"."
+    }
+   },
+   "misconception": "Rank tests are always weaker, so avoid them. On skewed data they can be more powerful than a t test.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Fit the test to the data.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Rank tests waste information."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "On skewed data they are often the better tool."
+    }
+   },
+   "check": {
+    "q": "Pain scores 0–10 in two independent groups: which test?",
+    "a": "Mann–Whitney U, wilcox.test(score ~ group): scores are ordinal.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Ordinal scores.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "weakly measured"
+      },
+      {
+       "id": "n1",
+       "label": "2 independent"
+      },
+      {
+       "id": "n2",
+       "label": "wilcox.test"
+      }
+     ]
+    }
+   },
+   "opens": "Which tests fit counts in categories?",
+   "id": "S3",
+   "answers": "What if the data are ranks or not normal?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p6-3",
+   "kind": "result",
+   "title": "Categorical counts: χ² and Fisher",
+   "ref": "Categorical counts branch, p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "Counts against an expected ratio → χ² goodness of fit, chisq.test(obs, p = props); two ways of grouping linked? → χ² test of association, chisq.test(table(a, b)); Fisher's exact test, fisher.test(table(a, b)), when an expected count is below 5. Use counts, never percentages.",
+   "explain": [
+    {
+     "text": "χ² adds up (observed − expected)² / expected over all cells: big gaps between what you saw and what the hypothesis predicts make a big χ². Percentages hide the sample size, and the test needs it, so always give the counts. With small expected counts the χ² approximation fails and Fisher's exact test is used.",
+     "figure": {
+      "kind": "bars",
+      "caption": "Mendel's peas: observed counts against the 9:3:3:1 expectation (added example).",
+      "categories": [
+       "round yellow",
+       "round green",
+       "wrinkled yellow",
+       "wrinkled green"
+      ],
+      "series": [
+       {
+        "name": "observed",
+        "values": [
+         315,
+         108,
+         101,
+         32
+        ]
+       },
+       {
+        "name": "expected",
+        "values": [
+         312.75,
+         104.25,
+         104.25,
+         34.75
+        ]
+       }
+      ],
+      "ylabel": "seeds",
+      "extra": [
+       {
+        "what": "Mendel's dihybrid counts",
+        "source": {
+         "title": "Versuche über Pflanzen-Hybriden",
+         "authors": "Mendel G",
+         "year": 1866
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "obs <- c(315, 108, 101, 32)",
+      "explain": "Mendel's four seed classes"
+     },
+     {
+      "code": "chisq.test(obs, p = c(9, 3, 3, 1) / 16)",
+      "explain": "goodness of fit to the 9:3:3:1 ratio"
+     }
+    ],
+    "output": [
+     "X-squared = 0.47002, df = 3, p-value = 0.9254"
+    ],
+    "interpret": "The counts fit the 9:3:3:1 ratio very well: no evidence against it."
+   },
+   "examples": [
+    {
+     "title": "Mendel's 9:3:3:1 (added)",
+     "origin": "added",
+     "problem": "556 seeds: 315, 108, 101, 32. Do they fit 9:3:3:1?",
+     "solution": [
+      {
+       "text": "Expected: 556 × 9/16 = 312.75; 104.25; 104.25; 34.75."
+      },
+      {
+       "text": "χ² = 0.016 + 0.135 + 0.101 + 0.218 = 0.470 with 3 df."
+      }
+     ],
+     "answer": "p = 0.925: the ratio fits.",
+     "source": {
+      "title": "Versuche über Pflanzen-Hybriden",
+      "authors": "Mendel G",
+      "year": 1866
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "expected count",
+     "meaning": "total × the proportion the hypothesis predicts"
+    },
+    {
+     "term": "contingency table",
+     "meaning": "counts cross-classified by two groupings"
+    }
+   ],
+   "intuition": "χ² measures the distance between the counts you saw and the counts you expected.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Observed versus expected.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "observed"
+     },
+     {
+      "id": "n1",
+      "label": "− expected"
+     },
+     {
+      "id": "n2",
+      "label": "squared ÷ expected"
+     },
+     {
+      "id": "n3",
+      "label": "sum = χ²"
+     }
+    ]
+   },
+   "misconception": "chisq.test() works on percentages. It needs counts; percentages lose n and give wrong p-values.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Counts, never %.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "chisq.test(c(57%, 19%, 18%, 6%))"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "chisq.test(c(315, 108, 101, 32))"
+    }
+   },
+   "check": {
+    "q": "A 2 × 2 table has a cell with expected count 3. Which test?",
+    "a": "Fisher's exact test, fisher.test(table(a, b)).",
+    "figure": {
+     "kind": "flow",
+     "caption": "Small counts.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "expected < 5"
+      },
+      {
+       "id": "n1",
+       "label": "fisher.test"
+      }
+     ]
+    }
+   },
+   "opens": "How do you test whether two variables are related?",
+   "id": "S4",
+   "answers": "Which tests fit counts in categories?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p6-4",
+   "kind": "result",
+   "title": "Two variables: regression and correlation",
+   "ref": "Two variables branch, p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "Both well measured → regression lm(y ~ x) and correlation cor.test(x, y); ranks or weak measures → Spearman rank correlation, cor.test(x, y, method = \"spearman\").",
+   "explain": [
+    {
+     "text": "Regression fits a line and asks whether its slope differs from zero; correlation measures how tightly the points follow a line. For sheet 04's body mass and sleep, r = −0.53: cor.test() tells whether such an r could arise by chance with this n. Spearman does the same on ranks, for monotonic but not straight relations or ordinal data.",
+     "figure": {
+      "kind": "scatter",
+      "caption": "A line through two measured variables (shape of sheet 04's trend).",
+      "points": [
+       [
+        -2,
+        18
+       ],
+       [
+        -1,
+        15
+       ],
+       [
+        0,
+        12
+       ],
+       [
+        1,
+        10
+       ],
+       [
+        2,
+        8
+       ],
+       [
+        3,
+        6
+       ],
+       [
+        3.8,
+        4
+       ]
+      ],
+      "fit": "ols",
+      "xlabel": "log10 body mass",
+      "ylabel": "sleep (h)"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "fit <- lm(TotalSleep ~ log10(BodyWt), data = dat)",
+      "explain": "fit sleep as a straight-line function of log body mass"
+     },
+     {
+      "code": "summary(fit)",
+      "explain": "slope, intercept and the p-value of the slope"
+     },
+     {
+      "code": "cor.test(log10(dat$BodyWt), dat$TotalSleep)",
+      "explain": "is r = −0.53 different from 0?"
+     },
+     {
+      "code": "cor.test(x, y, method = \"spearman\")",
+      "explain": "rank correlation for ordinal or non-linear data"
+     }
+    ],
+    "output": [],
+    "interpret": "The slope says how much sleep changes per tenfold increase in body mass."
+   },
+   "terms": [
+    {
+     "term": "regression",
+     "meaning": "fitting y = intercept + slope × x"
+    },
+    {
+     "term": "Spearman correlation",
+     "meaning": "correlation of the ranks"
+    }
+   ],
+   "intuition": "Regression draws the line; correlation says how tight the cloud is around it.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Line versus tightness.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "r is the slope."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Slope = steepness; r = tightness."
+    }
+   },
+   "misconception": "A significant regression proves x causes y. In observational data it shows association only.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Association, not cause.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Significant slope → x causes y."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Significant slope → x and y go together."
+    }
+   },
+   "check": {
+    "q": "Ranks of 8 wines by two judges: which test?",
+    "a": "Spearman: cor.test(judge1, judge2, method = \"spearman\").",
+    "figure": {
+     "kind": "flow",
+     "caption": "Ranks.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "two rankings"
+      },
+      {
+       "id": "n1",
+       "label": "Spearman"
+      }
+     ]
+    }
+   },
+   "opens": "How do you read the p-value a test returns?",
+   "id": "S5",
+   "answers": "How do you test whether two variables are related?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p6-5",
+   "kind": "definition",
+   "title": "Reading p",
+   "ref": "Reading p, p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "p is the chance of a result at least this extreme if H₀ were true; p ≤ 0.05 → reject H₀ (≤ 0.01 highly, ≤ 0.001 very highly significant); p > 0.05 is no evidence of a difference, not proof of none.",
+   "explain": [
+    {
+     "text": "H₀, the null hypothesis, says there is no effect. A small p says the data would be surprising if H₀ were true. Testing many times inflates false alarms, so divide 0.05 by the number of tests (Bonferroni): with 5 tests, each must reach p ≤ 0.01.",
+     "figure": {
+      "kind": "numberline",
+      "caption": "The p scale of the sheet.",
+      "min": 0,
+      "max": 0.1,
+      "step": 0.01,
+      "points": [
+       {
+        "x": 0.001,
+        "label": "0.001"
+       },
+       {
+        "x": 0.01,
+        "label": "0.01"
+       },
+       {
+        "x": 0.05,
+        "label": "0.05"
+       }
+      ],
+      "intervals": [
+       {
+        "from": 0,
+        "to": 0.05,
+        "label": "reject H₀",
+        "closedR": true
+       },
+       {
+        "from": 0.05,
+        "to": 0.1,
+        "label": "no evidence",
+        "closedL": false
+       }
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "H₀",
+     "meaning": "null hypothesis: no effect or no difference"
+    },
+    {
+     "term": "p-value",
+     "meaning": "P(a result at least this extreme | H₀ true)"
+    },
+    {
+     "term": "Bonferroni",
+     "meaning": "use 0.05 ÷ (number of tests) as the threshold"
+    }
+   ],
+   "intuition": "p asks: if nothing were going on, how often would I see something this striking?",
+   "intuitionFigure": {
+    "kind": "distribution",
+    "dist": "normal",
+    "params": {
+     "mean": 0,
+     "sd": 1
+    },
+    "caption": "Two-sided p for z = 2.1: both tails beyond ±2.1 (0.036).",
+    "shade": {
+     "from": 2.1,
+     "label": "one tail"
+    },
+    "marks": [
+     {
+      "x": 2.1,
+      "label": "2.1"
+     },
+     {
+      "x": -2.1,
+      "label": "−2.1"
+     }
+    ]
+   },
+   "misconception": "p is the probability that H₀ is true. It is the probability of data this extreme if H₀ is true.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Read p the right way round.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "p = 0.03 → 3% chance H₀ is true."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "p = 0.03 → such data in 3% of samples if H₀ were true."
+    }
+   },
+   "check": {
+    "q": "Ten tests: what threshold does Bonferroni give?",
+    "a": "0.05 / 10 = 0.005.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Bonferroni.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "0.05"
+      },
+      {
+       "id": "n1",
+       "label": "÷ 10 tests"
+      },
+      {
+       "id": "n2",
+       "label": "0.005 each"
+      }
+     ]
+    }
+   },
+   "opens": "In which two ways can a test be wrong?",
+   "id": "S6",
+   "answers": "How do you read the p-value a test returns?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p6-6",
+   "kind": "definition",
+   "title": "Two ways to be wrong",
+   "ref": "p. 6",
+   "pages": [
+    6
+   ],
+   "statement": "Rejecting a true H₀ is a Type I error (a false positive, at rate α); not rejecting a false H₀ is a Type II error (a missed effect).",
+   "explain": [
+    {
+     "text": "α is the threshold you chose (0.05): when H₀ is true, you will still reject it in 5% of studies. A Type II error happens when the effect is real but the sample is too small or noisy to show it. If you predicted a direction before seeing the data, use alternative = \"greater\" (or \"less\"); otherwise test two-sided.",
+     "figure": {
+      "kind": "table",
+      "caption": "The four outcomes of a test.",
+      "columns": [
+       "",
+       "H₀ true",
+       "H₀ false"
+      ],
+      "rows": [
+       [
+        "reject H₀",
+        "Type I: false positive (α)",
+        "correct"
+       ],
+       [
+        "don't reject",
+        "correct",
+        "Type II: missed effect"
+       ]
+      ],
+      "highlight": [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "t.test(x, mu = 1.9, alternative = \"greater\")",
+      "explain": "one-sided: only a mean above 1.9 counts as evidence"
+     }
+    ],
+    "output": [],
+    "interpret": "Choose the direction before seeing the data."
+   },
+   "terms": [
+    {
+     "term": "Type I error",
+     "meaning": "false positive: rejecting a true H₀"
+    },
+    {
+     "term": "Type II error",
+     "meaning": "false negative: missing a real effect"
+    },
+    {
+     "term": "α",
+     "meaning": "the significance threshold, the Type I error rate"
+    }
+   ],
+   "intuition": "A smoke alarm can ring without fire (Type I) or stay silent during one (Type II).",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Two alarms.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Ringing, no fire: Type I."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Fire, no ring: Type II."
+    }
+   },
+   "misconception": "Not significant means no effect. It may be a Type II error: the study may simply be too small.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Absence of evidence.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "p > 0.05 → no effect."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "p > 0.05 → no evidence; maybe too few data."
+    }
+   },
+   "check": {
+    "q": "Lowering α from 0.05 to 0.01 makes which error rarer and which more likely?",
+    "a": "Type I becomes rarer; Type II becomes more likely (real effects are harder to detect).",
+    "figure": {
+     "kind": "contrast",
+     "caption": "A trade-off.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "Smaller α helps everything."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "Smaller α: fewer false alarms, more missed effects."
+     }
+    }
+   },
+   "opens": "How does a predator's eating rate depend on how much prey there is?",
+   "id": "S7",
+   "answers": "In which two ways can a test be wrong?",
+   "from": [
+    "S6"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "6.0",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-1",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-2",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-3",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-4",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-5",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  },
+  {
+   "subsection": "p6-6",
+   "count": 0,
+   "why": "a decision key: tree and table figures show it"
+  }
+ ]
+}

@@ -9,7 +9,7 @@ import { DioramaScene, isSceneSpec } from './scene.js';
 import { SHAPES } from './builder.js';
 import { PRESETS } from '../gfx/materials.js';
 import { Materializer, addInk, addOutlines } from '../gfx/materialize.js';
-import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet , mathHTML, canvasMath } from '../util.js';
+import { el, $, clamp, fmt, esc, ease, easeInOutQuint, toast, typeset, uid, confirmBox, disposeTree, gpuSet , mathHTML, canvasMath, mathText } from '../util.js';
 import { askJSON, errCopy } from '../ai/claude.js';
 import { editPrompt } from '../ai/prompts.js';
 import { radialGlow } from '../gfx/textures.js';
@@ -76,13 +76,13 @@ export class DioramaView {
   }
   showSketchCoach() {
     this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', text: this.title })]),
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', mathLabel: this.title })]),
       el('button', { class: 'btn primary', text: 'Transition', onclick: () => this.transition() }));
     this.coach.hidden = false;
   }
   transition(duration = 6.5) {
     if (this.stage !== 'sketch') return; this.stage = 'materialize'; this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', text: this.title })]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', mathLabel: this.title })]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
     this.tm = 0; this.tmDur = duration; this.ds.playing = true; this.ds.speed = .6;
   }
   endMaterialize() {
@@ -108,7 +108,7 @@ export class DioramaView {
   renderTourCoach() {
     const A = this.ds.actors, a = A[this.tourI]; this.coach.innerHTML = '';
     const dots = el('div', { class: 'coach-dots' }, A.map((_, i) => el('i', { class: i < this.tourI ? 'seen' : i === this.tourI ? 'now' : '' })));
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: `Body ${this.tourI + 1} of ${A.length}` }), el('div', { class: 'coach-text', text: a.name }), a.describe ? el('div', { class: 'coach-sub', text: a.describe }) : null, dots]),
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: `Body ${this.tourI + 1} of ${A.length}` }), el('div', { class: 'coach-text', mathLabel: a.name }), a.describe ? el('div', { class: 'coach-sub', mathLabel: a.describe }) : null, dots]),
       el('button', { class: 'ibtn', title: 'Previous (↑)', 'aria-label': 'Previous body', text: '‹', onclick: () => this.prev() }),
       el('button', { class: 'ibtn', title: 'Next (scroll down or ↓)', 'aria-label': 'Next body', text: '›', onclick: () => this.next() }),
       el('button', { class: 'btn ghost small', text: 'Skip', onclick: () => { while (this.stage === 'tour') { this.tourI = this.ds.actors.length; this.finishTour(); } } }));
@@ -131,7 +131,7 @@ export class DioramaView {
   }
   ensurePin(a, focus) {
     let pin = this.pins.get(a.name);
-    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', html: mathHTML(a.name) })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
+    if (!pin) { pin = el('div', { class: 'pin' }, [el('span', { class: 'pin-dot' }), el('span', { class: 'pin-name', html: mathHTML(a.name, 'label') })]); this.labels.append(pin); this.pins.set(a.name, pin); requestAnimationFrame(() => pin.classList.add('in')); }
     this.pins.forEach(p => p.classList.remove('focus')); if (focus) pin.classList.add('focus');
     pin._actor = a; if (this._hot && this._hot.length) pin.classList.toggle('hot', this._hot.some(h => h.name === a.name));
   }
@@ -139,7 +139,7 @@ export class DioramaView {
   showExplore(immediate) {
     this.panel.hidden = false; requestAnimationFrame(() => this.panel.classList.add('in'));
     this.renderLessons(); this.renderParams(); this.renderObjects();
-    this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); });
+    this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', mathLabel: s.text }); p._sym = s; this.labels.append(p); });
     if (immediate) this.ds.actors.forEach(a => this.ensurePin(a, false));
     this.ds.playing = true; this.syncTimeUI(); this._wideFix = 2;   // the opening view is re-framed into the free frame once the panels are laid out
   }
@@ -182,7 +182,7 @@ export class DioramaView {
     const cue = this.dir.cinematic ? this.lessonCues(l, host) : {}; this.stepCue = cue;
     if (this.pov && this.pov.auto) this.exitPOV(false, true);
     if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
-    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null });
+    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null, extra: (l.chain || []).map(c => this.actorByName(c && (c.a || c))).filter(a => a && a !== host) });   // extra: the chain's links are framed with the subject
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     if (cue.isolate) this.cues.setIsolate(cue.isolate);
     if (cue.chain) this.cues.startChain(cue.chain, { pace: l.chainPace, on: l.chainOn });
@@ -207,19 +207,19 @@ export class DioramaView {
     for (const k in this.ds.ranges) {
       if ((this.spec.hidden || []).includes(k)) continue;
       const [a, b, , unit, name] = this.ds.ranges[k], v = this.ds.p[k];
-      const out = el('b', { text: fmt(v) + (unit ? ' ' + unit : '') });
+      const out = el('b', { mathLabel: fmt(v) + (unit ? ' ' + unit : '') });
       const inp = el('input', { type: 'range', min: a, max: b, step: (b - a) / 300, value: v, id: 'dp-' + k, 'aria-label': name || k });
       inp.onpointerdown = inp.onkeydown = () => { if (inp._from == null) inp._from = this.ds.p[k]; };
-      inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; out.textContent = fmt(+inp.value) + (unit ? ' ' + unit : ''); this.setParam(k, +inp.value, false, true); };   // a model that rebuilds rebuilds once per frame while dragging
+      inp.oninput = () => { if (inp._from == null) inp._from = this.ds.p[k]; typeset(out, fmt(+inp.value) + (unit ? ' ' + unit : ''), 'label'); this.setParam(k, +inp.value, false, true); };   // a model that rebuilds rebuilds once per frame while dragging
       inp.onchange = () => { if (inp._from != null && inp._from !== this.ds.p[k]) this.pushUndo({ kind: 'param', k, v: inp._from, label: name || k }); inp._from = null; inp.blur(); };
-      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { html: mathHTML(name || k) }), out]), inp]));
+      box.append(el('label', { class: 'ctrl' }, [el('span', {}, [el('span', { html: mathHTML(name || k, 'label') }), out]), inp]));
     }
     if (!box.children.length) box.append(el('p', { class: 'dim small', text: 'No variables. Use Edit → Ask AI to add some.' }));
     // what the model is doing right now, under the sliders that cause it (newest first)
     this.dynBox = el('div', { class: 'dyn-box' }, [el('h4', { text: 'Dynamic changes' }), this.dynList = el('ul', { class: 'dyn-list' })]);
     box.append(this.dynBox); (this._dyn || []).forEach(d => this.dynList.append(this.dynItem(d)));
   }
-  dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text) })]); }
+  dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text, 'label') })]); }
   pushDyn(ev) {
     const d = { text: ev.text, clock: this.clockText(ev.t), fresh: true }; this._dyn = [d].concat(this._dyn || []).slice(0, 12);
     if (this.dynList) { const li = this.dynItem(d); this.dynList.prepend(li); setTimeout(() => { d.fresh = false; li.classList.remove('fresh'); }, 2500); while (this.dynList.children.length > 12) this.dynList.lastChild.remove(); }
@@ -375,12 +375,12 @@ export class DioramaView {
     if (pin.classList.contains('mini') !== !!on) { pin.classList.toggle('mini', !!on); pin._w = 0; pin.title = on ? pin._actor && pin._actor.name : ''; }
   }
   highlightPins(actors) { if (actors && actors.length) this.touchLabels(actors); this._hot = actors; const on = actors && actors.length; this.labels.classList.toggle('dir-focus', !!on); this.pins.forEach(p => p.classList.toggle('hot', !!on && actors.includes(p._actor))); }
-  refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', text: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
+  refreshPins() { this.pins.forEach(p => p.remove()); this.pins.clear(); this.labels.querySelectorAll('.sym').forEach(p => p.remove()); this.ds.actors.forEach(a => this.ensurePin(a, false)); this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', mathLabel: s.text }); p._sym = s; this.labels.append(p); }); this.renderObjects(); }
   // ---------- HUD ----------
   buildHUD() {
     const u = this.ui;
     this.labels = el('div', { class: 'pins' }); u.append(this.labels);
-    this.titleEl = el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', text: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', text: this.opts.subtitle }) : null]); u.append(this.titleEl);
+    this.titleEl = el('div', { class: 'dio-brand' }, [el('div', { class: 'dio-title', mathLabel: this.title }), this.opts.subtitle ? el('div', { class: 'dio-sub', mathLabel: this.opts.subtitle }) : null]); u.append(this.titleEl);
     this.topBar = u.querySelector('.dio-actions');
     this.editBtn = el('button', { class: 'ibtn', title: 'Edit: select any object (E)', 'aria-label': 'Edit objects', html: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>', onclick: () => this.toggleEdit() });
     u.append(el('div', { class: 'dio-actions glass' }, [this.editBtn,
@@ -406,10 +406,10 @@ export class DioramaView {
     this.paceSel = el('select', { class: 'mini', 'aria-label': 'Reading pace', title: 'How long explanations stay on screen' }, [['slow', 'Read slowly'], ['normal', 'Read normally'], ['fast', 'Read fast']].map(([v, t]) => el('option', { value: v, text: t, selected: (this.prefs.pace || 'normal') === v })));
     this.paceSel.onchange = () => this.setPref('pace', this.paceSel.value);
     u.append(el('div', { class: 'dio-time glass' }, [this.playBtn, this.clock, this.speedSel, el('span', { class: 'sep' }), tog('cinematic', 'Cinematic', 'Camera follows each step and event; explanations appear beside what they describe, and time slows while you read', true), tog('guides', 'Guides', 'Show arrows for motion and links between the objects an explanation names', false), this.calmBtn = el('button', { class: 'tog', title: 'Calm motion: rides become still views and zooms become cuts (also follows the system setting "reduce motion")', 'aria-pressed': String(this.prefs.motion === 'reduced'), text: 'Calm', onclick: () => { this.setPref('motion', this.prefs.motion === 'reduced' ? 'full' : 'reduced'); } }), this.paceSel]));
-    this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.evlog = el('ul', { class: 'evlog' });
+    this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.sparkCap = el('div', { class: 'spark-cap' }); this.evlog = el('ul', { class: 'evlog' });   // the chart's caption is HTML, so it wraps instead of being cut at the canvas edge
     // readouts stay small by default (six values) so they don't cover the model; one click shows all of them
     this.readMore = el('button', { class: 'reads-more', onclick: () => { this.prefs.readsAll = !this.prefs.readsAll; savePrefs(this.prefs); this._rt = 0; } });
-    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.spark, this.evlog]); u.append(this.readPanel);
+    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.sparkCap, this.spark, this.evlog]); u.append(this.readPanel);
     this.ticker = el('div', { class: 'ticker' }); u.append(this.ticker);
     this.editBar = el('div', { class: 'edit-bar glass', hidden: true }); u.append(this.editBar);
     this.syncTimeUI();
@@ -444,7 +444,7 @@ export class DioramaView {
     this.pushDyn(ev);   // every change is listed under Variables → Dynamic changes (the old top-of-screen ticker is gone)
     // sound, placed left/right where the event happens
     if (this.app.sfx && this.stage === 'explore') { let sx = .5; if (ev.pos) { const q = ev.pos.clone().project(this.camera); sx = q.x * .5 + .5; } this._sndT = this._sndT || new Map(); if (now - (this._sndT.get(evKey) || -1e9) > 3000) { this._sndT.set(evKey, now); if (ev.sound) this.app.sfx.play(ev.sound, { x: sx }); else this.app.sfx.forEvent(ev.text, sx); } }
-    this.evlog.prepend(el('li', { html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text) })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
+    this.evlog.prepend(el('li', { title: this.clockText(ev.t) + ' · ' + mathText(ev.text), html: esc(this.clockText(ev.t)) + ' · ' + mathHTML(ev.text, 'label') })); while (this.evlog.children.length > 40) this.evlog.lastChild.remove();
     if (ev.pos && !this.spec.noMarkers) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialGlow('255,200,120'), color: ev.color || 0xffd27a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.copy(ev.pos); s.scale.setScalar(.3); this.scene.add(s); this.flashes.push({ s, a: 0 }); }
     if (this.running != null && this.runUntil && (ev.id && ev.id.toLowerCase() === this.runUntil || ev.text.toLowerCase().includes(this.runUntil))) { if (this.dir.cinematic) { if (!this.awaitIdle) this.awaitT = 0; this.awaitIdle = true; } else this.runT = this.runDur; }
   }
@@ -660,7 +660,7 @@ export class DioramaView {
       if (F) { const rel = rd0.filter(([k]) => { const w = String(k).toLowerCase().split(/[^a-zα-ωₐ-ₜ0-9]+/).filter(x => x.length > 2); return w.some(x => F.includes(x)); }); rd = (rel.length ? rel : rd0).slice(0, 6); }
       else if (!this.prefs.readsAll) rd = rd0.slice(0, 6);
       this.readMore.hidden = rd0.length <= 6 || !!F; this.readMore.textContent = this.prefs.readsAll ? 'Fewer readouts ▴' : `All ${rd0.length} readouts ▾`; this.readPanel.classList.toggle('full', !!this.prefs.readsAll && !F);
-      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${mathHTML(k)}</em> ${mathHTML(v)}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
+      this.reads.innerHTML = rd.map(([k, v]) => `<span><em>${readKey(k)}</em> ${mathHTML(v, 'label')}</span>`).join(''); if (rd.length !== this._rdN || !!F !== this._rdF) { this._rdN = rd.length; this._rdF = !!F; this._pr = 0; } /* the readouts changed size: labels re-test against them now */ this.drawSpark(); { const hid = this.stage === 'sketch' || this.stage === 'materialize' || (!rd.length && !ds.series.length); if (hid !== this.readPanel.hidden) { this.readPanel.hidden = hid; this._pr = 0; } } }   // (labels re-test against it at once)
   }
   // S6.2 comfort vignette: while a POV ride or a moving shot turns the camera faster than 30°/s (or a POV moves faster
   // than 3 actor sizes per second), the periphery darkens, at most 0.55; a cut (a jump) never counts
@@ -673,13 +673,13 @@ export class DioramaView {
   }
   drawSpark() {
     const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
-    g.fillStyle = 'rgba(244,239,230,.55)'; g.font = '20px IBM Plex Mono, monospace'; g.textAlign = 'left'; canvasMath(g, ds.seriesName || '', 8, 22);
+    const cap = ds.seriesName || ''; if (cap !== this._sparkCapT) { this._sparkCapT = cap; this.sparkCap.innerHTML = mathHTML(cap, 'label'); this.sparkCap.hidden = !cap; }
     const H = ds.sim && ds.sim.hist ? ds.sim.hist() : null;
-    if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 34), bw - 2, v / mx * (c.height - 34)); }); return; }
+    if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 8), bw - 2, v / mx * (c.height - 8)); }); return; }
     const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d);
     if (ds.sim && ds.sim.seriesRange) { try { const r = ds.sim.seriesRange(lo, hi); if (r && isFinite(r[0]) && isFinite(r[1]) && r[1] > r[0]) [lo, hi] = r; } catch (e) { } }
     if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
-    g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 40); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
+    g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 16); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
   }
   dispose() {
     if (this.pov) this.exitPOV(true);
@@ -694,6 +694,9 @@ export class DioramaView {
   disposeGPU() { if (this.gpuFreed) return; this.gpuFreed = true; const keep = this.app.mode && this.app.mode !== this ? this.app.mode.scene : null; const set = gpuSet([this.scene, this.tcHelper].filter(Boolean)); disposeTree(set, keep); }   // like ds.dispose(), plus textures and the gizmo, minus anything the next place still shows
 }
 
+// a readout's name: a lone leading letter is a quantity (x, t, V, "P measured", "R no drag") and is set as a maths
+// italic; the rest is typeset like any label (⟨KE⟩, T = 2⟨KE⟩/3, vₓ)
+function readKey(k) { k = String(k ?? ''); const m = /^([A-Za-zα-ωΑ-Ω])(?=\s|$)/.exec(k); return m && !/^(A|a|I)\s+[a-z]/.test(k) ? '<i class="rk">' + esc(m[1]) + '</i>' + mathHTML(k.slice(1), 'label') : mathHTML(k, 'label'); }
 // Off-screen sketch renderer: the drawing as an image (scroll illustrations, pedestal previews).
 const sketchCache = new Map();
 // opts.focusText: render a "stage plate" instead of the overview — the camera frames only the bodies the text names,
@@ -706,13 +709,50 @@ export function matchActors(actors, text) {
   const T = new Set(toks(text)); const full = String(text || '').toLowerCase();
   return actors.map(a => { const n = a.name.split(' · ')[0].toLowerCase(); const ts = toks(n); const word = x => T.has(x) || T.has(x + 's') || T.has(x.replace(/s$/, '')); const hit = new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(full) ? 10 : ts.length && ts.every(word) ? ts.length : 0; return { a, hit }; }).filter(x => x.hit > 0).sort((p, q) => q.hit - p.hit).map(x => x.a).slice(0, 5);
 }
+// The teaching subject of a diorama, for the drawing's framing (the same rule as the room's pedestal minis): the actors'
+// boxes (leaving out any actor 8 × larger than the median actor, a ground) mark the focus; a mesh belongs to the subject
+// when its centre lies within that box grown by 30 % and it is at most 2.2 × the box's extent; lines (orbits, rays,
+// traces) when they lie within the box grown by its extent. Without actors: the meshes within 1.6 × the 80th-percentile
+// distance of all mesh centres from their median centre. Everything else (ground planes, hills, rings of trees, rocks
+// round the field) is scenery. Returns { box, hide } in world coordinates; box is what the drawing frames.
+function sketchSubject(ds) {
+  const roots = [ds.world, ds.extras], items = [], lines = [], sizeOf = b => Math.max(b.max.x - b.min.x, b.max.z - b.min.z, b.max.y - b.min.y);
+  roots.forEach(r => r.updateMatrixWorld(true));
+  roots.forEach(r => r.traverse(o => { if (!o.visible || o.userData.isInk || !o.geometry) return; const b = new THREE.Box3().setFromObject(o); if (b.isEmpty() || !isFinite(b.min.x)) return;
+    if (o.isMesh && sizeOf(b) >= 1e-4) items.push({ o, b, c: b.getCenter(V3()), size: Math.max(b.max.x - b.min.x, b.max.z - b.min.z) }); else if (o.isLine || o.isSprite || o.isPoints) lines.push({ o, b }); }));
+  const ab = []; (ds.actors || []).forEach(a => { try { if (a.obj && a.obj.isObject3D) { const b = new THREE.Box3().setFromObject(a.obj); if (!b.isEmpty() && isFinite(b.min.x)) ab.push(b); } else { const q = a.getPos && a.getPos(); if (q && isFinite(q.x)) ab.push(new THREE.Box3(q.clone(), q.clone())); } } catch (e) { } });
+  const focus = new THREE.Box3(), keep = new Set();
+  if (ab.length) { const sz = ab.map(sizeOf).filter(s => s > 1e-3).sort((x, y) => x - y), ms = sz.length ? sz[sz.length >> 1] : .05; ab.forEach(b => { if (sizeOf(b) <= 8 * Math.max(ms, .05)) focus.union(b); }); }   // (symbol pins are points: they mark the focus but do not set the median)
+  let ext = 1;
+  if (!focus.isEmpty()) {
+    const fs = focus.getSize(V3()), fc = focus.getCenter(V3()); ext = Math.max(fs.x, fs.y, fs.z, .3);
+    items.forEach(it => { if (Math.abs(it.c.x - fc.x) <= fs.x / 2 + .3 * ext && Math.abs(it.c.z - fc.z) <= fs.z / 2 + .3 * ext && Math.abs(it.c.y - fc.y) <= fs.y / 2 + .6 * ext && it.size <= 2.2 * ext) keep.add(it.o); });
+  } else if (items.length) {
+    const med = k => { const v = items.map(it => it.c[k]).sort((x, y) => x - y); return v[v.length >> 1]; }, m = V3(med('x'), med('y'), med('z'));
+    items.forEach(it => { it.d = Math.hypot(it.c.x - m.x, it.c.z - m.z); });
+    const d2 = items.map(it => it.d).sort((x, y) => x - y), szm = items.map(it => it.size).sort((x, y) => x - y)[items.length >> 1], R = Math.max(.05, szm * .5, d2[Math.min(d2.length - 1, Math.floor(d2.length * .8))]);
+    items.forEach(it => { if (it.d <= 1.6 * R + .05 && it.size <= 4 * Math.max(R, szm, .25)) keep.add(it.o); });
+    ext = Math.max(R, .3);
+  }
+  if (!keep.size) items.forEach(it => keep.add(it.o));
+  const box = new THREE.Box3(); items.forEach(it => { if (keep.has(it.o)) box.union(it.b); });
+  if (box.isEmpty()) return null;
+  // a kept mesh's ancestors and descendants stay visible; scenery is hidden at its top-most hidden node
+  const hide = items.filter(it => !keep.has(it.o)).map(it => it.o).filter(o => { let k = false; o.traverse(q => { if (q !== o && keep.has(q)) k = true; }); return !k; });
+  const grow = box.clone().expandByScalar(ext);
+  lines.forEach(L => { if (grow.containsBox(L.b)) { if (L.o.isLine) box.union(L.b); } else hide.push(L.o); });
+  return { box, hide };
+}
 export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
   if (sketchCache.has(key)) return sketchCache.get(key);
   const ds = new DioramaScene(gfx, spec, { headless: true });
-  addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, ds.radius * .005); addOutlines(ds.extras, ds.U, ds.radius * .005);
-  const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   ds.step(0);
+  // the overview frames the subject (sketchSubject): its outlines are as thick as the subject is large, not the world
+  // (a landscape's radius made 30 cm hulls round a lever)
+  const subj = opts.focusText ? null : sketchSubject(ds), inkR = subj ? Math.max(.5, subj.box.getSize(V3()).length() * .5) : ds.radius;
+  addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, inkR * .005); addOutlines(ds.extras, ds.U, inkR * .005);
+  const cam = new THREE.PerspectiveCamera(40, w / h, .1, 400);
   // a stage plate shows the step's own state: let the model settle under the step's settings first (≈4 s of model time)
   if (opts.focusText) { const pl = ds.playing; ds.playing = true; try { const t0 = performance.now(); for (let k = 0; k < 96 && performance.now() - t0 < 8000; k++) ds.step(.5); } catch (e) { } ds.playing = pl; }   // a fixed 48 model-seconds (the time cap only guards a runaway model)   // ≈48 model-seconds: slow processes (crystals, levels) reach the step's state
   let endKey = ds.overviewKey(), focus = [], fc = ds.center, fr = ds.radius;
@@ -727,6 +767,23 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   m.setProgress(0); ds.step(0); m.setProgress(0);
   const paper = new THREE.Color('#efe9dc'); const keepBg = ds.scene.background, keepFog = ds.scene.fog; ds.scene.background = paper; ds.scene.fog = null;
   ds.scene.traverse(o => { if (o.isPoints || (o.userData.decorBase)) o.visible = false; });
+  // the overview drawing frames the teaching subject, not the whole world: scenery is left out and the subject's box
+  // fills ~76 % of the card (the larger of its height and its width over the aspect), seen along the technique's own
+  // drawing direction and lens
+  if (!opts.focusText) {
+    const S = subj;
+    if (S) {
+      S.hide.forEach(o => { o.visible = false; }); ((ds.env && ds.env.bgObjects) || []).forEach(o => { o.visible = false; });
+      const fk = m.flatKey, dir = fk.dir.clone().normalize(), up0 = Math.abs(dir.y) > .95 ? V3(0, 0, -1) : V3(0, 1, 0), right = up0.clone().cross(dir).normalize(), up = dir.clone().cross(right).normalize();
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9; const b = S.box;
+      for (let k = 0; k < 8; k++) { const p = V3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z), x = p.dot(right), y = p.dot(up), z = p.dot(dir); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      // the title strip covers the bottom 44 px: the subject is fitted to, and centred in, the area above it
+      const hu = h - 44, FILL = .76, useH = Math.max(y1 - y0, (x1 - x0) * hu / w, .05) / FILL, fullH = useH * h / hu, th = Math.tan(fk.fov * Math.PI / 360), dist = fullH / 2 / th;
+      const tgt = right.clone().multiplyScalar((x0 + x1) / 2).addScaledVector(up, (y0 + y1) / 2 - fullH * 22 / h).addScaledVector(dir, (z0 + z1) / 2);
+      cam.fov = fk.fov; cam.up.copy(up0); cam.position.copy(tgt).addScaledVector(dir, dist); cam.lookAt(tgt);
+      const depth = Math.max(z1 - z0, .1); cam.near = Math.max(.01, dist - depth * 2); cam.far = dist + depth * 2 + 1; cam.updateProjectionMatrix();
+    }
+  }
   const rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 }); const r = gfx.renderer;
   const prevT = r.getRenderTarget(), prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
   r.setRenderTarget(rt); r.render(ds.scene, cam); r.setRenderTarget(prevT); r.toneMapping = prevTM;
@@ -766,7 +823,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   // title block on an opaque strip; both labels fitted with an ellipsis so they never run into each other
   g.font = '13px "IBM Plex Mono", monospace'; g.textAlign = 'left';
   const fit = (t, max) => { t = String(t); if (g.measureText(t).width <= max) return t; while (t.length > 1 && g.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
-  const L0 = String(spec.title || spec.type).toUpperCase(), R0 = focus.length ? 'STAGE · ' + String(opts.label || '').toUpperCase() : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING';
+  const L0 = mathText(spec.title || spec.type).toUpperCase(), R0 = focus.length ? 'STAGE · ' + mathText(opts.label || '').toUpperCase() : (spec.technique || spec.style || 'card').toUpperCase() + ' · DRAWING';
   const avail = w - 52 - 24, lW = Math.min(g.measureText(L0).width, avail * .5), Lt = fit(L0, lW), Rt = fit(R0, avail - g.measureText(Lt).width);
   g.fillStyle = 'rgba(239,233,220,.94)'; g.fillRect(15, h - 44, w - 30, 29); g.strokeStyle = 'rgba(29,28,25,.35)'; g.beginPath(); g.moveTo(15, h - 44); g.lineTo(w - 15, h - 44); g.stroke();
   g.fillStyle = 'rgba(29,28,25,.85)'; g.fillText(Lt, 26, h - 25); g.textAlign = 'right'; g.fillText(Rt, w - 26, h - 25);

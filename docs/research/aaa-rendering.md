@@ -356,3 +356,99 @@ target while compiling.
 - **Measurement**: the build machine renders with SwiftShader (software), so absolute frame times are meaningless;
   the cost table uses draw calls, triangles, programs, full-screen passes and texture reads per pixel, which carry
   over to real GPUs.
+
+## Landscape kit: the water-cycle valley at Weatherglass quality (implemented)
+
+The recipes of `realism-playbook.md` (R1–R9, R12, R13 and part of R11) are implemented as modules and exposed as
+scene-spec shape kinds (`SCENE_SPEC.md`, "Landscape kit"); `WATER_CYCLE` in `js/seeds-scenes.js` is rebuilt on them.
+
+| module | what it does | spec kinds |
+|---|---|---|
+| `js/gfx/terrain.js` | one height field on the mesh grid (fBm + terraces + smooth-max peaks + downhill river with an automatic waterfall + lake bowl + pads + path); RGBA half-float texture (height, river, lake, slope) + bilinear CPU sampler + ecology `suit(x,z,kind)`; meadow/rock meshes split by slope and height (flatter diagonal per quad); peaks with `own` are cut out as separate bodies | `terrain{…field options}`, `peak` |
+| `js/gfx/soil.js` | the four cut faces of the block with strata (turf rim, humus, loam with mottles/burrows/stones, clay, gravel, tilted bedrock beds with joints, roots), wetness soaking down, derivative-bump normals; walnut plinth | `soilBlock` (built by `terrain{block:true}`) |
+| `js/gfx/grass.js` | instanced blades (arc bend of constant length, gust crests, flutter, per-vertex colour, translucency, root AO, distance hash-culling with widening), flowers (6 species), reeds and cattails; grow out of the paper with the materialize front | `grassField`, `flowers`, `reeds` |
+| `js/gfx/water.js` | lake in two passes (multiply by Beer–Lambert transmittance, add in-scatter + Fresnel sky + glint + glitter + lapping foam + rain rings), hand-compared sun shadow, cloud shadow; river ribbon with flow-space streaks, waterfall sheet, plunge foam, spray | `lake`, `river`/`waterfall` |
+| `js/gfx/clouds.js` | raymarched puff clouds (smooth-union SDF, Perlin–Worley erosion, dual-lobe HG over three scattering octaves, powder, terrain occlusion, camera-inside mode); 32³ CPU noise; cloud-shadow splat at 15 Hz | `cloud{volume:true}`, `cloudVolume` |
+| `js/gfx/precip.js` | vapour wisps (soft stretched point sprites) and velocity-aligned rain streaks | `particles{type:vapour|streaks}` |
+| `js/dio/trees.js` | species table (tree, oak, birch, cherry; pine, bush), crown-ellipsoid normals, vertex wind (lean ∝ h², per-tree phase, leaf flutter) on foliage and bark (`TREE_WIND` define) | `oak`, `birch`, `cherry`, `tree{species}`, `forest` |
+| `js/gfx/aaa.js` | scanned CC0 micro layer (Ground103 on meadow/mud/sand, Moss002 on up-facing crag, Bark001 on bark), lazily loaded from `assets/textures`, weight 0 until loaded (no recompile, graceful fallback); two hashed offsets per noise cell against tiling; off at low quality | (automatic) |
+| `js/gfx/materialize.js` | `ShaderMaterial`s take the scene's front uniforms through `userData.onFront(U)`; cloud-shadow hook on directional light 0 of every patched material in outdoor scenes (`AAA_CLOUDSH` define, own program key) | — |
+| `js/gfx/renderer.js` | grade pass `uPunch` (AgX "Punchy" approximation: power 1 + .3k, saturation 1 + .25k); `look.punch`: landscape .9, ocean .8, studio/desk .45, hub/rooms .15, default .3 | — |
+| `js/dio/environments.js` | WG sun colour/intensity ramp from elevation; outdoor exposure raised to match the punch look | — |
+
+Measured with `gfx.stats()` (one full frame, shadow passes included; SwiftShader, so no GPU times) on the rebuilt valley:
+
+| quality | draw calls | triangles | programs | grass blades | notes |
+|---|---|---|---|---|---|
+| low | 94 | 0.32 M | 99 | 18 k (5 tris) | no flowers, POM off, scans off, clouds 20/4 steps, 151 × 116 terrain grid |
+| medium | 123 | 0.74 M | 103 | 46 k (7 tris) | 2.2 k flowers, 261 × 201 grid, clouds 30/5 steps, atmosphere pass |
+| high | ≈130 (est.) | ≈1.3 M (est.) | — | 100 k (9 tris) | 361 × 277 grid, clouds 44/6 steps |
+
+Before the rebuild the playbook counted ~444 draw calls at medium, most of them the transmission pre-pass of the old
+transmissive lake; the new lake has none. Estimated GPU cost at medium on a GTX 1660-class card (from shader arithmetic):
+grass 1.0–1.5 ms, clouds 1.5–2.5 ms (three boxes, early-out outside the puffs), lake + river 0.3–0.5 ms, soil 0.1 ms,
+scans +0.2 ms, i.e. about 3.5–5 ms on top of the existing 6–8 ms: inside 16.7 ms.
+
+Second pass (after review): blades thinner (0.0045–0.009) and denser (70 k at medium, 3 rows) with dry straw tips, plus a
+ground-cover layer of crossed-card tufts with a comb of blades cut in the fragment shader (40 k, 4 triangles each);
+bushes are leaf-card clusters like the crowns; cherry petals recoloured from the atlas in the shader; pines get drooping
+needle sprays; `cabin` (log walls, bark-shingle roof, porch, stone chimney with smoke, glowing windows in the evening),
+`jetty` and painted `hills` kinds; a planar mirror for the lake (three's `Reflector` driven from the lake's first pass,
+half resolution at medium, 0.7 at high, off at low; the meadow is left out of the mirror); clouds eroded with inverted
+Worley above (cauliflower), finer noise below (wisps), shaded bases. Measured at medium: 179 draw calls, 1.22 M
+triangles including the mirror pass (about 0.45 M of it), 124 programs; the mirror is the largest new cost (≈1–1.5 ms
+on a mid GPU at half resolution).
+
+Third pass, measured against the reference itself (`weatherglass_ref/index.html` served locally, captured in
+Playwright at its `hero`, `low` and `close` presets; ours at matching radius, elevation and FOV). R15 metrics, full
+960 × 600 frame including UI (colour entropy in bits over 16³ bins, edge density = share of pixels with Sobel > 32,
+contrast = luma p95 − p5):
+
+| view | Weatherglass | ours before (pass 2) | ours after (pass 3) |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151, luma p50 54 | 6.36, .046, 89, p50 105 | 5.58, .074, 122, p50 54 |
+| low | 5.71, .135, 141, p50 60 | (lake edge) 6.70, .110, 94, p50 94 | 5.81, .059, 106, p50 71 |
+| close | 6.74, .175, 143, p50 65 | — | 6.10, .083, 111, p50 78 |
+
+What closed the gap: the vitrine with a warm studio backdrop (median luma now matches, the flat blue void is gone),
+less aerial haze inside the case, a punchier landscape grade (contrast 1.16, punch 1), envIntensity .35 for deeper
+shadows, warm back rim, cumulus clouds with crisp lobes. What did not: edge density stays at about half of the
+reference's: its meadow, rocks and cliffs carry far more fine, high-contrast detail (individual stones, cliff ledges,
+dense dark-gapped grass), and our ridge is still one smooth peak rather than craggy massifs.
+Cost at medium: 195 draw calls, 1.57 M triangles (including the lake mirror), 130 programs.
+
+Fourth pass (composition): a craggy massif of four terraced peaks (`peaks[].terrace` cliff bands + flat treads that
+carry grass and moss, `crag` gullies; rock only on the risers), the water axis massif → waterfall (`river.fallAt`) →
+stream → a lake that crosses the block's front edge and is cut open in section (water volume, shafts, sediment;
+`buildLakeSection`), a tighter case (lid at 5.4, thin brass frame, teal glass edges, clear panes) on a dark wooden base,
+the sun moved outside the case (a warm lamp), boulders, roots and lake silt in the soil section, more bushes along the
+stream and forest edges, three cherries, a path to the cabin. The scene's clouds are drawn below the lid (CAP 4.5;
+the physics is unchanged), the parcel ride is 1.1 lower, and a lee hollow behind the Ridge lets the rain-shadow cloud
+dissolve on the block at any wind (checked headless by replaying the scene's physics against the field).
+
+| view | Weatherglass | pass 3 | pass 4 |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151 | 5.56, .073, 122 | 5.71, .081, 120 |
+| low | 5.71, .135, 141 | 5.81, .059, 106 | 5.94, .073, 111 |
+| close | 6.74, .175, 143 | 6.10, .083, 111 | 6.31, .103, 157 |
+
+Cost at medium: 165 draw calls, 1.52 M triangles, 132 programs.
+
+Fifth pass (scale and framing): content scaled up on the same 13 × 10 block: the massif ~1.3× higher and bulkier
+(Ridge 4.4, cliff bands .34–.38), trees and bushes 1.45–1.9× larger and fewer, stream .22–.5 wide, the lake 2.25 × 2.0,
+the case lid at 6.5; the overview camera moved in (radius 14.2, polar 1.18, FOV 34) so the case fills the frame; the sun's
+disc is hidden from outside the case (`userData.skyOnly`); landscape saturation .88. Forest items never land in the lake
+or the stream. Headless physics replay: rain on the slope, rain shadow and rain back on the lake fire at winds 4, 6, 0.3.
+
+| view | Weatherglass | pass 4 | pass 5 |
+|---|---|---|---|
+| overview | entropy 6.03, edges .134, contrast 151, sat .079 | 5.71, .081, 120, .148 | 5.77, .096, 114, .122 |
+| low | 5.71, .135, 141, .069 | 5.94, .073, 111, .132 | 5.80, .083, 111, .110 |
+| close | 6.74, .175, 143, .093 | 6.31, .103, 157, .127 | 6.19, .120, 145, .107 |
+
+Cost at medium: 244 draw calls (bigger trees push more of them into the shadow cascades and the lake mirror),
+1.72 M triangles, 131 programs.
+
+Known gaps against Weatherglass: no contact-hardening
+shadow filter (R11.1) and no HDRI reflections (R11.4), cloud lighting is not yet tuned against the golden-hour lessons, no R15 visual gate. (The pedagogy hook is in: rain
+on the slope speeds the stream and its waterfall.)

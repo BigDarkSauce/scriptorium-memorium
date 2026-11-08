@@ -1,0 +1,96 @@
+{
+ "steps": [
+  {
+   "id": "G1",
+   "section": "p3-6",
+   "kind": "remark",
+   "title": "Rubber-duck it",
+   "ref": "p. 3",
+   "pages": [
+    3
+   ],
+   "statement": "Explaining your code line by line, out loud, to anyone (even a rubber duck) makes you notice the step you skipped.",
+   "explain": [
+    {
+     "text": "Three moves: trace your steps and ask whether you skipped one; explain each line out loud and why you chose that function; be descriptive, which is also how you ask for help online. Saying what a line should do forces you to compare it with what it does."
+    }
+   ],
+   "terms": [
+    {
+     "term": "rubber-duck debugging",
+     "meaning": "finding a bug by explaining the code aloud, step by step"
+    }
+   ],
+   "intuition": "Speaking slows you down to the speed of the bug.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "The three moves.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "trace your steps"
+     },
+     {
+      "id": "n1",
+      "label": "explain each line aloud"
+     },
+     {
+      "id": "n2",
+      "label": "describe it precisely"
+     }
+    ]
+   },
+   "misconception": "You need an expert to find a bug. Explaining it precisely, to anyone, finds most of them.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Explaining finds bugs.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Only an expert can spot it."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Saying each line aloud exposes it."
+    }
+   },
+   "check": {
+    "q": "Why does a precise description also help when asking online?",
+    "a": "Others can only help with what you state: the code, the message and what you expected.",
+    "figure": {
+     "kind": "flow",
+     "caption": "A good question.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "code"
+      },
+      {
+       "id": "n1",
+       "label": "message"
+      },
+      {
+       "id": "n2",
+       "label": "expected vs got"
+      }
+     ]
+    }
+   },
+   "answers": "What do you do when you cannot see the bug?",
+   "opens": "Which graph shows your data best?",
+   "basis": "source-text",
+   "figures": [],
+   "demos": [],
+   "from": []
+  }
+ ],
+ "coverage": [
+  {
+   "subsection": "p3-6",
+   "steps": [
+    "G1"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,358 @@
+{
+ "steps": [
+  {
+   "section": "1.0",
+   "kind": "definition",
+   "title": "The five parts of a function call",
+   "ref": "Sheet 01, p. 1",
+   "pages": [
+    1
+   ],
+   "figures": [
+    "fig-p1-1"
+   ],
+   "statement": "A function call is a verb with inputs: a name, brackets holding the arguments, and usually an arrow that stores the result.",
+   "quote": [
+    {
+     "text": "Any word followed by brackets is a function.",
+     "ref": "p. 1"
+    }
+   ],
+   "explain": [
+    {
+     "text": "In `avg <- mean(dat$TotalSleep, na.rm = TRUE)` the word mean is the function name: the verb, what to do. Everything inside the brackets is an argument, an input, and commas separate them. The first input, dat$TotalSleep, fills the first argument x (the data) because of its position; the second is named, na.rm = TRUE, and so replaces that argument's default value FALSE. Finally avg <- stores the output as an object called avg; read the arrow as \"gets\".",
+     "figure": {
+      "kind": "flow",
+      "caption": "Reading one call left to right: where the result goes, what to do, and the inputs.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "avg <- (store the output)"
+       },
+       {
+        "id": "n1",
+        "label": "mean (the verb)"
+       },
+       {
+        "id": "n2",
+        "label": "dat$TotalSleep → x (by position)"
+       },
+       {
+        "id": "n3",
+        "label": "na.rm = TRUE (by name)"
+       }
+      ],
+      "edges": [
+       {
+        "from": "n2",
+        "to": "n1"
+       },
+       {
+        "from": "n3",
+        "to": "n1"
+       },
+       {
+        "from": "n1",
+        "to": "n0",
+        "label": "output"
+       }
+      ]
+     }
+    },
+    {
+     "text": "Seeing the five parts makes any new function readable: find the verb, then match each input to an argument, then see where the output goes."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "avg <- mean(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "mean() averages the column TotalSleep of the data frame dat; na.rm = TRUE drops the missing values first; <- stores the result in a new object avg."
+     },
+     {
+      "code": "avg",
+      "explain": "Typing the object's name prints what it holds."
+     }
+    ],
+    "output": [
+     "[1] 10.53276"
+    ],
+    "interpret": "The 58 mammals with a sleep value sleep 10.53 hours a day on average."
+   },
+   "terms": [
+    {
+     "term": "function",
+     "meaning": "a named recipe that takes inputs (arguments) and returns an output; written name(…)"
+    },
+    {
+     "term": "argument",
+     "meaning": "one input slot of a function, e.g. x or na.rm"
+    },
+    {
+     "term": "<-",
+     "meaning": "assignment: store the value on the right under the name on the left (\"gets\")"
+    },
+    {
+     "term": "object",
+     "meaning": "anything R has stored under a name (a number, a vector, a data frame, a function)"
+    },
+    {
+     "term": "dat$TotalSleep",
+     "meaning": "the column TotalSleep of the data frame dat: hours of sleep per day for 62 mammals"
+    }
+   ],
+   "intuition": "A function is a machine: inputs go in through the brackets, the result comes out and the arrow puts it in a labelled box.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Inputs in, output out, stored in a labelled box.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "inputs"
+     },
+     {
+      "id": "n1",
+      "label": "mean()"
+     },
+     {
+      "id": "n2",
+      "label": "avg"
+     }
+    ]
+   },
+   "misconception": "The arrow is part of the function. It is not: <- only stores whatever the function returned; without it the result is printed and lost.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "With and without the arrow.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "mean(x) changes x or keeps the answer somewhere."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "mean(x) only prints; avg <- mean(x) keeps the answer in avg."
+    }
+   },
+   "check": {
+    "q": "In seq(1, 10, by = 2), which argument is matched by name and which by position?",
+    "a": "by = 2 is matched by name; 1 and 10 fill from and to by position.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Matching seq(1, 10, by = 2).",
+     "dir": "TB",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "1 → from"
+      },
+      {
+       "id": "n1",
+       "label": "10 → to"
+      },
+      {
+       "id": "n2",
+       "label": "by = 2 → by"
+      }
+     ]
+    }
+   },
+   "bodies": [
+    "avg",
+    "mean()",
+    "dat$TotalSleep",
+    "na.rm"
+   ],
+   "opens": "What does mean() do with the four missing values when na.rm is left out?",
+   "id": "S1",
+   "answers": "What is a function call in R made of, and how does R turn its inputs into an output?",
+   "from": [],
+   "basis": "source-text"
+  },
+  {
+   "section": "1.0",
+   "kind": "example",
+   "title": "Input, function, output: the NA case",
+   "ref": "Sheet 01, input/output panel, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "Left at its default (na.rm = FALSE), mean() of a column with missing values returns NA; with na.rm = TRUE it returns 10.53276.",
+   "explain": [
+    {
+     "text": "The column holds 62 values (3.3, 8.3, 12.5, 16.5, …), of which 4 are NA, R's mark for a missing value. The mean of a set that contains an unknown number is itself unknown, so by default mean() answers NA. Setting na.rm = TRUE removes the 4 NAs first and averages the other 58.",
+     "figure": {
+      "kind": "flow",
+      "caption": "Same data, two settings, two outputs.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "62 values, 4 NA"
+       },
+       {
+        "id": "n1",
+        "label": "na.rm = FALSE (default) → [1] NA"
+       },
+       {
+        "id": "n2",
+        "label": "na.rm = TRUE → [1] 10.53276"
+       }
+      ],
+      "edges": [
+       {
+        "from": "n0",
+        "to": "n1"
+       },
+       {
+        "from": "n0",
+        "to": "n2"
+       }
+      ]
+     }
+    }
+   ],
+   "examples": [
+    {
+     "title": "Average sleep of 62 mammals",
+     "origin": "pdf",
+     "ref": "p. 1",
+     "problem": "Find the mean of dat$TotalSleep, which has 4 missing values.",
+     "solution": [
+      {
+       "text": "mean(dat$TotalSleep) gives [1] NA: one unknown makes the mean unknown."
+      },
+      {
+       "text": "mean(dat$TotalSleep, na.rm = TRUE) drops the 4 NAs and averages the remaining 58 values."
+      }
+     ],
+     "answer": "10.53276 hours per day."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "mean(dat$TotalSleep)",
+      "explain": "na.rm is left at its default FALSE, so the NAs stay in and the result is NA."
+     },
+     {
+      "code": "mean(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "the named argument removes the NAs before averaging."
+     }
+    ],
+    "output": [
+     "[1] NA",
+     "[1] 10.53276"
+    ],
+    "interpret": "NA is not an error: it tells you the data have gaps that you must decide how to treat."
+   },
+   "terms": [
+    {
+     "term": "NA",
+     "meaning": "\"not available\": R's marker for a missing value"
+    },
+    {
+     "term": "na.rm",
+     "meaning": "argument of mean(), sd(), sum() …: TRUE removes NAs before computing; default FALSE"
+    }
+   ],
+   "intuition": "One blank in a list of numbers makes the total unknown, so R refuses to guess.",
+   "intuitionFigure": {
+    "kind": "sketch",
+    "caption": "A row of known values with one blank: the sum cannot be read off.",
+    "items": [
+     {
+      "shape": "rect",
+      "x": 5,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "3.3"
+     },
+     {
+      "shape": "rect",
+      "x": 22,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "8.3"
+     },
+     {
+      "shape": "rect",
+      "x": 39,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "NA",
+      "tone": "warn"
+     },
+     {
+      "shape": "rect",
+      "x": 56,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "12.5"
+     },
+     {
+      "shape": "arrow",
+      "x": 72,
+      "y": 27,
+      "x2": 86,
+      "y2": 27
+     },
+     {
+      "shape": "text",
+      "x": 92,
+      "y": 30,
+      "text": "?"
+     }
+    ]
+   },
+   "misconception": "NA means the code is wrong. It means the data contain missing values and you have not said what to do with them.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "NA is information, not a crash.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "NA = a bug in my code."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "NA = the data have gaps; decide with na.rm."
+    }
+   },
+   "check": {
+    "q": "Would sum(dat$TotalSleep) also give NA? Why?",
+    "a": "Yes: sum() also keeps NAs by default, and a sum with an unknown term is unknown; use na.rm = TRUE.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "sum() behaves like mean().",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "sum() ignores NAs by itself."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "sum(x) is NA; sum(x, na.rm = TRUE) is a number."
+     }
+    }
+   },
+   "bodies": [
+    "dat$TotalSleep",
+    "NA"
+   ],
+   "opens": "What happens if you leave out the brackets of a function?",
+   "id": "S2",
+   "answers": "What does mean() do with the four missing values when na.rm is left out?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "figures": []
+  }
+ ]
+}

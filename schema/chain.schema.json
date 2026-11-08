@@ -99,13 +99,20 @@
             "type": "string"
           },
           "check": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
               "q": {
                 "type": "string"
               },
               "a": {
                 "type": "string"
+              },
+              "figure": {
+                "$ref": "figure.schema.json",
+                "description": "shown only after the answer is revealed"
               }
             }
           },
@@ -386,7 +393,10 @@
             }
           },
           "table": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "description": "a table of the source, rows copied exactly",
             "properties": {
               "caption": {
@@ -460,6 +470,155 @@
                 }
               }
             }
+          },
+          "statementFigure": {
+            "$ref": "figure.schema.json"
+          },
+          "explain": {
+            "type": "array",
+            "description": "2–4 paragraphs in the chain's own words (≤ 90 words each); a paragraph of 60 words or more carries a figure",
+            "items": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "figure": {
+                  "$ref": "figure.schema.json"
+                }
+              }
+            }
+          },
+          "quote": {
+            "type": "array",
+            "description": "short excerpts copied exactly (≤ 40 words each), only when the wording matters; never the same passage twice in a chain",
+            "items": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "dupOf": {
+                  "type": "string",
+                  "description": "added by the app: the step that already shows this quote"
+                }
+              }
+            }
+          },
+          "code": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "code explained line by line",
+            "required": [
+              "lines"
+            ],
+            "properties": {
+              "lang": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "explain"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "explain": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "output": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "interpret": {
+                "type": "string"
+              }
+            }
+          },
+          "examples": {
+            "type": "array",
+            "description": "worked examples: the PDF's own (origin pdf) first; added ones (origin added) need a source",
+            "items": {
+              "type": "object",
+              "required": [
+                "origin"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "origin": {
+                  "enum": [
+                    "pdf",
+                    "added"
+                  ]
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "problem": {
+                  "type": "string"
+                },
+                "solution": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "math": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "answer": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "intuitionFigure": {
+            "$ref": "figure.schema.json"
+          },
+          "misconceptionFigure": {
+            "$ref": "figure.schema.json"
+          },
+          "figureRefs": {
+            "type": "array",
+            "description": "added by the quality gate: PDF figures this step cites that are shown in an earlier step (in) or are page-sized crops (pageLike); rendered as links",
+            "items": {
+              "type": "object"
+            }
+          },
+          "repaired": {
+            "type": "integer",
+            "description": "added by the app: how many times the quality gate had this step rewritten"
           }
         }
       }
@@ -544,6 +703,53 @@
     "renumbered": {
       "type": "object",
       "description": "written by the app after a follow-up merge: old step id → new step id"
+    },
+    "dioramaPlan": {
+      "type": "array",
+      "description": "how many 3D dioramas each subsection needs (0 when it has no dynamic or spatial idea); the app builds them",
+      "items": {
+        "type": "object",
+        "required": [
+          "subsection",
+          "count"
+        ],
+        "properties": {
+          "subsection": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "qualityReport": {
+      "type": "object",
+      "description": "added by the app (js/ai/pipeline.js)"
+    },
+    "figureReport": {
+      "type": "object",
+      "description": "added by the app (js/ai/pipeline.js)"
+    },
+    "dioramaReport": {
+      "type": "object",
+      "description": "added by the app (js/ai/pipeline.js)"
+    },
+    "level": {
+      "enum": [
+        "complete",
+        "essential",
+        "exact"
+      ],
+      "description": "added by the app: the breakdown level the chain was written at"
+    },
+    "levelN": {
+      "type": "integer"
     }
   },
   "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md. Validate with any draft 2020-12 validator (load chain.schema.json, room.schema.json and scene.schema.json together; their $ids share one base so the relative $refs resolve). The strict profile used by tools/verify-chain.mjs is chain.strict.schema.json."

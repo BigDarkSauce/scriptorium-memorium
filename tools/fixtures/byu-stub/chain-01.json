@@ -1,0 +1,1291 @@
+{
+ "title": "01 · Anatomy of an R function",
+ "summary": "What every R function call is made of, how R matches inputs to arguments, and how to write your own function.",
+ "question": "What is a function call in R made of, and how does R turn its inputs into an output?",
+ "sourceNote": "",
+ "chain": [
+  {
+   "section": "1.0",
+   "kind": "definition",
+   "title": "The five parts of a function call",
+   "ref": "Sheet 01, p. 1",
+   "pages": [
+    1
+   ],
+   "figures": [
+    "fig-p1-1"
+   ],
+   "statement": "A function call is a verb with inputs: a name, brackets holding the arguments, and usually an arrow that stores the result.",
+   "quote": [
+    {
+     "text": "Any word followed by brackets is a function.",
+     "ref": "p. 1"
+    }
+   ],
+   "explain": [
+    {
+     "text": "In `avg <- mean(dat$TotalSleep, na.rm = TRUE)` the word mean is the function name: the verb, what to do. Everything inside the brackets is an argument, an input, and commas separate them. The first input, dat$TotalSleep, fills the first argument x (the data) because of its position; the second is named, na.rm = TRUE, and so replaces that argument's default value FALSE. Finally avg <- stores the output as an object called avg; read the arrow as \"gets\".",
+     "figure": {
+      "kind": "flow",
+      "caption": "Reading one call left to right: where the result goes, what to do, and the inputs.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "avg <- (store the output)"
+       },
+       {
+        "id": "n1",
+        "label": "mean (the verb)"
+       },
+       {
+        "id": "n2",
+        "label": "dat$TotalSleep → x (by position)"
+       },
+       {
+        "id": "n3",
+        "label": "na.rm = TRUE (by name)"
+       }
+      ],
+      "edges": [
+       {
+        "from": "n2",
+        "to": "n1"
+       },
+       {
+        "from": "n3",
+        "to": "n1"
+       },
+       {
+        "from": "n1",
+        "to": "n0",
+        "label": "output"
+       }
+      ]
+     }
+    },
+    {
+     "text": "Seeing the five parts makes any new function readable: find the verb, then match each input to an argument, then see where the output goes."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "avg <- mean(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "mean() averages the column TotalSleep of the data frame dat; na.rm = TRUE drops the missing values first; <- stores the result in a new object avg."
+     },
+     {
+      "code": "avg",
+      "explain": "Typing the object's name prints what it holds."
+     }
+    ],
+    "output": [
+     "[1] 10.53276"
+    ],
+    "interpret": "The 58 mammals with a sleep value sleep 10.53 hours a day on average."
+   },
+   "terms": [
+    {
+     "term": "function",
+     "meaning": "a named recipe that takes inputs (arguments) and returns an output; written name(…)"
+    },
+    {
+     "term": "argument",
+     "meaning": "one input slot of a function, e.g. x or na.rm"
+    },
+    {
+     "term": "<-",
+     "meaning": "assignment: store the value on the right under the name on the left (\"gets\")"
+    },
+    {
+     "term": "object",
+     "meaning": "anything R has stored under a name (a number, a vector, a data frame, a function)"
+    },
+    {
+     "term": "dat$TotalSleep",
+     "meaning": "the column TotalSleep of the data frame dat: hours of sleep per day for 62 mammals"
+    }
+   ],
+   "intuition": "A function is a machine: inputs go in through the brackets, the result comes out and the arrow puts it in a labelled box.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Inputs in, output out, stored in a labelled box.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "inputs"
+     },
+     {
+      "id": "n1",
+      "label": "mean()"
+     },
+     {
+      "id": "n2",
+      "label": "avg"
+     }
+    ]
+   },
+   "misconception": "The arrow is part of the function. It is not: <- only stores whatever the function returned; without it the result is printed and lost.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "With and without the arrow.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "mean(x) changes x or keeps the answer somewhere."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "mean(x) only prints; avg <- mean(x) keeps the answer in avg."
+    }
+   },
+   "check": {
+    "q": "In seq(1, 10, by = 2), which argument is matched by name and which by position?",
+    "a": "by = 2 is matched by name; 1 and 10 fill from and to by position.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Matching seq(1, 10, by = 2).",
+     "dir": "TB",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "1 → from"
+      },
+      {
+       "id": "n1",
+       "label": "10 → to"
+      },
+      {
+       "id": "n2",
+       "label": "by = 2 → by"
+      }
+     ]
+    }
+   },
+   "bodies": [
+    "avg",
+    "mean()",
+    "dat$TotalSleep",
+    "na.rm"
+   ],
+   "opens": "What does mean() do with the four missing values when na.rm is left out?",
+   "id": "S1",
+   "answers": "What is a function call in R made of, and how does R turn its inputs into an output?",
+   "from": [],
+   "basis": "source-text",
+   "demos": []
+  },
+  {
+   "section": "1.0",
+   "kind": "example",
+   "title": "Input, function, output: the NA case",
+   "ref": "Sheet 01, input/output panel, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "Left at its default (na.rm = FALSE), mean() of a column with missing values returns NA; with na.rm = TRUE it returns 10.53276.",
+   "explain": [
+    {
+     "text": "The column holds 62 values (3.3, 8.3, 12.5, 16.5, …), of which 4 are NA, R's mark for a missing value. The mean of a set that contains an unknown number is itself unknown, so by default mean() answers NA. Setting na.rm = TRUE removes the 4 NAs first and averages the other 58.",
+     "figure": {
+      "kind": "flow",
+      "caption": "Same data, two settings, two outputs.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "62 values, 4 NA"
+       },
+       {
+        "id": "n1",
+        "label": "na.rm = FALSE (default) → [1] NA"
+       },
+       {
+        "id": "n2",
+        "label": "na.rm = TRUE → [1] 10.53276"
+       }
+      ],
+      "edges": [
+       {
+        "from": "n0",
+        "to": "n1"
+       },
+       {
+        "from": "n0",
+        "to": "n2"
+       }
+      ]
+     }
+    }
+   ],
+   "examples": [
+    {
+     "title": "Average sleep of 62 mammals",
+     "origin": "pdf",
+     "ref": "p. 1",
+     "problem": "Find the mean of dat$TotalSleep, which has 4 missing values.",
+     "solution": [
+      {
+       "text": "mean(dat$TotalSleep) gives [1] NA: one unknown makes the mean unknown."
+      },
+      {
+       "text": "mean(dat$TotalSleep, na.rm = TRUE) drops the 4 NAs and averages the remaining 58 values."
+      }
+     ],
+     "answer": "10.53276 hours per day."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "mean(dat$TotalSleep)",
+      "explain": "na.rm is left at its default FALSE, so the NAs stay in and the result is NA."
+     },
+     {
+      "code": "mean(dat$TotalSleep, na.rm = TRUE)",
+      "explain": "the named argument removes the NAs before averaging."
+     }
+    ],
+    "output": [
+     "[1] NA",
+     "[1] 10.53276"
+    ],
+    "interpret": "NA is not an error: it tells you the data have gaps that you must decide how to treat."
+   },
+   "terms": [
+    {
+     "term": "NA",
+     "meaning": "\"not available\": R's marker for a missing value"
+    },
+    {
+     "term": "na.rm",
+     "meaning": "argument of mean(), sd(), sum() …: TRUE removes NAs before computing; default FALSE"
+    }
+   ],
+   "intuition": "One blank in a list of numbers makes the total unknown, so R refuses to guess.",
+   "intuitionFigure": {
+    "kind": "sketch",
+    "caption": "A row of known values with one blank: the sum cannot be read off.",
+    "items": [
+     {
+      "shape": "rect",
+      "x": 5,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "3.3"
+     },
+     {
+      "shape": "rect",
+      "x": 22,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "8.3"
+     },
+     {
+      "shape": "rect",
+      "x": 39,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "NA",
+      "tone": "warn"
+     },
+     {
+      "shape": "rect",
+      "x": 56,
+      "y": 20,
+      "w": 14,
+      "h": 14,
+      "text": "12.5"
+     },
+     {
+      "shape": "arrow",
+      "x": 72,
+      "y": 27,
+      "x2": 86,
+      "y2": 27
+     },
+     {
+      "shape": "text",
+      "x": 92,
+      "y": 30,
+      "text": "?"
+     }
+    ]
+   },
+   "misconception": "NA means the code is wrong. It means the data contain missing values and you have not said what to do with them.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "NA is information, not a crash.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "NA = a bug in my code."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "NA = the data have gaps; decide with na.rm."
+    }
+   },
+   "check": {
+    "q": "Would sum(dat$TotalSleep) also give NA? Why?",
+    "a": "Yes: sum() also keeps NAs by default, and a sum with an unknown term is unknown; use na.rm = TRUE.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "sum() behaves like mean().",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "sum() ignores NAs by itself."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "sum(x) is NA; sum(x, na.rm = TRUE) is a number."
+     }
+    }
+   },
+   "bodies": [
+    "dat$TotalSleep",
+    "NA"
+   ],
+   "opens": "What happens if you leave out the brackets of a function?",
+   "id": "S2",
+   "answers": "What does mean() do with the four missing values when na.rm is left out?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.1",
+   "kind": "remark",
+   "title": "Brackets, always",
+   "ref": "Card 1, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "A function only runs when its name is followed by brackets, even empty ones: getwd() runs; getwd alone prints the function's own code.",
+   "explain": [
+    {
+     "text": "The name of a function is an object like any other; typing it shows what it holds, which is the code of the recipe. The brackets are the instruction to run it. getwd() needs no inputs, so its brackets are empty, but they must be there; it then returns the folder R is working in."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "getwd()",
+      "explain": "runs the function: returns the working directory (where R reads and writes files)."
+     },
+     {
+      "code": "getwd",
+      "explain": "without brackets: prints the code of getwd, nothing is run."
+     }
+    ],
+    "output": [],
+    "interpret": "If you see code instead of an answer, you forgot the brackets."
+   },
+   "terms": [
+    {
+     "term": "getwd()",
+     "meaning": "\"get working directory\": the folder R reads and writes files in"
+    }
+   ],
+   "intuition": "The name is the recipe card; the brackets mean \"cook it now\".",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Name versus call.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "getwd → shows the recipe card (code)."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "getwd() → cooks it: the folder path."
+    }
+   },
+   "misconception": "Functions without inputs can be called without brackets. They cannot: empty brackets are still required.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Empty brackets still count.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "getwd"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "getwd()"
+    }
+   },
+   "check": {
+    "q": "You type ls and see code. What did you mean to type?",
+    "a": "ls(): with brackets it lists the objects in your workspace.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Fix: add the brackets.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "ls"
+      },
+      {
+       "id": "n1",
+       "label": "ls()"
+      },
+      {
+       "id": "n2",
+       "label": "list of objects"
+      }
+     ]
+    }
+   },
+   "opens": "How does R decide which input goes into which argument?",
+   "id": "S3",
+   "answers": "What happens if you leave out the brackets of a function?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.2",
+   "kind": "result",
+   "title": "By position or by name",
+   "ref": "Card 2, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "Unnamed inputs fill the arguments in order; named inputs (name = value) can come in any order. seq(1, 10, 2) and seq(by = 2, to = 10, from = 1) both give 1 3 5 7 9.",
+   "explain": [
+    {
+     "text": "seq() has the arguments from, to and by, in that order. In seq(1, 10, 2) the three numbers fill them by position. In the named version each value carries its argument's name, so the order no longer matters. Both make the sequence that starts at 1, steps by 2 and stops at the last value not beyond 10.",
+     "figure": {
+      "kind": "numberline",
+      "caption": "seq(1, 10, 2): start at 1, step 2, stop before passing 10.",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "points": [
+       {
+        "x": 1,
+        "label": "1"
+       },
+       {
+        "x": 3,
+        "label": "3"
+       },
+       {
+        "x": 5,
+        "label": "5"
+       },
+       {
+        "x": 7,
+        "label": "7"
+       },
+       {
+        "x": 9,
+        "label": "9"
+       }
+      ],
+      "intervals": [
+       {
+        "from": 1,
+        "to": 10,
+        "label": "from = 1 … to = 10",
+        "closedL": true,
+        "closedR": true
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "seq(1, 10, 2)",
+      "explain": "by position: from = 1, to = 10, by = 2."
+     },
+     {
+      "code": "seq(by = 2, to = 10, from = 1)",
+      "explain": "by name: the same three settings in another order."
+     }
+    ],
+    "output": [
+     "[1] 1 3 5 7 9",
+     "[1] 1 3 5 7 9"
+    ],
+    "interpret": "Same settings, same sequence: names make a call readable and order-proof."
+   },
+   "terms": [
+    {
+     "term": "seq(from, to, by)",
+     "meaning": "a regular sequence from from to to in steps of by"
+    }
+   ],
+   "intuition": "Position is like seats in order; names are tickets with a seat number printed on them.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Positional seats versus named tickets.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "1 → seat 1 (from)"
+     },
+     {
+      "id": "n1",
+      "label": "10 → seat 2 (to)"
+     },
+     {
+      "id": "n2",
+      "label": "2 → seat 3 (by)"
+     }
+    ]
+   },
+   "misconception": "seq(10, 1, 2) counts down from 10. Positionally it asks for from = 10, to = 1 with a positive step, which R rejects; counting down needs by = -2.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Order matters without names.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "seq(10, 1, 2) → 10 8 6 4 2"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "error: wrong sign of by; use seq(10, 1, by = -2)"
+    }
+   },
+   "check": {
+    "q": "What does seq(to = 9, by = 3, from = 0) return?",
+    "a": "0 3 6 9: the names fix the roles whatever the order.",
+    "figure": {
+     "kind": "numberline",
+     "caption": "from 0 to 9 by 3.",
+     "min": 0,
+     "max": 9,
+     "step": 1,
+     "points": [
+      {
+       "x": 0,
+       "label": "0"
+      },
+      {
+       "x": 3,
+       "label": "3"
+      },
+      {
+       "x": 6,
+       "label": "6"
+      },
+      {
+       "x": 9,
+       "label": "9"
+      }
+     ]
+    }
+   },
+   "opens": "What happens to an argument you do not mention at all?",
+   "id": "S4",
+   "answers": "How does R decide which input goes into which argument?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.3",
+   "kind": "result",
+   "title": "Defaults fill the gaps",
+   "ref": "Card 3, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "An argument you skip takes its default value: mean(x) is the same call as mean(x, na.rm = FALSE).",
+   "explain": [
+    {
+     "text": "Every argument of a function either must be given (like x for mean) or has a default written into the function. R fills a skipped argument silently with its default. That is why the NA appeared earlier: na.rm was skipped, so it was FALSE.",
+     "figure": {
+      "kind": "flow",
+      "caption": "A skipped argument is filled with its default.",
+      "dir": "LR",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "mean(x)"
+       },
+       {
+        "id": "n1",
+        "label": "na.rm missing"
+       },
+       {
+        "id": "n2",
+        "label": "na.rm = FALSE (default)"
+       },
+       {
+        "id": "n3",
+        "label": "mean(x, na.rm = FALSE)"
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "mean(x)",
+      "explain": "only x is given; na.rm takes its default FALSE."
+     },
+     {
+      "code": "mean(x, na.rm = FALSE)",
+      "explain": "the same call written out in full."
+     }
+    ],
+    "output": [],
+    "interpret": "Read the help page (?mean) to see each argument's default."
+   },
+   "terms": [
+    {
+     "term": "default",
+     "meaning": "the value an argument takes when the call does not mention it"
+    }
+   ],
+   "intuition": "Defaults are the factory settings of a function.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Factory setting unless you change it.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "factory: na.rm = FALSE"
+     },
+     {
+      "id": "n1",
+      "label": "you: na.rm = TRUE"
+     },
+     {
+      "id": "n2",
+      "label": "used: TRUE"
+     }
+    ]
+   },
+   "misconception": "R would warn me if an argument were missing. Not for arguments with defaults: they are filled quietly.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Silent defaults.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "R warns about every argument I left out."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Only arguments without a default are required; the rest are filled silently."
+    }
+   },
+   "check": {
+    "q": "Is mean(x, TRUE) the same as mean(x, na.rm = TRUE)?",
+    "a": "No: the second position of mean is trim, not na.rm, so TRUE goes to trim; name it to be sure.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Second position of mean() is trim.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "mean(x, TRUE) removes NAs."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "mean(x, TRUE) sets trim; write na.rm = TRUE."
+     }
+    }
+   },
+   "opens": "How does R read a call that has another call inside it?",
+   "id": "S5",
+   "answers": "What happens to an argument you do not mention at all?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.4",
+   "kind": "example",
+   "title": "Nested calls: read inside out",
+   "ref": "Card 4, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "In rep(seq(3, 12, 3), times = 2) the inner seq() runs first and makes 3 6 9 12; rep() then repeats that vector twice.",
+   "explain": [
+    {
+     "text": "R evaluates the innermost brackets first and hands the result outward as an input. seq(3, 12, 3) makes the vector 3 6 9 12; that vector becomes the first argument of rep(); times = 2 asks for two copies one after the other.",
+     "figure": {
+      "kind": "codetrace",
+      "caption": "Inside out: seq() first, then rep().",
+      "lang": "r",
+      "lines": [
+       {
+        "code": "seq(3, 12, 3)",
+        "note": "inner call runs first",
+        "state": {
+         "v": "3 6 9 12"
+        }
+       },
+       {
+        "code": "rep(v, times = 2)",
+        "note": "the result is repeated twice",
+        "state": {
+         "out": "3 6 9 12 3 6 9 12"
+        }
+       }
+      ],
+      "output": [
+       "[1] 3 6 9 12 3 6 9 12"
+      ],
+      "animate": true
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "rep(seq(3, 12, 3), times = 2)",
+      "explain": "seq(3, 12, 3) gives 3 6 9 12; rep(…, times = 2) writes that vector twice."
+     }
+    ],
+    "output": [
+     "[1]  3  6  9 12  3  6  9 12"
+    ],
+    "interpret": "Eight numbers: the four of the inner sequence, twice."
+   },
+   "terms": [
+    {
+     "term": "rep(x, times)",
+     "meaning": "repeat the vector x the given number of times"
+    },
+    {
+     "term": "nested call",
+     "meaning": "a function call used as an argument of another"
+    }
+   ],
+   "intuition": "Like Russian dolls: open the innermost first.",
+   "intuitionFigure": {
+    "kind": "sketch",
+    "caption": "The inner call sits inside the outer one.",
+    "items": [
+     {
+      "shape": "rect",
+      "x": 5,
+      "y": 10,
+      "w": 90,
+      "h": 40,
+      "text": "rep( … , times = 2)"
+     },
+     {
+      "shape": "rect",
+      "x": 20,
+      "y": 22,
+      "w": 40,
+      "h": 18,
+      "text": "seq(3, 12, 3)",
+      "tone": "accent"
+     }
+    ]
+   },
+   "misconception": "times = 2 doubles each number (6 12 18 24). rep() repeats the vector; it does not multiply.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Repeat, not multiply.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "rep(c(3,6,9,12), times = 2) = 6 12 18 24"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "= 3 6 9 12 3 6 9 12"
+    }
+   },
+   "check": {
+    "q": "What does rep(seq(1, 3), each = 2) give?",
+    "a": "1 1 2 2 3 3: each repeats every element in place.",
+    "figure": {
+     "kind": "codetrace",
+     "caption": "each = 2 repeats each element.",
+     "lang": "r",
+     "lines": [
+      {
+       "code": "seq(1, 3)",
+       "note": "1 2 3"
+      },
+      {
+       "code": "rep(…, each = 2)",
+       "note": "1 1 2 2 3 3"
+      }
+     ],
+     "output": [],
+     "animate": false
+    }
+   },
+   "opens": "What happens when a function receives the wrong kind of input?",
+   "id": "S6",
+   "answers": "How does R read a call that has another call inside it?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.5",
+   "kind": "remark",
+   "title": "Wrong input, no answer",
+   "ref": "Card 5, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "Functions expect a type of input; mean(\"ten\") returns NA with a warning because \"ten\" is text, not a number. str() shows each object's type.",
+   "explain": [
+    {
+     "text": "mean() needs numbers. Text in quotes is of type character, so mean() cannot average it, warns you and returns NA. The same happens when a column you think is numeric was imported as text. str(dat) lists every column with its type (num, int, chr, Factor), so check it after every import."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "mean(\"ten\")",
+      "explain": "the input is a character string, not a number: R warns and returns NA."
+     },
+     {
+      "code": "str(dat)",
+      "explain": "shows each column of dat with its type, so you can see which ones are numbers."
+     }
+    ],
+    "output": [
+     "[1] NA",
+     "Warning: argument is not numeric or logical: returning NA"
+    ],
+    "interpret": "A warning means R ran but the answer is not usable."
+   },
+   "terms": [
+    {
+     "term": "type (class)",
+     "meaning": "what kind of value an object holds: numeric, character, logical, factor …"
+    },
+    {
+     "term": "str()",
+     "meaning": "compact structure of an object: its type and first values"
+    }
+   ],
+   "intuition": "A juicer given a brick gives no juice.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Right input, right output.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "\"ten\" → mean() → NA + warning"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "10 → mean() → 10"
+    }
+   },
+   "misconception": "Numbers in quotes are numbers. \"10\" is text; as.numeric(\"10\") turns it into the number 10.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Quotes make text.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "\"10\" is a number."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "\"10\" is text; as.numeric(\"10\") is 10."
+    }
+   },
+   "check": {
+    "q": "After read.csv(), str(dat) shows TotalSleep as chr. What will mean(dat$TotalSleep) do?",
+    "a": "Warn and return NA: the column is text and must be converted (or the file cleaned) first.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Check the type before you compute.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "read.csv()"
+      },
+      {
+       "id": "n1",
+       "label": "str(dat): chr"
+      },
+      {
+       "id": "n2",
+       "label": "convert"
+      },
+      {
+       "id": "n3",
+       "label": "mean()"
+      }
+     ]
+    }
+   },
+   "opens": "Where can you find out which arguments a function takes?",
+   "id": "S7",
+   "answers": "What happens when a function receives the wrong kind of input?",
+   "from": [
+    "S6"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "1.6",
+   "kind": "remark",
+   "title": "Stuck? Ask R",
+   "ref": "Card 6, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "A question mark before a function name opens its help page, which lists every argument, its default and examples to copy: ?seq, ?mean, ?hist, ?t.test.",
+   "explain": [
+    {
+     "text": "Each help page has the same sections: Description, Usage (the arguments in their order with defaults), Arguments (what each means), Value (what comes back) and Examples. Usage answers the matching questions of the earlier cards: the order for positional inputs and the defaults for skipped ones."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "?seq",
+      "explain": "opens the help page of seq(): its arguments from, to, by, length.out and their defaults."
+     }
+    ],
+    "output": [],
+    "interpret": "The Examples section at the end can be run as it stands."
+   },
+   "terms": [
+    {
+     "term": "?name",
+     "meaning": "open the help page of the function name"
+    }
+   ],
+   "intuition": "The help page is the function's instruction leaflet.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Sections of every help page.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "Usage"
+     },
+     {
+      "id": "n1",
+      "label": "Arguments"
+     },
+     {
+      "id": "n2",
+      "label": "Value"
+     },
+     {
+      "id": "n3",
+      "label": "Examples"
+     }
+    ]
+   },
+   "misconception": "Help pages are only for experts. The Usage line alone answers most questions about order and defaults.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Usage answers matching questions.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Help pages are unreadable."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Usage: seq(from = 1, to = 1, by = …): order and defaults at a glance."
+    }
+   },
+   "check": {
+    "q": "Which section of ?mean tells you the default of na.rm?",
+    "a": "Usage (and Arguments): mean(x, trim = 0, na.rm = FALSE, …).",
+    "figure": {
+     "kind": "flow",
+     "caption": "Look in Usage.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "?mean"
+      },
+      {
+       "id": "n1",
+       "label": "Usage"
+      },
+      {
+       "id": "n2",
+       "label": "na.rm = FALSE"
+      }
+     ]
+    }
+   },
+   "opens": "How do you make a function of your own when R has none for the job?",
+   "id": "S8",
+   "answers": "Where can you find out which arguments a function takes?",
+   "from": [
+    "S7"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p1-7",
+   "kind": "example",
+   "title": "Write your own: a standard-error function",
+   "ref": "Write your own panel, p. 1",
+   "pages": [
+    1
+   ],
+   "statement": "function(x) { … } builds a reusable recipe; se <- function(x) { x <- x[!is.na(x)]; sd(x) / sqrt(length(x)) } returns the standard error, 0.6048973 for dat$TotalSleep.",
+   "explain": [
+    {
+     "text": "Base R has sd() but no se(), so we make one. se is the name we choose; function is the keyword that builds a function; (x) is the argument, a stand-in for whatever data the call passes; the body between { } runs line by line and its last line is the output. The first line drops the NAs, the second divides the standard deviation by the square root of the number of values, which is the formula SE = sd ÷ √n.",
+     "figure": {
+      "kind": "codetrace",
+      "caption": "Inside se(dat$TotalSleep).",
+      "lang": "r",
+      "lines": [
+       {
+        "code": "x <- x[!is.na(x)]",
+        "note": "keep the values that are not NA",
+        "state": {
+         "n": "58"
+        }
+       },
+       {
+        "code": "sd(x) / sqrt(length(x))",
+        "note": "sd ÷ √n is the last line, so it is returned",
+        "state": {
+         "se": "0.6048973"
+        }
+       }
+      ],
+      "output": [
+       "[1] 0.6048973"
+      ],
+      "animate": true
+     }
+    },
+    {
+     "text": "Back-calculation: with n = 58 values, sd = 0.6048973 × √58 ≈ 4.61 hours. The standard error is about seven times smaller than the spread of single mammals, because averaging 58 values cancels much of their variation."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "se <- function(x) {",
+      "explain": "create a function called se with one argument x"
+     },
+     {
+      "code": "  x <- x[!is.na(x)]       # drop NAs",
+      "explain": "is.na(x) is TRUE where a value is missing; ! flips it; x[…] keeps only the present values"
+     },
+     {
+      "code": "  sd(x) / sqrt(length(x)) # sd ÷ √n",
+      "explain": "length(x) counts the values; sqrt() takes the root; the quotient is the last line, so it is returned"
+     },
+     {
+      "code": "}",
+      "explain": "end of the body"
+     },
+     {
+      "code": "se(dat$TotalSleep)",
+      "explain": "call the new function on the sleep data"
+     }
+    ],
+    "output": [
+     "[1] 0.6048973"
+    ],
+    "interpret": "The mean sleep of 10.53 h is known to within about ±0.6 h (one standard error)."
+   },
+   "examples": [
+    {
+     "title": "Standard error of a small sample (added)",
+     "origin": "added",
+     "problem": "Four measurements: 2, 4, 4, 6. What is their standard error?",
+     "solution": [
+      {
+       "text": "mean = 4; deviations −2, 0, 0, 2; sum of squares 8; sd = √(8/3) = 1.633."
+      },
+      {
+       "text": "SE = 1.633 / √4 = 0.816."
+      }
+     ],
+     "answer": "se(c(2, 4, 4, 6)) returns 0.8164966.",
+     "source": {
+      "title": "Statistics notes: Standard deviations and standard errors",
+      "authors": "Altman D G; Bland J M",
+      "year": 2005,
+      "doi": "10.1136/bmj.331.7521.903"
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "function(x) { }",
+     "meaning": "the keyword that builds a function with argument x and body { }"
+    },
+    {
+     "term": "standard error (SE)",
+     "meaning": "sd ÷ √n: how far a sample mean is likely to be from the population mean"
+    },
+    {
+     "term": "is.na()",
+     "meaning": "TRUE where a value is missing"
+    }
+   ],
+   "intuition": "Writing a function is writing down a recipe once so you can cook it on any data.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Input → processing → output.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "input: x"
+     },
+     {
+      "id": "n1",
+      "label": "drop NAs"
+     },
+     {
+      "id": "n2",
+      "label": "sd ÷ √n"
+     },
+     {
+      "id": "n3",
+      "label": "output: SE"
+     }
+    ]
+   },
+   "misconception": "The x inside the function is the same as an x in your workspace. It is a local stand-in for whatever you pass in the call.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "x is a placeholder.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "se() uses my global x."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "se(dat$TotalSleep) puts that column into the local x."
+    }
+   },
+   "check": {
+    "q": "Why does se() drop NAs before length(x)?",
+    "a": "Otherwise length() would count the 4 missing values too (n = 62 instead of 58) and sd() would return NA.",
+    "figure": {
+     "kind": "bars",
+     "caption": "Counting with and without the NAs.",
+     "categories": [
+      "length with NAs",
+      "length without"
+     ],
+     "series": [
+      {
+       "name": "n",
+       "values": [
+        62,
+        58
+       ]
+      }
+     ]
+    }
+   },
+   "bodies": [
+    "se",
+    "x",
+    "sd()",
+    "sqrt()"
+   ],
+   "demos": [
+    {
+     "type": "scene",
+     "title": "The function machine",
+     "purpose": "How does a function turn an input into an output, step by step?",
+     "technique": "card",
+     "request": "A function machine on a workbench: a hopper labelled x receives a row of value-tokens (some marked NA), a sieve removes the NA tokens, a counter shows n, a dial computes sd ÷ √n and a tray outputs the SE token. Lessons: feed the sleep data; watch NAs drop; see n = 58; read 0.605."
+    }
+   ],
+   "opens": "Which functions will you need in a whole analysis, and in what order?",
+   "id": "S9",
+   "answers": "How do you make a function of your own when R has none for the job?",
+   "from": [
+    "S8"
+   ],
+   "basis": "source-text",
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "1.0",
+   "count": 0,
+   "why": "static anatomy: the flow figure shows it"
+  },
+  {
+   "subsection": "1.1",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "1.2",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "1.3",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "1.4",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "1.5",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "1.6",
+   "count": 0,
+   "why": "a rule about syntax; figures suffice"
+  },
+  {
+   "subsection": "p1-7",
+   "count": 1,
+   "why": "input → processing → output is a process: a function machine"
+  }
+ ]
+}

@@ -1,0 +1,231 @@
+{
+ "steps": [
+  {
+   "basis": "source-text",
+   "figures": [],
+   "demos": [],
+   "from": [],
+   "id": "G1",
+   "section": "p7-4",
+   "kind": "result",
+   "title": "The two limits of the disc equation",
+   "ref": "p. 7",
+   "pages": [
+    7
+   ],
+   "answers": "What does the disc equation predict at very low and very high prey density?",
+   "opens": "How do you estimate a and Th from data?",
+   "statement": "When prey are scarce Ha ≈ aHT (the straight start, slope a × T = 0.5); when prey are abundant Ha → T ÷ Th = 10 (the plateau).",
+   "math": "H_a \\approx aHT\\ (aHT_h \\ll 1),\\qquad H_a \\to \\frac{T}{T_h}\\ (aHT_h \\gg 1)",
+   "explain": [
+    {
+     "text": "The denominator 1 + aHTh compares the two uses of time. If aHTh is much smaller than 1, handling is negligible and the predator eats in proportion to prey. If it is much larger than 1, handling fills the day and the prey density no longer matters. With a = 0.5 and Th = 0.1 the switch happens around aHTh = 1, at H = 20.",
+     "figure": {
+      "kind": "plot",
+      "caption": "The disc equation (a = 0.5, Th = 0.1, T = 1) between its two limits.",
+      "x": [
+       0,
+       200
+      ],
+      "y": [
+       0,
+       12
+      ],
+      "curves": [
+       {
+        "expr": "0.5*x/(1+0.05*x)",
+        "label": "disc equation"
+       },
+       {
+        "expr": "0.5*x",
+        "label": "low-density limit aHT",
+        "dash": true
+       }
+      ],
+      "hlines": [
+       {
+        "y": 10,
+        "label": "high-density limit T ÷ Th"
+       }
+      ],
+      "vlines": [
+       {
+        "x": 20,
+        "label": "aHTh = 1"
+       }
+      ]
+     }
+    }
+   ],
+   "intuition": "At first the fox is limited by finding rabbits, later by eating them.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Two bottlenecks.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "One limit for all densities."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Scarce prey: search limits; abundant prey: handling limits."
+    }
+   },
+   "misconception": "The plateau depends on prey density.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "The ceiling.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "More prey raises the ceiling."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "The ceiling is T ÷ Th whatever H is."
+    }
+   },
+   "check": {
+    "q": "At what H does aHTh = 1 for a = 0.5, Th = 0.1?",
+    "a": "H = 1 / (0.5 × 0.1) = 20.",
+    "figure": {
+     "kind": "numberline",
+     "caption": "The switch point.",
+     "min": 0,
+     "max": 60,
+     "step": 10,
+     "points": [
+      {
+       "x": 20,
+       "label": "H = 20"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "basis": "source-text",
+   "figures": [],
+   "demos": [],
+   "from": [],
+   "id": "G2",
+   "section": "p7-5",
+   "kind": "remark",
+   "title": "Why the straight-line fit is only a start",
+   "answers": "How exact is the straight-line fit with real, noisy data?",
+   "opens": "How would you fit a Type III response, and which type fits your predator?",
+   "statement": "Taking 1/Ha magnifies the noise of small catches, so the line is best used for starting values; a nonlinear fit of the curve itself, nls(), is the usual final step.",
+   "explain": [
+    {
+     "text": "With real counts, a predator that ate 1 or 2 prey gives 1/Ha = 1 or 0.5, and a single prey more or less changes 1/Ha a lot, while large catches barely move it. Least squares on the transformed scale therefore listens most to the noisiest points. Fitting Ha = aHT/(1 + aHTh) directly by nonlinear least squares, with the line's a and Th as starting values, avoids that."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "fit2 <- nls(Ha ~ a*H*T/(1 + a*H*Th), start = list(a = 0.5, Th = 0.1))",
+      "explain": "fit the disc equation itself, starting from the straight-line estimates"
+     },
+     {
+      "code": "coef(fit2)",
+      "explain": "the fitted a and Th"
+     }
+    ],
+    "output": [],
+    "interpret": "With the sheet's exact values both fits agree: a = 0.5, Th = 0.1."
+   },
+   "examples": [
+    {
+     "title": "Nonlinear fitting of functional responses (added)",
+     "origin": "added",
+     "problem": "Why do ecologists prefer nonlinear fits for functional responses?",
+     "solution": [
+      {
+       "text": "Linearisations distort the error structure; nonlinear least squares (or maximum likelihood) fit the curve on the original scale."
+      }
+     ],
+     "answer": "Use the line for starting values, then nls() or a likelihood fit.",
+     "source": {
+      "title": "Nonlinear curve fitting: predation and functional response curves",
+      "authors": "Juliano S A",
+      "year": 2001,
+      "doi": "",
+      "note": "chapter in Design and Analysis of Ecological Experiments, Oxford University Press"
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "nls()",
+     "meaning": "nonlinear least squares: fits a curve with parameters directly"
+    }
+   ],
+   "intuition": "Turning numbers upside down also turns their errors upside down.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Noise after 1/x.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Every point counts equally after 1/Ha."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Small catches become the loudest points after 1/Ha."
+    }
+   },
+   "misconception": "If the line fits, the transformation is harmless.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Fit on the right scale.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "A straight line on 1/Ha is the best estimate."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Use it to start; finish with nls()."
+    }
+   },
+   "check": {
+    "q": "Which points dominate a least-squares fit of 1/Ha?",
+    "a": "Those with small Ha: their 1/Ha values are large and vary most.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Why.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "small Ha"
+      },
+      {
+       "id": "n1",
+       "label": "large 1/Ha"
+      },
+      {
+       "id": "n2",
+       "label": "large residuals"
+      },
+      {
+       "id": "n3",
+       "label": "dominate the fit"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "subsection": "p7-4",
+   "steps": [
+    "G1"
+   ]
+  },
+  {
+   "subsection": "p7-5",
+   "steps": [
+    "G2"
+   ]
+  }
+ ]
+}

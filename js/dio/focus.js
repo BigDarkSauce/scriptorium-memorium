@@ -47,9 +47,9 @@ const maskMat = (r, g, b, max, side = THREE.DoubleSide) => new THREE.ShaderMater
 });
 const COMPOSITE = {
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse,tMask;uniform float uIso,uChain,uVig,uMaskOn;uniform vec3 uAccent;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse,tMask;uniform float uIso,uChain,uVig,uMaskOn;uniform vec3 uAccent;uniform vec2 uTexel;varying vec2 vUv;
   void main(){vec4 c=texture2D(tDiffuse,vUv);
-   if(uMaskOn>.5){vec4 m=texture2D(tMask,vUv);float l=dot(c.rgb,vec3(.2126,.7152,.0722));
+   if(uMaskOn>.5){vec2 e=uTexel*.75;vec4 m=texture2D(tMask,vUv)*.36+(texture2D(tMask,vUv+vec2(e.x,e.y))+texture2D(tMask,vUv+vec2(-e.x,e.y))+texture2D(tMask,vUv+vec2(e.x,-e.y))+texture2D(tMask,vUv+vec2(-e.x,-e.y)))*.16;   /* the half-resolution mask, tent-filtered: smooth highlight edges instead of stair steps */float l=dot(c.rgb,vec3(.2126,.7152,.0722));
     float ctx=(1.-m.g)*uIso;float val=mix(.65,.85,m.b),sat=mix(.25,.7,m.b);
     c.rgb=mix(c.rgb,mix(vec3(l),c.rgb,sat)*val,ctx);
     c.rgb=mix(c.rgb,c.rgb+uAccent*.55,m.r*uChain);}
@@ -59,7 +59,7 @@ const COMPOSITE = {
 export class FocusPass extends Pass {
   constructor() {
     super();
-    this.uniforms = { tDiffuse: { value: null }, tMask: { value: null }, uIso: { value: 0 }, uChain: { value: 0 }, uVig: { value: 0 }, uMaskOn: { value: 0 }, uAccent: { value: new THREE.Color(1, .851, .541) } };
+    this.uniforms = { tDiffuse: { value: null }, tMask: { value: null }, uIso: { value: 0 }, uChain: { value: 0 }, uVig: { value: 0 }, uMaskOn: { value: 0 }, uTexel: { value: new THREE.Vector2(1 / 512, 1 / 512) }, uAccent: { value: new THREE.Color(1, .851, .541) } };
     this.fsQuad = new FullScreenQuad(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: COMPOSITE.vertexShader, fragmentShader: COMPOSITE.fragmentShader, depthTest: false, depthWrite: false }));
     this.maskRT = new THREE.WebGLRenderTarget(2, 2, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: true, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.uniforms.tMask.value = this.maskRT.texture;
@@ -75,7 +75,7 @@ export class FocusPass extends Pass {
     try { this.mats.forEach(([, m]) => { sc.overrideMaterial = m; r.render(sc, cam); }); } finally { r.setRenderTarget(prev); }
     rt.dispose(); g.dispose(); b.dispose();
   }
-  setSize(w, h) { this.maskRT.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1)); }   // the focus mask at half resolution
+  setSize(w, h) { this.maskRT.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1)); this.uniforms.uTexel.value.set(1 / Math.max(1, w >> 1), 1 / Math.max(1, h >> 1)); }   // the focus mask at half resolution
   renderMask(r) {
     const sc = this.scene, cam = this.camera, bg = sc.background, fog = sc.fog, ov = sc.overrideMaterial, lm = cam.layers.mask, au = r.shadowMap.autoUpdate, ac = r.autoClear, ca = r.getClearAlpha();
     r.getClearColor(this._cc); sc.background = null; sc.fog = null; r.shadowMap.autoUpdate = false; r.autoClear = false;
@@ -190,8 +190,8 @@ export class Cues {
     const gi = C.seg * 8 + C.k; C.gi = gi; C.badges[gi].hidden = false; C.badges[gi].classList.add('now');
     C.badges.forEach((b, i) => { if (i !== gi) b.classList.remove('now'); });
     // the chip: the step, its note, and the key of the numbers (the badges and any numbered labels) — the current one lit
-    const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' ')) : '';
-    const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0])}</i>`).join('') + '</span>';
+    const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' '), 'label') : '';
+    const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0], 'label')}</i>`).join('') + '</span>';
     this.chipBody = (note ? `<span class="cue-note">${note}</span>` : '') + key;
     this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (note ? ' · ' + note : '') + key; this.chip._w = 0;
     this.kicker(`Step ${gi + 1} of ${C.n}`);
@@ -331,14 +331,23 @@ export class Cues {
     const C = this.chain, cam = this.v.camera, w = innerWidth, h = innerHeight, q = this._q, placed = [];
     const order = []; C.badges.forEach((b, i) => { if (b.hidden) return; const p = C.links[i].a.getPos && C.links[i].a.getPos(); if (!p) { b.style.opacity = 0; return; } q.copy(p).project(cam); if (q.z > 1 || Math.abs(q.x) > 1.05 || Math.abs(q.y) > 1.05) { b.style.opacity = 0; return; } order.push({ b, i, x: (q.x * .5 + .5) * w + 10, y: (-q.y * .5 + .5) * h - 26 }); });
     order.sort((a, b2) => a.y - b2.y);
+    // the HUD (readouts, panels, the title, the buttons, the time bar, the callout): a badge never sits on it; read at most
+    // every 0.25 s. A badge that would overlap moves to the nearest clear spot round its link (left, below, above), else hides.
+    const now = performance.now(); this._hudN = (this._hudN || 0) + 1; if (!this._hudR || now - this._hudT > 250 || this._hudN > 8) { this._hudT = now; this._hudN = 0; const v = this.v, d = v.dir, R = [];
+      [v.readPanel, v.panel && !v.panel.classList.contains('folded') ? v.panel : null, v.titleEl, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), v.ui && v.ui.querySelector('.dio-time'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), d && d.beat && d.beat.el, v.inset && v.inset.box].forEach(P => { if (!P || P.hidden || !P.getBoundingClientRect) return; const r = P.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && getComputedStyle(P).display !== 'none') R.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); });
+      this._hudR = R; }
+    const onHud = (x, y) => this._hudR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]);
     for (const o of order) {
       for (let k = 0; k < 6; k++) { const hit = placed.find(p => Math.abs(p.x - o.x) < 26 && Math.abs(p.y - o.y) < 26); if (!hit) break; o.y = hit.y + 27; }
+      if (onHud(o.x, o.y)) { const x0 = o.x, y0 = o.y, alt = [[x0 - 46, y0], [x0 - 10, y0 + 52], [x0 - 46, y0 + 52], [x0 + 24, y0], [x0 - 10, y0 - 30], [x0 - 80, y0], [x0 - 80, y0 + 52]].find(([x, y]) => x > 12 && y > 12 && x < w - 12 && y < h - 12 && !onHud(x, y) && !placed.some(p => Math.abs(p.x - x) < 26 && Math.abs(p.y - y) < 26));
+        if (alt) { o.x = alt[0]; o.y = alt[1]; } else { o.b.style.opacity = 0; continue; } }
       placed.push(o); const tf = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px)`; if (o.b._tf !== tf) { o.b._tf = tf; o.b.style.transform = tf; } o.b.style.opacity = '';
     }
     C.rects = placed.map(p => [p.x, p.y, 22, 22]); this.placeChip();
     // the flow arrow from the link just left to the link reached, while the front crosses (one pace)
     const pace = C.pace * (C.pass === 2 ? .6 : 1);
-    if (!C.done && C.prevLink && C.ft < pace) {
+    const vd = this.v.dir, vecShown = vd && vd.guides && vd.beat && (vd.beat.flowEls || []).some(F => F.pts);   // the director's guide arrows are on screen: no second, crossing arrow
+    if (!C.done && C.prevLink && C.ft < pace && !vecShown) {
       const a = C.prevLink.a.getPos && C.prevLink.a.getPos(), b = C.frontLink.a.getPos && C.frontLink.a.getPos();
       if (a && b) { const A = this._q.copy(a).project(cam), ax = (A.x * .5 + .5) * w, ay = (-A.y * .5 + .5) * h, B = this._q2.copy(b).project(cam), bx = (B.x * .5 + .5) * w, by = (-B.y * .5 + .5) * h;
         if (A.z < 1 && B.z < 1 && Math.hypot(bx - ax, by - ay) > 24) { const g = Math.min(1, C.ft / (pace * .6)), ex = ax + (bx - ax) * g, ey = ay + (by - ay) * g, nx = -(by - ay) * .16, ny = (bx - ax) * .16; this.flow.setAttribute('d', `M${ax.toFixed(0)} ${ay.toFixed(0)} Q ${((ax + ex) / 2 + nx).toFixed(0)} ${((ay + ey) / 2 + ny).toFixed(0)} ${ex.toFixed(0)} ${ey.toFixed(0)}`); } else this.flow.setAttribute('d', ''); }

@@ -1,0 +1,828 @@
+{
+ "title": "04 · Which graph?",
+ "summary": "Let the variables choose the chart: histogram, scatterplot, boxplot, bar chart with the points, and a checklist for figures.",
+ "question": "How do the types of your variables decide which graph to draw?",
+ "chain": [
+  {
+   "section": "4.0",
+   "kind": "definition",
+   "title": "Response, explanatory, continuous, categorical",
+   "ref": "p. 4",
+   "pages": [
+    4
+   ],
+   "statement": "The response (y axis) is the outcome you measure; the explanatory variable (x axis) is what might drive it; y ~ x reads \"y as a function of x\".",
+   "explain": [
+    {
+     "text": "A continuous variable is a scale (hours, kg); a categorical one is groups (flying yes/no, danger 1–5). Two questions pick the chart: how many variables, and of which kinds. One continuous → histogram; two continuous → scatterplot; continuous by groups → boxplot; a value per group → bars with the points.",
+     "figure": {
+      "kind": "tree",
+      "caption": "The variables choose the graph.",
+      "root": {
+       "label": "your variables",
+       "children": [
+        {
+         "label": "one continuous",
+         "edge": "shape?",
+         "children": [
+          {
+           "label": "histogram"
+          }
+         ]
+        },
+        {
+         "label": "two continuous",
+         "edge": "related?",
+         "children": [
+          {
+           "label": "scatterplot"
+          }
+         ]
+        },
+        {
+         "label": "continuous ~ groups",
+         "edge": "differ?",
+         "children": [
+          {
+           "label": "boxplot"
+          }
+         ]
+        },
+        {
+         "label": "value per group",
+         "edge": "how big?",
+         "children": [
+          {
+           "label": "bars + points"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "response",
+     "meaning": "the measured outcome, on the y axis"
+    },
+    {
+     "term": "explanatory variable",
+     "meaning": "the candidate cause or grouping, on the x axis"
+    },
+    {
+     "term": "continuous / categorical",
+     "meaning": "a measured scale / a set of groups"
+    }
+   ],
+   "intuition": "y is the effect you watch, x the knob you suspect.",
+   "intuitionFigure": {
+    "kind": "sketch",
+    "caption": "x is the knob, y the dial.",
+    "items": [
+     {
+      "shape": "arrow",
+      "x": 10,
+      "y": 50,
+      "x2": 90,
+      "y2": 50,
+      "text": "x: explanatory"
+     },
+     {
+      "shape": "arrow",
+      "x": 10,
+      "y": 50,
+      "x2": 10,
+      "y2": 8,
+      "text": "y: response"
+     }
+    ]
+   },
+   "misconception": "It does not matter which variable goes on which axis. Convention puts the response on y, which is how readers read cause and effect.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Axes have roles.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Any variable on any axis."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Response on y, explanatory on x."
+    }
+   },
+   "check": {
+    "q": "Sleep hours against danger level 1–5: which graph?",
+    "a": "A boxplot: a continuous response split by groups.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Pick by type.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "continuous ~ groups"
+      },
+      {
+       "id": "n1",
+       "label": "boxplot"
+      }
+     ]
+    }
+   },
+   "opens": "What graph shows the shape of one continuous variable?",
+   "id": "S1",
+   "answers": "How do the types of your variables decide which graph to draw?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p4-1",
+   "kind": "result",
+   "title": "Histogram: the shape of one variable",
+   "ref": "Histogram panel, p. 4",
+   "pages": [
+    4
+   ],
+   "statement": "hist(dat$TotalSleep) groups the values into intervals and draws touching bars whose heights count the species in each.",
+   "explain": [
+    {
+     "text": "The bars touch because x is a continuous scale with no gaps between intervals. Look at the shape before picking a test: one peak or two, symmetric or skewed. For sleep (2 to 20 hours, counts up to 12 species per bar) the shape decides between a t-test and a rank test later."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "hist(dat$TotalSleep)",
+      "explain": "histogram of hours of sleep; R chooses the intervals"
+     },
+     {
+      "code": "hist(dat$TotalSleep, breaks = 10, xlab = \"Total sleep (h per day)\")",
+      "explain": "about 10 intervals and an axis label with units"
+     }
+    ],
+    "output": [],
+    "interpret": "Read the shape: centre, spread, skew, peaks."
+   },
+   "terms": [
+    {
+     "term": "histogram",
+     "meaning": "bars over adjacent intervals of a continuous variable; heights = counts"
+    },
+    {
+     "term": "skew",
+     "meaning": "a long tail on one side"
+    }
+   ],
+   "intuition": "A histogram is a pile of the data sorted into bins.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Touching versus separate bars.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Gaps between bars of a histogram."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Bars touch: the scale is continuous."
+    }
+   },
+   "misconception": "A histogram and a bar chart are the same. Bars of a bar chart stand for separate categories; a histogram's bins are adjacent intervals.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Bins versus categories.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Histogram = bar chart."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Histogram: intervals of a scale; bar chart: separate groups."
+    }
+   },
+   "check": {
+    "q": "Why check the histogram before choosing a test?",
+    "a": "A strongly skewed or two-peaked shape breaks the normality that t-tests assume; it points to a rank test.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Shape decides.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "histogram"
+      },
+      {
+       "id": "n1",
+       "label": "roughly normal?"
+      },
+      {
+       "id": "n2",
+       "label": "t-test or rank test"
+      }
+     ]
+    }
+   },
+   "opens": "How do you see whether two continuous variables are related?",
+   "id": "S2",
+   "answers": "What graph shows the shape of one continuous variable?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p4-2",
+   "kind": "result",
+   "title": "Scatterplot: two continuous variables",
+   "ref": "Scatterplot panel, p. 4",
+   "pages": [
+    4
+   ],
+   "figures": [
+    "fig-p4-1"
+   ],
+   "statement": "plot(log10(dat$BodyWt), dat$TotalSleep) draws one dot per mammal; with body mass on a log axis the dots fall from upper left to lower right: bigger mammals sleep less (r = −0.53).",
+   "explain": [
+    {
+     "text": "Body mass runs from 0.005 to 6,654 kg, a factor of more than a million. On an ordinary axis nearly every dot would pile into the left corner. Taking log10 spaces the masses evenly by powers of ten (0.005 → −2.3, 6,654 → 3.8), so the pattern becomes visible: bats sleep long, the elephant short.",
+     "figure": {
+      "kind": "numberline",
+      "caption": "log10 spreads 0.005 kg to 6,654 kg evenly over powers of ten.",
+      "min": -3,
+      "max": 4,
+      "step": 1,
+      "points": [
+       {
+        "x": -2.3,
+        "label": "0.005 kg"
+       },
+       {
+        "x": 0,
+        "label": "1 kg"
+       },
+       {
+        "x": 3.82,
+        "label": "6,654 kg"
+       }
+      ]
+     }
+    },
+    {
+     "text": "The correlation r = −0.53 measures how tightly the dots follow a straight falling line: −1 would be a perfect line, 0 no linear pattern. A moderate negative value says the tendency is clear but individual mammals vary a lot."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "plot(log10(dat$BodyWt), dat$TotalSleep)",
+      "explain": "x = log10 of body mass, y = hours of sleep; one dot per mammal"
+     },
+     {
+      "code": "cor(log10(dat$BodyWt), dat$TotalSleep, use = \"complete.obs\")",
+      "explain": "the correlation, ignoring rows with NAs"
+     }
+    ],
+    "output": [
+     "[1] -0.53"
+    ],
+    "interpret": "Larger mammals tend to sleep less; the relation is moderate, not tight."
+   },
+   "terms": [
+    {
+     "term": "correlation r",
+     "meaning": "strength and direction of a linear relation, from −1 to 1"
+    },
+    {
+     "term": "log scale",
+     "meaning": "equal steps are equal ratios (×10)"
+    }
+   ],
+   "intuition": "A log axis is a zoom that treats a mouse and an elephant fairly.",
+   "intuitionFigure": {
+    "kind": "scatter",
+    "caption": "The trend of the sheet: down from bats to the elephant (dots sketch the direction only).",
+    "points": [
+     [
+      -2,
+      18,
+      "bats"
+     ],
+     [
+      0,
+      12
+     ],
+     [
+      1,
+      10
+     ],
+     [
+      2,
+      8
+     ],
+     [
+      3.8,
+      4,
+      "elephant"
+     ]
+    ],
+    "fit": "ols",
+    "xlabel": "log10 body mass (kg)",
+    "ylabel": "sleep (h)"
+   },
+   "misconception": "r = −0.53 means body mass causes less sleep. Correlation in observational data does not show cause.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Correlation is not cause.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Heavier bodies make mammals sleep less."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "They go together; predation risk or diet may drive both."
+    }
+   },
+   "check": {
+    "q": "Without the log, where would most dots sit?",
+    "a": "Squashed against the y axis: almost all mammals weigh far less than the largest ones.",
+    "figure": {
+     "kind": "contrast",
+     "caption": "Why log.",
+     "wrong": {
+      "title": "Mistaken",
+      "text": "Linear axis spreads the dots well."
+     },
+     "right": {
+      "title": "Instead",
+      "text": "Linear axis piles them in a corner."
+     }
+    }
+   },
+   "opens": "How do you compare a continuous variable between groups?",
+   "id": "S3",
+   "answers": "How do you see whether two continuous variables are related?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "demos": []
+  },
+  {
+   "section": "p4-3",
+   "kind": "result",
+   "title": "Boxplot: do groups differ?",
+   "ref": "Boxplot panel, p. 4",
+   "pages": [
+    4
+   ],
+   "figures": [
+    "fig-p4-2"
+   ],
+   "statement": "boxplot(TotalSleep ~ Danger, data = dat) draws one box per danger level: the box is the middle 50% (the IQR), the thick line the median, whiskers reach the furthest point within 1.5 × IQR, dots beyond are outliers.",
+   "explain": [
+    {
+     "text": "Reading across the five danger levels (low → high) compares their medians and spreads at once. Mammals in high danger of predation sleep less, which fits the story of the scatterplot: big animals and prey animals sleep short.",
+     "figure": {
+      "kind": "sketch",
+      "caption": "Anatomy of one box (no data: what each part means).",
+      "items": [
+       {
+        "shape": "line",
+        "x": 50,
+        "y": 8,
+        "x2": 50,
+        "y2": 18,
+        "text": "whisker: ≤ 1.5 × IQR"
+       },
+       {
+        "shape": "rect",
+        "x": 35,
+        "y": 18,
+        "w": 30,
+        "h": 24,
+        "text": "middle 50% (IQR)"
+       },
+       {
+        "shape": "line",
+        "x": 35,
+        "y": 30,
+        "x2": 65,
+        "y2": 30,
+        "tone": "accent"
+       },
+       {
+        "shape": "text",
+        "x": 80,
+        "y": 31,
+        "text": "median"
+       },
+       {
+        "shape": "line",
+        "x": 50,
+        "y": 42,
+        "x2": 50,
+        "y2": 52
+       },
+       {
+        "shape": "circle",
+        "x": 50,
+        "y": 57,
+        "r": 1.5,
+        "text": "outlier"
+       }
+      ]
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "boxplot(TotalSleep ~ Danger, data = dat)",
+      "explain": "formula: sleep (response) by danger (group); data = dat names the data frame"
+     },
+     {
+      "code": "boxplot(TotalSleep ~ Danger, data = dat, xlab = \"Danger of predation\", ylab = \"Total sleep (h)\")",
+      "explain": "with labels and units"
+     }
+    ],
+    "output": [],
+    "interpret": "Lower boxes at higher danger: animals at risk sleep less."
+   },
+   "terms": [
+    {
+     "term": "median",
+     "meaning": "the middle value"
+    },
+    {
+     "term": "IQR",
+     "meaning": "interquartile range: the middle 50% of the values"
+    },
+    {
+     "term": "outlier",
+     "meaning": "a value beyond 1.5 × IQR from the box"
+    }
+   ],
+   "intuition": "Each box is a histogram seen from above, squeezed to its five landmarks.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Five landmarks.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "min"
+     },
+     {
+      "id": "n1",
+      "label": "Q1"
+     },
+     {
+      "id": "n2",
+      "label": "median"
+     },
+     {
+      "id": "n3",
+      "label": "Q3"
+     },
+     {
+      "id": "n4",
+      "label": "max"
+     }
+    ]
+   },
+   "misconception": "The whiskers show the minimum and maximum. They stop at 1.5 × IQR; points beyond are drawn separately as outliers.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Whiskers are capped.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Whiskers = min and max."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Whiskers ≤ 1.5 × IQR; beyond = dots."
+    }
+   },
+   "check": {
+    "q": "Two boxes overlap a lot but their medians differ. Does that prove a difference?",
+    "a": "No: it suggests one; a test (sheet 06) decides how likely such a gap is by chance.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Picture, then test.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "boxplot"
+      },
+      {
+       "id": "n1",
+       "label": "difference?"
+      },
+      {
+       "id": "n2",
+       "label": "test it (sheet 06)"
+      }
+     ]
+    }
+   },
+   "opens": "What is wrong with a bar of means, and how do you fix it?",
+   "id": "S4",
+   "answers": "How do you compare a continuous variable between groups?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": []
+  },
+  {
+   "section": "p4-4",
+   "kind": "result",
+   "title": "A value per group: bars plus the points",
+   "ref": "Bar chart + the points, p. 4",
+   "pages": [
+    4
+   ],
+   "figures": [
+    "fig-p4-3"
+   ],
+   "statement": "A bar of means hides the data: \"flying\" is just 2 bats against 56 non-flying mammals; draw the points and give n.",
+   "explain": [
+    {
+     "text": "barplot(means) shows two bars of similar height, which looks like a fair comparison. Adding the points with points() reveals that one bar rests on two animals and the other on 56: the flying mean is almost no evidence at all. Lecture 5 calls bars of means without data \"dynamite plots\".",
+     "figure": {
+      "kind": "bars",
+      "caption": "How many animals stand behind each bar.",
+      "categories": [
+       "flying",
+       "non-flying"
+      ],
+      "series": [
+       {
+        "name": "n",
+        "values": [
+         2,
+         56
+        ]
+       }
+      ],
+      "ylabel": "n"
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "means <- tapply(dat$TotalSleep, dat$Flying, mean, na.rm = TRUE)",
+      "explain": "mean sleep in each group"
+     },
+     {
+      "code": "b <- barplot(means)",
+      "explain": "draw the bars; b holds their x positions"
+     },
+     {
+      "code": "points(rep(b, table(dat$Flying)), dat$TotalSleep[order(dat$Flying)])",
+      "explain": "add every animal as a dot over its bar"
+     }
+    ],
+    "output": [],
+    "interpret": "The dots show the n behind each mean."
+   },
+   "terms": [
+    {
+     "term": "n",
+     "meaning": "the number of observations in a group"
+    },
+    {
+     "term": "dynamite plot",
+     "meaning": "a bar of means with an error bar and no data"
+    }
+   ],
+   "intuition": "A bar is a promise; the points are the evidence.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Bar versus evidence.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Two bars, two equal facts."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "One bar is 2 bats, the other 56 mammals."
+    }
+   },
+   "misconception": "Bars of equal height mean equally reliable groups.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "n matters.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Same height, same certainty."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "n = 2 versus n = 56: very different certainty."
+    }
+   },
+   "check": {
+    "q": "What two things should a group comparison figure always show?",
+    "a": "The data points (or their spread) and n per group.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Always show.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "points"
+      },
+      {
+       "id": "n1",
+       "label": "n per group"
+      }
+     ]
+    }
+   },
+   "opens": "What must a figure have before you hand it in?",
+   "id": "S5",
+   "answers": "What is wrong with a bar of means, and how do you fix it?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": []
+  },
+  {
+   "section": "p4-5",
+   "kind": "remark",
+   "title": "Before you hand in a figure",
+   "ref": "p. 4",
+   "pages": [
+    4
+   ],
+   "statement": "Nine checks: response on y, explanatory on x; axis labels with units; log() if squashed; show the data, not just means; no 3-D or chartjunk; bars start at zero; a legend for groups; colour-blind-safe colours plus pch shapes; a caption saying what, n and colours.",
+   "explain": [
+    {
+     "text": "Pie or donut charts only suit parts of a whole and people judge angles badly, so a bar chart is usually clearer; never use 3-D. Bars encode values by length, so they must start at zero; colours alone fail for colour-blind readers, so pair them with point shapes (pch).",
+     "figure": {
+      "kind": "table",
+      "caption": "The figure checklist.",
+      "columns": [
+       "check",
+       "why"
+      ],
+      "rows": [
+       [
+        "y = response",
+        "readers read effect on y"
+       ],
+       [
+        "labels + units",
+        "xlab, ylab"
+       ],
+       [
+        "log if squashed",
+        "see the pattern"
+       ],
+       [
+        "show the data",
+        "n and spread"
+       ],
+       [
+        "no 3-D",
+        "no distortion"
+       ],
+       [
+        "bars from 0",
+        "length = value"
+       ],
+       [
+        "legend",
+        "which group is which"
+       ],
+       [
+        "colour + pch",
+        "colour-blind safe"
+       ],
+       [
+        "caption",
+        "what, n, colours"
+       ]
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "chartjunk",
+     "meaning": "decoration that carries no data (shadows, 3-D, textures)"
+    },
+    {
+     "term": "pch",
+     "meaning": "plotting character: the point symbol in R"
+    }
+   ],
+   "intuition": "A figure is an argument: every mark must carry evidence.",
+   "intuitionFigure": {
+    "kind": "contrast",
+    "caption": "Ink that informs.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "3-D pie with shadows."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Labelled bars from zero with points."
+    }
+   },
+   "misconception": "Truncating the y axis makes small differences visible, so it is fine for bars. For bars it exaggerates: length must be proportional to value.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Bars start at zero.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Start bars at 9 h to show the gap."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Start at 0, or use points/boxplots."
+    }
+   },
+   "check": {
+    "q": "Why add pch shapes when you already use colours?",
+    "a": "About 1 in 12 men is colour-blind; shapes keep the groups distinguishable.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Two channels.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "colour"
+      },
+      {
+       "id": "n1",
+       "label": "+ shape"
+      },
+      {
+       "id": "n2",
+       "label": "readable by all"
+      }
+     ]
+    }
+   },
+   "opens": "How do you compute probabilities in R?",
+   "id": "S6",
+   "answers": "What must a figure have before you hand it in?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "4.0",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  },
+  {
+   "subsection": "p4-1",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  },
+  {
+   "subsection": "p4-2",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  },
+  {
+   "subsection": "p4-3",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  },
+  {
+   "subsection": "p4-4",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  },
+  {
+   "subsection": "p4-5",
+   "count": 0,
+   "why": "a static chart: the figures and the PDF's own panels show it"
+  }
+ ]
+}

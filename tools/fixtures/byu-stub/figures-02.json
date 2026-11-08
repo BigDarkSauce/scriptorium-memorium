@@ -1,0 +1,59 @@
+{
+ "figures": [
+  {
+   "step": "S3",
+   "slot": "intuition",
+   "figure": {
+    "kind": "flow",
+    "caption": "From a file on disk to a data frame in R.",
+    "nodes": [
+     {
+      "id": "a",
+      "label": "mammal_sleep_flying.csv"
+     },
+     {
+      "id": "b",
+      "label": "read.csv()"
+     },
+     {
+      "id": "c",
+      "label": "dat (62 rows)"
+     }
+    ],
+    "dir": "LR"
+   }
+  },
+  {
+   "step": "S5",
+   "slot": "check",
+   "figure": {
+    "kind": "table",
+    "caption": "dat$TotalSleep[10] picks one cell of the column.",
+    "columns": [
+     "row",
+     "TotalSleep"
+    ],
+    "rows": [
+     [
+      "9",
+      "…"
+     ],
+     [
+      "10",
+      "this one"
+     ],
+     [
+      "11",
+      "…"
+     ]
+    ],
+    "highlight": [
+     [
+      1,
+      1
+     ]
+    ]
+   }
+  }
+ ]
+}

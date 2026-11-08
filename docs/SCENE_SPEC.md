@@ -26,6 +26,7 @@ Shape kinds: box{w,h,d,round} sphere{r} cylinder{r,rt,rb,h} cone{r,h} torus{R,r}
  table{w,d,h} lamp{h} beaker{r,h,fill,liquid} flask testtube molecule{atoms:[["O",x,y,z]...],bonds:[[i,j]...],scale} cell{r} planet{r,rings,color} star{r,color,intensity}
  gear{r,teeth,depth} magnet battery coin{r} die{s} book person{h,color} bars{data:[..],w,gap,scale,colors} surface{expr in x,y,range,h} curve{x,y,z exprs in t,t0,t1,r}
  grid{size,div} axes{size} glasscase{w,d,h} particles{type:rain|snow|dust|bubbles|stars|sparks,count,area:[x,y,z],speed} scale pulley{r} boat car group
+ Landscape kit (outdoor scenes, environment.base:false): terrain{w,d,h,seed,low,high,block:true,bottom,peaks:[{x,z,r,h,squash,own}],terraces:[{z0,z1,x0,x1,h}],river:{points:[[x,z]...],width:[a,b],depth},lake:{x,z,rx,rz,depth,level},pads:[[x,z,r]],path:{points,width}} (ONE height field, a specimen block with a soil cross-section; put it FIRST: the kinds below sit on it) peak{id,x,z} (the rock of the terrain peak with own:id as its own actor body, position [x,0,z]) grassField{density} flowers reeds rockScatter{count,r:[min,max]} lake river (with its waterfall) forest{species:oak|birch|cherry|pine|bush|tree,items:[[x,z,h]...]} oak{h} birch{h} cherry{h} cloud{r,puffs,volume:true} (volumetric, casts cloud shadows; code: obj.userData.cloud.set({grey,fade,storm})) particles{type:vapour|streaks} (wisps; velocity-aligned rain); cabin{w,d} (log cabin, porch, stone chimney with smoke; front +z; obj.userData.cabin.setGlow(0..1)) jetty{from:[x,z],to:[x,z],width} hills{r,layers,height} (painted distant hills); vitrine{min:[x,y,z],max:[x,y,z]} (glass case around the block: warm studio backdrop from outside, the sky from inside); scene code reads heights with api.body(terrainId).userData.field.h(x,z) and sets wind with api.scene.userData.wind=[x,z]
 Material presets: brass gold copper chrome steel iron mercury wood darkwood bark paper parchment card glass water ice plastic rubber ceramic stone marble plaster fabric leather foliage grass soil sand snow skin membrane gel emissive neon cloud smoke ink chalk
 Expressions ("amount","speed", surface/curve): plain maths with + - * / ^ ( ), sin cos tan exp log sqrt abs min max pow, PI, E, t (seconds) and the param keys.
 Techniques: "card" = a white card model on a drafting desk seen through a long lens; a light sphere turns card into real materials (good for objects, machines, organisms, economies).
@@ -47,6 +48,9 @@ OPTIONAL EXPLAINER CUES on a lesson (actor names spelled as in "focus"; see EXPL
  "peel":{"layers":["outermost actor",…],"mode":"ghost|lift|clip","order":"out-in|in-out","dwell":2.2,"restore":"step|beat|never"} reveals an inside one named layer at a time ("Layer k of n"), at most 6 layers, restored in reverse
  "zoom":{"to":"small actor","from":"wide|current","perDecade":3,"fovEnd":30,"stations":[{"at":"actor","hold":2}],"back":false} one continuous zoom into a small part, pausing at stations named after the levels of organisation (leave "shot" out: "zoom" is the shot); the diorama needs "scale":{"m":<metres per world unit>} for its scale bar
  "track":{"points":[[x,y,z],…],"dur":8,"lookAhead":0.08,"lookAtSubject":0.3} (or the name of a track in the scene's "tracks") a short ride along an authored path, bracketed by establishing and pull-out shots.
+MATHS IN TEXT (titles, body names, labels, lessons, events, readouts, terms, explanations, examples): write every formula in ONE plain syntax the app typesets — italic variables, upright functions and units, real superscripts, subscripts, radicals and fractions:
+ * or juxtaposition for products (2*x or 2x, a*sin(x)); / for division (Ea/(k*T)); ^ for powers, with brackets round a compound exponent (x^2, x^(n+1), e^(-Ea/(k*T))); sqrt(…), cbrt(…), exp(…), abs(…), ln(…), log(…), sin cos tan(…); pi; Greek letters by name or symbol (theta, omega, Delta T, or θ ω ΔT); subscripts as x_i, T_max, v_(n+1) (or m1, v0 for a single digit); <= >= != -> +- ~= for ≤ ≥ ≠ → ± ≈; 1.2e-3 for 1.2 × 10⁻³; a number then a space then its unit (9.81 m/s^2, 2.5 kg*m^2, -286 kJ*mol^-1, 300 K); chemistry as H2O, CO2, Ca2+, SO4^2-, 2H2 + O2 -> 2H2O.
+ In scroll text ("statement", "math", "derivation", "examples", "terms") LaTeX inside $…$ is also fine; never mix the two syntaxes inside one formula. Never write **, a compound exponent without brackets (e^-Ea/kT), × or · typed between letters, or a formula in backticks (backticks are only for code).
 
 BUILT-IN 3D MODELS. Use {"type":<name>,"title":str,"purpose":str,"params":{...},"lessons":[...]}; each also accepts "technique":"card|sweep|topdown". Listed per model: params; actors (the names to use in a lesson's "focus"/"pov" and in a step's "bodies"); events (the texts it logs; a lesson's "until":"event:<substring>" MUST use a substring of one of them, "<n>" stands for a number).
 pendulum{L,g,theta0,damping} actors: bob · m | string · L | pivot | small-angle model | angle scale; events: "bob released from rest" | "turning point: ω = 0" | "period measured: T =" | "amplitude halved" | "lowest point: speed v = Lω"
@@ -134,6 +138,42 @@ See `../examples/scene-*.json`:
 - **Galton board** (statistics, section sweep): binomial counts against the normal curve; ride one bead.
 - **Market** (economics, card model): a double auction of zero-intelligence traders, as in Smith 1962 and Gode & Sunder 1993; close-up on the price crossing.
 - **Osmosis** (biology, section sweep): the ideal-solution balance −ln x_w = 2KΔh, reverse osmosis under a piston; ride a tagged molecule through a pore.
+
+## Landscape kit (outdoor dioramas at Weatherglass quality)
+
+Built for the water-cycle flagship (`js/seeds-scenes.js`, `WATER_CYCLE`) and usable by any outdoor scene. The research
+and the per-recipe costs are in `research/realism-playbook.md`; the implementation notes are in
+`research/aaa-rendering.md`, "Landscape kit".
+
+- **`terrain` with a field** (any of `peaks`, `lake`, `river`, `block`): one height field baked on the mesh grid
+  (`js/gfx/terrain.js`): fBm meadow (`h`, `seed`, `lift`), `backRise:[z0,z1,h]`, `terraces:[{z0,z1,x0,x1,h}]` (a sharp
+  terrace edge under a river becomes its waterfall), `peaks:[{x,z,r,h,squash,rot,rough,own,terrace,crag}]` (smooth-max, no creases; `terrace` = cliff-band height: steep rock risers and grassy ledges; `crag` 0–1 gullies),
+  `river:{points:[[x,z],…],width:[source,mouth],depth,fallAt:[x,z]}` (its water surface only runs downhill; `fallAt` places the waterfall), `lake:{x,z,rx,rz,depth,level}`
+  (level from the rim if left out), `pads:[[x,z,r]]` (flattened yards), `path:{points,width}` (bare, no grass).
+  Rock (AAA crag) where it is steep or high, meadow elsewhere. `block:true` (default) cuts the land as a rectangular
+  specimen with a painted **soil section** on its four faces down to `bottom`, on a walnut plinth: use it with
+  `environment.base:false`. Put the terrain body first; later bodies find its field. Scene code: `api.body('ground').userData.field`
+  gives `h(x,z)`, `slope(x,z)`, `normal(x,z)`, `suit(x,z,kind)`, `lake.level`, `river.P`, `river.fall`.
+- **`peak{id,x,z}`**: the rock of the terrain peak whose `own` is `id`, as its own body (an actor ridge that labels,
+  isolates and glows on its own); give the body `position:[x,0,z]`.
+- **`grassField{density,height,amount}`**, **`flowers{amount}`**, **`reeds{amount}`**: instanced, wind-bent blades,
+  six flower species, reeds and cattails on the shore, scattered by the field's ecology; they grow out of the paper as the
+  materialize front passes. Counts follow `gfx.quality`.
+- **`rockScatter{count,r:[min,max],region,moss,anywhere}`**: half-buried mossy boulders on rocky ground (2 draw calls).
+- **`lake`** and **`river`** (alias `waterfall`): where the lake crosses the block's edge, its water volume is drawn in the cut section. Analytic water on the field: depth colour, Fresnel sky reflection, sun
+  glint and glitter, lapping foam, rain rings where it rains; the river has flowing streaks, a waterfall sheet, plunge
+  foam and spray. No transmission.
+- **`forest{species,items:[[x,z,h],…]|count,region,h:[min,max],variants}`** and **`oak|birch|cherry{h}`** (also
+  `tree{species}`): species with crown-shaded foliage and wind in the vertex shader (2 draw calls per variant).
+- **`cloud{r,puffs,volume:true}`** (alias `cloudVolume`): a raymarched volumetric cloud; it shadows the land. Code drives
+  it with `mesh.userData.cloud.set({grey,fade,storm})` (find the mesh with `traverse(o => o.userData.cloud)`).
+- **`particles{type:"vapour"}`** (soft rising wisps; `material.opacity` still fades them) and **`particles{type:"streaks"}`**
+  (rain as velocity-aligned soft streaks; write drop positions into `obj.userData.streaks.pos` and call `commit()`).
+- **`cabin{w,d}`** (log walls, shingled roof, porch, woodpile, stone chimney with smoke; front = +z; `obj.userData.cabin.setGlow(0..1)` lights the windows), **`jetty{from:[x,z],to:[x,z],width}`** (planks and posts out over the lake), **`hills{r,layers,height,y}`** (painted distant hills around the block, hazed by the fog).
+- **`vitrine{min,max}`**: a glass case with a brass frame around the specimen block. Seen from outside, the background is a warm dark studio with a lamp glow and the atmosphere's sky haze and god rays are off; from inside (low views, POV rides) the scene's sky (`scene.userData.skyBackground`) and objects marked `userData.skyOnly` (the hills) come back.
+- The lake reflects the scene in a half-resolution planar mirror at medium/high quality (sky only at low); the meadow has a short ground-cover layer under the blades (`grassField{cover:false}` turns it off).
+- Wind for grass, reeds, trees and lake waves: `api.scene.userData.wind = [x, z]` (m/s). A scene may set its overview lens
+  with `api.camera({fov})`.
 
 ## Edits stored in a spec
 

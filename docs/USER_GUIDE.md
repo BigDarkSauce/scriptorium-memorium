@@ -13,7 +13,7 @@
   - Click one to select it, then drag it along the floor; it snaps flush to the nearest wall.
   - Rotate it by 90° or 15°, rename it by subject, switch its shape, or remove it.
   - The **Room size** sliders change the room's width, depth and height.
-- **+ Add PDF scroll:** pick one or more PDFs. Each becomes a folded scroll with its name tag. It goes on the selected bookcase, otherwise the first one with space.
+- **+ Add PDF scroll:** a guided dialog. Pick the PDF (its chapters, or the sheets of an infographic pack, are listed at once); choose the bookcase, row and place (a glowing ghost scroll shows where it will go; tick "hang it" to hang it on the front); choose the pages, or tick chapters; choose the breakdown (*Complete chain*, *Essential chain* or an *exact number of steps*); then *Add and analyse*. A progress list shows each part going through chain → coverage → quality check → figures → dioramas; *Cancel* pauses, *Resume* continues where it stopped (also after a reload, from the chip in the corner). *Add without analysing* only places the scroll.
 - **Open a scroll:** click it. It lifts out, unrolls in light, and carries you into its room.
 - **Graphics: Low · Medium · High (auto):** the chip button under the speaker (top right) opens the graphics setting.
   - The app picks a level for your device at the start, marked *(auto)*, and lowers it by itself if frames stay slow (a step-down shows up here, again marked *(auto)*).

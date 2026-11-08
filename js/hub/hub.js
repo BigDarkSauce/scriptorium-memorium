@@ -3,29 +3,44 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, SLOT, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
-import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree } from '../util.js';
+import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
+import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const TOUCH = () => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
 // the bottom hint, worded for the device in hand (touch screens have no WASD / V keys)
 const HINTS = {
-  look: () => TOUCH() ? 'Drag to look · pinch to zoom · tap a scroll to open it' : 'Drag to look · WASD walks (Shift: faster) · V: first person · click a scroll to open it',
-  build: () => TOUCH() ? 'Tap a bookcase to select it · drag it along the floor · it snaps to walls' : 'Click a bookcase to select it · drag it along the floor · it snaps to walls'
+  look: () => TOUCH() ? 'Drag to look · pinch to zoom · tap a scroll to open it · long-press it for options' : 'Drag to look · WASD walks (Shift: faster) · V: first person · click a scroll to open it · right-click it for options',
+  build: () => TOUCH() ? 'Tap a bookcase to select it · drag it along the floor · drag a scroll to another place' : 'Click a bookcase to select it · drag it along the floor · drag a scroll to another place on any shelf'
 };
+// case-frame bounds (inv: the bookcase's inverse world matrix) of the visible meshes under root that pass keep()
+const _bm = new THREE.Matrix4();
+export function localBox(root, inv, keep = () => true) {
+  const box = new THREE.Box3(), b = new THREE.Box3(); root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!o.isMesh || !keep(o)) return; for (let p = o; p && p !== root.parent; p = p.parent) if (!p.visible) return;
+    if (o.isInstancedMesh) { if (!o.count) return; o.computeBoundingBox(); b.copy(o.boundingBox); } else { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); b.copy(o.geometry.boundingBox); }
+    box.union(b.applyMatrix4(_bm.multiplyMatrices(inv, o.matrixWorld)));
+  });
+  return box;
+}
+const isUnder = (o, root) => { for (let p = o; p; p = p.parent) if (p === root) return true; return false; };
 const SUBJECT_COLORS = ['#8a2a1e', '#2d5b8e', '#3f7d6e', '#8f733a', '#6a4a8a', '#a0522d', '#2f4f6f', '#7a2a4a'];
 
 export class Hub {
   constructor(app) {
     this.app = app; this.gfx = app.gfx; this.lib = app.lib;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0d0a07);
-    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;
+    this.scene.environment = this.gfx.envStudio; this.scene.environmentIntensity = .16;   // until the hall's own probe is captured (first update)
+    // reflections of the hall itself (surfaces.js): captured after every rebuild; GTAO at quality 'high'
+    this.probe = new RoomProbe(this.gfx); this.probeDirty = true; this.ao = new RoomAO(this.gfx, this.scene, null);
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
     // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
-    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: 1.2, vignette: .36, bloom: .15, bloomThreshold: 2.1 });
-    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120);
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .9, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .003, sat: .97 });   /* sat .97: the warm lamps on warm plaster and giallo compound into ochre; a touch less chroma keeps stucco cream */   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
+    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120); this.ao.camera = this.camera;
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
     this.keys = {}; this.shelfObjs = new Map(); this.scrollObjs = new Map();
@@ -40,11 +55,16 @@ export class Hub {
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => this.obstacles() });
     this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children.filter(o => o.visible) : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
-    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else this.selectShelf(null); } if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else if (this.menu) this.closeMenu(); else if (this.moveDlg) this.closeMove(); else { if (this.sdrag) this.endScrollDrag(false); this.selectShelf(null); } } if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
     this.gfx.canvas.addEventListener('pointerdown', this.onDown); addEventListener('pointermove', this.onMove); addEventListener('pointerup', this.onUp);
+    // a scroll's options: right-click (mouse), long-press (touch; pointerDown starts the timer)
+    this.onCtx = e => { if (this.opening) return; const sc = this.scrollAt(e); if (!sc) return; e.preventDefault(); e.stopPropagation(); if (this.rdown && Math.hypot(e.clientX - this.rdown.x, e.clientY - this.rdown.y) > 6) return; this.openMenu(sc.userData.bookId, e.clientX, e.clientY); };
+    this.gfx.canvas.addEventListener('contextmenu', this.onCtx, true);
+    this.onDocDown = e => { if (this.menu && !this.menu.contains(e.target)) this.closeMenu(); };
+    addEventListener('pointerdown', this.onDocDown, true);
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
   }
   // ---------- world ----------
@@ -66,6 +86,7 @@ export class Hub {
     this.placeFurniture();
     if (gone.length) this.trash(gone);
     this.floorPlane = new THREE.Plane(V3(0, 1, 0), 0); this.obstaclesDirty = true; this.shadowsDirty = true;
+    if (!fast) this.probeDirty = true;
     return true;
   }
   // the reading floor: two reading tables with lecterns and benches, two globes, a fauteuil, a desk, and two display
@@ -102,43 +123,66 @@ export class Hub {
   // free removed objects a few frames later, keeping whatever the hall still shows (shared materials, cached textures)
   trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); this.obstaclesDirty = true; this.shadowsDirty = true; }
   buildShelves() {
-    const old = [...this.shelfObjs.values()]; this.shelfObjs.forEach(o => o.removeFromParent()); this.shelfObjs.clear(); this.scrollObjs.clear(); if (old.length) this.trash(old);
+    this.dropGhost(); const old = [...this.shelfObjs.values()]; this.shelfObjs.forEach(o => o.removeFromParent()); this.shelfObjs.clear(); this.scrollObjs.clear(); if (old.length) this.trash(old);
     this.lib.shelves.forEach(s => this.addShelfObj(s));
     if (this.repairSlots()) this.app.saveLib();
     this.lib.books.forEach(b => this.addScrollObj(b));
     this.refill(); this.glowDirty = true;
   }
-  // Libraries saved while several PDFs were imported at once can hold books sharing one shelf+tier+slot (or a slot the
-  // bookcase does not have): the first keeps its place, later ones move to the nearest free eye-level slot, on the same
-  // bookcase if it has room, else on another. Returns the number of books moved.
+  // ---------- slots ----------
+  // A cradled scroll takes its own slot; a hanging one reserves the run of slots it spans on its tier (props.hangSlots).
+  // need(): the 'tier:slot' keys a book takes; occ(caseId, except): Map key → bookId of everything placed on a bookcase.
+  need(so, b) { const t = b.tier || 0; return b.hang ? hangSlots(so, b.slot || 0).map(j => t + ':' + j) : [t + ':' + (b.slot || 0)]; }
+  occ(caseId, except) {
+    const so = this.shelfObjs.get(caseId), M = new Map(); if (!so) return M;
+    this.lib.books.forEach(b => { if (b.shelf === caseId && b.id !== except) this.need(so, b).forEach(k => M.set(k, b.id)); }); return M;
+  }
+  // can `book` (or a new one: except null) take tier/slot on this bookcase, cradled or hanging?
+  canPlace(caseId, tier, slot, hang = false, except = null) {
+    const so = this.shelfObjs.get(caseId); if (!so) return false; const u = so.userData;
+    if (!(tier >= 0 && tier < u.tiers && slot >= 0 && slot < u.slotsPerTier && Number.isInteger(tier) && Number.isInteger(slot))) return false;
+    const M = this.occ(caseId, except); return this.need(so, { tier, slot, hang }).every(k => !M.has(k));
+  }
+  // a free place on a bookcase: the preferred tier first (nearest slots first), then eye-level tiers; null if full
+  findSpot(so, M, hang = false, prefTier = null, prefSlot = null) {
+    const u = so.userData, tiers = this.tierOrder(u); if (prefTier != null && prefTier >= 0 && prefTier < u.tiers) tiers.splice(tiers.indexOf(prefTier), 1), tiers.unshift(prefTier);
+    const slots = [...Array(u.slotsPerTier).keys()]; if (prefSlot != null) slots.sort((a, b) => Math.abs(a - prefSlot) - Math.abs(b - prefSlot));
+    for (const t of tiers) for (const j of slots) if (this.need(so, { tier: t, slot: j, hang }).every(k => !M.has(k))) return { tier: t, slot: j };
+    return null;
+  }
+  // Libraries saved while several PDFs were imported at once can hold books sharing one place (or a slot the bookcase
+  // does not have; or a hanging scroll whose span covers another): hanging scrolls are kept first, then the cradled ones
+  // in order; a book that does not fit moves to the nearest free place, on its bookcase if it has room, else on another
+  // (a hanging one that fits nowhere is laid in a cradle). Returns the number of books moved.
   repairSlots() {
-    const used = new Map(), bad = [], key = b => (b.tier || 0) + ':' + (b.slot || 0), setOf = id => used.get(id) || used.set(id, new Set()).get(id);
-    this.lib.books.forEach(b => {
-      const so = this.shelfObjs.get(b.shelf); if (!so) return; const u = so.userData, t = b.tier || 0, sl = b.slot || 0, S = setOf(b.shelf);
-      if (S.has(key(b)) || t < 0 || sl < 0 || t >= u.tiers || sl >= u.slotsPerTier) bad.push(b); else S.add(key(b));
+    const occ = new Map(), bad = [], O = id => occ.get(id) || occ.set(id, new Map()).get(id);
+    [...this.lib.books].sort((a, b) => (!!b.hang) - (!!a.hang)).forEach(b => {
+      const so = this.shelfObjs.get(b.shelf); if (!so) return; const u = so.userData, t = b.tier || 0, sl = b.slot || 0, M = O(b.shelf);
+      if (t < 0 || sl < 0 || t >= u.tiers || sl >= u.slotsPerTier) { bad.push(b); return; }
+      const ks = this.need(so, b); if (ks.some(k => M.has(k))) bad.push(b); else ks.forEach(k => M.set(k, b.id));
     });
-    const pick = (so, S) => { const u = so.userData; for (const t of this.tierOrder(u)) for (let j = 0; j < u.slotsPerTier; j++) if (!S.has(t + ':' + j)) return { tier: t, slot: j }; return null; };
     bad.forEach(b => {
-      let id = b.shelf, fs = pick(this.shelfObjs.get(id), setOf(id));
-      for (const s of this.lib.shelves) { if (fs) break; const so = this.shelfObjs.get(s.id); if (so) { fs = pick(so, setOf(s.id)); id = s.id; } }
-      if (!fs) { const s = this.makeDefaultShelf(); id = s.id; fs = pick(this.shelfObjs.get(id), setOf(id)); }
-      Object.assign(b, { shelf: id, tier: fs.tier, slot: fs.slot }); setOf(id).add(key(b));
+      let fs = null, id = null; const tryAll = hang => { for (const s of [this.lib.shelves.find(x => x.id === b.shelf), ...this.lib.shelves]) { const so = s && this.shelfObjs.get(s.id); if (!so) continue; fs = this.findSpot(so, O(s.id), hang, s.id === b.shelf ? b.tier : null, s.id === b.shelf ? b.slot : null); if (fs) { id = s.id; return; } } };
+      tryAll(!!b.hang); if (!fs && b.hang) { delete b.hang; tryAll(false); }
+      if (!fs) { const s = this.makeDefaultShelf(); id = s.id; fs = this.findSpot(this.shelfObjs.get(id), O(id)); }
+      Object.assign(b, { shelf: id, tier: fs.tier, slot: fs.slot }); this.need(this.shelfObjs.get(id), b).forEach(k => O(id).set(k, b.id));
     });
     if (bad.length) console.info(`Scriptorium: ${bad.length} scroll(s) shared a shelf slot and were moved to free slots`);
     return bad.length;
   }
-  // The user's bookcases hold scrolls only. Their cradles (props.scrollRests) are shown on the tiers that hold scrolls
-  // and on the tier the next scroll will go to; the other tiers stay plain lined shelves, ready but quiet.
+  // The user's bookcases hold scrolls only. Every tier of every bookcase carries its cradles (props.scrollRests, one
+  // instanced draw call per bookcase), so a new bookcase reads as ready on all its rows; hanging scrolls get their chains.
   refill(id) {
     if (id == null) { this.lib.shelves.forEach(s => this.refill(s.id)); return; }
-    const s = this.lib.shelves.find(x => x.id === id), so = this.shelfObjs.get(id); if (!s || !so) return;
-    const tiers = new Set(this.lib.books.filter(b => b.shelf === id).map(b => b.tier || 0)), fs = this.freeSlot(s); if (fs) tiers.add(fs.tier);
-    setRestTiers(so, tiers);
+    const so = this.shelfObjs.get(id); if (!so) return;
+    setRestTiers(so, null);
+    setChains(so, this.lib.books.filter(b => b.shelf === id && b.hang).flatMap(b => chainItems(so, b)));
+    this.shadowsDirty = true;
   }
   caseDepth() { return (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; }
   // footprints of the user's bookcases, for leaving out the built-in wall cases behind them
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
-  updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
+  updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; this.probeDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
   // eye-level tiers first (scroll centres nearest 1.35 m), then the rest
   tierOrder(u) { return [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35)); }
   // walk-mode collision boxes, recomputed only when bookcases or furniture change (or a bookcase is being dragged)
@@ -146,13 +190,9 @@ export class Hub {
   addShelfObj(s) { this.obstaclesDirty = true; this.shadowsDirty = true; const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); quietShadows(o); this.shelfObjs.set(s.id, o); return o; }
   addScrollObj(b) {
     const so = this.shelfObjs.get(b.shelf); if (!so) return null;
-    const o = makeScroll(b); const p = slotPos(so, b.tier || 0, b.slot || 0); o.position.copy(p); so.add(o); quietShadows(o); this.scrollObjs.set(b.id, o); return o;
+    const o = makeScroll(b); so.add(o); poseScroll(o, so, b); quietShadows(o); this.scrollObjs.set(b.id, o); return o;
   }
-  freeSlot(shelf) {
-    const so = this.shelfObjs.get(shelf.id); if (!so) return null; const u = so.userData, used = new Set(this.lib.books.filter(b => b.shelf === shelf.id).map(b => (b.tier || 0) + ':' + (b.slot || 0)));
-    for (const t of this.tierOrder(u)) for (let s = 0; s < u.slotsPerTier; s++) if (!used.has(t + ':' + s)) return { tier: t, slot: s };
-    return null;
-  }
+  freeSlot(shelf, hang = false) { const so = this.shelfObjs.get(shelf.id); return so ? this.findSpot(so, this.occ(shelf.id), hang) : null; }
   // ---------- the hero: the user's own scrolls ----------
   // The bookcase that holds the newest scroll the user added; before any, the one the next import goes to.
   heroShelf() {
@@ -165,6 +205,14 @@ export class Hub {
   // face, on the side of the nearer corner; the view is then turned along the wall, so the hero scrolls and the plaque
   // sit in the left (or right) third, the near corner is the frame edge, and the rest of the hall recedes on the other side.
   frameHero() {
+    const R = this.lib.hub, cam = this.camera;
+    // the opening view is the hall's own composition: from the middle of the entrance end, eye height, looking down the
+    // carpet to the window wall (symmetric: windows, columns, the bookcases either side). A view jammed against one
+    // bookcase hid the room it belongs to; the hero scrolls get the warm pool of light instead (syncGlow)
+    { const c = this.caseDepth() + .5, z = Math.max(0, R.d / 2 - c - .35), eye = 1.6; cam.position.set(0, eye, z); this.controls.target.set(0, eye + .25, Math.min(z - 4, -R.d / 2 + c)); this.controls.update(); return; }
+    // (the hero framing below is kept for a direct call by name: heroView)
+  }
+  heroView() {
     const R = this.lib.hub, cam = this.camera, s = this.heroShelf(), o = s && this.shelfObjs.get(s.id);
     if (!o) { cam.position.set(R.w * .07, 1.7, R.d * .28); this.controls.target.set(-R.w * .29, 1.75, -R.d * .22); this.controls.update(); return; }
     o.updateMatrixWorld(true); const u = o.userData, M = o.matrixWorld, n = V3(0, 0, 1).transformDirection(M), t = V3(1, 0, 0).transformDirection(M);
@@ -272,8 +320,11 @@ export class Hub {
     promptBox('Name this bookcase (its subject)', s.name).then(v => { if (v) { s.name = v; this.rebuildShelf(s); this.app.saveLib(); this.renderBuildPanel(); } });
   }
   rebuildShelf(s) {
-    const old = this.shelfObjs.get(s.id); if (old) { old.removeFromParent(); this.trash([old]); } this.shelfObjs.delete(s.id);
-    this.addShelfObj(s); this.lib.books.filter(b => b.shelf === s.id).forEach(b => this.addScrollObj(b)); this.refill(s.id); this.updateWallCases(); this.glowDirty = true;
+    const old = this.shelfObjs.get(s.id); if (old) { this.dropGhost(old); old.removeFromParent(); this.trash([old]); } this.shelfObjs.delete(s.id);
+    this.addShelfObj(s);
+    const where = b => b.shelf + ':' + b.tier + ':' + b.slot + ':' + !!b.hang, before = new Map(this.lib.books.map(b => [b.id, where(b)]));
+    if (this.repairSlots()) { this.app.saveLib(); this.lib.books.filter(b => b.shelf !== s.id && before.get(b.id) !== where(b)).forEach(b => { this.rebuildScroll(b); this.refill(b.shelf); }); }
+    this.lib.books.filter(b => b.shelf === s.id).forEach(b => this.addScrollObj(b)); this.refill(s.id); this.updateWallCases(); this.glowDirty = true;
     if (this.selShelf === s.id) this.highlight(this.shelfObjs.get(s.id));
   }
   // turn a bookcase in place, then bring its turned footprint back inside the room (flush where it meets a wall)
@@ -286,8 +337,11 @@ export class Hub {
     const s = this.lib.shelves.find(x => x.id === id); if (!s) return;
     const books = this.lib.books.filter(b => b.shelf === id);
     if (books.length && !(await confirmBox(`Remove "${s.name}"? Its ${books.length} scroll(s) move to another bookcase.`, 'Remove'))) return;
-    this.lib.shelves = this.lib.shelves.filter(x => x !== s); const o = this.shelfObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.shelfObjs.delete(id);
-    books.forEach(b => { const target = this.lib.shelves.find(x => this.freeSlot(x)) || this.makeDefaultShelf(); const fs = this.freeSlot(target); Object.assign(b, { shelf: target.id, tier: fs.tier, slot: fs.slot }); this.addScrollObj(b); this.refill(target.id); });
+    this.lib.shelves = this.lib.shelves.filter(x => x !== s); const o = this.shelfObjs.get(id); if (o) { this.dropGhost(o); o.removeFromParent(); this.trash([o]); } this.shelfObjs.delete(id);
+    books.forEach(b => { b.shelf = null; this.scrollObjs.delete(b.id); });
+    books.forEach(b => {
+      let target = this.lib.shelves.find(x => this.freeSlot(x, !!b.hang)); if (!target && b.hang) { delete b.hang; target = this.lib.shelves.find(x => this.freeSlot(x)); }
+      target = target || this.makeDefaultShelf(); const fs = this.freeSlot(target, !!b.hang); Object.assign(b, { shelf: target.id, tier: fs.tier, slot: fs.slot }); this.addScrollObj(b); this.refill(target.id); });
     this.updateWallCases(); this.selectShelf(null); this.glowDirty = true; this.sfx('wood', { gain: .6, pitch: .6 }); this.app.saveLib();
   }
   makeDefaultShelf() { const R = this.lib.hub; const s = { id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .5, z: 0, rot: Math.PI / 2 }; this.snap(s); this.lib.shelves.push(s); this.addShelfObj(s); this.updateWallCases(); return s; }
@@ -310,14 +364,22 @@ export class Hub {
   // ---------- books ----------
   pickPDF(shelfId) { this.addTarget = shelfId || this.selShelf || null; this.fileIn.click(); }
   // several PDFs picked at once are added one after another, each into the slot left free by the one before
-  async addFiles(files) {
-    for (const f of files) { if (this.disposed) return; try { await this.addPDF(f); } catch (e) { console.warn(e); toast(`Could not add "${f.name}": ${e.message || e}`); } }
+  // place (optional, the first file only): {caseId, row, slot, hang?} chosen in a dialog (see placeScroll)
+  async addFiles(files, place = null) {
+    for (const f of files) { if (this.disposed) return; try { await this.addPDF(f, place); place = null; } catch (e) { console.warn(e); toast(`Could not add "${f.name}": ${e.message || e}`); } }
   }
-  async addPDF(file) {
+  async addPDF(file, place = null) {
     const id = 'bk-' + uid(); const title = file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
-    let shelf = this.lib.shelves.find(s => s.id === this.addTarget && this.freeSlot(s)) || this.lib.shelves.find(s => this.freeSlot(s)) || this.makeDefaultShelf();
+    const hang = place && place.hang ? this.hangOpts(place.hang) : null;
+    let shelf, fs;
+    if (place && this.canPlace(place.caseId, place.row, place.slot, !!hang)) { shelf = this.lib.shelves.find(s => s.id === place.caseId); fs = { tier: place.row, slot: place.slot }; }
+    else {
+      shelf = this.lib.shelves.find(s => s.id === ((place && place.caseId) || this.addTarget) && this.freeSlot(s)) || this.lib.shelves.find(s => this.freeSlot(s)) || this.makeDefaultShelf();
+      fs = this.freeSlot(shelf);
+    }
     // the slot is reserved (the book is listed) before anything is awaited, so a concurrent call can never take it too
-    const fs = this.freeSlot(shelf); const b = { id, title, shelf: shelf.id, tier: fs.tier, slot: fs.slot, color: shelf.color, icon: 'PDF', hasPdf: true, added: Date.now(), size: file.size };
+    const b = { id, title, shelf: shelf.id, tier: fs.tier, slot: fs.slot, color: shelf.color, icon: 'PDF', hasPdf: true, added: Date.now(), size: file.size };
+    if (hang && this.canPlace(shelf.id, fs.tier, fs.slot, true)) Object.assign(b, { important: true, hang: { ...hang, drop: hangDrop(this.shelfObjs.get(shelf.id), fs.tier, hang.drop) } });
     this.lib.books.push(b);
     try { await this.app.store.set('pdf:' + id, file); } catch (e) { this.lib.books = this.lib.books.filter(x => x !== b); throw e; }
     if (this.disposed) { this.app.saveLib(); return; }
@@ -335,16 +397,116 @@ export class Hub {
     const so = o.parent; o.removeFromParent(); this.trash([o]); this.scrollObjs.delete(b.id);
     const n = this.addScrollObj(b); if (n && o.userData.arrive != null) { n.userData.arrive = o.userData.arrive; n.scale.copy(o.scale); } if (this.hover === o) this.hover = null; this.refill(so.userData.shelfId);
   }
+  // remove a scroll's object and build it again where its book now says (a new place, pose or tag)
+  rebuildScroll(b, arrive = false) {
+    const o = this.scrollObjs.get(b.id); if (o && this.opening && this.opening.sc === o) return null;
+    if (o) { if (this.hover === o) this.hover = null; o.removeFromParent(); this.trash([o]); this.scrollObjs.delete(b.id); }
+    const n = this.addScrollObj(b); if (n && arrive) { n.userData.arrive = 0; n.scale.setScalar(.01); } return n;
+  }
+  hangOpts(h) { h = h === true ? {} : (h || {}); return { metal: h.metal in METALS ? h.metal : 'brass', drop: h.drop != null ? +h.drop : null }; }
+  // ---------- placing, moving and hanging scrolls ----------
+  // Move a book to {caseId, row, slot, hang?}. hang: true | {metal, drop} hangs it (and tags it important), false lays
+  // it in a cradle, undefined keeps its current pose. If that place is taken, the nearest free place on the same
+  // bookcase (same row first) is used. Returns {ok, caseId, row, slot, hang, moved} (moved: not the place asked for).
+  moveBook(b, { caseId = b.shelf, row = b.tier || 0, slot = b.slot || 0, hang } = {}, { quiet = false } = {}) {
+    const so = this.shelfObjs.get(caseId); if (!so) return { ok: false, reason: 'no such bookcase' };
+    let H = hang === undefined ? (b.hang || null) : hang ? this.hangOpts(hang === true && b.hang ? b.hang : hang) : null;
+    let fs = this.canPlace(caseId, row, slot, !!H, b.id) ? { tier: row, slot } : this.findSpot(so, this.occ(caseId, b.id), !!H, row, slot), moved = !fs || fs.tier !== row || fs.slot !== slot;
+    if (!fs) return { ok: false, reason: H ? 'no row of this bookcase has room to hang it (it needs about 0.8 m free)' : 'this bookcase is full' };
+    const from = b.shelf; Object.assign(b, { shelf: caseId, tier: fs.tier, slot: fs.slot });
+    if (H) { b.hang = { metal: H.metal, drop: hangDrop(so, fs.tier, H.drop != null ? H.drop : b.hang && b.hang.drop) }; b.important = true; } else delete b.hang;
+    this.rebuildScroll(b, !quiet); this.refill(caseId); if (from !== caseId) this.refill(from);
+    this.glowDirty = true; this.obstaclesDirty = true; this.app.saveLib(); if (!quiet) this.sfx('wood', { gain: .35, pitch: 1.2 });
+    return { ok: true, caseId, row: fs.tier, slot: fs.slot, hang: !!H, moved };
+  }
+  setImportant(b, on) { b.important = !!on; if (!on && b.hang) delete b.hang; this.rebuildScroll(b); this.refill(b.shelf); this.app.saveLib(); }
+  // hang (or lay down) a scroll: at its own place if the span is free, else the nearest free span on its bookcase, else
+  // on another bookcase; tells the user where it went when that is not where it was
+  setHang(b, on, opts = {}) {
+    if (!on) return this.moveBook(b, { hang: false }, { quiet: true });
+    const H = this.hangOpts({ ...(b.hang || {}), ...opts });
+    let r = this.moveBook(b, { hang: H }, { quiet: true });
+    if (!r.ok) for (const s of this.lib.shelves) { if (s.id === b.shelf) continue; const so = this.shelfObjs.get(s.id), fs = so && this.findSpot(so, this.occ(s.id, b.id), true); if (fs) { r = this.moveBook(b, { caseId: s.id, row: fs.tier, slot: fs.slot, hang: H }, { quiet: true }); r.moved = true; break; } }
+    if (!r.ok) toast('No shelf has room to hang this scroll: it needs a row with about 0.8 m free.');
+    else { this.sfx('wood', { gain: .3, pitch: 1.5 }); if (r.moved) toast(`Hung on ${this.caseName(r.caseId)}, row ${this.rowLabel(r.caseId, r.row)}, to keep clear of its neighbours`); }
+    return r;
+  }
+  // chain metal / drop changed: re-pose in place (no rebuild)
+  setHangStyle(b, { metal, drop } = {}) {
+    if (!b.hang) return; const so = this.shelfObjs.get(b.shelf), o = this.scrollObjs.get(b.id); if (!so) return;
+    if (metal in METALS) b.hang.metal = metal; if (drop != null) b.hang.drop = hangDrop(so, b.tier || 0, drop);
+    if (o && o.parent === so) poseScroll(o, so, b); this.refill(b.shelf); this.app.saveLib();
+  }
+  caseName(id) { return (this.lib.shelves.find(s => s.id === id) || {}).name || 'a bookcase'; }
+  // rows are counted from the top for people (row 1 = the top row); the API uses tier indices (0 = the bottom row)
+  rowLabel(id, t) { const so = this.shelfObjs.get(id); return so ? so.userData.tiers - t : t + 1; }
+  // ---------- public API (for the Add-PDF dialog and other callers) ----------
+  // listShelves() → [{caseId, title, kind, rows: [{row, label, hang: {min, max}, slots: [{slot, free, bookId?}]}]}]
+  //   row: tier index, 0 = the bottom row (label: 1 = the top row, as people count); free: a new cradled scroll can go
+  //   there; hang: the chain drop range of that row in metres. Rows are listed top first.
+  listShelves() {
+    return this.lib.shelves.filter(s => this.shelfObjs.get(s.id)).map(s => {
+      const so = this.shelfObjs.get(s.id), u = so.userData, M = this.occ(s.id), rows = [];
+      for (let t = u.tiers - 1; t >= 0; t--) {
+        const slots = []; for (let j = 0; j < u.slotsPerTier; j++) { const id = M.get(t + ':' + j); slots.push(id ? { slot: j, free: false, bookId: id } : { slot: j, free: true }); }
+        const L = hangLimits(so, t); rows.push({ row: t, label: u.tiers - t, hang: { min: +L.min.toFixed(3), max: +L.max.toFixed(3) }, slots });
+      }
+      return { caseId: s.id, title: s.name, kind: s.kind, rows };
+    });
+  }
+  // highlightSlot(caseId, row, slot, {hang, frame = true, bookId}) shows a warm ghost scroll at that place (hanging, if
+  // hang) and, if frame, turns the camera to it (0.8 s); highlightSlot(null) clears it. Returns {ok, free} (free: the
+  // place can be taken; bookId: a book that may move there, its own place counts as free).
+  highlightSlot(caseId, row, slot, { hang = false, frame = true, bookId = null } = {}) {
+    if (caseId == null) { this.dropGhost(); return { ok: true, free: false }; }
+    const so = this.shelfObjs.get(caseId); if (!so || !(row >= 0 && row < so.userData.tiers && slot >= 0 && slot < so.userData.slotsPerTier)) { this.dropGhost(); return { ok: false, free: false }; }
+    const free = this.canPlace(caseId, row, slot, !!hang, bookId);
+    if (!this.ghost) this.ghost = ghostScroll(); const G = this.ghost; if (G.parent !== so) so.add(G);
+    poseScroll(G, so, { tier: row, slot, hang: hang ? this.hangOpts(hang) : null }); G.visible = true; G.userData.mat.color.set(free ? 0xffcf86 : 0xff6a50);
+    if (frame) { so.updateMatrixWorld(true); this.frameAt(G.getWorldPosition(V3()), V3(0, 0, 1).transformDirection(so.matrixWorld).setY(0).normalize()); }
+    return { ok: true, free };
+  }
+  dropGhost(onlyFrom) { const G = this.ghost; if (G && (!onlyFrom || G.parent === onlyFrom)) { G.removeFromParent(); G.visible = false; } }
+  // placeScroll(bookId, {caseId, row, slot, hang?}) puts a book already in the library (e.g. just ingested) there,
+  // cradled or hanging (hang: true | {metal, drop}); nearest free place on that bookcase if taken. → moveBook's result.
+  placeScroll(bookId, target = {}) {
+    const b = this.lib.books.find(x => x.id === bookId); if (!b) return { ok: false, reason: 'unknown book' };
+    this.dropGhost(); const r = this.moveBook(b, target); if (r.ok && r.moved) toast(`That place was taken: "${b.title}" went to row ${this.rowLabel(r.caseId, r.row)}, place ${r.slot + 1}`); return r;
+  }
+  // a gentle camera move to look at a world point p on a bookcase facing n (overview: orbit target; walk: eye height);
+  // the view aims 0.28 m below p, so p sits in the upper third, clear of a dialog at the bottom of the screen
+  frameAt(p, n) {
+    if (this.opening) return; const R = this.lib.hub, c = this.caseDepth() + .4, walk = this.nav.mode === 'walk';
+    const to = p.clone().addScaledVector(n, 2.0).add(V3(n.z, 0, -n.x).multiplyScalar(.35)); to.y = walk ? this.camera.position.y : clamp(p.y + .35, 1.3, R.h - .5);
+    to.x = clamp(to.x, -R.w / 2 + c, R.w / 2 - c); to.z = clamp(to.z, -R.d / 2 + c, R.d / 2 - c);
+    const f = V3(); this.camera.getWorldDirection(f);
+    this.camTween = { t: 0, p0: this.camera.position.clone(), a0: this.camera.position.clone().addScaledVector(f, Math.max(.5, this.controls.target.distanceTo(this.camera.position))), p1: to, a1: p.clone().add(V3(0, -.28, 0)), walk };
+  }
+  stepCamTween(dt) {
+    const T = this.camTween; T.t += dt; const k = easeInOutQuint(Math.min(1, T.t / .8));
+    this.camera.position.lerpVectors(T.p0, T.p1, k); const a = V3().lerpVectors(T.a0, T.a1, k); this.camera.lookAt(a);
+    if (k >= 1) { this.camTween = null; if (!T.walk) { this.controls.target.copy(a); this.controls.update(); } }
+  }
   sfx(name, o) { if (this.app.sfx) this.app.sfx.play(name, o); }
-  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
+  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); if (this.app.cancelJob) this.app.cancelJob(id); if (this.app.ingest && this.app.ingest.closePDF) this.app.ingest.closePDF(id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); await this.app.store.del('job:' + id); }
   // ---------- pointer ----------
   pick(e, list) { const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera); return this.ray.intersectObjects(list, true); }
   ownerOf(o, kind) { while (o && !(o.userData && o.userData.kind === kind)) o = o.parent; return o; }
+  scrollAt(e) { if (e.target !== this.gfx.canvas) return null; const h = this.pick(e, [...this.scrollObjs.values()])[0]; return (h && this.ownerOf(h.object, 'scroll')) || null; }
   pointerDown(e) {
-    if (this.opening) return; this.down = { x: e.clientX, y: e.clientY };
-    if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; const sh = h && this.ownerOf(h.object, 'shelf'); if (sh) { this.selectShelf(sh.userData.shelfId); this.dragging = sh; this._lifted = false; this.controls.enabled = false; } }
+    if (this.opening) return; this.down = { x: e.clientX, y: e.clientY }; if (e.button === 2) this.rdown = { x: e.clientX, y: e.clientY };
+    clearTimeout(this._lpT); this._lpFired = false;
+    if (e.pointerType && e.pointerType !== 'mouse') { const sc = this.scrollAt(e); if (sc) this._lpT = setTimeout(() => { if (!this.down || this.opening) return; this._lpFired = true; if (this.sdrag) this.endScrollDrag(false); this.openMenu(sc.userData.bookId, this.down.x, this.down.y); }, 550); }
+    if (e.button !== 0) return;
+    if (this.build) {
+      // a scroll first (drag it to another place), else its bookcase
+      const sc = this.scrollAt(e); if (sc) { this.sdrag = { sc, b: this.lib.books.find(x => x.id === sc.userData.bookId), active: false, target: null }; this.controls.enabled = false; return; }
+      const h = this.pick(e, [...this.shelfObjs.values()])[0]; const sh = h && this.ownerOf(h.object, 'shelf'); if (sh) { this.selectShelf(sh.userData.shelfId); this.dragging = sh; this._lifted = false; this.controls.enabled = false; }
+    }
   }
   pointerMove(e) {
+    if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 8) clearTimeout(this._lpT);
+    if (this.sdrag) { this.dragScroll(e); return; }
     if (this.opening || !e.target || e.target !== this.gfx.canvas) { if (!this.dragging) { this.tip.hidden = true; } }
     if (this.dragging) {
       const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera);
@@ -353,18 +515,98 @@ export class Hub {
         const now = performance.now(); if (!(now - (this._casesT || 0) < 350)) { this._casesT = now; this.updateWallCases(); } } // wall cases make room while dragging (throttled)
       return;
     }
-    if (e.target !== this.gfx.canvas || this.build) return;
-    const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
+    if (e.target !== this.gfx.canvas || this.build || this.menu) return;
+    const sc = this.scrollAt(e);
     if (sc !== this.hover) { if (this.hover) this.hover.userData.paper.emissiveIntensity = 0; this.hover = sc; if (sc) sc.userData.paper.emissiveIntensity = .25; this.gfx.canvas.style.cursor = sc ? 'pointer' : ''; }
-    if (sc) { const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false; this.tip.innerHTML = `<b>${esc(b.title)}</b><span>${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; } else this.tip.hidden = true;
+    if (sc) {
+      const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false;
+      const st = b.hang ? `hanging on ${METALS[b.hang.metal in METALS ? b.hang.metal : 'brass'].label.toLowerCase()} chains · ` : '';
+      this.tip.innerHTML = `<b>${b.important ? '★ ' : ''}${mathHTML(b.title, 'label')}</b><span>${st}${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span><span class="tip-more">${TOUCH() ? 'Long-press' : 'Right-click'} for options: important, hang on chains, move</span>`;
+      this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
+    } else this.tip.hidden = true;
   }
   pointerUp(e) {
+    clearTimeout(this._lpT); if (this._lpFired) { this._lpFired = false; this.down = null; return; }
+    if (this.sdrag) { const D = this.endScrollDrag(true); if (!D.active && e.target === this.gfx.canvas && this.down) this.openMenu(D.b.id, e.clientX, e.clientY); this.down = null; return; }
     if (this.dragging) { if (this._lifted) this.sfx('wood', { gain: .6 }); this.dragging = null; this._lifted = false; this.glowDirty = true; this.controls.enabled = this.nav.mode !== 'walk'; this.updateWallCases(); this.app.saveLib(); return; }
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || e.target !== this.gfx.canvas) return; this.down = null;
     if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; if (!h) this.selectShelf(null); return; }
-    const h = this.pick(e, [...this.scrollObjs.values()])[0]; const sc = h && this.ownerOf(h.object, 'scroll');
+    const sc = this.scrollAt(e);
     if (sc) this.openScroll(sc);
   }
+  // Arrange mode: drag a scroll; a ghost shows the free place it would snap to (nearest free slot on the row under the
+  // pointer; red when that row has none). Releasing over a free place moves it there.
+  dragScroll(e) {
+    const D = this.sdrag; if (!D.b) return;
+    if (!D.active) { if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) < 6) return; D.active = true; this.gfx.outline.enabled = true; this.gfx.outline.selectedObjects = [D.sc]; this.sfx('wood', { pitch: 1.3, gain: .25 }); this.tip.hidden = true; this.gfx.canvas.style.cursor = 'grabbing'; }
+    let tg = null;
+    for (const h of this.pick(e, [...this.shelfObjs.values()])) {
+      const so = this.ownerOf(h.object, 'shelf'); if (!so) continue; const u = so.userData, id = u.shelfId, L = so.worldToLocal(h.point.clone());
+      const row = clamp(Math.floor((L.y - .13) / u.tierH), 0, u.tiers - 1), j = clamp(Math.round((L.x + u.w / 2 - .14) / SLOT), 0, u.slotsPerTier - 1);
+      let best = null; for (let k = 0; k < u.slotsPerTier; k++) if (this.canPlace(id, row, k, !!D.b.hang, D.b.id) && (best == null || Math.abs(k - j) < Math.abs(best - j))) best = k;
+      tg = { caseId: id, row, slot: best != null ? best : j, free: best != null }; break;
+    }
+    if (tg && D.target && tg.caseId === D.target.caseId && tg.row === D.target.row && tg.slot === D.target.slot) return;
+    D.target = tg; if (tg) { this.highlightSlot(tg.caseId, tg.row, tg.slot, { hang: D.b.hang, frame: false, bookId: D.b.id }); this.sfx('click', { gain: .12 }); } else this.dropGhost();
+  }
+  endScrollDrag(commit) {
+    const D = this.sdrag; if (!D) return null; this.sdrag = null; this.dropGhost(); this.highlight(this.selShelf ? this.shelfObjs.get(this.selShelf) : null);
+    this.controls.enabled = this.nav.mode !== 'walk'; this.gfx.canvas.style.cursor = '';
+    const T = D.target; if (commit && D.active && T && T.free && !(D.b.shelf === T.caseId && (D.b.tier || 0) === T.row && (D.b.slot || 0) === T.slot)) this.moveBook(D.b, { caseId: T.caseId, row: T.row, slot: T.slot });
+    return D;
+  }
+  // ---------- the scroll menu (right-click / long-press / a click in Arrange mode) ----------
+  openMenu(bookId, x, y) {
+    const b = this.lib.books.find(q => q.id === bookId); if (!b || this.opening) return; this.closeMenu(); this.tip.hidden = true;
+    this.menu = el('div', { class: 'scroll-menu glass', role: 'menu', 'aria-label': 'Scroll options' }); this.menuBook = b.id; this.ui.append(this.menu);
+    this.renderMenu(); const r = this.menu.getBoundingClientRect();
+    this.menu.style.left = clamp(x + 6, 8, innerWidth - r.width - 8) + 'px'; this.menu.style.top = clamp(y + 6, 8, innerHeight - r.height - 8) + 'px';
+    this.sfx('click', { gain: .2 });
+  }
+  renderMenu() {
+    const m = this.menu, b = this.lib.books.find(q => q.id === this.menuBook); if (!m) return; if (!b) { this.closeMenu(); return; } m.innerHTML = '';
+    const item = (text, fn, extra = '') => el('button', { class: 'menu-item' + extra, role: 'menuitem', text, onclick: fn });
+    m.append(el('div', { class: 'menu-title', text: (b.important ? '★ ' : '') + b.title }), el('div', { class: 'menu-sub', text: `${this.caseName(b.shelf)} · row ${this.rowLabel(b.shelf, b.tier || 0)} · place ${(b.slot || 0) + 1}` }));
+    m.append(item('Open scroll', () => { const sc = this.scrollObjs.get(b.id); this.closeMenu(); if (sc) this.openScroll(sc); }));
+    m.append(item(b.important ? '☆ Remove the “important” tag' : '★ Tag as important', () => { this.setImportant(b, !b.important); this.renderMenu(); }));
+    m.append(item(b.hang ? 'Lay it back in a cradle' : 'Hang on chains', () => { this.setHang(b, !b.hang); this.renderMenu(); }));
+    if (b.hang) {
+      const so = this.shelfObjs.get(b.shelf), L = so ? hangLimits(so, b.tier || 0) : { min: .1, max: .3 };
+      m.append(el('div', { class: 'menu-h', text: 'Chain metal' }), el('div', { class: 'swatches', role: 'radiogroup', 'aria-label': 'Chain metal' }, Object.entries(METALS).map(([k, M]) =>
+        el('button', { class: 'swatch' + (b.hang.metal === k ? ' on' : ''), title: M.label, 'aria-label': M.label, role: 'radio', 'aria-checked': String(b.hang.metal === k), style: '--c:#' + M.color.toString(16).padStart(6, '0'), onclick: () => { this.setHangStyle(b, { metal: k }); this.renderMenu(); } }))));
+      const cm = v => Math.round(v * 100) + ' cm', out = el('b', { text: cm(b.hang.drop) }), inp = el('input', { type: 'range', min: L.min, max: L.max, step: .005, value: b.hang.drop, 'aria-label': 'Chain length' });
+      inp.oninput = () => { this.setHangStyle(b, { drop: +inp.value }); out.textContent = cm(b.hang.drop); };
+      m.append(el('label', { class: 'ctrl' }, [el('span', {}, ['Chain length (drop)', out]), inp]), el('div', { class: 'menu-note', text: `${cm(L.min)}–${cm(L.max)} on this row: the scroll stays clear of the shelf above and the cradles below` }));
+    }
+    m.append(item('Move to…', () => { this.closeMenu(); this.openMove(b.id); }));
+  }
+  closeMenu() { if (this.menu) { this.menu.remove(); this.menu = null; } }
+  // "Move to…": bookcase, then a grid of rows × places (taken places disabled); the ghost and the camera preview the
+  // chosen place while the dialog (bottom of the screen, no dark veil) stays open
+  openMove(bookId) {
+    const b = this.lib.books.find(q => q.id === bookId); if (!b) return; this.closeMove();
+    const st = { caseId: b.shelf, row: b.tier || 0, slot: b.slot || 0 };
+    const box = el('div', { class: 'modal glass move-dlg', role: 'dialog', 'aria-label': 'Move scroll' }), veil = el('div', { class: 'modal-veil peek' }, [box]);
+    document.body.append(veil); this.moveDlg = veil;
+    const render = () => {
+      box.innerHTML = ''; const list = this.listShelves(); if (!list.length) { this.closeMove(); return; }
+      const C = list.find(c => c.caseId === st.caseId) || list[0]; st.caseId = C.caseId;
+      const sel = el('select', { class: 'field', 'aria-label': 'Bookcase', onchange: () => { st.caseId = sel.value; st.row = null; this.dropGhost(); render(); } }, list.map(c => el('option', { value: c.caseId, text: c.title, selected: c.caseId === st.caseId })));
+      const grid = el('div', { class: 'slot-grid' });
+      C.rows.forEach(r => grid.append(el('div', { class: 'slot-row' }, [el('span', { class: 'slot-lab', text: 'Row ' + r.label }), ...r.slots.map(sl => {
+        const can = this.canPlace(C.caseId, r.row, sl.slot, !!b.hang, b.id), mine = sl.bookId === b.id, on = st.row === r.row && st.slot === sl.slot;
+        return el('button', { class: 'slot' + (mine ? ' mine' : '') + (on ? ' on' : ''), disabled: !can, 'aria-pressed': String(on), title: mine ? 'its place now' : can ? 'free' : 'taken', 'aria-label': `Row ${r.label}, place ${sl.slot + 1}${mine ? ', its place now' : can ? '' : ', taken'}`,
+          onclick: () => { st.row = r.row; st.slot = sl.slot; this.highlightSlot(C.caseId, r.row, sl.slot, { hang: b.hang, bookId: b.id }); render(); } });
+      })])));
+      const same = st.caseId === b.shelf && st.row === (b.tier || 0) && st.slot === (b.slot || 0), ok = st.row != null && !same && this.canPlace(st.caseId, st.row, st.slot, !!b.hang, b.id);
+      box.append(el('h3', { text: 'Move “' + b.title + '”' }), el('label', { text: 'Bookcase' }), sel,
+        el('label', { text: b.hang ? 'Place (rows top to bottom; a hanging scroll needs the places round it free)' : 'Place (rows top to bottom)' }), grid,
+        el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: () => this.closeMove() }), el('button', { class: 'btn primary', text: 'Move here', disabled: !ok, onclick: () => { this.closeMove(); this.moveBook(b, { caseId: st.caseId, row: st.row, slot: st.slot }); } })]));
+    };
+    render(); this.highlightSlot(st.caseId, st.row, st.slot, { hang: b.hang, bookId: b.id });
+  }
+  closeMove() { if (this.moveDlg) { this.moveDlg.remove(); this.moveDlg = null; this.dropGhost(); } }
   // ---------- the opening: fly → lift → unroll in light → dive into the page ----------
   // The interface fades away first (body.cine: the action pill, the hint, the walk panel and the corner buttons), so the
   // opening is a clean shot; Escape before the dive cancels it (the scroll goes back to its slot, the interface returns).
@@ -377,14 +619,20 @@ export class Hub {
   // the sheet and a back light on the bookcase behind it: the sheet itself only gains a faint glow, so its parchment
   // and title stay readable and below the bloom threshold. Fully open it holds a beat, then the camera moves in as the
   // screen fades (1.05 s); the room opens when the fade is complete.
+  // Taking the scroll out (takeOutPath, scrollPose): it starts where it is (in its cradles or on its chains), rises 3 cm
+  // out of the cradles' hollow (a hanging one leaves its hooks going straight forward), slides straight forward out of the case
+  // until its back end is 3 cm before everything on the bookcase (case, cornice, neighbours' tags), then rises to the
+  // reading height, and turns to face the viewer only once it is out (a turn about its middle never brings its ends
+  // back toward the case by more than 6 mm). The flight and the unroll follow as before.
   openScroll(sc) {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
+    this.closeMenu(); this.closeMove(); this.dropGhost(); this.camTween = null; if (this.sdrag) this.endScrollDrag(false);
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null); this.gfx.canvas.style.cursor = '';
     if (this.hover) { this.hover.userData.paper.emissiveIntensity = 0; this.hover = null; }
     const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
     if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }
     const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() }; O.so = so; O.slotP = sc.position.clone(); O.slotQ = sc.quaternion.clone();
-    O.liftTo = wp.clone().addScaledVector(outward, .6).setY(Math.max(1.62, wp.y));
+    O.path = this.takeOutPath(sc, so, wp, outward); O.liftTo = O.path.end;
     O.look = O.liftTo.clone().add(V3(0, -.22, 0));                       // a little above the middle of the unrolled sheet
     O.camTo = O.look.clone().addScaledVector(outward, 1.22).add(V3(0, .04, 0));
     O.into = O.look.clone().addScaledVector(outward, .3);
@@ -392,8 +640,11 @@ export class Hub {
     // the flight's length grows with the turn: the view direction at the start and at the end
     O.d0 = O.from.t.clone().sub(O.from.p).normalize(); O.d1 = O.look.clone().sub(O.camTo).normalize(); O.dist0 = O.from.t.distanceTo(O.from.p);
     const deg = THREE.MathUtils.radToDeg(O.d0.angleTo(O.d1)); O.tFly = 1.4 + .01 * deg;
+    // the scroll's way out ends with the flight (or after it, when the way out is the longer); then the unroll
+    O.S0 = Math.max(0, O.tFly - O.path.D); O.tUn = Math.max(O.tFly, O.S0 + O.path.D) + .1;
     O.qd = new THREE.Quaternion().setFromUnitVectors(O.d0, O.d1);
     this.scene.attach(sc);   // reparent to the hall so it can float free
+    if (b.hang) { const sid = so.userData.shelfId; setChains(so, this.lib.books.filter(x => x.shelf === sid && x.hang && x !== b).flatMap(x => chainItems(so, x))); O.chainsOff = sid; }   // its chains go with it (no ends left dangling while it is out)
     // facing: the scroll's axis (local z) across the view, its front (local −x) toward the viewer, kept level
     O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.liftTo.clone().add(outward), O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
     O.sheet = makeSheet(.42, .6, b.title); sc.add(O.sheet);
@@ -403,19 +654,38 @@ export class Hub {
     this.hint.textContent = 'Opening "' + b.title + '"…';
     document.body.classList.add('cine');
   }
-  // Escape during the opening (before the dive): the camera and the scroll ease back (0.7 s), then the interface returns
+  // The way out, from the scroll's pose on its bookcase so (case frame: +z out of the case, +y up). Box sizes are the
+  // case-frame bounds of the bookcase without this scroll, and of the scroll itself.
+  takeOutPath(sc, so, wp, outward) {
+    so.updateMatrixWorld(true); const inv = so.matrixWorld.clone().invert();
+    const caseBox = localBox(so, inv, o => !isUnder(o, sc) && o.name !== 'slot-ghost'), own = localBox(sc, inv), P0 = sc.position.clone();
+    const hanging = !!sc.userData.hanging, rise = hanging ? 0 : .03, zClear = caseBox.max.z + .03;   // off the chain hooks: straight forward (the knob tops fall away from the hooks)
+    // the reading height: 1.5 m (rod a hand below the case top), also for a scroll taken from a high tier or its chains (held up at the cornice's height
+    // it sat across the dentils, the sheet hanging over the case top); never below the top of the case's lower body
+    const slide = Math.max(zClear - own.min.z + .02, .62 - P0.z), y1 = wp.y + rise, liftY = 1.5, up = liftY - y1;
+    const dUp = clamp(.45 + .4 * Math.abs(up), .5, 1.1), T = { rise: [0, .35], slide: [.25, 1.25], up: [1.1, 1.1 + dUp], turn: [1.22, Math.max(2.1, 1.22 + dUp)] };
+    return { A: wp.clone(), out: outward.clone(), rise, slide, up, T, D: Math.max(T.up[1], T.turn[1]), zClear, end: wp.clone().addScaledVector(outward, slide).setY(liftY) };
+  }
+  // the scroll's pose at s seconds along its way out (each leg eased with smootherstep: still at both ends)
+  scrollPose(O, s) {
+    const P = O.path, sm = ([a, b]) => { const u = clamp((s - a) / (b - a), 0, 1); return u * u * u * (u * (u * 6 - 15) + 10); }, sc = O.sc;
+    sc.position.copy(P.A).addScaledVector(P.out, P.slide * sm(P.T.slide)); sc.position.y += P.rise * sm(P.T.rise) + P.up * sm(P.T.up);
+    sc.quaternion.slerpQuaternions(O.q0, O.face, sm(P.T.turn));
+  }
+  // Escape during the opening (before the dive): the camera eases back and the scroll goes back the way it came
+  // (0.7 s, or longer for a scroll already far out), then the interface returns
   cancelOpening() {
-    const O = this.opening; if (!O || O.done || O.cancel || O.t > O.tFly + 1.6 + .3) return;
-    O.cancel = { t: 0, p: this.camera.position.clone(), tg: this.controls.target.clone(), sp: O.sc.position.clone(), sq: O.sc.quaternion.clone(), k3: O.k3 || 0 };
+    const O = this.opening; if (!O || O.done || O.cancel || O.t > O.tUn + 1.5 + .2) return;
+    O.cancel = { t: 0, p: this.camera.position.clone(), tg: this.controls.target.clone(), ps: O.ps || 0, k3: O.k3 || 0, dur: Math.max(.7, (O.ps || 0) * .6) };
   }
   stepCancel(dt) {
     const O = this.opening, C = O.cancel, c = this.camera, sc = O.sc, S = O.sheet.userData; C.t += dt;
-    const k = ease(Math.min(1, C.t / .7)), e3 = C.k3 * (1 - k);
+    const k = ease(Math.min(1, C.t / C.dur)), e3 = C.k3 * (1 - Math.min(1, C.t / .5));
     c.position.lerpVectors(C.p, O.from.p, k); this.controls.target.lerpVectors(C.tg, O.from.t, k); c.lookAt(this.controls.target);
-    sc.position.lerpVectors(C.sp, O.start, k); sc.quaternion.slerpQuaternions(C.sq, O.q0, k);
+    this.scrollPose(O, C.ps * (1 - Math.min(1, C.t / C.dur)));
     S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = e3 > .002; this.glowAt(O, e3);
-    if (C.t < .7) return;
-    O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ);
+    if (C.t < C.dur) return;
+    O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ); if (O.chainsOff != null) this.refill(O.chainsOff);
     sc.remove(O.sheet, O.light); this.trash([O.sheet]); O.light.dispose();
     sc.userData.paper.emissiveIntensity = 0; this.gfx.bloom.strength = this.scene.userData.look.bloom;
     this.opening = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update();
@@ -429,7 +699,7 @@ export class Hub {
   }
   stepOpening(dt) {
     const O = this.opening; if (O.cancel) { this.stepCancel(dt); return; }
-    const T_FLY = O.tFly, T_UN = T_FLY + .1, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
+    const T_FLY = O.tFly, T_UN = O.tUn, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
     O.t += dt; const t = O.t, c = this.camera, sc = O.sc, S = O.sheet.userData;
     // the flight: position along a straight line; the view direction turns by an angle-uniform slerp under a quintic
     // in-out (peak 1.875 × the mean rate: an 85° turn peaks at ~71°/s), its aim distance blending from start to end
@@ -437,7 +707,7 @@ export class Hub {
     const dir = O.d0.clone().applyQuaternion(new THREE.Quaternion().slerp(O.qd, k1)), camP = V3().lerpVectors(O.from.p, O.camTo, k1);
     const aim = THREE.MathUtils.lerp(O.dist0, O.camTo.distanceTo(O.look), k1);
     this.controls.target.copy(camP).addScaledVector(dir, aim);
-    const k2 = easeOut(clamp((t - (T_FLY - 1.1)) / 1.05, 0, 1)); sc.position.lerpVectors(O.start, O.liftTo, k2); sc.quaternion.slerpQuaternions(O.q0, O.face, k2);
+    O.ps = clamp(t - O.S0, 0, O.path.D); this.scrollPose(O, O.ps);
     // the unroll, and the light with it (nothing glows before the sheet moves)
     const k3 = clamp((t - T_UN) / D_UN, 0, 1), e3 = ease(k3); O.k3 = e3;
     if (k3 > 0 && !O.sound) { O.sound = true; this.sfx('unroll'); }
@@ -451,13 +721,30 @@ export class Hub {
     if (k4 >= 1 && !O.done) { O.done = true; this.app.openRoom(O.b.id, { fromHub: true }); }
   }
   // ---------- frame ----------
+  // ---------- the hall's reflections and contact occlusion (surfaces.js) ----------
+  // A probe at eye height in the middle of the hall, windows at their HDR radiance; the furniture and bookcase
+  // footprints darken the floor beneath them. Materials built elsewhere get their companion normal/roughness maps.
+  captureProbe() {
+    this.probeDirty = false; const R = this.lib.hub, sh = this.shell; if (!sh) return;
+    const info = sh.userData.baroque || {}, L = sh.userData.lights;
+    enrich(this.scene);
+    const feet = footprints([...(this.furn ? this.furn.children : []), ...this.shelfObjs.values()]).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
+    bindRoom(this.scene, this.probe, { w: R.w, d: R.d, floor: 0, cornice: info.ys || R.h * .83, ceiling: R.h, caseDepth: info.caseDepth || 0, aisle: [0, 1.3], feet: feet.slice(0, 24) });
+    this.probe.begin(this.scene, { pos: V3(0, 1.75, R.d * .08), box: new THREE.Box3(V3(-R.w / 2, 0, -R.d / 2), V3(R.w / 2, R.h, R.d / 2)), hide: [this.ghost], fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .12 });
+    this.shadowsDirty = true;
+  }
   update(dt) {
+    if ((this.probeDirty || this.probe.stale()) && !this.dragging && !this.opening && !this.sdrag && !this.probe.busy) this.captureProbe();
+    this.probe.step();
+    this.ao.update();
     // the hall is static: its 2048² sun shadow map is redrawn only while something moves (opening, dragging, arriving)
     const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false;
     if (this.shadowsDirty !== false || this.opening || this.dragging || this._arriving) { sm.needsUpdate = true; this.shadowsDirty = false; }
     if (this.opening) { this.stepOpening(dt); return; }
+    if (this.camTween) this.stepCamTween(dt);
+    if (this.ghost && this.ghost.visible) { this._gT = (this._gT || 0) + dt; this.ghost.userData.mat.opacity = .24 + .1 * Math.sin(this._gT * 4); }
     // walking (overview or first person) — see js/nav.js
-    this.nav.update(dt, !!this.dragging);
+    this.nav.update(dt, !!this.dragging || !!this.sdrag || !!this.camTween);
     if (this.glowDirty || this.dragging) this.syncGlow();
     this._arriving = false;
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { this._arriving = true; o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
@@ -466,6 +753,9 @@ export class Hub {
     if (this.disposed) return; this.disposed = true; document.body.classList.remove('cine');
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
+    this.gfx.canvas.removeEventListener('contextmenu', this.onCtx, true); removeEventListener('pointerdown', this.onDocDown, true); clearTimeout(this._lpT);
+    this.closeMenu(); this.closeMove(); this.dropGhost(); if (this.ghost) { disposeTree(this.ghost); this.ghost = null; }   // off the scene graph after dropGhost: the scene's disposal never sees it
     this.nav.dispose(); this.controls.dispose(); this.highlight(null); this.ui.remove(); this.gfx.canvas.style.cursor = ''; this.gfx.renderer.shadowMap.autoUpdate = true;
+    this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
   }
 }

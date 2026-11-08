@@ -1,0 +1,842 @@
+{
+ "title": "07 · Functional responses",
+ "summary": "How one predator's eating rate changes with prey density: Holling's Types I, II and III, the disc equation, and how to fit it with a straight line.",
+ "question": "As prey become more common, how fast does one predator eat?",
+ "chain": [
+  {
+   "section": "7.0",
+   "kind": "definition",
+   "title": "Functional response",
+   "ref": "p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "A functional response is how each predator's eating rate changes with prey density; y is prey eaten per predator per unit time, Ha, and x is prey density, H. (Predator numbers rising instead is the numerical response.)",
+   "explain": [
+    {
+     "text": "Holling (1959) found three shapes. Type I rises in a straight line. Type II rises and then levels off, because each catch costs handling time: with a = 0.5, Th = 0.1 and T = 1 the plateau is T ÷ Th = 10 prey, and the initial slope is a × T. Type III is S-shaped: slow at first, then steep, then level.",
+     "figure": {
+      "kind": "plot",
+      "caption": "Holling's three curves; Type II drawn with the sheet's a, Th = 0.1, T = 1: it levels off at 1 ÷ 0.1 = 10 prey. (Type I and III: illustrative shapes.)",
+      "x": [
+       0,
+       200
+      ],
+      "y": [
+       0,
+       12
+      ],
+      "xlabel": "prey density H",
+      "ylabel": "prey eaten per predator Ha",
+      "curves": [
+       {
+        "expr": "0.06*x",
+        "label": "Type I"
+       },
+       {
+        "expr": "a*x/(1+a*x*0.1)",
+        "label": "Type II"
+       },
+       {
+        "expr": "10*x^2/(x^2+3600)",
+        "label": "Type III"
+       }
+      ],
+      "hlines": [
+       {
+        "y": 10,
+        "label": "plateau T ÷ Th = 10"
+       }
+      ],
+      "animate": {
+       "param": "a",
+       "from": 0.1,
+       "to": 1,
+       "period": 5
+      }
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "Ha",
+     "meaning": "prey eaten per predator per unit time"
+    },
+    {
+     "term": "H",
+     "meaning": "prey density (prey per unit area)"
+    },
+    {
+     "term": "numerical response",
+     "meaning": "the change in predator numbers with prey density"
+    }
+   ],
+   "intuition": "Imagine one fox in fields with more and more rabbits: at first more rabbits means more meals, but a fox can only eat so fast.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "More prey, but a ceiling.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "more prey"
+     },
+     {
+      "id": "n1",
+      "label": "more catches"
+     },
+     {
+      "id": "n2",
+      "label": "handling fills the time"
+     },
+     {
+      "id": "n3",
+      "label": "plateau"
+     }
+    ]
+   },
+   "misconception": "Functional and numerical responses are the same thing. One is eating rate per predator, the other is how many predators there are.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Per predator versus how many.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "More prey → more predators = functional response."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Functional: each predator eats more; numerical: more predators."
+    }
+   },
+   "check": {
+    "q": "On the sheet's Type II curve, what is the most a predator can eat in T = 1?",
+    "a": "T ÷ Th = 1 ÷ 0.1 = 10 prey.",
+    "figure": {
+     "kind": "plot",
+     "caption": "The plateau of Type II.",
+     "x": [
+      0,
+      200
+     ],
+     "y": [
+      0,
+      12
+     ],
+     "curves": [
+      {
+       "expr": "0.5*x/(1+0.05*x)",
+       "label": "Type II"
+      }
+     ],
+     "hlines": [
+      {
+       "y": 10,
+       "label": "10"
+      }
+     ]
+    }
+   },
+   "opens": "What does the straight-line Type I response mean for prey?",
+   "id": "S1",
+   "answers": "As prey become more common, how fast does one predator eat?",
+   "from": [],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p7-1",
+   "kind": "result",
+   "title": "Type I: a straight line",
+   "ref": "Type I card, p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "In a Type I response the catch rises in step with prey density; nothing slows the predator down, as with a spider's web: more flies about, more caught.",
+   "explain": [
+    {
+     "text": "Because catches are proportional to prey, each prey individual has the same chance of being eaten whatever the density: prey mortality is constant. The relation is linear, so it is fitted with simple regression, lm(Ha ~ H), whose slope is the attack rate times T."
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "lm(Ha ~ H)",
+      "explain": "straight line through prey eaten against prey density: the slope is the capture rate per prey"
+     }
+    ],
+    "output": [],
+    "interpret": "A constant slope means a constant share of prey eaten."
+   },
+   "terms": [
+    {
+     "term": "prey mortality",
+     "meaning": "the share of prey eaten per unit time"
+    }
+   ],
+   "intuition": "A web catches a fixed share of whatever flies past.",
+   "intuitionFigure": {
+    "kind": "plot",
+    "caption": "Type I: catches proportional to prey.",
+    "x": [
+     0,
+     200
+    ],
+    "curves": [
+     {
+      "expr": "0.06*x",
+      "label": "Type I"
+     }
+    ]
+   },
+   "misconception": "More prey caught means a higher risk for each prey. In Type I the risk per prey stays the same.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Total versus per prey.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "More eaten → riskier for each."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Same share eaten: risk per prey constant."
+    }
+   },
+   "check": {
+    "q": "If H doubles under Type I, what happens to Ha?",
+    "a": "It doubles too: Ha is proportional to H.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Proportional.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "H × 2"
+      },
+      {
+       "id": "n1",
+       "label": "Ha × 2"
+      }
+     ]
+    }
+   },
+   "opens": "Why does the Type II curve level off?",
+   "id": "S2",
+   "answers": "What does the straight-line Type I response mean for prey?",
+   "from": [
+    "S1"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p7-2",
+   "kind": "result",
+   "title": "Type II: handling time caps intake",
+   "ref": "Type II card, p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "In a Type II response every catch costs handling time (chase, kill, eat, digest), so intake levels off; e.g. small mammals eating gypsy-moth pupae.",
+   "explain": [
+    {
+     "text": "At low density the predator spends almost all its time searching, so catches rise nearly in proportion to prey. As prey become common, more and more of the time goes into handling, which leaves less time to search, and the rate approaches a ceiling of T ÷ Th. Prey mortality is therefore highest when prey are scarce: at high density each prey has a smaller chance of being eaten.",
+     "figure": {
+      "kind": "plot",
+      "caption": "Type II: Ha = aHT / (1 + aHTh) with a = 0.5, Th = 0.1, T = 1 (the sheet's values).",
+      "x": [
+       0,
+       200
+      ],
+      "y": [
+       0,
+       12
+      ],
+      "curves": [
+       {
+        "expr": "0.5*x/(1+0.05*x)",
+        "label": "Type II"
+       }
+      ],
+      "hlines": [
+       {
+        "y": 10,
+        "label": "T ÷ Th"
+       }
+      ],
+      "points": [
+       [
+        100,
+        8.33,
+        "H = 100: 8.33"
+       ]
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "handling time Th",
+     "meaning": "time spent on each prey caught (chase, kill, eat, digest)"
+    }
+   ],
+   "intuition": "A fast eater in a buffet is still limited by chewing.",
+   "intuitionFigure": {
+    "kind": "bars",
+    "caption": "Share of the time budget spent handling rises with prey density (Type II, a = 0.5, Th = 0.1).",
+    "categories": [
+     "H = 10",
+     "H = 50",
+     "H = 200"
+    ],
+    "series": [
+     {
+      "name": "handling share",
+      "values": [
+       0.33,
+       0.71,
+       0.91
+      ]
+     }
+    ]
+   },
+   "misconception": "With unlimited prey a predator eats without limit. Handling time caps it at T ÷ Th.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "A ceiling.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "More prey → ever more eaten."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Ha → T ÷ Th = 10 at most."
+    }
+   },
+   "check": {
+    "q": "At H = 100 (a = 0.5, Th = 0.1, T = 1), how many prey does one predator eat?",
+    "a": "Ha = 0.5 × 100 / (1 + 0.5 × 100 × 0.1) = 50 / 6 = 8.33.",
+    "figure": {
+     "kind": "plot",
+     "caption": "Reading H = 100 off the curve.",
+     "x": [
+      0,
+      200
+     ],
+     "y": [
+      0,
+      12
+     ],
+     "curves": [
+      {
+       "expr": "0.5*x/(1+0.05*x)"
+      }
+     ],
+     "vlines": [
+      {
+       "x": 100,
+       "label": "H = 100"
+      }
+     ],
+     "points": [
+      [
+       100,
+       8.33,
+       "8.33"
+      ]
+     ]
+    }
+   },
+   "demos": [
+    {
+     "type": "scene",
+     "title": "A predator's time budget",
+     "purpose": "Why does handling time make the catch rate level off?",
+     "technique": "topdown",
+     "request": "Holling disc: a predator on a field of prey; it searches, catches, then handles each prey for Th seconds; prey density H and handling time Th are parameters; a readout shows catches per minute and the share of time spent handling; lessons: low density, high density, longer handling."
+    }
+   ],
+   "opens": "What makes a response S-shaped?",
+   "id": "S3",
+   "answers": "Why does the Type II curve level off?",
+   "from": [
+    "S2"
+   ],
+   "basis": "source-text",
+   "figures": []
+  },
+  {
+   "section": "p7-3",
+   "kind": "result",
+   "title": "Type III: S-shaped",
+   "ref": "Type III card, p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "In a Type III response predators get better as prey get common: they learn, or switch to the commonest prey; e.g. birds switching prey, hunters following scent.",
+   "explain": [
+    {
+     "text": "At low density the predator rarely meets this prey and does not bother with it, so the curve starts flat. As the prey becomes common the predator learns or switches to it and the catch rate accelerates, until handling time caps it as in Type II. Prey mortality therefore rises, then falls: rare prey find a refuge in their rarity.",
+     "figure": {
+      "kind": "plot",
+      "caption": "Type III: slow start, steep middle, plateau (illustrative shape).",
+      "x": [
+       0,
+       200
+      ],
+      "y": [
+       0,
+       12
+      ],
+      "curves": [
+       {
+        "expr": "10*x^2/(x^2+3600)",
+        "label": "Type III"
+       }
+      ]
+     }
+    }
+   ],
+   "terms": [
+    {
+     "term": "prey switching",
+     "meaning": "a predator shifting its diet to whichever prey is commonest"
+    }
+   ],
+   "intuition": "You only start looking for mushrooms once you have spotted a few.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Learning makes the S.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "rare: ignored"
+     },
+     {
+      "id": "n1",
+      "label": "common: learned"
+     },
+     {
+      "id": "n2",
+      "label": "abundant: handling cap"
+     }
+    ]
+   },
+   "misconception": "Type III is just a slower Type II. Its start is accelerating (S-shaped), which gives rare prey a refuge that Type II does not.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "The start differs.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Type III = flatter Type II."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Type III starts flat then accelerates: rare prey are spared."
+    }
+   },
+   "check": {
+    "q": "Which type can stabilise a prey population at low density, and why?",
+    "a": "Type III: the risk per prey falls as prey become rare, so a declining population is spared.",
+    "figure": {
+     "kind": "flow",
+     "caption": "A refuge in rarity.",
+     "dir": "LR",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "prey become rare"
+      },
+      {
+       "id": "n1",
+       "label": "predators switch away"
+      },
+      {
+       "id": "n2",
+       "label": "risk per prey falls"
+      }
+     ]
+    }
+   },
+   "opens": "Where does the Type II formula come from?",
+   "id": "S4",
+   "answers": "What makes a response S-shaped?",
+   "from": [
+    "S3"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p7-4",
+   "kind": "derivation",
+   "title": "Holling's disc equation",
+   "ref": "Where Type II comes from, p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "Splitting one predator's time budget into searching and handling gives Ha = aHT / (1 + aHTh).",
+   "math": "H_a=\\frac{aHT}{1+aHT_h}",
+   "derivation": [
+    {
+     "expr": "T = T_{search} + T_{handling}",
+     "why": "the total time is spent searching or handling"
+    },
+    {
+     "expr": "H_a = a\\,H\\,T_{search}",
+     "why": "prey found while searching: area searched per unit time × density × search time"
+    },
+    {
+     "expr": "T_{handling} = H_a\\,T_h",
+     "why": "each prey caught costs Th"
+    },
+    {
+     "expr": "H_a = aH(T - H_a T_h)",
+     "why": "substitute T_search = T − T_handling"
+    },
+    {
+     "expr": "H_a(1 + aHT_h) = aHT",
+     "why": "collect the Ha terms"
+    },
+    {
+     "expr": "H_a = \\frac{aHT}{1 + aHT_h}",
+     "why": "divide"
+    }
+   ],
+   "explain": [
+    {
+     "text": "Every term has a meaning: a is the attack rate (area searched per unit time), Th the handling time per prey, T the total time and H the prey density. When H is small the denominator is close to 1 and Ha ≈ aHT, the straight start; when H is large, aHTh dominates and Ha → T ÷ Th, the plateau.",
+     "figure": {
+      "kind": "flow",
+      "caption": "One time budget, two uses.",
+      "dir": "TB",
+      "nodes": [
+       {
+        "id": "n0",
+        "label": "T total time"
+       },
+       {
+        "id": "n1",
+        "label": "T search: finds a·H·T search prey"
+       },
+       {
+        "id": "n2",
+        "label": "T handling = Ha · Th"
+       },
+       {
+        "id": "n3",
+        "label": "Ha = aHT / (1 + aHTh)"
+       }
+      ],
+      "edges": [
+       {
+        "from": "n0",
+        "to": "n1"
+       },
+       {
+        "from": "n0",
+        "to": "n2"
+       },
+       {
+        "from": "n1",
+        "to": "n3"
+       },
+       {
+        "from": "n2",
+        "to": "n3"
+       }
+      ]
+     }
+    }
+   ],
+   "examples": [
+    {
+     "title": "Ha at H = 100",
+     "origin": "pdf",
+     "ref": "values of p. 7",
+     "problem": "a = 0.5, Th = 0.1, T = 1, H = 100.",
+     "solution": [
+      {
+       "text": "Numerator aHT = 0.5 × 100 × 1 = 50."
+      },
+      {
+       "text": "Denominator 1 + aHTh = 1 + 0.5 × 100 × 0.1 = 6."
+      }
+     ],
+     "answer": "Ha = 50 / 6 = 8.33 prey."
+    }
+   ],
+   "terms": [
+    {
+     "term": "a",
+     "meaning": "attack rate: area searched per unit time"
+    },
+    {
+     "term": "T",
+     "meaning": "total time available"
+    },
+    {
+     "term": "T_search, T_handling",
+     "meaning": "time spent searching / handling"
+    }
+   ],
+   "intuition": "The predator's day is a pie of searching and handling; more prey makes the handling slice grow.",
+   "intuitionFigure": {
+    "kind": "bars",
+    "caption": "Searching and handling time out of T = 1 at three densities (a = 0.5, Th = 0.1).",
+    "categories": [
+     "H = 10",
+     "H = 50",
+     "H = 200"
+    ],
+    "series": [
+     {
+      "name": "searching",
+      "values": [
+       0.67,
+       0.29,
+       0.09
+      ]
+     },
+     {
+      "name": "handling",
+      "values": [
+       0.33,
+       0.71,
+       0.91
+      ]
+     }
+    ]
+   },
+   "misconception": "Ha = aHT is the whole story. That ignores the time lost to handling; it only holds while prey are scarce.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "Do not forget handling.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "Ha = aHT for all H."
+    },
+    "right": {
+     "title": "Instead",
+     "text": "Ha = aHT / (1 + aHTh): handling bends the line."
+    }
+   },
+   "check": {
+    "q": "What does Ha approach as H grows very large?",
+    "a": "aHT / (aHTh) = T / Th: the plateau.",
+    "figure": {
+     "kind": "plot",
+     "caption": "Ha → T ÷ Th.",
+     "x": [
+      0,
+      400
+     ],
+     "y": [
+      0,
+      12
+     ],
+     "curves": [
+      {
+       "expr": "0.5*x/(1+0.05*x)"
+      }
+     ],
+     "hlines": [
+      {
+       "y": 10,
+       "label": "T ÷ Th"
+      }
+     ]
+    }
+   },
+   "opens": "How do you estimate a and Th from data?",
+   "id": "S5",
+   "answers": "Where does the Type II formula come from?",
+   "from": [
+    "S4"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  },
+  {
+   "section": "p7-5",
+   "kind": "derivation",
+   "title": "Fit it with a straight line",
+   "ref": "Fit it with a straight line, p. 7",
+   "pages": [
+    7
+   ],
+   "statement": "Taking 1 ÷ both sides turns Type II into a straight line: 1/Ha = (1/a)·1/(HT) + Th/T, so lm(I(1/Ha) ~ I(1/(H * T))) gives slope 1/a and intercept Th/T.",
+   "math": "\\frac{1}{H_a}=\\frac{1}{a}\\cdot\\frac{1}{HT}+\\frac{T_h}{T}",
+   "explain": [
+    {
+     "text": "Plot y = 1/Ha against x = 1/(H T): the points fall on a line with slope 1/a and intercept Th/T. With the sheet's values the points computed from the model lie exactly on y = 2x + 0.1, so a = 1/2 = 0.5 and Th = 0.1 × T = 0.1, the values the fit recovers.",
+     "figure": {
+      "kind": "scatter",
+      "caption": "Five densities (H = 10, 20, 50, 100, 200; T = 1) computed from a = 0.5, Th = 0.1: they lie on y = 2x + 0.1.",
+      "points": [
+       [
+        0.1,
+        0.3
+       ],
+       [
+        0.05,
+        0.2
+       ],
+       [
+        0.02,
+        0.14
+       ],
+       [
+        0.01,
+        0.12
+       ],
+       [
+        0.005,
+        0.11
+       ]
+      ],
+      "fit": "ols",
+      "xlabel": "1 / (H × T)",
+      "ylabel": "1 / Ha",
+      "animate": true
+     }
+    }
+   ],
+   "code": {
+    "lang": "r",
+    "lines": [
+     {
+      "code": "fit <- lm(I(1/Ha) ~ I(1/(H * T)))",
+      "explain": "regress 1/Ha on 1/(H T); I() makes R do the arithmetic inside the formula"
+     },
+     {
+      "code": "a  <- 1 / coef(fit)[2]   # slope = 1/a",
+      "explain": "the slope is 1/a, so a is its reciprocal"
+     },
+     {
+      "code": "Th <- coef(fit)[1] * T   # Th/T × T",
+      "explain": "the intercept is Th/T, so multiply by T"
+     }
+    ],
+    "output": [
+     "a = 0.5, Th = 0.1"
+    ],
+    "interpret": "The linear fit recovers the attack rate and handling time used to make the curves."
+   },
+   "terms": [
+    {
+     "term": "I()",
+     "meaning": "inside a formula: compute this expression literally (not as formula syntax)"
+    },
+    {
+     "term": "coef(fit)",
+     "meaning": "the fitted intercept and slope"
+    }
+   ],
+   "intuition": "Turning the curve inside out (1 ÷ both sides) straightens it.",
+   "intuitionFigure": {
+    "kind": "flow",
+    "caption": "Linearise, fit, convert back.",
+    "dir": "LR",
+    "nodes": [
+     {
+      "id": "n0",
+      "label": "1/Ha vs 1/(HT)"
+     },
+     {
+      "id": "n1",
+      "label": "lm()"
+     },
+     {
+      "id": "n2",
+      "label": "a = 1/slope"
+     },
+     {
+      "id": "n3",
+      "label": "Th = intercept × T"
+     }
+    ]
+   },
+   "misconception": "In a formula, 1/Ha means \"1 divided by Ha\" without I(). Formula operators have special meanings; I() is needed.",
+   "misconceptionFigure": {
+    "kind": "contrast",
+    "caption": "I() in formulas.",
+    "wrong": {
+     "title": "Mistaken",
+     "text": "lm(1/Ha ~ 1/(H*T))"
+    },
+    "right": {
+     "title": "Instead",
+     "text": "lm(I(1/Ha) ~ I(1/(H*T)))"
+    }
+   },
+   "check": {
+    "q": "A fit gives slope 4 and intercept 0.2 with T = 2. What are a and Th?",
+    "a": "a = 1/4 = 0.25; Th = 0.2 × 2 = 0.4.",
+    "figure": {
+     "kind": "flow",
+     "caption": "Convert back.",
+     "dir": "TB",
+     "nodes": [
+      {
+       "id": "n0",
+       "label": "slope 4 → a = 0.25"
+      },
+      {
+       "id": "n1",
+       "label": "intercept 0.2 × T = 2 → Th = 0.4"
+      }
+     ]
+    }
+   },
+   "opens": "How would you fit a Type III response, and which type fits your predator?",
+   "id": "S6",
+   "answers": "How do you estimate a and Th from data?",
+   "from": [
+    "S5"
+   ],
+   "basis": "source-text",
+   "demos": [],
+   "figures": []
+  }
+ ],
+ "coverage": [],
+ "dioramaPlan": [
+  {
+   "subsection": "7.0",
+   "count": 0,
+   "why": "the animated plot shows the three shapes"
+  },
+  {
+   "subsection": "p7-1",
+   "count": 0,
+   "why": "a straight line"
+  },
+  {
+   "subsection": "p7-2",
+   "count": 1,
+   "why": "searching and handling: a predator's time budget in motion"
+  },
+  {
+   "subsection": "p7-3",
+   "count": 0,
+   "why": "a curve shape"
+  },
+  {
+   "subsection": "p7-4",
+   "count": 0,
+   "why": "algebra on the same time budget (diorama of p7-2)"
+  },
+  {
+   "subsection": "p7-5",
+   "count": 0,
+   "why": "a fitting procedure: figure"
+  }
+ ]
+}

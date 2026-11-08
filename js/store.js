@@ -52,8 +52,12 @@ export async function keys(prefix = '') {
   return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).getAllKeys(); r.onsuccess = () => res([...new Set([...r.result.filter(k => String(k).startsWith(prefix) && !deleted.has(k)), ...local])]); r.onerror = () => res(local); } catch (e) { res(local); } });
 }
 // Debounced savers keyed by name
-const timers = {};
-export function saveLater(key, getVal, ms = 500) { clearTimeout(timers[key]); timers[key] = setTimeout(() => { try { set(key, structuredCloneSafe(getVal())); } catch (e) { console.warn('save', key, e); } }, ms); }
+const timers = {}, pending = new Map();
+export function saveLater(key, getVal, ms = 500) { clearTimeout(timers[key]); pending.set(key, getVal); timers[key] = setTimeout(() => flushOne(key), ms); }
+function flushOne(key) { clearTimeout(timers[key]); delete timers[key]; const f = pending.get(key); pending.delete(key); if (!f) return; try { set(key, structuredCloneSafe(f())); } catch (e) { console.warn('save', key, e); } }
+// the page is going away (tab closed, switched away on a phone): write what is still waiting instead of losing it
+export function flushSaves() { [...pending.keys()].forEach(flushOne); }
+if (typeof addEventListener === 'function') { addEventListener('pagehide', flushSaves); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaves(); }); }
 export function structuredCloneSafe(v) { try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } }
 export function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
 export function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }

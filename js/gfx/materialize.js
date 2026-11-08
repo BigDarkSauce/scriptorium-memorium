@@ -20,7 +20,7 @@ export function makeFrontUniforms() {
     uJitter: { value: .35 }, uPaper: { value: PAPER.clone() }, uInk: { value: INK.clone() }, uPoche: { value: 0 }, uCardMix: { value: 1 }
   };
 }
-const FRONT_GLSL = `
+export const FRONT_GLSL = `
 uniform int uFrontKind; uniform vec3 uFrontC; uniform vec3 uFrontN; uniform float uFrontR; uniform float uFrontW; uniform float uSeamK;
 uniform vec3 uFrontCol; uniform float uJitter; uniform vec3 uPaper; uniform vec3 uInk; uniform float uPoche; uniform float uCardMix;
 varying vec3 vFrontW;
@@ -55,6 +55,22 @@ float aaaCascShadow = 1.0;
 aaaCascShadow = ${SH(0)};
 #endif
 `;
+// Cloud shadows (realism-playbook R6, WG's JT hook): js/gfx/clouds.js splats the clouds' optical depth into a small
+// texture over the block (uCloudSh, world rect uCloudShM = (minX, minZ, 1/w, 1/d)) at ~15 Hz; every patched material in an
+// outdoor scene projects its point along the sun to the cloud layer and multiplies the sun (directional light 0) by
+// exp(−τ). Off (1x1, uCloudShOn = 0) until a cloud volume exists. Shared by all scenes (one diorama renders at a time).
+export const CLOUD_SH_U = { uCloudSh: { value: null }, uCloudShM: { value: new THREE.Vector4(-8, -8, 1 / 16, 1 / 16) }, uCloudShY: { value: 2.5 }, uCloudShOn: { value: 0 }, uCloudSun: { value: new THREE.Vector3(0, 1, 0) } };
+{ const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); t.needsUpdate = true; t.userData.shared = true; CLOUD_SH_U.uCloudSh.value = t; }
+const CLOUD_GLSL = `
+uniform sampler2D uCloudSh; uniform vec4 uCloudShM; uniform float uCloudShY, uCloudShOn; uniform vec3 uCloudSun;
+float aaaCloudVis(vec3 p){ if (uCloudShOn < .5) return 1.; vec2 q = p.xz + uCloudSun.xz / max(uCloudSun.y, .15) * (uCloudShY - p.y); vec2 uv = (q - uCloudShM.xy) * uCloudShM.zw;
+  if (any(lessThan(uv, vec2(0.))) || any(greaterThan(uv, vec2(1.)))) return 1.; return exp(-texture2D(uCloudSh, uv).r); }
+`;
+const DIR_INFO = 'getDirectionalLightInfo( directionalLight, directLight );';
+function cloudChunk(s) {
+  if (s.fragmentShader.includes('#include <lights_fragment_begin>')) s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin);
+  s.fragmentShader = s.fragmentShader.replace(DIR_INFO, DIR_INFO + '\n\t\t#if UNROLLED_LOOP_INDEX == 0\n\t\tdirectLight.color *= aaaCloudVis( vFrontW );\n\t\t#endif');
+}
 function cascadeChunk(s) {
   let ch = THREE.ShaderChunk.lights_fragment_begin;
   if (!s.fragmentShader.includes('#include <lights_fragment_begin>') || !ch.includes(DIR_SHADOW_LINE)) return;
@@ -68,17 +84,23 @@ function cascadeChunk(s) {
   s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_begin>', ch);
 }
 export function patchMaterial(mat, U) {
-  if (!mat || mat.userData.frontPatched || mat.isShaderMaterial || mat.isLineBasicMaterial || mat.isPointsMaterial || mat.isSpriteMaterial) return mat;
+  if (!mat || mat.userData.frontPatched) return mat;
+  // ShaderMaterials (water, clouds, spray: js/gfx/water.js, clouds.js) handle card → real themselves: they take the
+  // scene's front uniforms through userData.onFront(U)
+  if (mat.isShaderMaterial) { if (mat.userData.onFront) { mat.userData.frontPatched = true; mat.userData.onFront(U); } return mat; }
+  if (mat.isLineBasicMaterial || mat.isPointsMaterial || mat.isSpriteMaterial) return mat;
   mat.userData.frontPatched = true;
-  const prev = mat.onBeforeCompile, casc = U._aaaCasc || 0;
+  const prev = mat.onBeforeCompile, casc = U._aaaCasc || 0, cloud = !!U._cloud;
   if (casc > 1) mat.defines = Object.assign({}, mat.defines, { AAA_CASCADES: casc });
+  if (cloud) mat.defines = Object.assign({}, mat.defines, { AAA_CLOUDSH: '' });
   mat.onBeforeCompile = (s, r) => {
     if (prev) prev(s, r);
     Object.assign(s.uniforms, U);
     if (casc > 1) cascadeChunk(s);
+    if (cloud && (s.fragmentShader.includes('#include <lights_fragment_begin>') || s.fragmentShader.includes(DIR_INFO))) { Object.assign(s.uniforms, CLOUD_SH_U); cloudChunk(s); }
     s.vertexShader = 'varying vec3 vFrontW;\n' + s.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vFrontW = (modelMatrix * vec4(transformed,1.0)).xyz;\n#ifdef USE_INSTANCING\n vFrontW = (modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz;\n#endif');
     if (!s.vertexShader.includes('vFrontW =')) s.vertexShader = s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vFrontW = (modelMatrix * vec4(transformed,1.0)).xyz;');
-    let f = FRONT_GLSL + s.fragmentShader;
+    let f = FRONT_GLSL + (cloud && s.uniforms.uCloudSh ? CLOUD_GLSL : '') + s.fragmentShader;
     const isLit = f.includes('#include <emissivemap_fragment>');
     const cardBlock = `
       float fdv = frontD(vFrontW); float isCard = (1.0 - step(fdv, uFrontR)) * uCardMix;
@@ -112,7 +134,7 @@ export function patchMaterial(mat, U) {
     }
     s.fragmentShader = f;
   };
-  mat.customProgramCacheKey = () => 'front-' + (prev ? 'p' : '') + mat.type;
+  mat.customProgramCacheKey = () => 'front-' + (prev ? 'p' : '') + (cloud ? 'c' : '') + mat.type;
   mat.needsUpdate = true;
   return mat;
 }
@@ -157,7 +179,7 @@ export function addOutlines(root, U, thick = .03) {
   return mat;
 }
 export function patchTree(root, U) {
-  const R = root.isScene && root.userData.envR; if (R) U._aaaCasc = R.cascades ? R.cascades.length : 0;   // spawned objects reuse the scene's choice
+  const R = root.isScene && root.userData.envR; if (R) { U._aaaCasc = R.cascades ? R.cascades.length : 0; U._cloud = !!R.atmos; }   // spawned objects reuse the scene's choice
   root.traverse(o => { if (o.material) [].concat(o.material).forEach(m => patchMaterial(m, U)); });
 }
 

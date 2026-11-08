@@ -23,6 +23,8 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 1. \`01-split-book.md\`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).
 2. \`02-analyse-part.md\`: one call per part; returns the logical chain with coverage, the PDF's figures cited by id, the question thread and demos.
 3. \`07-fill-gaps.md\`: only when the coverage check finds a missing or coarse subsection: a small call with just that subsection's text.
+3b. \`08-repair-steps.md\`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
+3c. \`09-figures.md\`: only for paragraphs and teaching boxes that still lack a figure.
 4. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`).
 5. \`04-edit-diorama.md\`: change an existing diorama.
 6. \`05-sub-scroll.md\`: expand one step into a detailed sub-scroll.
@@ -38,6 +40,10 @@ The formats are documented in \`../docs/PROTOCOL.md\`, \`../docs/SCENE_SPEC.md\`
 
 - Subsections: ${P.SUBSECTION_IDS}
 - Figures and tables: ${P.FIGURE_IDS}
+
+## What a good answer looks like (the quality gate)
+
+The app (and \`node tools/verify-chain.mjs\`) rejects: more than 40 words pasted from the PDF in any paragraph; two steps repeating the same passage; a PDF figure shown by two steps or a page-sized crop; a step without \`explain\` paragraphs; code without a line-by-line \`code\` explanation and its interpreted output. Every paragraph of 60+ words, and every *Picture it*, *Common mistake* and *Check yourself*, carries a figure spec (\`../schema/figure.schema.json\`; kinds: flow, plot, distribution, bars, hist, scatter, boxplot, numberline, tree, venn, timeline, sketch, codetrace, table, contrast, pdf). Every chain gives a \`dioramaPlan\` (how many 3D dioramas each subsection needs). Breakdown levels: complete, essential, or exactly N steps (never coarser than the subsections). A worked answer for a 7-sheet statistics tutorial (infographics) is in \`../tools/fixtures/byu-stub/chain-0*.json\`.
 
 ## Where demo data comes from
 
@@ -72,6 +78,11 @@ ${P.CHAIN_FORMAT}
 
 ${P.HARD_RULES}
 
+${P.EXPLAIN_RULES}
+${P.CODE_RULES}
+${P.FIGURE_SPEC}
+${P.DIORAMA_RULES}
+
 ${P.BUILTIN_TYPES}
 ${P.DIAGRAM_TYPES}
 ${P.LESSON_FORMAT}
@@ -89,6 +100,19 @@ The app runs this automatically (inside claude.ai) after the main analysis when 
 New steps get ids G1, G2, …; the app inserts them, renumbers the whole chain S1…Sn and remaps \`from\`. For a coarse subsection (one that already has steps) the new steps go right after its last existing step: the first new step answers a new question, which the app then writes into that existing step's \`opens\`, and the last new step opens what the existing step used to open.
 
 ` + block(P.followUpPrompt({ book: '<book title>', chapter: '<part title>', A: mockA, gaps, sections: demoSections, figures: demoFigures })));
+
+// the quality gate's repair call and the figures call, shown with a small mock chain
+const mockR = { chain: [{ id: 'S1', section: '<1.1>', title: '<step that pasted the page>', statement: '<the pasted page text>', answers: '<…>', opens: '<…>' }] };
+w('prompts/08-repair-steps.md', `# Repair steps the quality gate rejected
+
+The app runs this automatically after the analysis when a step pastes more than 40 words of the PDF, repeats another step, states without explaining, or leaves code unexplained. Only those steps are sent, with their subsections' text; they come back with the same ids, sections and question thread, and the gate runs again (at most two rounds).
+
+` + block(P.repairPrompt({ book: '<book title>', chapter: '<part title>', A: mockR, issues: [{ step: 'S1', kind: 'copied', detail: '86 words copied from the PDF in "statement": explain it in your own words (quote at most 40 words, in "quote")' }, { step: 'S1', kind: 'unexplained', detail: 'only 0 words of explanation and no "explain" paragraphs' }], sections: demoSections })));
+w('prompts/09-figures.md', `# Design the missing figures
+
+Sent for paragraphs of 60+ words and teaching boxes (Picture it, Common mistake, Check yourself) that still have no valid figure. Whatever is still missing afterwards, the app builds from the step itself.
+
+` + block(P.figuresPrompt({ book: '<book title>', chapter: '<part title>', A: { chain: [{ id: 'S3', title: '<step title>', section: '<1.2>' }] }, slots: [{ step: 'S3', slot: 'explain.0', text: '<the paragraph>' }, { step: 'S3', slot: 'misconception', text: '<the mistake>', small: true }] })));
 
 // docs/SCENE_SPEC.md: replace the generated block between the first ```text fence and its closing fence
 const specPath = path.join(root, 'docs/SCENE_SPEC.md'); let spec = fs.readFileSync(specPath, 'utf8');
