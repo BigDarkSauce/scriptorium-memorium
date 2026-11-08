@@ -657,7 +657,7 @@ export class Director {
       }
       const cw = b.cw, ch = b.ch;
       // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
-      const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h + 8) : 84;
+      const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h) : 84;
       const bounds = y => [panel, y < 176 ? w - cw - 66 : w - cw - 24];
       const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
