@@ -576,7 +576,7 @@ export class Director {
       const [[ax, ay], [cx, cy]] = F.pts, L = Math.hypot(cx - ax, cy - ay) || 1, ux = (cx - ax) / L, uy = (cy - ay) / L, side0 = F.lane ? 1 : (F.side || 1);
       const cand = [];
       [F.full, F.short].forEach((txt, vi) => { if (vi && txt === F.full) return; const wd = vi ? F.wS : F.wF;
-        [.5, .32, .68, 1, 0].forEach(k => [side0, -side0].forEach(sd => [0, 1, 2].forEach(far => {   // beside the shaft, and out past either end, in up to three rows (a crowded body: pins, other arrows) const nx = -uy * sd, ny = ux * sd, off = 9 + far * (LH + 8) + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi, far }); }))); });
+        [.5, .32, .68, 1, 0].forEach(k => [side0, -side0].forEach(sd => [0, 1, 2].forEach(far => {   /* beside the shaft, and out past either end, in up to three rows (a crowded body: pins, other arrows) */ const nx = -uy * sd, ny = ux * sd, off = 9 + far * (LH + 8) + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi, far }); }))); });
       // keep last frame's choice while it is still clear (no flicker); otherwise the first clear candidate, else the least bad
       let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd && c.far === F.lc.far);
       if (keep && cost(keep.x, keep.y, keep.wd) === 0) best = keep;

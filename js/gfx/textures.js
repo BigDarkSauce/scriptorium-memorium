@@ -219,7 +219,7 @@ export const MARBLES = {
   // the antique marbles of the columns (Roman spolia): giallo antico (Chemtou: warm yellow, rust veins), verde antico
   // (Thessalian breccia: dark green with white and black fragments), rosso antico (Taenarum: deep oxblood, fine dark
   // veins) and pavonazzetto (Docimium: white with violet veins and clasts)
-  giallo: { base: '#d4c19e', cloud: ['#e3d4b6', '#c0a77c', '#ece2cc', '#b29a72', '#d8c6a4'], vein: '#8a5e3c', vein2: '#f1e8d6' },   // pale, weathered giallo antico: honey-cream, not mustard
+  giallo: { base: '#d3c8b2', cloud: ['#e2d9c6', '#bdae92', '#ebe4d6', '#ad9f86', '#d6cab4'], vein: '#86684e', vein2: '#f0eadf' },   // pale, weathered giallo antico: honey-cream, not mustard
   verde: { base: '#2c4a3b', cloud: ['#3e6550', '#1b2f26', '#5d8a70', '#24382e', '#e6eee6', '#0f1814'], vein: '#e8efe8', vein2: '#0c1410' },
   rosso: { base: '#7a221d', cloud: ['#8d2e26', '#5e1714', '#9c3b30', '#6a1c18'], vein: '#3a0c0a', vein2: '#c46a58' },
   pavonazzetto: { base: '#ece6df', cloud: ['#f6f2ee', '#d9cfd2', '#c9b4bf', '#efe9e4', '#b89aab'], vein: '#6e4a66', vein2: '#a17c95' }

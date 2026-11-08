@@ -187,7 +187,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
     const a=arcG.attributes.position;for(let i=0;i<=40;i++){const s=th*i/40;a.setXYZ(i,piv.x+.9*Math.sin(s),piv.y-.9*Math.cos(s),.02)}a.needsUpdate=true},
    readouts(){const E=.5*p.L*p.L*w*w+p.g*p.L*(1-Math.cos(th));return[['θ',fx(th*DEG,1)+'°'],['ω',fx(w,2)+' rad/s'],['T measured',isFinite(Tm)?fx(Tm,3)+' s':'…'],['T exact 4√(L/g)·K',fx(Tex,3)+' s'],['T₀ = 2π√(L/g)',fx(T0,3)+' s'],['T/T₀',isFinite(Tm)?fx(Tm/T0,3):'…'],['E/m',fx(E,3)+' J/kg']]}}}};
 {const B=()=>PEN.bob?PEN.bob():V3(0,2,0),whole=()=>[0,(PEN.piv?PEN.piv.y:5.6)-(PEN.Lv||3.1)*.55,0];
- DIO.pendulum.shots={'bob released':SHOT(whole,10.5),'turning point':SHOT(()=>B().toArray(),5),'lowest point':SHOT(()=>[0,(PEN.piv?PEN.piv.y:5.6)-(PEN.Lv||3.1)+.6,0],6),'period measured':SHOT(whole,10),'amplitude halved':SHOT(whole,10)};
+ DIO.pendulum.shots={'bob released':SHOT(whole,10.5),'turning point':SHOT(()=>B().toArray(),5),'lowest point':SHOT(whole,9.5),'period measured':SHOT(whole,10),'amplitude halved':SHOT(whole,10)};
  DIO.pendulum.flows={
   'bob released':[{from:()=>B().add(V3(0,.5,0)),to:()=>B().lerp(PEN.piv,.4),label:'the cord pulls toward the pivot'},{from:()=>B().add(V3(.6,0,0)),to:()=>B().add(V3(.6,-1.2,0)),label:'gravity pulls straight down'}],
   'lowest point':[{from:()=>B().add(V3(-1.4,.9,0)),to:()=>B().add(V3(-.3,.2,0)),label:'height turned into speed'}],
@@ -1181,7 +1181,7 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
     g.fillStyle='#ffffff';g.font='600 50px Georgia, serif';g.textAlign='center';g.fillText('A + B',X(.08),eR-26);g.fillText('C = AB',X(.9),eC-26);
     g.fillStyle='rgba(207,238,230,.75)';g.font='italic 36px Georgia, serif';g.fillText('reaction coordinate →',(x0+x1)/2,yb+80)});
    const card=put(new T.Mesh(new T.PlaneGeometry(2.6,2.6*chh/cw),new T.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false,depthWrite:false})),'energy profile card',PF);card.userData.noInk=true;card.userData.noContact=true;
-   PF.position.set(BX+1.75,Y0+.2,0);PF.rotation.y=-.32;RXN.prof=()=>V3(BX+1.75,Y0+.2,0)}
+   PF.position.set(-BX-1.8,Y0+.2,.4);PF.rotation.y=.32;RXN.prof=()=>V3(-BX-1.8,Y0+.2,.4)}   // on the left, turned to the default view (the right-hand side is where the readouts sit)
   let Tk=p.T,tr=0,nf=0,nb=0,flashT=0,enc=0,encOK=0,firstRev=false,eqd=false,tAcc=0,samp=0,tLast=0;const hist=new Float32Array(400);let hn=0;
   const cnt=k=>{let c=0;for(let i=0;i<n;i++)if(K[i]===k)c++;return c};const Vbox=8*BX*BY*BZ,theory=()=>(1+p.Ea/p.T)*Math.exp(-p.Ea/p.T),kr=1.5*Math.exp(-p.Eb/p.T);
   const mp=(i,v)=>v.set(P[i*3],P[i*3+1]+Y0,P[i*3+2]);

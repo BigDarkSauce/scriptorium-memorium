@@ -71,7 +71,7 @@ export function bmat(name) {
     case 'gilt-dim': m = giltMat({ color: lin(.7, .62, .42), rough: .85, metal: .9 }); m.userData.boxUV = 2.2; break;
     case 'stucco': m = plasterMat([242, 239, 232], 'stucco2', .1, { color: 0xf4f1ea, ns: .3 }); m.userData.boxUV = .35; break;
     // a warm limewash a step darker than the ivory cases, so white-and-gold bookcases separate from the wall behind them
-    case 'wall': m = plasterMat([226, 220, 207], 'bwall4', .09, { wallAO: true }); m.userData.boxUV = .22; break;   // warm off-white stucco (saturation ≈ .08 before the lamps' warmth; it read ochre at .18)
+    case 'wall': m = plasterMat([230, 220, 200], 'bwall5', .09, { wallAO: true }); m.userData.boxUV = .22; break;   // warm off-white stucco (saturation ≈ .08 before the lamps' warmth; it read ochre at .18)
     // painted wood (Admont's white cases): ivory lacquer with the grain faintly showing through
     case 'cream': m = woodMat([244, 236, 220], 'ivory', { fig: { paint: 1 }, paint: true, coat: .45, ccr: .28 }); m.color.set(0xfbf6ec); m.userData.boxUV = .55; break;
     // case interiors (backs, inner side panels) a shade deeper, as they sit in their own shadow: the shelves read as
@@ -941,7 +941,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     FX.add(gilt, new THREE.CylinderGeometry(.012, .012, h + D.rise - yc - .3 * sCh, 6), Mx(D.x, (h + D.rise + yc + .3 * sCh) / 2, D.z));
     }   // (a fast preview leaves out the chandelier's metalwork, never its light: the light count, and so every shader, stays the same)
     // by day the candles are a warm accent, not the key (0.75 of their night strength in a hall with windows)
-    const L = new THREE.PointLight(0xffd9b8, 7 * yc * yc / 4 * (hasWin ? .75 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
+    const L = new THREE.PointLight(0xffd0a4, 7 * yc * yc / 4 * (hasWin ? .75 : 1.35), 0, 2); L.position.set(D.x, yc - .1, D.z); L.userData.base = L.intensity; lights.add(L);
   });
   // ---- the sun through the window wall: shadowed directional light + soft additive shafts ----
   if (hasWin) {

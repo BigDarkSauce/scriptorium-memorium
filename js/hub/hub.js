@@ -39,7 +39,7 @@ export class Hub {
     // crisp warm daylight (renderer.js), a step less exposure than the house look: the surround sits lower and the hero,
     // under its own key light, separates from it (presentation-craft value check); set before setView
     // bloom kept to the flames and the sky itself (threshold above the sunlit stucco), so the window wall stays clear and warm
-    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .9, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .002, sat: .9 });   /* sat .9: the warm lamps on warm plaster and giallo compound into ochre; a touch less chroma keeps stucco cream */   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
+    this.scene.userData.look = Object.assign(this.gfx.constructor.HOUSE, { exposure: .9, vignette: .36, bloom: .15, bloomThreshold: 2.1, warm: .003, sat: .97 });   /* sat .97: the warm lamps on warm plaster and giallo compound into ochre; a touch less chroma keeps stucco cream */   // (exposure lowered from 1.2 with the hall's own probe: its bounce light replaced the fake ambient)
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, .05, 120); this.ao.camera = this.camera;
     this.controls = new OrbitControls(this.camera, this.gfx.canvas);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: .08, minDistance: .4, maxDistance: 14, maxPolarAngle: Math.PI * .56, screenSpacePanning: false, rotateSpeed: .6 });
