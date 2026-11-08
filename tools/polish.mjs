@@ -273,7 +273,7 @@ async function runItem(id) {
         // as the ticks; control comes back here only with a finding not seen before (for its screenshot) or at the end
         ts = Date.now(); const st = await page.evaluate(() => { const v = W.mode, d = v.dir; const seen = window._pSeen || (window._pSeen = new Set()), keys = window._pKeys || (window._pKeys = new Set()); let k = 0, n = 0;
           const T0 = performance.now(); for (; k < 2400; k++) { if (performance.now() - T0 > 50000) return { end: true, timeout: true, n }; S.tick(1); const b = d && d.beat, c = v.cues && v.cues.chain; const key = b ? (b.kind + ':' + (b.text || b.title || '')).slice(0, 80) : null; const ckey = c && c.gi != null ? 'chain' + c.gi : null;
-            let at = null; if (b && b.t > 1.2 && key && !seen.has(key)) at = key; else if (ckey && c.ft > .6 && !seen.has(ckey)) at = ckey;
+            let at = null; if (b && b.t > 1.2 && !b.tw && key && !seen.has(key)) at = key;   /* (not mid-glide: a callout changing sides passes over things for 0.35 s) */ else if (ckey && c.ft > .6 && !seen.has(ckey)) at = ckey;
             if (at) { seen.add(at); n++; const r = POLISH('dio'), fresh = r.filter(x => { const q = x.check + '|' + x.what + '|' + (x.a || x.el || x.label || x.where || '') + '|' + (x.b || ''); if (keys.has(q)) return false; keys.add(q); return true; }); if (fresh.length) return { beat: at, r: fresh, n }; }
             if (v.running == null && k > 30) return { end: true, n }; }
           return { end: true, timeout: true, n }; });
