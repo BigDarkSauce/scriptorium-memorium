@@ -160,6 +160,8 @@ const FN = new Set('sin cos tan sec csc cot asin acos atan atan2 arcsin arccos a
 const TRIG = new Set('sin cos tan sec csc cot asin acos atan arcsin arccos arctan sinh cosh tanh arsinh arcosh artanh ln log lg exp det arg'.split(' '));   // may take an argument without brackets (sin x)
 const FN_SHOW = { asin: 'arcsin', acos: 'arccos', atan: 'arctan', sign: 'sgn', log10: 'log₁₀', log2: 'log₂' };
 const UNITS = new Set('m s kg g mg µg km cm mm µm um nm pm Å mol mmol K Pa kPa MPa GPa hPa bar mbar atm N kN mN J kJ MJ mJ eV keV MeV GeV W kW MW mW V mV kV µV A mA µA Ω kΩ MΩ ohm Hz kHz MHz GHz C mC µC F mF µF nF pF H mH T mT L mL l h min ms µs ns ps yr rad mrad sr deg °C °F lx cd lm Wb S Gy Sv Bq M mM µM cal kcal Da kDa dB ppm ppb au ly pc'.split(' '));
+// a text that is a unit (J, s⁻², m/s², %/K, kg·m²) or ends with one in brackets ("height (m)", "T (s)"): set upright
+export const unitish = s => { const u = t => { const w = String(t).split(/[\s()\/·*^⁻⁺⁰-⁹¹²³\d.]+/).filter(Boolean); return w.length > 0 && w.every(x => UNITS.has(x) || /^[%‰°]$|^°[CFK]$/.test(x)); }; const m = /\(([^()]+)\)\s*$/.exec(String(s)); return u(s) || !!(m && u(m[1])); };
 const MULTI_UNITS = new Set([...UNITS].filter(u => u.length > 1 && !['ms', 'min', 'au', 'pc', 'ly', 'cd', 'lm', 'rad', 'deg', 'bar', 'atm', 'yr'].includes(u)).concat(['m/s']));
 const ELEMENTS = new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pt Au Hg Tl Pb Bi Po Rn Ra U Pu'.split(' '));
 const UPRIGHT_WORDS = new Set('pH pKa pOH max min const avg rms tot net eff ext int sup inf lim mod Re Im Ma Nu Pr Sc'.split(' '));
@@ -175,7 +177,7 @@ const TOK = new RegExp([
   /(?<ion>(?:[A-Z][a-z]?\d*){1,6}(?:\^?\d{0,2}[+\-−](?![\w(+\-])))/.source,    // Ca2+, SO4^2-, Na+, Cl-
   /(?<num>(?:\d+\.?\d*|\.\d+)(?:[eE][+\-−]?\d+)?)/.source,
   /(?<word>[A-Za-zα-ωΑ-ΩϑϕϵℓÅµ∂∇ΔΣΠ][A-Za-z0-9α-ωΑ-ΩϑϕϵµΔ₀-₉ᵢⱼₐₑₒₓₙₘᵧₕₖₗₚₛₜᵣᵤᵥ]*'*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]*)/.source,
-  /(?<op>\*\*|<=>|<->|<=|>=|!=|==|->|=>|<-|~=|\+\/-|\+-|<<|>>|[-−+*\/^=<>~×·÷±∓≤≥≠≈∝→⇒⇌↔←≡≪≫_√∛!%°′])/.source,
+  /(?<op>\*\*|<=>|<->|<=|>=|!=|==|->|=>|<-|~=|\+\/-|\+-|<<|>>|[-−+*\/^=<>~×·÷±∓≤≥≠≈∝→⇒⇌↔←≡≪≫_√∛!%‰°′])/.source,
   /(?<tex>\\[A-Za-z]+|\\.)/.source,
   /(?<open>[(\[{])/.source, /(?<close>[)\]}])/.source, /(?<bar>\|)/.source, /(?<comma>,)/.source,
   /(?<ws>\s+)/.source, /(?<other>[\s\S])/.source].join('|'), 'gu');
@@ -258,6 +260,7 @@ function findSpans(T) {
     if (v === '^' || v === '**') { if (operandL(L) && operandR(R) && !sp) anchor[i] = true; }
     else if (v === '_') { const b = T[L]; if (b && b.k === 'word' && !sp && !spR && T[R] && (T[R].k === 'word' || T[R].k === 'num' || T[R].k === 'open') && (splitWord(b.v).w.length <= 3 || GREEK[b.v])) anchor[i] = true; }
     else if (v === '*' || v === '×' || v === '÷') { if (operandL(L) && operandR(R) && sp === spR && (v !== '*' || !sp || mathyL(L) || mathyR(R))) anchor[i] = true; }
+    else if (v === '/' && T[L] && T[L].k === 'op' && /^[%‰]$/.test(T[L].v) && !sp && !spR && T[R] && T[R].k === 'word' && (UNITS.has(T[R].v) || /^°[CFK]$/.test(T[R].v))) { /* %/K, ‰/°C: a unit, upright */ }
     else if (v === '/') { const date = T[L] && T[R] && T[L].k === 'num' && T[R].k === 'num' && ((T[R + 1] && T[R + 1].v === '/' && tight(R + 1)) || (T[L - 1] && T[L - 1].v === '/' && tight(L)) || /^0\d/.test(T[R].v) || /^\d{4}$/.test(T[L].v));
       if (mathyL(L) && mathyR(R) && sp === spR && !date) anchor[i] = true;
       else if (T[L] && T[L].k === 'word' && T[R] && T[R].k === 'word' && !sp && !spR && UNITS.has(T[L].v) && UNITS.has(T[R].v)) anchor[i] = true;
@@ -790,7 +793,7 @@ export function typeset(node, s, target) {
   return mathJax(node);
 }
 function mathJax(node) {
-  const go = () => window.MathJax.typesetPromise([node]).catch(() => {});
+  const go = () => window.MathJax.typesetPromise([].concat(node)).catch(() => {});   // one node or a list
   if (window.MathJax && window.MathJax.typesetPromise) return go();
   return new Promise(r => { const iv = setInterval(() => { if (window.MathJax && window.MathJax.typesetPromise) { clearInterval(iv); go().then(r); } }, 300); setTimeout(() => { clearInterval(iv); r(); }, 15000); });
 }

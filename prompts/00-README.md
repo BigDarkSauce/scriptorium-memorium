@@ -8,7 +8,9 @@ Order of work (the full recipe, with checklists, is in `../docs/PROTOCOL.md` →
 3. `07-fill-gaps.md`: only when the coverage check finds a missing or coarse subsection: a small call with just that subsection's text.
 3b. `08-repair-steps.md`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. `09-figures.md`: only for paragraphs and teaching boxes that still lack a figure.
-4. `03-author-diorama.md`: one call per 3D scene the chain asked for (`{"type":"scene","request":...}`).
+4. `10-didactic-plan.md`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with `node tools/verify-chain.mjs plan.json`.
+4b. `03-author-diorama.md`: one call per 3D scene the chain asked for (`{"type":"scene","request":...}`), built from the plan (paste the plan into the request's "plan").
+4c. `11-self-critique.md`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
 5. `04-edit-diorama.md`: change an existing diorama.
 6. `05-sub-scroll.md`: expand one step into a detailed sub-scroll.
 7. `06-whole-room.md`: everything in one answer (for AIs with large outputs).

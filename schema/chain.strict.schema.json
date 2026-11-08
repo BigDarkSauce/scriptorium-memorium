@@ -194,6 +194,16 @@
             "pov",
             "medium"
           ]
+        },
+        "cameraMode": {
+          "enum": [
+            "global",
+            "object",
+            "component",
+            "mechanism",
+            "frame"
+          ],
+          "description": "the explanatory level of the beat: global (wide) | object (medium) | component (push) | mechanism (static, holds) | frame (POV)"
         }
       }
     },
@@ -223,6 +233,9 @@
           "items": {
             "$ref": "#/$defs/lesson"
           }
+        },
+        "plan": {
+          "$ref": "#/$defs/plan"
         }
       },
       "allOf": [
@@ -393,6 +406,224 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/demo"
+          }
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "required": [
+        "stage",
+        "technique",
+        "cameraMode",
+        "purpose",
+        "answers"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "curiosity",
+            "orientation",
+            "decomposition",
+            "inspection",
+            "mechanism",
+            "intuition",
+            "reconstruction",
+            "understanding"
+          ],
+          "description": "Jared Owen's explanatory sequence, used as a planning algorithm"
+        },
+        "technique": {
+          "enum": [
+            "establish",
+            "explode",
+            "assemble",
+            "inspect",
+            "section",
+            "peel",
+            "isolate",
+            "chain",
+            "zoom",
+            "scaleTo",
+            "compare",
+            "progression",
+            "track",
+            "pov",
+            "analogy",
+            "answer"
+          ],
+          "description": "an operation of the visual grammar (js/dio/grammar.js), by name"
+        },
+        "cameraMode": {
+          "enum": [
+            "global",
+            "object",
+            "component",
+            "mechanism",
+            "frame"
+          ]
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 4
+        },
+        "answers": {
+          "type": "string",
+          "minLength": 4
+        },
+        "opens": {
+          "type": "string"
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lesson": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "motion": {
+          "type": "object",
+          "properties": {
+            "explanatory": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "background": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "which motion explains, and which only makes the scene alive"
+        },
+        "sub": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/beat"
+          },
+          "description": "the sequence again, inside this beat (recursive)"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "description": "the didactic plan written before the demo (docs/PEDAGOGY.md); checked by tools/verify-chain.mjs",
+      "required": [
+        "question",
+        "knowledgeKind",
+        "sequence",
+        "comprehensionCheck"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 5
+        },
+        "knowledgeKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "structural",
+                "internal",
+                "causal",
+                "scale",
+                "history",
+                "pathology",
+                "movement",
+                "perspective"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "structural",
+                  "internal",
+                  "causal",
+                  "scale",
+                  "history",
+                  "pathology",
+                  "movement",
+                  "perspective"
+                ]
+              }
+            }
+          ]
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "sequence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/beat"
+          }
+        },
+        "analogy": {
+          "type": "object",
+          "required": [
+            "familiar",
+            "limit"
+          ],
+          "properties": {
+            "familiar": {
+              "type": "string"
+            },
+            "maps": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "string"
+            }
+          }
+        },
+        "comprehensionCheck": {
+          "type": "object",
+          "required": [
+            "explainBack",
+            "misconceptionToAvoid"
+          ],
+          "properties": {
+            "explainBack": {
+              "type": "string",
+              "minLength": 5
+            },
+            "misconceptionToAvoid": {
+              "type": "string",
+              "minLength": 3
+            },
+            "answer": {
+              "type": "string"
+            }
           }
         }
       }

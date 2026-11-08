@@ -11,7 +11,7 @@
 // through the copy/paste relay and the later stages run without AI: deterministic fixes, figures built from the steps,
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
 import { askJSON, aiAvailable, imageLimit } from './claude.js';
-import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS } from './prompts.js';
+import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan } from './prompts.js';
 import { evidenceTools } from './evidence.js';
 import { partKey, cached } from '../store.js';
 import { validateFigure, figureSlots, setSlotFigure, autoFigure } from '../room/figspec.js';
@@ -141,17 +141,47 @@ export function validScene(s) {
   if (!s.bodies.some(b => b.role === 'actor') && !s.code) return 'no actor';
   return '';
 }
-// Author one scene request in place: full prompt, then a simpler one, then a fallback. Returns how it was made.
+// The didactic plan (docs/PEDAGOGY.md): a short storyboard written BEFORE the scene, checked by checkPlan; one retry with
+// the faults named. Small and tool-free (about 1.5k tokens out); null when there is no AI or it cannot produce a valid plan.
+export async function planDemo(ctx, st, d, context, o = {}) {
+  if (d.plan) return d.plan; let issues = '';
+  for (let k = 0; k < 2; k++) {
+    check(o.signal); o.onStatus && o.onStatus(`Planning the explanation: diorama “${d.title || st.title}”${k ? ' (second try)' : ''}…`);
+    try { const p = await ask(planPrompt({ ...d, issues }, context), { ...o, tools: false, writing: 'Planning the explanation' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
+      const faults = checkPlan(plan).filter(x => x.level === 'fault'); if (!faults.length) return plan; issues = faults.slice(0, 6).map(x => x.issue).join('; ');
+    } catch (e) { if (e && e.code === 'cancelled') throw e; return null; }
+  }
+  return null;
+}
+// The self-critique: could a newcomer explain the concept after these lessons (weighed above "is it attractive")? A short,
+// tool-free call that may only patch lesson texts; the deterministic plan check runs first and is stored with it.
+export async function critiqueDemo(s, plan, o = {}) {
+  const names = (s.bodies || []).flatMap(b => [b.id, b.name, b.label].filter(Boolean)), local = checkPlan(plan, s.lessons || [], names);
+  s.critique = { local: local.length, faults: local.filter(x => x.level === 'fault').map(x => x.issue).slice(0, 8) };
+  try {
+    check(o.signal); o.onStatus && o.onStatus('Checking the explanation: could a newcomer explain it after watching?');
+    const ans = await ask(critiquePrompt(plan, s), { ...o, tools: false, writing: 'Checking the explanation' }, 'Check this diorama in any AI');
+    if (!ans || typeof ans !== 'object') return s.critique;
+    Object.assign(s.critique, { canExplain: +ans.canExplain || 0, attractive: +ans.attractive || 0, verdict: ans.verdict === 'revise' ? 'revise' : 'pass', issues: (ans.issues || []).slice(0, 6).map(String) });
+    let n = 0; if (ans.verdict === 'revise' && Array.isArray(ans.patch)) ans.patch.forEach(P => { const l = P && (s.lessons || [])[+P.i]; if (!l) return; ['text', 'explain', 'explainBack'].forEach(k => { if (typeof P[k] === 'string' && P[k].trim().length > 8 && P[k].length < 1400) { l[k] = P[k].trim(); n++; } }); });
+    s.critique.patched = n;
+  } catch (e) { if (e && e.code === 'cancelled') throw e; s.critique.error = (e && (e.code || e.message)) || 'failed'; }
+  return s.critique;
+}
+// Author one scene request in place: plan → full prompt (from the plan) → self-critique; then a simpler one; then a fallback.
 export async function authorDemo(ctx, st, d, o = {}) {
   const context = `${st.title}: ${st.statement || ''}${st.answers ? ' | the step answers: ' + st.answers : ''}${st.opens ? ' | and opens: ' + st.opens : ''}`;
   let fail = '';
   if (o.auto !== false && aiAvailable()) {
+    const plan = o.plan === false ? null : await planDemo(ctx, st, d, context, o);
     for (const simple of [false, true]) {
       check(o.signal); o.onStatus && o.onStatus(`${simple ? 'Retrying, simpler' : 'Authoring'}: diorama “${d.title || st.title}” for ${st.id}…`);
       try {
-        const spec = await ask(authorPrompt({ ...d, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
+        const spec = await ask(authorPrompt({ ...d, plan: simple ? null : plan, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
         const s = spec && (spec.spec || spec); const why = validScene(s);
-        if (!why) { s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; s.purpose = s.purpose || d.purpose; s.request = d.request; s.authored = simple ? 'simple' : 'full'; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored; }
+        if (!why) { s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; s.purpose = s.purpose || d.purpose; s.request = d.request; s.authored = simple ? 'simple' : 'full';
+          if (plan) { s.plan = s.plan && s.plan.sequence ? s.plan : plan; if (!s.levels && plan.levels) s.levels = plan.levels; if (!simple) await critiqueDemo(s, s.plan, o); }
+          Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored; }
         fail = why;
       } catch (e) { if (e && e.code === 'cancelled') throw e; fail = (e && (e.code || e.message)) || 'failed'; }
     }

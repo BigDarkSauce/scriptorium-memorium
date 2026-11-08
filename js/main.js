@@ -16,6 +16,7 @@ import { groundChain } from './seeds-sources.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
 import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
+import { installBVH, BVH } from './gfx/bvh.js';
 
 const LIB_KEY = 'library.v3';
 class App {
@@ -90,11 +91,21 @@ class App {
     // example rooms saved before grounding existed get their verified sources and teaching fields once
     const b = this.lib && this.lib.books.find(x => x.id === id);
     // example rooms saved before the authored diorama lessons existed get them once (matched by demo type + title)
-    if (b && b.example && r.lessonsV !== 4) {
+    if (b && b.example && (r.lessonsV || 0) < 4) {
       const L = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
       walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) L.set(d.type + '|' + d.title, d.lessons); });
       walk(r.parts, d => { const l = L.get(d.type + '|' + d.title); if (l && !(d.lessons && d.lessons.length)) d.lessons = JSON.parse(JSON.stringify(l)); });
       r.lessonsV = 4; store.set('room:' + id, r);
+    }
+    // v5 (the explanatory grammar, js/dio/grammar.js): example demos whose lessons are still the authored ones (every title is
+    // a seed title, now or before v5) get the new lessons with their operations, the demo's levels and its didactic plan;
+    // lessons a learner or an AI has changed are kept
+    if (b && b.example && (r.lessonsV || 0) < 5) {
+      const OLD = new Set(['Heat the lake', 'Ride a parcel of air', 'Wind to the ridge', 'Over the crest', 'Calm air', 'Evening']), N = new Map(), walk = (o, f) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) return o.forEach(x => walk(x, f)); if (o.type && o.title) f(o); Object.values(o).forEach(x => walk(x, f)); };
+      walk(legacyScrolls(), d => { if (Array.isArray(d.lessons) && d.lessons.length) N.set(d.type + '|' + d.title, d); }); FLAGSHIPS.forEach(d => N.set(d.type + '|' + d.title, d));
+      walk(r.parts, d => { const n = N.get(d.type + '|' + d.title); if (!n || !Array.isArray(n.lessons)) return; const T = new Set(n.lessons.map(l => l.title));
+        if (!(d.lessons && d.lessons.length) || d.lessons.every(l => l && (T.has(l.title) || OLD.has(l.title)))) { d.lessons = JSON.parse(JSON.stringify(n.lessons)); if (n.plan) d.plan = JSON.parse(JSON.stringify(n.plan)); if (n.levels) d.levels = JSON.parse(JSON.stringify(n.levels)); } });
+      r.lessonsV = 5; store.set('room:' + id, r);
     }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
@@ -112,22 +123,29 @@ class App {
     return (this._sw = (this._sw || Promise.resolve()).then(run, run));
   }
   async _switch(make) {
-    const g = this.gfx.grade.uniforms.uFade;
-    // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
-    const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
-    if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
-    g.value = 1;
-    const old = this.mode;
-    if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
-    this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32;
-    this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true;
-    try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
-    // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
-    if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
-    // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
-    if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
-    this.gfx.resetAdapt();
-    await sleep(60); await fade(1, 0, 330); g.value = 0;
+    const g = this.gfx.grade.uniforms.uFade; this.switching = true;   // the switch owns the veil (uFade) until it has faded back in: a mode's own cut applies at once under it (director.js)
+    // the flag is always cleared (try/finally): left set by an exception, every later cut would apply without a dip; a switch
+    // that failed half-way also lifts the veil, so the screen is never left black
+    let done = false;
+    try {
+      // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
+      const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
+      if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
+      g.value = 1;
+      const old = this.mode;
+      if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
+      try { this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32; this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true; } catch (e) { console.warn(e); }   /* a reset that throws never skips opening the next mode */
+      try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
+      // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
+      if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
+      // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
+      if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
+      this.gfx.resetAdapt();
+      // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
+      // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
+      for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await sleep(60); await fade(1, 0, 330); g.value = 0; done = true;
+    } finally { this.switching = false; if (!done) g.value = 0; }
   }
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
   retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
@@ -151,7 +169,9 @@ class App {
     requestAnimationFrame(() => this.loop());
     const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
     if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)
+    this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
     if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
+    this.loopDt = 0;   // (an update driven by hand, outside this loop, steps by its own dt only)
     this.gfx.adapt(raw); this.gfx.render(dt, this.t);
     this.flushTrash();
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
@@ -338,5 +358,6 @@ Return {"format":"scriptorium-room/1","book":{"title":str,"pages":n},"room":{"pa
 App.prototype.addPdfDialog = function (opts = {}) { return openAddPdf(this, opts); };
 App.prototype.cancelJob = function (bookId) { try { cancelJobFor(bookId); } catch (e) { console.warn(e); } };   // removing a book stops its analysis (js/hub/hub.js removeBook)
 Hub.prototype.pickPDF = function (shelfId) { return openAddPdf(this.app, { hub: this, shelfId: shelfId || this.selShelf || null }); };
-const app = new App(); window.__scriptorium = app;
+installBVH();   // accelerated raycasts (three-mesh-bvh); off with ?bvh=0, falls back to three's own raycast if it cannot load
+const app = new App(); window.__scriptorium = app; app.bvh = BVH;
 app.boot().catch(e => { console.error(e); app.fatal('Could not start: ' + e.message); });

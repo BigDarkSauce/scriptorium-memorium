@@ -66,6 +66,8 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
    instead of running under the panel or ending in an ellipsis. Phones: the panel stands above it, so it takes the full width. */
 .hint { position: absolute; left: calc(var(--gut) + max(0px, env(safe-area-inset-left,0px))); bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); padding: 8px 16px; border-radius: 18px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: normal; text-wrap: balance; width: max-content; max-width: calc(100vw - 3 * var(--gut) - 300px); pointer-events: none !important; }
 @media (max-width: 700px) { .hint { max-width: calc(100vw - 2 * var(--gut)); font-size: 12.5px; padding: 7px 14px; } }
+/* any modal open (Add PDF, a confirm, the lightbox…): the hint steps away instead of being cut by the dialog's edge */
+body:has(.modal-veil) .hint { opacity: 0 !important; visibility: hidden; }
 /* the hall's cinematic opening of a scroll (hub.js openScroll): the interface fades out and comes back on cancel */
 .hub-ui > *, .sound-btn, .gfx-btn { transition: opacity .45s ease; }
 body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, body.cine .gfx-card { opacity: 0 !important; pointer-events: none !important; }
@@ -348,7 +350,7 @@ select option:checked { background: #6b5124; color: #fff4d6; }
 .gfx-opt.on { background: radial-gradient(120% 100% at 50% 0%, rgba(255,217,138,.4), rgba(255,217,138,.14)); color: var(--brass-hi); }
 .gfx-opt.on::before, .gfx-opt.on + .gfx-opt::before { opacity: 0; }
 .gfx-note { margin: 9px 2px 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
-body:has(.reader:not([hidden])) .gfx-btn, body:has(.reader:not([hidden])) .gfx-card { display: none; }
+body:has(.reader:not([hidden])) .gfx-btn, body:has(.reader:not([hidden])) .gfx-card, body:has(.reader:not([hidden])) .nav-box { display: none; }   /* the walk / speed box would sit under the sheet */
 /* documentary framing during a step: compact readouts */
 .dio-reads.compact { width: 240px; }
 .dio-reads.compact .reads { grid-template-columns: 1fr; }
@@ -496,7 +498,7 @@ i { font-style: italic; }
 .dir-scale i { display: block; height: 6px; border: 2px solid var(--ink); border-top: 0; box-shadow: 0 2px 3px rgba(0,0,0,.6); transition: width .15s linear; }
 .dir-scale.flash span { animation: scale-flash .9s var(--ease); }
 @keyframes scale-flash { 0% { color: #ffd98a; transform: scale(1.25); } 100% { color: var(--ink); transform: none; } }
-.dir-chip { position: absolute; left: 50%; top: calc(74px + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(18,14,10,.82); border: 1px solid rgba(255,217,138,.45); color: var(--ink); font: 13px var(--f-mono); white-space: nowrap; transition: opacity .6s var(--ease); }
+.dir-chip { position: absolute; left: 50%; top: calc(74px + var(--lv-shift, 0px) + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(18,14,10,.82); border: 1px solid rgba(255,217,138,.45); color: var(--ink); font: 13px var(--f-mono); white-space: nowrap; transition: opacity .6s var(--ease); }
 .dir-chip b { color: var(--brass); font-weight: 500; }
 .dir-chip.out { opacity: 0; }
 .dir-edge { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -13px 0 0 -13px; color: #ffd98a; filter: drop-shadow(0 0 4px rgba(0,0,0,.9)); }
@@ -526,7 +528,9 @@ i { font-style: italic; }
 }
 @media (max-width: 560px) {
   .dio-time { flex-wrap: wrap; row-gap: 4px; border-radius: 22px; right: calc(var(--gut) + env(safe-area-inset-right,0px)); justify-content: center; }
-  .dio-reads { bottom: calc(var(--gut) + 104px + env(safe-area-inset-bottom,0px)); max-height: calc(100vh - 300px); }
+  .dio-reads { bottom: calc(var(--gut) + 104px + env(safe-area-inset-bottom,0px)); max-height: calc(50vh - 132px); }
+  .dir-scale { bottom: auto; top: calc(66px + var(--lv-shift, 0px) + env(safe-area-inset-top,0px)); }   /* at the top: the bottom belongs to the time bar and the callout sheet */
+  .dio-reads.under-sheet { visibility: hidden; }   /* a callout sheet is up (director.js): it takes the readouts' place */   /* stays in the lower half: the open panel owns the upper half (polish gate, phone) */
   .pov-bar { bottom: calc(var(--gut) + 108px + env(safe-area-inset-bottom,0px)); }
   .dio-time .sep { display: none; }
   .nav-box { max-width: calc(100vw - 2 * var(--gut)); }
@@ -675,3 +679,32 @@ i { font-style: italic; }
 .fig-play { position: absolute; right: 6px; bottom: 6px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--vellum-edge); background: rgba(251,246,234,.92); color: var(--iron); font-size: 11px; padding: 0; }
 .quality .cov-note a { color: var(--lapis); cursor: pointer; }
 .reader .explain code, .reader .stmt code, .reader .intuition code, .reader .miscon code, .reader .check code, .reader .ce code, .reader dd code, .reader .example-card code, .reader .code-int code { font-family: var(--f-mono); font-size: .88em; background: rgba(90,60,30,.08); padding: 0 3px; border-radius: 3px; }
+
+/* progressive unfolding (reader.js computeFolds / applyFolds): the sheet ends in a rolled edge on a rod; pressing it
+   unrolls the next fold. The rest of the scroll stays rolled up (display: none, so it is neither read aloud nor tabbed). */
+.unf-hidden { display: none !important; }
+.fold-bar { position: relative; margin: 6px -22px 0; padding: 0 0 4px; display: grid; justify-items: center; gap: 6px; }
+.unroll { position: relative; display: block; width: 100%; min-height: 64px; padding: 0; border: 0; background: none; color: var(--iron); cursor: pointer; font: inherit; text-align: center; -webkit-tap-highlight-color: transparent; }
+.unroll-sheet { position: absolute; left: 22px; right: 22px; top: 0; height: 22px; background: linear-gradient(180deg, rgba(90,60,30,0), rgba(90,60,30,.14) 70%, rgba(60,36,14,.32)); border-radius: 0 0 50% 50% / 0 0 100% 100%; pointer-events: none; }
+.unroll-rod { position: absolute; left: 4px; right: 4px; top: 18px; height: 20px; border-radius: 10px; background: repeating-linear-gradient(180deg, rgba(255,255,255,.08) 0 2px, transparent 2px 9px), linear-gradient(180deg, #6b4526, #a87447 28%, #5a3720 60%, #2a170b); background-size: 100% 18px, 100% 100%; box-shadow: 0 5px 10px -4px rgba(40,20,5,.6), inset 0 -1px 0 rgba(255,220,160,.2); }
+.unroll-rod::before, .unroll-rod::after { content: ""; position: absolute; top: -4px; width: 26px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #f3dc98, #c49a45 45%, #6e5120 80%); }
+.unroll-rod::before { left: -10px; } .unroll-rod::after { right: -10px; }
+.unroll-label { position: relative; display: inline-flex; align-items: baseline; gap: 10px; margin-top: 42px; padding: 3px 12px; border-radius: 999px; font-family: var(--f-display); font-size: 16px; }
+.unroll-label b { font-weight: 400; letter-spacing: .02em; }
+.unroll-prog { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--iron-soft); }
+.unroll:hover .unroll-label, .unroll:focus-visible .unroll-label { background: rgba(255,255,255,.4); }
+.unroll:hover .unroll-rod { filter: brightness(1.12); }
+.unroll:focus-visible { outline: none; } .unroll:focus-visible .unroll-label { box-shadow: 0 0 0 2px var(--lapis); }
+.unroll:active .unroll-rod { transform: translateY(1px); }
+.unroll.end { cursor: default; min-height: 58px; } .unroll.end .unroll-label { margin-top: 40px; color: var(--iron-soft); }
+.fold-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 80%; }
+.fold-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(90,60,30,.22); } .fold-dots i.on { background: var(--rubric); }
+.fold-bar .roll-up { font-size: 13px; }
+.reader-menu { position: relative; margin-right: 6px; }
+.reader-menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 200px; display: grid; padding: 6px; border-radius: 10px; background: #f6eedb; border: 1px solid var(--vellum-edge); box-shadow: 0 12px 28px -10px rgba(40,25,10,.6); }
+.reader-menu-pop[hidden] { display: none; }
+.rm-kicker { padding: 4px 8px 6px; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--iron-soft); }
+.rm-item { text-align: left; padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: var(--iron); font: inherit; font-size: 14px; cursor: pointer; min-height: 36px; }
+.rm-item:hover:not([disabled]), .rm-item:focus-visible { background: rgba(90,60,30,.12); outline: none; }
+.rm-item[disabled] { opacity: .45; cursor: default; }
+@media (pointer: coarse) { .reader-menu-btn.ibtn.tiny { width: 36px; height: 36px; font-size: 16px; } .unroll { min-height: 72px; } }

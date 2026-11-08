@@ -121,7 +121,7 @@ if (!STATS_ONLY) try {
   // breakdown: exact N spreads over the parts; then back to complete for the run
   await page.locator('input[name=aplevel][value=exact]').check();
   await page.fill('.ap-level input[type=number]', '70'); await page.locator('.ap-level input[type=number]').dispatchEvent('input');
-  const alloc = await page.locator('.ap-level.on .dim.small').last().innerText();
+  const alloc = await page.locator('.ap-level.on .ap-alloc').last().innerText();   // (the allocation line under the exact level)
   await shot('04-dialog-breakdown.png', '.addpdf');
   await page.locator('input[name=aplevel][value=complete]').check();
   await page.click('.addpdf [data-next]');
@@ -208,7 +208,9 @@ try {
     if (window.__R) window.__R.el.remove(); const room = { book, data: D, partIndex: p => D.parts.filter(x => !x.subOf).indexOf(p), save() { }, refreshStation() { }, onReaderClosed() { }, addPart() { } };
     window.__R = new Reader(W, room, D.parts[k]); return D.parts[k].title; }, [bookId, k]);
   await open(0);
-  await page.waitForSelector('.reader .step', { timeout: 60000 }); await page.waitForTimeout(4000);
+  // the reader unfolds a scroll progressively: the checks below read the whole scroll, so it is unfolded first (Unfold all)
+  const unfold = () => page.evaluate(() => window.__R && window.__R.unfoldAll && window.__R.unfoldAll());
+  await page.waitForSelector('.reader .step', { timeout: 60000 }); await unfold(); await page.waitForTimeout(4000);
   const D = await page.evaluate(() => { const r = document.querySelector('.reader'); const q = s => r.querySelectorAll(s).length; return { steps: q('.step'), explainFigs: q('.explain .fig svg'), code: q('.code-step'), codeLines: q('.code-lines tr'), examples: q('.example-card'), added: q('.example-card.added'), picture: q('.intuition .fig'), mistake: q('.miscon .fig'), checkBefore: q('.check .ans .fig'), pdfFigs: q('.pdf-fig'), refs: q('.fig-refs'), quality: q('.quality'), bad: q('.fig-bad'), demos: q('.demo-wrap'), text: (r.innerText.match(/.{0,20}(\bNaN\b|\bundefined\b|\[object Object\]).{0,20}/) || [''])[0] }; });
   await shot('07-reader-sheet01.png');
   await page.locator('.reader .code-step').first().scrollIntoViewIfNeeded(); await page.waitForTimeout(500);
@@ -219,11 +221,11 @@ try {
   await page.locator('.reader .quality summary').first().click().catch(() => {}); await page.locator('.reader .quality').first().scrollIntoViewIfNeeded().catch(() => {}); await page.waitForTimeout(300);
   await shot('10-quality-panel.png', '.reader .quality');
   // sheet 05 (d p q r): distribution figures; sheet 07: the animated Holling plot and the diorama slot
-  await open(4); await page.waitForSelector('.reader .fig-distribution', { timeout: 30000 }); await page.waitForTimeout(3000);
+  await open(4); await page.waitForSelector('.reader .fig-distribution', { timeout: 30000, state: 'attached' }); await unfold(); await page.waitForTimeout(3000);
   const dist = await page.locator('.reader .fig-distribution').count();
   await page.locator('.reader .fig-distribution').nth(1).scrollIntoViewIfNeeded(); await page.waitForTimeout(600);
   await shot('11-reader-dpqr.png');
-  await open(6); await page.waitForSelector('.reader .fig-plot', { timeout: 30000 }); await page.waitForTimeout(2500);
+  await open(6); await page.waitForSelector('.reader .fig-plot', { timeout: 30000, state: 'attached' }); await unfold(); await page.waitForTimeout(2500);
   const H = await page.evaluate(() => ({ plots: document.querySelectorAll('.reader .fig-plot').length, animated: document.querySelectorAll('.reader .fig.animated').length, cards: document.querySelectorAll('.reader .sketch-card').length, empty: document.querySelectorAll('.reader .sketch-empty').length }));
   await page.locator('.reader .fig-plot').first().scrollIntoViewIfNeeded(); await page.waitForTimeout(600);
   await shot('12-reader-holling.png');

@@ -3,6 +3,9 @@
 //
 // RUN
 //   node tools/verify-chain.mjs chain.json [sections.json] [--json] [--loose]
+//   node tools/verify-chain.mjs scene.json          one scene spec (type "scene"): its lessons' cues and its didactic plan
+//   node tools/verify-chain.mjs plan.json           one didactic plan ({"question","knowledgeKind","sequence",…})
+//   node tools/verify-chain.mjs --builtins          the didactic plans of the built-in models (js/dio/plans.js)
 //     chain.json     one part's chain (schema/chain.schema.json), or a whole room file (scriptorium-room/1: every
 //                    part with an "analysis" is checked against that part's "subsections" and "figureIndex")
 //     sections.json  optional: the part's subsections, as the app caches them (Import / export, or partSections()):
@@ -29,6 +32,12 @@
 //              model's actors or the scene's bodies, enums and track points valid (faults); a chain link the lesson's
 //              text never names, a zoom without the diorama's "scale", and directed-motion wording ("travels to",
 //              "seeks", "finds") in a POV of a micro or diffusive scene are warnings
+//   plans      checkPlan(): a demo's didactic "plan" (docs/PEDAGOGY.md): the question, the knowledge kind, Owen stages in order
+//              (recursion through "sub"), every beat with a purpose, the sub-question it answers, a known operation and a
+//              camera mode; no inside (section, peel, inspect, zoom) before a global or object beat; every mechanism beat says
+//              which motion explains and which is background; the analogy names its limit; the comprehension check is
+//              there (faults). An operation that does not serve the plan's kind of knowledge, stages out of order, and a
+//              lesson using an operation no beat names are warnings.
 // EXIT CODE: 0 = passes, 1 = at least one fault (numbers not found in the text are warnings only), 2 = usage error.
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -37,7 +46,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const P = await import(pathToFileURL(join(ROOT, 'js/ai/prompts.js')).href);
 const args = process.argv.slice(2), flags = new Set(args.filter(a => a.startsWith('--'))), files = args.filter(a => !a.startsWith('--'));
-if (!files.length) { console.error('usage: node tools/verify-chain.mjs chain.json [sections.json] [--json] [--loose]'); process.exit(2); }
+if (!files.length && !flags.has('--builtins')) { console.error('usage: node tools/verify-chain.mjs chain.json [sections.json] [--json] [--loose]'); process.exit(2); }
 const readJSON = f => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch (e) { console.error(`${f}: ${e.message}`); process.exit(2); } };
 
 // ---------------------------------------------------------------- a small draft 2020-12 validator (the subset the schemas use)
@@ -113,13 +122,32 @@ function check(A, sections, figures, label) {
   (rep.demoIssues || []).forEach(d => F('demos', `${d.step} demo ${d.demo + 1} (${d.type}): ${d.issue}`));
   // demo data provenance: outside data needs a source
   (P.checkCues ? P.checkCues(A) : []).forEach(c => (c.level === 'fault' ? F : W)('cues', `${c.step} demo ${c.demo + 1} (${c.type}) lesson ${c.lesson}: ${c.issue}`));
+  (P.checkPlans ? P.checkPlans(A) : []).forEach(c => (c.level === 'fault' ? F : W)('plan', `${c.step} demo ${c.demo + 1} (${c.type}): ${c.issue}`));
   chain.forEach(st => (st.demos || []).forEach((d, i) => { const ex = Array.isArray(d.extra) ? d.extra : []; if (ex.some(e => !e || !e.source || !(e.source.title || e.source.doi || e.source.url))) F('demos', `${st.id} demo ${i + 1}: outside data ("extra") without a source`); }));
   out.pass = !out.faults.length;
   return out;
 }
 
 // ---------------------------------------------------------------- input
+// a scene spec, a lone plan, or the built-in plans: the cue and plan checks only
+function checkAlone(label, plan, lessons, names, scene) {
+  const out = { part: label, faults: [], warnings: [] }, F = (...a) => out.faults.push(a.join(' ')), W = (...a) => out.warnings.push(a.join(' '));
+  if (scene) { if (!Array.isArray(scene.lessons) || scene.lessons.length < 3 || scene.lessons.length > 6) W('lessons', `${(scene.lessons || []).length} lessons (3–6)`); P.checkCues({ chain: [{ id: 'S1', demos: [scene] }] }).forEach(c => (c.level === 'fault' ? F : W)('cues', `lesson ${c.lesson}: ${c.issue}`)); (scene.lessons || []).forEach((l, k) => { if (k && l.question && scene.lessons[k - 1].opens && P.similar(l.question, scene.lessons[k - 1].opens) < .6) W('thread', `lesson ${k + 1} asks "${l.question}" but lesson ${k} opens "${scene.lessons[k - 1].opens}"`); }); }
+  if (plan) P.checkPlan(plan, lessons, names).forEach(c => (c.level === 'fault' ? F : W)('plan', c.issue)); else W('plan', 'no didactic "plan" (docs/PEDAGOGY.md)');
+  out.pass = !out.faults.length; return out;
+}
+function printAlone(results) {
+  if (flags.has('--json')) console.log(JSON.stringify(results, null, 1));
+  else results.forEach(r => { console.log(`\n${r.pass ? 'PASS' : 'FAIL'}  ${r.part}`); r.faults.forEach(f => console.log('  ✗ ' + f)); r.warnings.forEach(w => console.log('  ! ' + w)); if (!r.faults.length && !r.warnings.length) console.log('  ✓ no faults'); });
+  process.exit(results.every(r => r.pass) ? 0 : 1);
+}
+if (flags.has('--builtins')) {
+  const { PLANS } = await import(pathToFileURL(join(ROOT, 'js/dio/plans.js')).href);
+  printAlone(Object.entries(PLANS).map(([k, plan]) => checkAlone('built-in ' + k, plan, null, (P.BUILTIN_MODELS[k] || {}).actors || null, null)));
+}
 const doc = readJSON(files[0]);
+if (doc && (doc.type === 'scene' || Array.isArray(doc.bodies)) && !Array.isArray(doc.chain)) printAlone([checkAlone(doc.title || files[0], doc.plan || null, doc.lessons || null, (doc.bodies || []).flatMap(b => [b.id, b.name, b.label].filter(Boolean)), doc)]);
+if (doc && Array.isArray(doc.sequence) && !Array.isArray(doc.chain)) printAlone([checkAlone(files[0], doc, null, null, null)]);
 let side = files[1] ? readJSON(files[1]) : null, sideSecs = null, sideFigs = null;
 if (side) { if (Array.isArray(side)) sideSecs = side; else { sideSecs = side.sections || null; sideFigs = side.figures || side.figureIndex || null; } }
 const jobs = [];

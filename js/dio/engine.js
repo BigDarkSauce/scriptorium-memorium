@@ -18,6 +18,7 @@ import { evidenceTools } from '../ai/evidence.js';
 import { Director } from './director.js';
 import { Cues, cloneMat } from './focus.js';
 import { Inset } from './inset.js';
+import { Ops } from './grammar.js';
 import { DIO } from './models.js';
 const PREFS_KEY = 'scriptorium.view';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
@@ -46,6 +47,7 @@ export class DioramaView {
     this.buildHUD();
     this.dir = new Director(this, this.ui);
     this.cues = new Cues(this);   // chain / isolate / peel cues and the focus mask (js/dio/focus.js)
+    this.ops = new Ops(this);   // the explanatory operations: explode, assemble, inspect, compare, progression, scaleTo, levels (js/dio/grammar.js; nothing is built until one runs)
     this.inset = new Inset(this);   // S10: the passive "you are here" overview during zooms, rides and deep close-ups (js/dio/inset.js)
     this.ds.listeners.event.push(ev => this.onEvent(ev));
     this.gfx.setView(this.scene, this.camera);
@@ -116,11 +118,15 @@ export class DioramaView {
   finishTour() {
     if (this.stage !== 'tour') return; this.stage = 'explore';
     this.ds.actors.forEach(a => this.ensurePin(a, false));
-    const k = this.ds.overviewKey(); this.flyTo(k.target, this.ds.orb.r * .95);
+    this.showExplore();
+    // the intro's last flight lands on the opening view itself (framed in the free part of the screen, the panels now laid
+    // out), so the re-frame after it has nothing left to change: no cut through a dip right after the intro
+    { const k = this.dir.wideKey(), c = this.camera; this.fly = { from: { p: c.position.clone(), t: this.controls.target.clone() }, to: { p: k.pos.clone(), t: k.target.clone() }, k: 0, dur: 1.7, lift: Math.min(2, c.position.distanceTo(k.pos) * .15) }; this.controls.enabled = false; }
     this.coach.innerHTML = ''; this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'All bodies introduced' }), el('div', { class: 'coach-text', text: 'Instructions are now on the left' })]));
     setTimeout(() => { if (this.stage === 'explore') this.coach.hidden = true; }, 3200);
-    this.showExplore();
   }
+  // the opening view is still being settled (the re-frame into the free frame, or its cut): the mode switch keeps its veil up
+  framing() { return this.stage === 'explore' && (!!this._wideFix || !!(this.dir && this.dir.dip)); }
   flyTo(target, dist, dur = 1.7, swingDeg = 0) {
     const c = this.camera, from = { p: c.position.clone(), t: this.controls.target.clone() };
     const dir = c.position.clone().sub(this.controls.target).normalize().lerp(V3(.55, .5, .7).normalize(), .35).normalize();
@@ -162,14 +168,18 @@ export class DioramaView {
         el('div', { class: 'lesson-text', html: mathHTML(l.text || '') }),
         done && l.explain ? el('div', { class: 'lesson-explain', html: mathHTML(l.explain) }) : null,
         done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + mathHTML(l.opens) }) : null,
+        done && l.explainBack ? el('div', { class: 'lesson-explain', html: '<b>Say it back:</b> ' + mathHTML(l.explainBack) }) : null,
         !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : 'Play this step', onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
       box.append(card); if (!done) requestAnimationFrame(() => card.classList.add('in'));
     });
     if (this.lessonI >= L.length) box.append(el('div', { class: 'lesson-all', text: 'All instructions complete. Change any variable or object and explore freely.' }));
+    // the comprehension check of the demo's didactic plan: can the learner now explain it? (weighed above "was it attractive")
+    { const P = this.spec.plan || (DIO[this.spec.type] || {}).plan, K = P && P.comprehensionCheck; if (K && K.explainBack && this.lessonI >= L.length) box.append(el('div', { class: 'lesson-explain lesson-check' }, [el('b', { text: 'Explain it back' }), el('div', { html: mathHTML(K.explainBack) }), P.question ? el('div', { class: 'dim small', html: 'It answers: ' + mathHTML(P.question) }) : null, K.misconceptionToAvoid ? el('details', {}, [el('summary', { text: 'A common wrong answer' }), el('div', { html: mathHTML(K.misconceptionToAvoid) })]) : null, K.answer ? el('details', {}, [el('summary', { text: 'Compare with' }), el('div', { html: mathHTML(K.answer) })]) : null])); }
     typeset(box);
   }
   runLesson(i, replay) {
     const l = this.lessons()[i]; if (!l) return;
+    this.ops.reset(); if (this.dir.cinematic && l.compare && typeof l.compare === 'object') this.ops.startCompare(l.compare, l);   // a comparison builds its second state before the step's own values are set
     if (l.reset !== false && i === this.lessonI) { /* keep state continuous */ }
     if (l.set) { for (const k in l.set) this.setParam(k, +l.set[k], true); this.renderParams(); }
     const fa = l.focus ? this.ds.actors.find(a => a.id === l.focus || a.name === l.focus || a.name.toLowerCase().includes(String(l.focus).toLowerCase())) : null;
@@ -178,15 +188,19 @@ export class DioramaView {
     this.dir.clearCaption();
     // cinematic: the instruction is read first (the model waits), then the step plays; without a subject it shows as a caption
     const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, lt = String(l.text || '').toLowerCase(), fk = Object.keys(flows).find(k => lt.includes(k));
-    const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : l.track === 'actor' ? host : null;
     const cue = this.dir.cinematic ? this.lessonCues(l, host) : {}; this.stepCue = cue;
+    // the beat's camera mode (Owen's five): global = the whole environment (wide), object = one object (medium), component =
+    // a subsystem (push in), mechanism = a static medium that holds while the parts interact, frame = ride the subject (POV)
+    const mode = ['global', 'object', 'component', 'mechanism', 'frame'].includes(l.cameraMode) ? l.cameraMode : null; this.dir.mode = this.dir.cinematic ? mode : null;
+    const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : l.track === 'actor' || (mode === 'frame' && !cue.track && !cue.zoom) ? host : null;
     if (this.pov && this.pov.auto) this.exitPOV(false, true);
     if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
-    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : undefined), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null, extra: (l.chain || []).map(c => this.actorByName(c && (c.a || c))).filter(a => a && a !== host) });   // extra: the chain's links are framed with the subject
+    if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : { global: 'wide', object: 'medium', component: 'push', mechanism: 'medium' }[mode]), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => this.ops.noAnchor() ? null : host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null, extra: (l.chain || []).map(c => this.actorByName(c && (c.a || c))).filter(a => a && a !== host) });   // extra: the chain's links are framed with the subject
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     if (cue.isolate) this.cues.setIsolate(cue.isolate);
     if (cue.chain) this.cues.startChain(cue.chain, { pace: l.chainPace, on: l.chainOn });
-    if (cue.peel) this.cues.startPeel(cue.peel, host);
+    if (cue.peel) this.cues.startPeel(cue.peel, cue.peel.layers.some(a => host && a.obj === host.obj) ? null : host);   // a section of the subject itself cuts the subject
+    if (this.dir.cinematic) this.ops.start(cue, l, host);
     this.ds.playing = true; this.syncTimeUI();
     const until = String(l.until || ''); this.running = i; this.runT = 0; this.runDur = +l.run || (until ? 30 : 6); this.runUntil = until.startsWith('event:') ? until.slice(6).toLowerCase() : null; this.runReplay = !!replay;
     const bar = this.lessonBox.querySelectorAll('.lesson')[i]; this.runBar = bar && bar.querySelector('.lesson-bar i');
@@ -196,8 +210,8 @@ export class DioramaView {
     const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV(false, true);
     const unfold = () => { if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; this.fold.textContent = '‹'; } this.readFocus = null; this.readPanel.classList.remove('compact'); };
     const l = this.lessons()[i]; const fa = this.lessonActor;
-    const cue = this.stepCue || {}; this.stepCue = null; this.cues.endStep(); const back = !!(cue.zoom && cue.zoom.back && this.dir.zoomBack()); if (cue.zoom && !back) this.dir.endZoomHud();   // zoom back: the generalising pull-out
-    if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', noShot: back, onEnd: unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
+    const cue = this.stepCue || {}; this.stepCue = null; this.cues.endStep(); this.ops.endStep(); this.dir.mode = null; const back = !!(cue.zoom && cue.zoom.back && this.dir.zoomBack()), keepZ = !!(cue.zoom && !back && l && l.explain && this.dir.cinematic && this.dir.zoom); if (cue.zoom && !back && !keepZ) this.dir.endZoomHud();   // keepZ: the explanation is read at the zoom's view, still following its subject (a molecule flies off: a static medium would frame empty space)   // zoom back: the generalising pull-out
+    if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', noShot: back || keepZ, onEnd: keepZ ? () => { this.dir.endZoomHud(); unfold(); } : unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
     if (!(l && l.explain && this.dir.cinematic)) unfold();
     if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
     this.renderLessons();
@@ -264,7 +278,7 @@ export class DioramaView {
     const others = this.ds.actors, i = others.indexOf(a);
     this.povBar.innerHTML = ''; this.povBar.hidden = false;
     this.povBar.append(el('button', { class: 'ibtn', 'aria-label': 'Previous object', text: '‹', onclick: () => this.setPOV(others[(i - 1 + others.length) % others.length]) }),
-      el('span', { html: `Seeing as <b>${esc(a.name.split(' · ')[0])}</b> · drag to look · Esc to leave` }),
+      el('span', { html: `Seeing as <b>${esc(a.name.split(' · ')[0])}</b> · drag to look · Esc to leave`, title: `Seeing as ${a.name.split(' · ')[0]} · drag to look · Esc to leave` }),   // (cut with an ellipsis on a phone: the whole line is its tooltip)
       el('button', { class: 'ibtn', 'aria-label': 'Next object', text: '›', onclick: () => this.setPOV(others[(i + 1) % others.length]) }),
       el('button', { class: 'btn small', text: 'Leave', onclick: () => this.exitPOV(false, true) }));
   }
@@ -347,6 +361,21 @@ export class DioramaView {
     if (out.isolate && out.chain) out.isolate = [...new Set(out.isolate.concat(out.chain.map(x => x.a)))];   // the links the front travels are never dimmed
     if (l.peel && Array.isArray(l.peel.layers)) { const layers = l.peel.layers.map(A).filter(Boolean); if (layers.length) out.peel = Object.assign({}, l.peel, { layers }); }
     if (l.zoom && typeof l.zoom === 'object') { const to = l.zoom.to ? A(l.zoom.to) : host; if (to) out.zoom = Object.assign({}, l.zoom, { to, stations: (l.zoom.stations || []).map(x => typeof x === 'string' ? { at: x } : x || {}).map(x => ({ a: A(x.at || x.a), hold: x.hold })).filter(x => x.a) }); }
+    // the explanatory operations (js/dio/grammar.js); actors are matched like "focus", and a scene's decor bodies by id
+    const B = n => this.ops.actor(n), list = (x, f) => (Array.isArray(x) ? x : []).map(f).filter(Boolean);
+    if (l.explode && typeof l.explode === 'object') { const parts = list(l.explode.parts, B); if (parts.length >= 2) out.explode = Object.assign({}, l.explode, { parts }); }
+    if (l.assemble && typeof l.assemble === 'object') { const parts = list(l.assemble.parts, x => { const p = x && typeof x === 'object' ? { a: B(x.a || x.at || x.name), caption: x.caption, label: x.label } : { a: B(x) }; return p.a ? p : null; }); if (parts.length) out.assemble = Object.assign({}, l.assemble, { parts }); }
+    if (l.inspect) { const I = Array.isArray(l.inspect) ? { parts: l.inspect } : l.inspect, parts = list(I.parts, x => { const p = x && typeof x === 'object' ? { a: B(x.a || x.at || x.name), note: x.note } : { a: B(x) }; return p.a ? p : null; }); if (parts.length) out.inspect = Object.assign({}, I, { parts }); }
+    if (l.progression) { const st = Array.isArray(l.progression) ? l.progression : l.progression.stages; if (Array.isArray(st) && st.length) out.progression = { stages: st }; }
+    if (l.scaleTo && Array.isArray(l.scaleTo.items)) out.scaleTo = l.scaleTo;
+    // section: a clip plane swept in with a capped poché; "on":"all" cuts the whole scene (a section through the land), "at"
+    // a point (or an actor) the plane passes through at the end, "axis" x | y | z | [x,y,z] (default: away from the camera)
+    if (l.section && !out.peel) { const S = typeof l.section === 'object' ? l.section : {}, ds = this.ds, all = S.on === 'all' || S.on === '*';
+      const on = all ? [{ name: S.label || 'Section', obj: ds.world, getPos: () => ds.center.clone(), describe: S.caption || '' }] : list([].concat(S.on || S.layers || (host ? host.name : [])), B).map(a => S.caption ? Object.assign({}, a, { describe: S.caption }) : a);
+      const at = Array.isArray(S.at) ? new THREE.Vector3(+S.at[0] || 0, +S.at[1] || 0, +S.at[2] || 0) : S.at && B(S.at) ? B(S.at).getPos() : null;
+      if (on.length) out.peel = { layers: on.slice(0, 6), mode: 'clip', axis: S.axis, at: at && at.isVector3 ? at : null, keep: list(S.keep, B), sweep: S.sweep || 1.6, depth: S.depth, dwell: S.dwell || 2.4, restore: S.restore || 'step', kicker: 'Section', frame: list(S.frame, B) }; }
+    out.levels = this.spec.levels || D.levels || null;
+    if (l.section && typeof l.section === 'object' && Array.isArray(l.section.hide)) out.hide = list(l.section.hide, B);
     if (l.track && l.track !== 'actor') { let T = typeof l.track === 'string' ? (this.spec.tracks || D.tracks || {})[l.track] : l.track; if (Array.isArray(T)) T = { points: T }; if (T && Array.isArray(T.points) && T.points.length >= 2) out.track = Object.assign({ name: typeof l.track === 'string' ? l.track : 'the track' }, T); }
     return out;
   }
@@ -368,7 +397,7 @@ export class DioramaView {
     const link = a => C ? C.links.findIndex(x => x.a === a) : -1;
     const score = (a, i) => { const pin = this.pins.get(a.name), r = R.get(a.name); return (pin && pin.classList.contains('hot') ? 1e7 : 0) + (C && C.front === a ? 5e6 : 0) + (r && now - r.t < r.min ? 1e6 : 0) + (a === this.lessonActor ? 5e5 : 0) + (r ? 1e3 + r.t : -i); };
     const full = new Set(A.map((a, i) => [a, score(a, i)]).sort((p, q) => q[1] - p[1]).slice(0, 4).map(x => x[0].name));
-    this.pins.forEach((pin, name) => { const a = pin._actor; if (!a) return; const k = link(a); const isFull = full.has(name); this.setMini(pin, !isFull && k >= 0, k + 1); pin._quiet = !isFull && k < 0 && A.length > 4; });
+    this.pins.forEach((pin, name) => { const a = pin._actor; if (!a) return; const k = link(a); const isFull = full.has(name); const badge = k >= 0 && C.badges[k] && !C.badges[k].hidden; this.setMini(pin, !isFull && k >= 0 && !badge, k + 1); pin._quiet = !isFull && ((k < 0 && A.length > 4) || badge); });   // a link whose chain badge is on screen carries its number there: no second, numbered pin beside it
   }
   setMini(pin, on, n) {
     if (on) { let s = pin._num; if (!s) { s = pin._num = el('span', { class: 'pin-num' }); pin.prepend(s); } const tx = String(n || ''); if (s.textContent !== tx) s.textContent = tx; }
@@ -416,7 +445,7 @@ export class DioramaView {
   }
   // actors whose names appear in a sentence (for links and framing)
   namesIn(text, except) { const t = String(text || '').toLowerCase(); return this.ds.actors.filter(a => a !== except && a.name && a.name.length > 2 && t.includes(a.name.toLowerCase().split(' · ')[0])); }
-  setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); if (k === 'motion' && this.calmBtn) { this.calmBtn.setAttribute('aria-pressed', String(v === 'reduced')); return; } this.ui && this.ui.querySelectorAll(`[data-pref="${k}"]`).forEach(b => b.setAttribute('aria-pressed', String(!!v))); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) { this.dir.clear(); this.dir.endShots(); this.cues.reset(); } } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
+  setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); if (k === 'motion' && this.calmBtn) { this.calmBtn.setAttribute('aria-pressed', String(v === 'reduced')); return; } this.ui && this.ui.querySelectorAll(`[data-pref="${k}"]`).forEach(b => b.setAttribute('aria-pressed', String(!!v))); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) { this.dir.clear(); this.dir.endShots(); this.cues.reset(); this.ops.reset(); } } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
   // the model's own clock when it has one (e.g. "11:00 · day 1"), else simulated seconds
   clockText(t) { const s = this.ds.sim; if (s && s.clock) { try { const c = s.clock(t); if (c) return String(c); } catch (e) { } } return 't=' + (t ?? this.ds.t).toFixed(1) + ' s'; }
   syncTimeUI() { this.playBtn.innerHTML = this.ds.playing ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>'; }
@@ -433,13 +462,13 @@ export class DioramaView {
     // one callout per kind of event: per step while a step runs, once per visit while exploring freely; after the awaited event, the ticker only
     const evKey = Director.evKey(ev.text), keys = this.running != null ? (this._stepKeys = this._stepKeys || new Set()) : (this._freeKeys = this._freeKeys || new Set());
     const repeat = keys.has(evKey); keys.add(evKey);
-    if (this.dir.cinematic && this.stage === 'explore' && !offTopic && !repeat && !this.awaitIdle) {
+    if (this.dir.cinematic && this.stage === 'explore' && !offTopic && !repeat && !this.awaitIdle && !this.ops.noAnchor()) {   // (side by side, an event of one state would sit over the other: the log and readouts carry it)
       // a model may name the best shot for an event (DIO.<type>.shots: lowercase text substring → {target, dist})
       const shots = (DIO[this.spec.type] && DIO[this.spec.type].shots) || this.spec.shots || {}, lt = ev.text.toLowerCase();
       const key = Object.keys(shots).find(k => lt.includes(k)), shot = key && shots[key];
       const flows = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, fk = Object.keys(flows).find(k => lt.includes(k));
       const tg = shot && shot.target, pos0 = tg ? (typeof tg === 'function' ? tg() : tg) : null, pos = pos0 ? (pos0.isVector3 ? pos0.clone() : new THREE.Vector3().fromArray(pos0)) : ev.pos ? ev.pos.clone() : null;
-      this.dir.push({ kind: 'event', text: ev.text, anchor: () => pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null, evKey });
+      this.dir.push({ kind: 'event', text: ev.text, anchor: () => this.ops.noAnchor() ? null : pos || (host ? host.getPos() : null), focus: host && host.obj, names: named.filter(a => a !== host), host, dist: shot && shot.dist, flows: fk ? flows[fk] : null, evKey });
     }
     this.pushDyn(ev);   // every change is listed under Variables → Dynamic changes (the old top-of-screen ticker is gone)
     // sound, placed left/right where the event happens
@@ -618,9 +647,9 @@ export class DioramaView {
     if (this.fly) { const f = this.fly; f.k = Math.min(1, f.k + dt / f.dur); const e = easeInOutQuint(f.k); this.controls.target.lerpVectors(f.from.t, f.to.t, e); this.camera.position.lerpVectors(f.from.p, f.to.p, e); this.camera.position.y += Math.sin(Math.PI * e) * f.lift; this.camera.lookAt(this.controls.target); if (f.k >= 1) { this.fly = null; this.controls.enabled = this.stage !== 'materialize' && this.stage !== 'sketch'; } }
     else if (this.pov) this.updatePOV(dt);
     else if (this.controls.enabled) this.controls.update();
-    this.cues.preStep(); ds.step(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale);
+    this.cues.preStep(); this.ops.preStep(); const opk = this.ops.simRate(); ds.step(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale * opk); this.ops.stepB(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale * opk); this.ops.update(dt);   // an exploded view or a lineup freezes the simulation (opk = 0)
     if (this.awaitIdle) { this.awaitT = (this.awaitT || 0) + dt; if ((this.dir.idle() && !this.dir.busy()) || this.awaitT > 15) { this.awaitIdle = false; this.runT = this.runDur; } }
-    if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) { this._busyT = this.dir.busy() ? (this._busyT || 0) + dt : 0; if (this._busyT === 0 || this._busyT > 12) { this._busyT = 0; this.completeLesson(); } } }   // a zoom, ride or bracket still on its way finishes first (at most 12 s more)
+    if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale * opk; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) { this._busyT = this.dir.busy() || this.ops.busy() ? (this._busyT || 0) + dt : 0; if (this._busyT === 0 || this._busyT > 12) { this._busyT = 0; this.completeLesson(); } } }   // a zoom, ride or bracket still on its way finishes first (at most 12 s more)
     this.flashes = this.flashes.filter(f => { f.a += dt; f.s.scale.setScalar(.3 + f.a * 2.4); f.s.material.opacity = Math.max(0, 1 - f.a / 1.1); if (f.a > 1.1) { f.s.removeFromParent(); f.s.material.dispose(); return false; } return true; });
     // pins
     const w = innerWidth, h = innerHeight, v = V3();
@@ -628,16 +657,16 @@ export class DioramaView {
     this.comfort(dt); this.cues.update(dt); this.inset.update(dt); this.labelRule(t);
     // the opening overview framed in the free part of the screen (not under the instruction panel), once the panel and the
     // readouts are laid out (second frame) and nothing else moves the camera
-    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(); this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); } }
+    if (this._wideFix && this.stage === 'explore' && !this.fly && !this.pov && this.running == null && !this.dir.move && !this.dir.dip && this.controls.enabled) { if (--this._wideFix === 0) { const k = this.dir.wideKey(), big = this.camera.position.distanceTo(k.pos) > (this.ds.orb ? this.ds.orb.r : 10) * .04 || this.controls.target.distanceTo(k.target) > (this.ds.orb ? this.ds.orb.r : 10) * .04, put = () => { this.controls.target.copy(k.target); this.camera.position.copy(k.pos); this.camera.lookAt(k.target); this.controls.update(); }; if (big && !this.app.switching) this.dir.dip = { t: 0, done: false, apply: put }; else put(); } }   // a visible change of view goes through a dip, like any cut (never a bare jump); under the opening veil (the mode switch) nothing is on screen yet, so it is put at once
     // labels: project, then place in priority order (the step's objects first) so they never sit on each other,
     // and fade any label that would land under the instruction panel or the readouts
     // panels are measured every 0.5 s (cheap); the callout moves every frame, so its drawn box is added fresh each frame
-    if (!this._pr || t - this._pr > .5) { this._pr = t; const insB = this.inset && this.inset.box && !this.inset.box.hidden && +this.inset.box.style.opacity > .05 ? this.inset.box : null; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, insB, this.dir.chipEl, this.cues.chip, this.ui.querySelector('.dio-time')].filter(P => P && !P.hidden && P.style.visibility !== 'hidden' && !(P === this.panel && P.classList.contains('folded'))).map(P => P.getBoundingClientRect()).filter(r => r.width > 0); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; this.labels.childNodes.forEach(p => { p._w = 0; }); }
+    const sbOn = !!(this.dir.sbar && !this.dir.sbar.hidden); if (!this._pr || t - this._pr > .5 || sbOn !== this._sbOn) { this._pr = t; this._sbOn = sbOn; const insB = this.inset && this.inset.box && !this.inset.box.hidden && +this.inset.box.style.opacity > .05 ? this.inset.box : null; this._block = [this.panel, this.readPanel, this.titleEl, this.povBar, this.editBar, insB, this.dir.chipEl, this.dir.sbar, this.cues.chip, this.ui.querySelector('.dio-time'), ...this.ui.querySelectorAll('.ops-cap, .ops-level, .dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].filter(P => P && !P.hidden && P.style.visibility !== 'hidden' && !(P === this.panel && P.classList.contains('folded') && getComputedStyle(P).opacity === '0')).map(P => P.getBoundingClientRect()).filter(r => r.width > 0); const hr = this.labels.getBoundingClientRect(); this._bo = [hr.left, hr.top]; this.labels.childNodes.forEach(p => { p._w = 0; }); }
     const cb = this.dir.beat && this.dir.beat.box, blocks = cb ? (this._block || []).concat({ left: cb[0] + this._bo[0], top: cb[1] + this._bo[1], width: cb[2], height: cb[3] }) : (this._block || []);   // re-measure widths: labels grow/shrink (full label ↔ numbered dot), so a stale width let them overflow the right edge
     const placed = [], items = [], vis = (p, x) => { if (p._vis !== x) { p._vis = x; p.style.visibility = x; } };   // style writes only when something changed
     this.labels.childNodes.forEach(pin => {
       const src = pin._actor ? pin._actor.getPos() : pin._sym ? (() => { try { return pin._sym.getPos(); } catch (e) { return null; } })() : null;
-      if (!src || this.stage === 'sketch' || this.stage === 'materialize' || pin._quiet) { vis(pin, 'hidden'); return; }
+      if (!src || this.stage === 'sketch' || this.stage === 'materialize' || pin._quiet || this.ops.hidePins()) { vis(pin, 'hidden'); return; }   // (a comparison or a lineup has its own captions)
       v.copy(src).project(this.camera); if (v.z > 1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02 || (this.pov && pin._actor === this.pov.a)) { vis(pin, 'hidden'); return; }   // off-screen (or the actor you ride): no label pinned to the frame edge
       if (!pin._w) pin._w = pin.offsetWidth;
       items.push({ pin, x: clamp((v.x * .5 + .5) * w, 10, w - (pin._w || 120) - 10), y: clamp((-v.y * .5 + .5) * h, 22, h - 22), pr: (pin.classList.contains('hot') ? 4 : 0) + (pin.classList.contains('focus') ? 2 : 0) + (pin._actor ? 1 : 0) });
@@ -647,10 +676,11 @@ export class DioramaView {
       const W0 = it.pin._w || 120, H0 = 28; let y = it.y, ok = false;
       for (let k = 0; k < 4 && !ok; k++) { const hit = placed.find(q => it.x < q.x + q.w && it.x + W0 > q.x && y - H0 / 2 < q.y + q.h / 2 && y + H0 / 2 > q.y - q.h / 2); if (!hit) ok = true; else y = hit.y + (y >= hit.y ? H0 : -H0); }
       if (y < 14 || y > h - 14) ok = false;   // pushed off the screen by the collision step: hide it rather than pin it outside
-      const under = blocks.some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + W0 > rx + 2 && it.x < rx + r.width - 2 && y + H0 / 2 > ry + 2 && y - H0 / 2 < ry + r.height - 2; });   // the whole label, not just its dot
+      const under = blocks.some(r => { const rx = r.left - this._bo[0], ry = r.top - this._bo[1]; return it.x + W0 > rx + 2 && it.x < rx + r.width - 2 && y + H0 > ry + 2 && y - H0 / 2 < ry + r.height - 2; });   /* the label box hangs from y (top-left anchored flex row): test down to y + H0 */   // the whole label, not just its dot
       vis(it.pin, ok && !under ? 'visible' : 'hidden');
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); const tf = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; if (it.pin._tf !== tf) { it.pin._tf = tf; it.pin.style.transform = tf; } }
     }
+    this.cues.draw();   // the chain badges keep off the labels as laid out just now
     // weather you can hear: rain follows the model's rain (its own weather() if it has one, else any visible 'rain' object's opacity)
     if (this.app.sfx && (!this._wt || t - this._wt > .5)) { this._wt = t; let rain = 0, wind = 0;
       try { const W = ds.sim && ds.sim.weather && ds.sim.weather(); if (W) { rain = +W.rain || 0; wind = +W.wind || 0; } else { if (!this._rainObjs || t - (this._rainScan || 0) > 4) { this._rainScan = t; this._rainObjs = []; ds.world.traverse(o => { if (/rain/i.test(o.name || '') && o.material && !o.isGroup) this._rainObjs.push(o); }); }
@@ -684,7 +714,7 @@ export class DioramaView {
   dispose() {
     if (this.pov) this.exitPOV(true);
     if (this.disposed) return;
-    if (this.dir) this.dir.dispose(); if (this.cues) this.cues.dispose(); if (this.inset) this.inset.dispose(); this.gfx.canvas.removeEventListener('wheel', this.onWheel); removeEventListener('keydown', this.onKey);
+    if (this.dir) this.dir.dispose(); if (this.cues) this.cues.dispose(); if (this.ops) this.ops.dispose(); if (this.inset) this.inset.dispose(); this.gfx.canvas.removeEventListener('wheel', this.onWheel); removeEventListener('keydown', this.onKey);
     this.gfx.canvas.removeEventListener('pointerdown', this.onPointerDown); this.gfx.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.controls.dispose(); if (this.tc) { this.tc.detach(); this.tc.dispose(); }
     this.gfx.outline.selectedObjects = []; this.gfx.outline.enabled = false; this.gfx.canvas.classList.remove('editing');

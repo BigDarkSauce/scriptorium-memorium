@@ -19,6 +19,7 @@ const BITS = (1 << L_ISO) | (1 << L_PAST) | (1 << L_FRONT) | (0b111 << L_BG) | (
 const SIDE = m => m && m.side === THREE.BackSide ? 1 : m && m.side === THREE.DoubleSide ? 2 : 0;
 const NS = 'http://www.w3.org/2000/svg';
 const smoother = x => x * x * x * (x * (x * 6 - 15) + 10);
+const POCHE_ON = { value: 1 }, POCHE_OFF = { value: 0 };   // the per-clone poché switch of a clip (see swap)
 const BIG_RE = /sky|backdrop|ground|meadow|plinth|floor|hill|cloud|haze|terrain|sea|ocean|stars|lake|valley|table|desk/i;
 
 // Material.clone() does not carry onBeforeCompile or an instance customProgramCacheKey over (three.js r170): a plain
@@ -163,7 +164,7 @@ export class Cues {
   // already reads "Step k of n"), or, with no callout on screen, at the top of the free frame (desktop) / above the time
   // bar (phones), clear of the side buttons, the readouts and the inset
   placeChip() {
-    const d = this.v.dir, b = d && d.beat, co = b && b.el && b.el.isConnected ? b.el : null;
+    const d = this.v.dir, b = d && d.beat, co = b && b.el && b.el.isConnected && this.beatAboutChain(b) ? b.el : null;   // only a callout about the chain (the step's instruction, or the link now lit) carries the step; any other event keeps the chip in its own slot
     if (this.chip.hidden) { this.dropCoStep(); return; }
     if (co) {
       if (!this.coStep || this.coStep.parentNode !== co) { this.dropCoStep(); this.coStep = el('div', { class: 'co-step' }); const k = co.querySelector('.co-kicker'); if (k) k.after(this.coStep); else co.prepend(this.coStep); this.coStep._h = null; }
@@ -200,7 +201,9 @@ export class Cues {
     this.dirty = true;
   }
   // the current callout carries the k-of-n numbering too (S5.8)
-  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = k.dataset.base + ' · ' + txt; }
+  // a callout belongs to the chain when it is the step's own instruction or explanation, or an event about the link now lit
+  beatAboutChain(b) { const C = this.chain; if (!b || !C) return false; if (b.kind !== 'event') return true; const f = C.front; if (!f) return false; const nm = f.name.split(' · ')[0].toLowerCase(); return b.host === f || (b.names || []).includes(f) || String(b.text || '').toLowerCase().includes(nm); }
+  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = this.beatAboutChain(b) ? k.dataset.base + ' · ' + txt : k.dataset.base; }   // a callout no longer about the link now lit drops its step number (never a stale one)
   // ---------- S3 peel ----------
   // P: {layers:[actor], mode, order, dwell, restore}, host: the inner subject
   startPeel(P, host) {
@@ -212,14 +215,19 @@ export class Cues {
     // a layer never takes the inner subject, nor another actor that sits inside it (the mercury column inside the
     // barometer case), with it: their meshes stay as they are
     const inside = (o, root) => { for (let q = o; q; q = q.parent) if (q === root) return true; return false; };
-    const keep = new Set((host ? this.meshesOf(host) : []).concat(...ds.actors.filter(x => x.obj && !layers.some(l => l.obj === x.obj) && layers.some(l => inside(x.obj, l.obj))).map(x => this.meshesOf(x))));
+    // (a section cuts through everything in its layers, nested actors too, except what it names in "keep")
+    const keep = new Set((host ? this.meshesOf(host) : []).concat(...(P.kicker === 'Section' ? (P.keep || []).filter(x => x && x.obj) : ds.actors.filter(x => x.obj && !layers.some(l => l.obj === x.obj) && layers.some(l => inside(x.obj, l.obj)))).map(x => this.meshesOf(x))));
     const L = layers.map((a, i) => {
-      const bx = new THREE.Box3().setFromObject(a.obj), c = bx.getCenter(V3()), r = Math.max(.05, bx.getSize(V3()).length() * .5);
+      const bx = new THREE.Box3().setFromObject(a.obj), c = bx.getCenter(V3()); let r = Math.max(.05, bx.getSize(V3()).length() * .5);
       const out = c.clone().sub(C0); out.y = Math.max(out.y, 0); if (out.lengthSq() < 1e-6) out.set(0, 1, 0); out.normalize();
       const meshes = this.meshesOf(a).filter(m => !keep.has(m) && ![].concat(m.material).some(x => x && (x.transmission > 0 || (x.transparent && x.opacity < .6))));   // thin-shell glass is already see-through: skip it
+      if (P.at && P.at.isVector3) { r = Math.max(r, c.distanceTo(P.at) + .05); c.copy(P.at); }   // a section through a given point: every layer is cut by the same plane
       return { a, i, c, r, out, meshes, k: 0, goal: 0, off: V3(), lastOff: V3(), ap: V3(), has: false, plane: new THREE.Plane(V3(1, 0, 0), 1e5), swapped: false };
     });
-    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1 };
+    // a section (grammar.js "section"): clip mode with a fixed world axis (the normal points away from the half cut off),
+    // a sweep time and a depth (0.5 = through the middle), labelled "Section k of n"
+    const ax = Array.isArray(P.axis) ? V3(+P.axis[0] || 0, +P.axis[1] || 0, +P.axis[2] || 0) : { x: V3(1, 0, 0), y: V3(0, -1, 0), z: V3(0, 0, -1) }[P.axis] || null;
+    this.peel = { L, n: L.length, mode, order: P.order === 'in-out' ? 'in-out' : 'out-in', dwell: Math.max(.8, +P.dwell || 2.2), restore: ['step', 'beat', 'never'].includes(P.restore) ? P.restore : 'step', host, idx: -1, t: 0, wait: 0, phase: 'run', meshSet: new Set(L.flatMap(l => l.meshes)), speed: 1, axisV: ax && ax.lengthSq() > 1e-9 ? ax.normalize() : null, sweep: clamp(+P.sweep || 1.2, .4, 6), depth: clamp(P.depth ?? .5, .1, 1), kicker: P.kicker || 'Layer', frame: (P.frame || []).filter(a => a && a.obj) };
     this.peel.ord = this.peel.order === 'out-in' ? L : L.slice().reverse();
     if (this.peel.order === 'in-out') L.forEach(l => { l.k = l.goal = 1; this.swap(l, true); });   // build up: start from the bare inside
     if (!this.meshes.length || this.stale()) this.gather(); this.dirty = true;
@@ -228,13 +236,16 @@ export class Cues {
     const P = this.peel; if (on === l.swapped) return; l.swapped = on;
     if (P.mode === 'lift') return;
     if (on) {
-      if (P.mode === 'clip') { const U = this.v.ds.U; if (P.poche0 == null) { P.poche0 = U.uPoche.value; } U.uPoche.value = 1; }
       l.meshes.forEach(m => {
         if (m.userData._povMat) { this.v.povFade(m, false); this.v.pov && this.v.pov.faded && this.v.pov.faded.delete(m); }   // one material swap per mesh at a time
         m.userData._peelMat = m.material; m.userData._peelRO = m.renderOrder;
         const ms = [].concat(m.material).map(x => { const k = cloneMat(x); k.userData._op0 = x.opacity ?? 1;
           if (P.mode === 'ghost') { k.transparent = true; k.depthWrite = false; k.side = THREE.FrontSide; }
-          else { k.clippingPlanes = [l.plane]; if (!k.transparent) k.side = THREE.DoubleSide; }
+          else { k.clippingPlanes = [l.plane]; if (!k.transparent) k.side = THREE.DoubleSide;
+            // the cut is capped with poché (the inside of a closed solid seen through the cut is drawn in ink) on this clone
+            // only: its own uPoche uniform (same GLSL, so the same program); thin sheets (instanced blades, alpha-cut leaves)
+            // get none, and the rest of the scene keeps its back faces as they were
+            const ob = k.onBeforeCompile, on = !m.isInstancedMesh && !(x.alphaTest > 0); k.onBeforeCompile = function (sh, r) { if (ob) ob.call(this, sh, r); if (sh.uniforms && sh.uniforms.uPoche) sh.uniforms.uPoche = on ? POCHE_ON : POCHE_OFF; }; }
           return k; });
         m.material = Array.isArray(m.material) ? ms : ms[0];
         if (P.mode === 'ghost') {
@@ -260,12 +271,20 @@ export class Cues {
   preStep() { const P = this.peel; if (!P || P.mode !== 'lift') return; for (const l of P.L) { if (!l.has) continue; const p = l.a.obj.position; if (p.equals(l.ap)) p.sub(l.lastOff); l.has = false; } }
   layerBeat(l) {
     const P = this.peel, d = this.v.dir, a = l.a, nm = a.name.split(' · ')[0], idx = P.order === 'out-in' ? l.i : P.n - 1 - l.i;
-    d.push({ kind: 'explain', kicker: `Layer ${idx + 1} of ${P.n}`, noShot: true, title: nm, text: (a.describe ? nm + ': ' + a.describe : nm), anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
+    // the kicker names the layer ("Section · capacitor", "Layer 2 of 3 · soil"; no counter for a single one); the caption is the
+    // text as written when it is a sentence, else it follows the name (never "name: Caption: …" with two colons)
+    const named = !!nm && nm.toLowerCase() !== String(P.kicker).toLowerCase(), D = String(a.describe || '').trim();
+    const kicker = (P.n > 1 ? `${P.kicker} ${idx + 1} of ${P.n}` : P.kicker) + (named ? ' · ' + nm : '');
+    const text = !D ? nm : (/^[A-Z0-9“"(]/.test(D) || !named) ? D : nm + (D.includes(':') ? ' — ' : ': ') + D;
+    d.push({ kind: 'explain', kicker, noShot: true, title: nm, text, anchor: () => a.getPos(), focus: a.obj, host: a, names: [] });
     this.v.touchLabels && this.v.touchLabels([a]);
   }
   updatePeel(dt) {
     const P = this.peel; if (!P) return; const ord = P.ord;
     if (P.phase === 'run' && this.ready()) {
+      // a section that names what it shows (section.frame): the camera first glides to fit those parts (the cut and what the
+      // caption names stay in view), the cut starts once it has landed (ready() waits for the move)
+      if (P.idx < 0 && P.frame.length && !P.framed && this.v.ops) { P.framed = true; const bx = new THREE.Box3(), q = new THREE.Box3(); this.v.scene.updateMatrixWorld(true); P.frame.forEach(a => { q.setFromObject(a.obj); if (!q.isEmpty()) bx.union(q); }); if (!bx.isEmpty()) { this.v.ops.glide(this.v.ops.poseFor(bx, 'medium', true), 1.8); return; } }
       P.t += dt;
       if (P.idx < 0 || P.t >= P.wait) {
         P.idx++;
@@ -280,13 +299,13 @@ export class Cues {
     if (P.phase === 'held' && P.holdT != null) { P.holdT -= dt; if (P.holdT <= 0) { P.holdT = null; this.restorePeel(); } }
     if (P.phase === 'restore') { P.t += dt; const k = Math.min(P.rorder.length, Math.floor(P.t / .45) + 1); for (let i = 0; i < k; i++) P.rorder[i].goal = 0; }
     // animate every layer toward its goal: ghost 0.8 s, lift 0.9 s, clip 1.2 s (restore at 2× speed)
-    const dur = P.mode === 'ghost' ? .8 : P.mode === 'lift' ? .9 : 1.2, cam = this.v.camera;
+    const dur = P.mode === 'ghost' ? .8 : P.mode === 'lift' ? .9 : P.sweep, cam = this.v.camera;
     for (const l of P.L) {
       if (l.k !== l.goal) { l.k = l.goal > l.k ? Math.min(l.goal, l.k + dt * P.speed / dur) : Math.max(l.goal, l.k - dt * P.speed / dur); }
       if (l.k > 0) this.swap(l, true); else if (l.swapped) this.swap(l, false);
       const e = smoother(l.k);
       if (P.mode === 'ghost' && l.swapped) l.meshes.forEach(m => { [].concat(m.material).forEach(x => { x.opacity = x.userData._op0 + (.12 - x.userData._op0) * e; }); const ln = m.userData._peelLine; if (ln) ln.material.opacity = .5 * e; });
-      else if (P.mode === 'clip' && l.swapped) { const n = this._q.copy(l.c).sub(cam.position); n.y = 0; if (n.lengthSq() < 1e-6) n.set(0, 0, -1); n.normalize(); l.plane.normal.copy(n); l.plane.constant = l.r * (1 - e) - n.dot(l.c) + 1e-4; }
+      else if (P.mode === 'clip' && l.swapped) { const n = P.axisV ? this._q.copy(P.axisV) : this._q.copy(l.c).sub(cam.position); if (!P.axisV) { n.y = 0; if (n.lengthSq() < 1e-6) n.set(0, 0, -1); n.normalize(); } l.plane.normal.copy(n); l.plane.constant = l.r * (1 - 2 * P.depth * e) - n.dot(l.c) + 1e-4; }
       else if (P.mode === 'lift' && l.k > 0) { const p = l.a.obj.position; l.off.copy(l.out).multiplyScalar(1.2 * l.r * e); p.add(l.off); l.lastOff.copy(l.off); l.ap.copy(p); l.has = true; }
     }
     if (P.phase === 'restore' && P.L.every(l => l.k === 0)) { P.L.forEach(l => { this.unlift(l); this.swap(l, false); }); this.peel = null; this.dirty = true; }
@@ -324,8 +343,10 @@ export class Cues {
     U.uIso.value = this.iso.w * this.iso.w * (3 - 2 * this.iso.w); U.uChain.value = C ? C.w : 0; U.uVig.value = this.vig < .005 ? 0 : this.vig;
     this.pass.enabled = U.uIso.value > .002 || U.uChain.value > .002 || U.uVig.value > 0;
     this.pass.camera = v.camera; this.pass.scene = v.scene;
-    if (C) this.drawChain();
   }
+  // the chain's badges, placed after the engine has laid out this frame's object labels: they step round where the
+  // names are now, not where they were a frame ago (a moving body's label pushes a still one's label aside)
+  draw() { if (this.chain) this.drawChain(); }
   // badges on the links (pin style), kept apart from each other; the arrow between consecutive links while the front crosses
   drawChain() {
     const C = this.chain, cam = this.v.camera, w = innerWidth, h = innerHeight, q = this._q, placed = [];
@@ -334,10 +355,15 @@ export class Cues {
     // the HUD (readouts, panels, the title, the buttons, the time bar, the callout): a badge never sits on it; read at most
     // every 0.25 s. A badge that would overlap moves to the nearest clear spot round its link (left, below, above), else hides.
     const now = performance.now(); this._hudN = (this._hudN || 0) + 1; if (!this._hudR || now - this._hudT > 250 || this._hudN > 8) { this._hudT = now; this._hudN = 0; const v = this.v, d = v.dir, R = [];
-      [v.readPanel, v.panel && !v.panel.classList.contains('folded') ? v.panel : null, v.titleEl, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), v.ui && v.ui.querySelector('.dio-time'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), d && d.beat && d.beat.el, v.inset && v.inset.box].forEach(P => { if (!P || P.hidden || !P.getBoundingClientRect) return; const r = P.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && getComputedStyle(P).display !== 'none') R.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); });
+      [v.readPanel, v.panel && !v.panel.classList.contains('folded') ? v.panel : null, v.titleEl, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), v.ui && v.ui.querySelector('.dio-time'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), d && d.beat && d.beat.el, v.inset && v.inset.box].forEach(P => { if (!P || P.hidden || !P.getBoundingClientRect) return; const r = P.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && getComputedStyle(P).display !== 'none') R.push([r.left - 8, r.top - 8, r.right + 8, r.bottom + 8]); });   /* ≥ 8 px clear of every HUD rect */
+      [this.chip, d && d.chipEl, d && d.sbar, v.ops && v.ops.lv && v.ops.lv.box].forEach(P => { if (!P || P.hidden || P.style.visibility === 'hidden') return; const r = P.getBoundingClientRect(); if (r.width > 1 && r.height > 1) R.push([r.left - 8, r.top - 8, r.right + 8, r.bottom + 8]); });   /* nor under the step chip */
       this._hudR = R; }
-    const onHud = (x, y) => this._hudR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]);
+    // nor on an object's name: the pins move and appear every frame, so they are read on every call
+    const pinR = []; this.v.labels && this.v.labels.querySelectorAll('.pin.in').forEach(P => { if (P.style.visibility === 'hidden') return; const ns = P.querySelectorAll('.pin-name, .pin-num'); for (const n of ns.length ? ns : [P]) { const r = n.getBoundingClientRect(); if (r.width > 1 && r.height > 1) pinR.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); } });   /* (a symbol label, θ, is the pin itself) */   /* a full name or, for a shrunk label, its number */
+    const dot = this.v.dir && this.v.dir.beat && this.v.dir.beat.dot; if (dot && dot.style.opacity === '1') { const r = dot.getBoundingClientRect(); pinR.push([r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]); }   // nor on the callout's anchor dot
+    const onHud = (x, y) => this._hudR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]) || pinR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]);
     for (const o of order) {
+      o.x = clamp(o.x, 14, w - 14); o.y = clamp(o.y, 14, h - 14);   // a link near the frame edge: its badge stays whole on screen
       for (let k = 0; k < 6; k++) { const hit = placed.find(p => Math.abs(p.x - o.x) < 26 && Math.abs(p.y - o.y) < 26); if (!hit) break; o.y = hit.y + 27; }
       if (onHud(o.x, o.y)) { const x0 = o.x, y0 = o.y, alt = [[x0 - 46, y0], [x0 - 10, y0 + 52], [x0 - 46, y0 + 52], [x0 + 24, y0], [x0 - 10, y0 - 30], [x0 - 80, y0], [x0 - 80, y0 + 52]].find(([x, y]) => x > 12 && y > 12 && x < w - 12 && y < h - 12 && !onHud(x, y) && !placed.some(p => Math.abs(p.x - x) < 26 && Math.abs(p.y - y) < 26));
         if (alt) { o.x = alt[0]; o.y = alt[1]; } else { o.b.style.opacity = 0; continue; } }

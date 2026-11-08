@@ -41,6 +41,8 @@ export function isCodeCall(name, args) {
   const us = /^([A-Za-z][A-Za-z0-9]*)_([A-Za-z0-9_]+)$/.exec(name); if (us) return us[1].length >= 2 && us[2].length >= 2 && !MATHFN.has(us[1]);   // read_csv, na_if; e_s, T_max, theta_0 are subscripts
   if (/["'~]|<-|\w\$\w|\b[A-Za-z_][\w.]+\s*=(?!=)|\bna\.rm\b|\bTRUE\b|\bFALSE\b|\bNULL\b/.test(args)) return true;
   if (name === 'c' && /,/.test(args)) return true;
+  // a maths function around code is code too: sqrt(length(x)), exp(mean(y))
+  for (const m of String(args).matchAll(/([A-Za-z_.][\w.]*)\(([^()]*)\)/g)) if (isCodeCall(m[1], m[2])) return true;
   return /^[a-z][a-z0-9]+$/.test(name) && !MATHFN.has(name) && !/^[a-z]\d+$/.test(name);
 }
 // code tokens in plain (non-TeX) text: R columns (dat$TotalSleep, df$a$b, x$y[1]) and code calls (mean(x), lm(y ~ x))
@@ -63,7 +65,10 @@ function codeTokens(seg) {
     }
     i++;
   }
-  flush(seg.length); return out;
+  flush(seg.length);
+  // code joined by an operator is one piece of code: sd(x) / sqrt(length(x)), mean(x) - median(x)
+  for (let k = 1; k + 1 < out.length; k++) if (out[k - 1].k === 'code' && out[k + 1].k === 'code' && out[k].k === 'text' && /^\s*[-+*\/^]\s*$/.test(out[k].v)) { out[k - 1].v += out[k].v + out[k + 1].v; out.splice(k, 2); k--; }
+  return out;
 }
 // prose(t) → [{k: 'text'|'tex'|'code', v}] (exported for the tests) and the HTML
 export function proseParts(t) {

@@ -7,6 +7,8 @@ import { proseParts, prose, isCodeCall } from '../js/room/prose.js';
 
 const flat = t => proseParts(t).map(p => p.k === 'tex' ? '{' + p.v + '}' : p.k === 'code' ? '`' + p.v + '`' : p.v).join('');
 const C = [
+  // --- code nested in a maths function, and code joined by an operator, is one piece of code (polish gate, BYU sheet 01)
+  ['se is sd(x) / sqrt(length(x)) here', 'se is `sd(x) / sqrt(length(x))` here'], ['sqrt(x^2 + 1) stays maths', 'sqrt(x^2 + 1) stays maths'], ['exp(mean(y))', '`exp(mean(y))`'],
   // --- the defects (G/10, G/12, G/28): TeX dollars next to punctuation
   ['in a uniform gravitational field $g$.', 'in a uniform gravitational field {$g$}.'],
   ['moves on a circle of radius $L$.', 'moves on a circle of radius {$L$}.'],

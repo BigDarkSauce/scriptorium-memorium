@@ -1,6 +1,6 @@
 // Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
-import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathText } from '../util.js';
+import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathText, unitish } from '../util.js';
 import { validateFigure } from './figspec.js';
 import { isCodeCall } from './prose.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
@@ -19,7 +19,7 @@ export function SVGDEMO(spec,host,fail){
   // animation loops end by themselves once the diagram leaves the page (scroll closed or re-rendered without cleanup)
   const gone=()=>{if(wrap.isConnected){shown=true;return false}return shown};
   const slider=(name,min,max,val,step,on,label)=>{const out=el('b',{text:fmt(val)});const inp=el('input',{type:'range',min,max,step:step||(max-min)/200,value:val,id:'r'+uid(),'aria-label':label||name});inp.oninput=()=>{out.textContent=fmt(+inp.value);on(+inp.value)};ctrls.append(el('label',{class:'ctrl'},[el('span',{},[label||name,out]),inp]));return inp};
-  if(t!=='customsvg')for(const k in P_)if(!(spec.hidden||[]).includes(k))slider(k,P_[k][0],P_[k][1],P_[k][2],null,v=>{pv[k]=v;draw()});
+  if(t!=='customsvg')for(const k in P_)if(!(spec.hidden||[]).includes(k))slider(k,P_[k][0],P_[k][1],P_[k][2],null,v=>{pv[k]=v;state.legReset&&state.legReset();draw()});
   const pn=Object.keys(P_);
   let xr=spec.x||[-5,5],yr=spec.y||spec.yrange||[-3,3];
   if(t==='phase'){xr=spec.range||xr;yr=spec.yrange||spec.range||yr}
@@ -28,13 +28,13 @@ export function SVGDEMO(spec,host,fail){
   const X=x=>P+(x-xr[0])/(xr[1]-xr[0])*(W-2*P),Y=y=>H-P-(y-yr[0])/(yr[1]-yr[0])*(H-2*P);
   const IX=px=>xr[0]+(px-P)/(W-2*P)*(xr[1]-xr[0]),IY=py=>yr[0]+(H-P-py)/(H-2*P)*(yr[1]-yr[0]);
   const COLORS=['#2d5b8e','#9c3a28','#3f7d6e','#8f733a','#6a4a8a'];
-  function axes(){const g=mk('g',{});const step=niceStep(xr[1]-xr[0]),stepy=niceStep(yr[1]-yr[0]);
+  function axes(){const g=mk('g',{class:'fig-axes'});const step=niceStep(xr[1]-xr[0]),stepy=niceStep(yr[1]-yr[0]);
     for(let x=Math.ceil(xr[0]/step)*step;x<=xr[1]+1e-9;x+=step){mk('line',{x1:X(x),x2:X(x),y1:P,y2:H-P,stroke:'rgba(90,60,30,.12)'},g);mk('text',{x:X(x),y:H-P+14,'font-size':10,'text-anchor':'middle',fill:'#5b4532','font-family':'IBM Plex Mono, monospace'},g).textContent=fmt(x,2)}
     for(let y=Math.ceil(yr[0]/stepy)*stepy;y<=yr[1]+1e-9;y+=stepy){mk('line',{y1:Y(y),y2:Y(y),x1:P,x2:W-P,stroke:'rgba(90,60,30,.12)'},g);mk('text',{x:P-5,y:Y(y)+3,'font-size':10,'text-anchor':'end',fill:'#5b4532','font-family':'IBM Plex Mono, monospace'},g).textContent=fmt(y,2)}
     if(yr[0]<0&&yr[1]>0)mk('line',{x1:P,x2:W-P,y1:Y(0),y2:Y(0),stroke:'#5b4532','stroke-width':1.2},g);
     if(xr[0]<0&&xr[1]>0)mk('line',{y1:P,y2:H-P,x1:X(0),x2:X(0),stroke:'#5b4532','stroke-width':1.2},g);
-    if(spec.xlabel)mk('text',{x:W-P,y:H-P-6,'font-size':12,'text-anchor':'end',fill:'#2a1e15','font-style':'italic'},g).textContent=spec.xlabel;
-    if(spec.ylabel)mk('text',{x:P+6,y:P+12,'font-size':12,fill:'#2a1e15','font-style':'italic'},g).textContent=spec.ylabel;return g}
+    if(spec.xlabel)mk('text',{x:W-P,y:H-P-6,'font-size':12,'text-anchor':'end',fill:'#2a1e15','font-style':unitish(spec.xlabel)?'normal':'italic',class:'fig-axtitle'},g);{const e=g.lastChild;if(unitish(spec.xlabel)&&!/\(/.test(spec.xlabel))TC.set.call(e,spec.xlabel);else e.textContent=spec.xlabel}
+    if(spec.ylabel)mk('text',{x:P+6,y:P+12,'font-size':12,fill:'#2a1e15','font-style':unitish(spec.ylabel)?'normal':'italic',class:'fig-axtitle'},g);{const e=g.lastChild;if(unitish(spec.ylabel)&&!/\(/.test(spec.ylabel))TC.set.call(e,spec.ylabel);else e.textContent=spec.ylabel}return g}
   function curve(f,color,width=2.2,dash){let d='',pen=false;const N=500;for(let i=0;i<=N;i++){const x=xr[0]+(xr[1]-xr[0])*i/N,y=f(x);if(!isFinite(y)||y<yr[0]-(yr[1]-yr[0])*2||y>yr[1]+(yr[1]-yr[0])*2){pen=false;continue}d+=(pen?'L':'M')+X(x).toFixed(1)+' '+Y(y).toFixed(1);pen=true}
     return mk('path',{d,fill:'none',stroke:color,'stroke-width':width,'stroke-dasharray':dash||'','clip-path':'url(#clp'+cid+')'})}
   const cid=uid();const dfs=mk('defs',{});const cp=mk('clipPath',{id:'clp'+cid},dfs);mk('rect',{x:P,y:P,width:W-2*P,height:H-2*P},cp);
@@ -47,15 +47,21 @@ export function SVGDEMO(spec,host,fail){
     const pts=(Array.isArray(spec.points)?spec.points:[]).map(p=>Array.isArray(p)?{x:+p[0],y:+p[1],label:p[2]}:{x:+p.x,y:+p.y,label:p.label}).filter(p=>isFinite(p.x)&&isFinite(p.y));
     // legend: each curve's name ("labels", else the ylabel, else the demo title; the raw expression only as a tooltip),
     // top right inside the frame, so it never meets the y-axis label (top left) or the x-axis label (bottom right)
-    const names=exprs.map((e,i)=>{const L=Array.isArray(spec.labels)?spec.labels[i]:null;if(L)return String(L);const base=String(spec.ylabel||spec.title||'f');return exprs.length>1?base+' · '+(i+1):base});
+    let legPos=null;const names=exprs.map((e,i)=>{const L=Array.isArray(spec.labels)?spec.labels[i]:null;if(L)return String(L);const base=String(spec.ylabel||spec.title||'f');return exprs.length>1?base+' · '+(i+1):base});
     const legend=()=>{const rows=names.map((n,i)=>({n:n.length>34?n.slice(0,33)+'…':n,c:COLORS[i],e:exprs[i]}));if(pts.length)rows.push({n:spec.pointsLabel||'data points',dot:true});if(!rows.length)return;
-      const g=mk('g',{'font-size':11,'font-family':'IBM Plex Mono, monospace'}),wid=Math.min(W/2-P,Math.max(...rows.map(r=>r.n.length))*6.6+30),x0=W-P-8-wid,y0=P+(spec.ylabel?20:6);
+      const wid=Math.min(W/2-P,Math.max(...rows.map(r=>r.n.length))*6.6+30),hgt=rows.length*16+6;
+      // the corner (or top/bottom middle) the curves and points cross least; the y label sits top left, the x label bottom right
+      if(!legPos){const pv2=pn.map(k=>pv[k]),cand=[[W-P-8-wid,P+(spec.ylabel?20:6)],[P+8,P+(spec.ylabel?24:6)],[W-P-8-wid,H-P-hgt-(spec.xlabel?22:8)],[P+8,H-P-hgt-8],[(W-wid)/2,P+6],[(W-wid)/2,H-P-hgt-8]];
+        const hits=([x,y])=>{let n=0;fs.forEach(f=>{for(let i=0;i<=200;i++){const xx=xr[0]+(xr[1]-xr[0])*i/200,yy=f(xx,...pv2);if(!isFinite(yy))continue;const px=X(xx),py=Y(yy);if(px>=x-4&&px<=x+wid+4&&py>=y-4&&py<=y+hgt+4)n++}});pts.forEach(p=>{const px=X(p.x),py=Y(p.y);if(px>=x-6&&px<=x+wid+6&&py>=y-6&&py<=y+hgt+6)n+=3});return n};
+        let bh=Infinity;cand.forEach(c=>{const h=hits(c);if(h<bh){bh=h;legPos=c}})}
+      const g=mk('g',{class:'fig-legend','font-size':11,'font-family':'IBM Plex Mono, monospace'}),[x0,y0]=legPos;
       mk('rect',{x:x0,y:y0,width:wid,height:rows.length*16+6,rx:3,fill:'rgba(251,246,234,.86)',stroke:'rgba(90,60,30,.25)'},g);
       rows.forEach((r,i)=>{const y=y0+13+i*16;if(r.dot)mk('circle',{cx:x0+14,cy:y-3,r:3.4,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.5},g);else mk('rect',{x:x0+8,y:y-4.5,width:12,height:3,fill:r.c},g);const tx=mk('text',{x:x0+26,y,fill:'#2a1e15'},g);tx.textContent=r.n;if(r.e){const ti=document.createElementNS(NS,'title');ti.textContent=mathText(r.e);tx.append(ti)}})};
     draw=()=>{clear();axes();fs.forEach((f,i)=>curve(x=>f(x,...pn.map(k=>pv[k])),COLORS[i]));
       pts.forEach(p=>{mk('circle',{cx:X(p.x),cy:Y(p.y),r:3.6,fill:'#fbf6ea',stroke:'#2a1e15','stroke-width':1.6});if(p.label)mk('text',{x:X(p.x)+6,y:Y(p.y)-6,'font-size':10,fill:'#2a1e15','font-family':'IBM Plex Mono, monospace'}).textContent=p.label});
       legend();
       reads.innerHTML='';if(hx!=null){mk('line',{x1:X(hx),x2:X(hx),y1:P,y2:H-P,stroke:'#9c3a28','stroke-dasharray':'3 3'});reads.append(el('span',{html:'<i>x</i> '+fmt(hx)}));fs.forEach((f,i)=>{const y=f(hx,...pn.map(k=>pv[k]));if(isFinite(y))mk('circle',{cx:X(hx),cy:Y(y),r:4,fill:COLORS[i]});reads.append(el('span',{html:`<i>f${i+1}</i> ${fmt(y)}`}))})}else reads.append(el('span',{html:'<i>Move the pointer over the plot to read values</i>'}))};
+    state.legReset=()=>{legPos=null};
     svg.addEventListener('pointermove',ev=>{const[x]=svgPt(ev);hx=clamp(IX(x),xr[0],xr[1]);draw()});
   }else if(t==='tangent'){
     const f=compile(spec.expr||'x^2',['x',...pn]);let x0=(xr[0]+xr[1])/2+.7,h=1.5;
@@ -222,27 +228,65 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
   box.append(el('div', { class: 'fig-frame' }, [svg])); const c = capEl(); if (c) box.append(c);
   const fs = small ? 10 : 11.5;
   // everything drawn after the layer exists goes into it, so each animation frame clears it all (defs stay on the svg)
-  let target = svg; const mk = (n, a = {}, parent = target) => { const e = document.createElementNS(NS, n); for (const k in a) if (a[k] != null) e.setAttribute(k, a[k]); (parent || target).append(e); return e; };
+  // every data mark drawn (bars, dots, curve points, labels) is recorded as boxes, so the legend can be placed where
+  // it covers none of them (axes and grid lines are not recorded: rec is off while they are drawn)
+  let target = svg, rec = true; const marks = []; const est = (a, s) => { const fz = +(a['font-size'] || fs), w = String(s).length * fz * .56, x = +a.x || 0, y = +a.y || 0, an = a['text-anchor']; return [an === 'end' ? x - w : an === 'middle' ? x - w / 2 : x, y - fz * .8, an === 'end' ? x : an === 'middle' ? x + w / 2 : x + w, y + fz * .25]; };
+  const record = (n, a) => { if (!rec) return; const N = v => +v || 0;
+    if (n === 'rect') marks.push([N(a.x), N(a.y), N(a.x) + N(a.width), N(a.y) + N(a.height)]);
+    else if (n === 'circle') marks.push([N(a.cx) - N(a.r), N(a.cy) - N(a.r), N(a.cx) + N(a.r), N(a.cy) + N(a.r)]);
+    else if (n === 'ellipse') marks.push([N(a.cx) - N(a.rx), N(a.cy) - N(a.ry), N(a.cx) + N(a.rx), N(a.cy) + N(a.ry)]);
+    else if (n === 'line') { const L = Math.hypot(N(a.x2) - N(a.x1), N(a.y2) - N(a.y1)), k = Math.max(1, Math.ceil(L / 3)); for (let i = 0; i <= k; i++) { const x = N(a.x1) + (N(a.x2) - N(a.x1)) * i / k, y = N(a.y1) + (N(a.y2) - N(a.y1)) * i / k; marks.push([x - 1, y - 1, x + 1, y + 1]); } }
+    else if (n === 'path' && a.d && !a.transform) { const v = String(a.d).match(/-?\d+(?:\.\d+)?/g) || []; let px = null, py = null; for (let i = 0; i + 1 < v.length; i += 2) { const x = +v[i], y = +v[i + 1]; if (px != null) { const k = Math.max(1, Math.ceil(Math.hypot(x - px, y - py) / 3)); for (let j = 1; j <= k; j++) { const qx = px + (x - px) * j / k, qy = py + (y - py) * j / k; marks.push([qx - 1, qy - 1, qx + 1, qy + 1]); } } else marks.push([x - 1, y - 1, x + 1, y + 1]); px = x; py = y; } if (a.fill && a.fill !== 'none') { const xs = v.filter((_, i) => i % 2 === 0).map(Number), ys = v.filter((_, i) => i % 2).map(Number); marks.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]); } } };
+  const mk = (n, a = {}, parent = target) => { const e = document.createElementNS(NS, n); for (const k in a) if (a[k] != null) e.setAttribute(k, a[k]); (parent || target).append(e); record(n, a); return e; };
   // labels are typeset maths (m2 → m₂), except code (dnorm(x), avg <- mean(…), dat$col), which stays verbatim in a code face
-  const txt = (x, y, s, a = {}, parent) => { const code = looksLikeCode(String(s)); const e = mk('text', { x, y, 'font-size': fs, fill: FC.ink, 'font-family': code ? 'IBM Plex Mono, monospace' : 'Alegreya, Georgia, serif', ...a, ...(code ? { 'font-size': (a['font-size'] || fs) * .92 } : {}) }, parent); if (code) e.textContent = String(s); else svgMath(e, String(s)); return e; };
-  const wrapText = (s, max) => { const w = String(s).split(/\s+/), out = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > max && cur) { out.push(cur); cur = x; } else cur = (cur + ' ' + x).trim(); }); if (cur) out.push(cur); return out; };
-  const multi = (x, y, s, max, a = {}, parent, lh = fs * 1.25) => { const L = wrapText(s, max).slice(0, 4); L.forEach((l, i) => txt(x, y + (i - (L.length - 1) / 2) * lh, l, a, parent)); return L.length; };
+  // a short label (a point's or a line's name) never leaves the drawing: shifted back inside the viewBox by its estimated
+  // width (only short ones: for a line of wrapped text the estimate is too rough and would shift it out of its column)
+  let clampTxt = true; const txt = (x, y, s, a = {}, parent) => { const code = looksLikeCode(String(s)); const bb = est({ x, y, 'font-size': fs, ...a }, s); if (clampTxt && String(s).length <= 14) { if (bb[2] > W - 2) x -= bb[2] - (W - 2); else if (bb[0] < 2) x += 2 - bb[0]; if (bb[1] < 1) y += 1 - bb[1]; else if (bb[3] > H - 1) y -= bb[3] - (H - 1); } if (rec) marks.push(est({ x, y, 'font-size': fs, ...a }, s)); const e = mk('text', { x, y, 'font-size': fs, fill: FC.ink, 'font-family': code ? 'IBM Plex Mono, monospace' : 'Alegreya, Georgia, serif', ...a, ...(code ? { 'font-size': (a['font-size'] || fs) * .92 } : {}) }, parent); if (code || (a.class === 'fig-axtitle' && unitish(s) && !/\(/.test(s))) e.textContent = String(s); else svgMath(e, String(s)); return e; };
+  // (a number and its unit stay on one line: "2 m" never breaks into "2" / "m", which would read as a variable)
+  const wrapText = (s, max) => { const w = String(s).split(/\s+/).reduce((a, x) => { if (a.length && /\d[°%]?$/.test(a[a.length - 1]) && x.length <= 5 && unitish(x.replace(/[.,;:)]+$/, ''))) a[a.length - 1] += '\u00a0' + x; else a.push(x); return a; }, []), out = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > max && cur) { out.push(cur); cur = x; } else cur = (cur + ' ' + x).trim(); }); if (cur) out.push(cur); return out; };
+  // wrapped lines centred on y, the block kept inside the drawing (a label near the top or bottom edge moves in)
+  const multi = (x, y, s, max, a = {}, parent, lh = fs * 1.25) => { const L = wrapText(s, max).slice(0, 4), f = +(a['font-size'] || fs), top = y - (L.length - 1) / 2 * lh - f * .8, bot = y + (L.length - 1) / 2 * lh + f * .25; if (top < 1) y += 1 - top; else if (bot > H - 1) y -= bot - (H - 1);
+    { const wl = Math.max(...L.map(l => l.length)) * f * .52, an = a['text-anchor'], x0 = an === 'middle' ? x - wl / 2 : an === 'end' ? x - wl : x; if (x0 + wl > W - 2) x -= Math.min(x0 + wl - (W - 2), Math.max(0, x0 - 2)); else if (x0 < 2) x += 2 - x0; }   // and sideways
+    L.forEach((l, i) => txt(x, y + (i - (L.length - 1) / 2) * lh, l, a, parent)); return L.length; };
   const defs = mk('defs'); defs.innerHTML = `<marker id="fa${uid()}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="${FC.soft}"/></marker>`; const arrowId = defs.firstChild.id;
-  const layer = mk('g'); target = layer; const clear = () => { layer.innerHTML = ''; };
+  const layer = mk('g'); target = layer; const clear = () => { layer.innerHTML = ''; marks.length = 0; };
   // axes helper for the chart kinds
   const P0 = { l: small ? 34 : 46, r: small ? 10 : 16, t: small ? 14 : 18, b: small ? 30 : 38 };
   const axes = (xr, yr, { xlabel, ylabel, logx, cats } = {}) => {
+    { const s0 = niceStep(yr[1] - yr[0]), wmax = Math.max(0, ...(() => { const o = []; for (let v = Math.ceil(yr[0] / s0) * s0; v <= yr[1] + s0 * 1e-6 && o.length < 40; v += s0) o.push(mathText(String(fmt(+v.toFixed(10), 3))).length); return o; })()) * (fs - 1.5) * .62; P0.l = Math.max(small ? 34 : 46, Math.ceil(wmax + 8)); }   // wide tick labels (1.00 × 10⁵) widen the margin
     const X = v => P0.l + ((logx ? Math.log10(v) : v) - (logx ? Math.log10(xr[0]) : xr[0])) / ((logx ? Math.log10(xr[1]) - Math.log10(xr[0]) : xr[1] - xr[0]) || 1) * (W - P0.l - P0.r), Y = v => H - P0.b - (v - yr[0]) / ((yr[1] - yr[0]) || 1) * (H - P0.t - P0.b);
-    const g = mk('g', {}, layer), tick = r => { const s = niceStep(r[1] - r[0]); const out = []; for (let v = Math.ceil(r[0] / s) * s; v <= r[1] + s * 1e-6; v += s) out.push(+v.toFixed(10)); return out; };
+    rec = false; const g = mk('g', { class: 'fig-axes' }, layer), tick = r => { const s = niceStep(r[1] - r[0]); const out = []; for (let v = Math.ceil(r[0] / s) * s; v <= r[1] + s * 1e-6; v += s) out.push(+v.toFixed(10)); return out; };
     tick(yr).forEach(v => { mk('line', { x1: P0.l, x2: W - P0.r, y1: Y(v), y2: Y(v), stroke: FC.grid }, g); txt(P0.l - 4, Y(v) + 3, fmt(v, 3), { 'text-anchor': 'end', 'font-size': fs - 1.5, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }, g); });
     if (!cats) (logx ? [1e-3, 1e-2, .1, 1, 10, 100, 1e3, 1e4].filter(v => v >= xr[0] && v <= xr[1]) : tick(xr)).forEach(v => txt(X(v), H - P0.b + 13, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 1.5, fill: FC.soft, 'font-family': 'IBM Plex Mono, monospace' }, g));
-    mk('line', { x1: P0.l, x2: W - P0.r, y1: H - P0.b, y2: H - P0.b, stroke: FC.soft }, g); mk('line', { x1: P0.l, x2: P0.l, y1: P0.t, y2: H - P0.b, stroke: FC.soft }, g);
-    if (xlabel) txt(W - P0.r, H - 4, xlabel, { 'text-anchor': 'end', 'font-style': 'italic', 'font-size': fs - .5 }, g);
-    if (ylabel) txt(P0.l + 4, P0.t + 2, ylabel, { 'font-style': 'italic', 'font-size': fs - .5 }, g);
+    mk('line', { x1: P0.l, x2: W - P0.r, y1: H - P0.b, y2: H - P0.b, stroke: FC.soft }, g); mk('line', { x1: P0.l, x2: P0.l, y1: P0.t, y2: H - P0.b, stroke: FC.soft }, g); rec = true;
+    // axis titles in italics, except a unit (J, s⁻², "height (m)"): units are always upright; variables in them are
+    // still italicised by the typesetter
+    if (xlabel) txt(W - P0.r, H - 4, xlabel, { 'text-anchor': 'end', 'font-style': unitish(xlabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' }, g);
+    if (ylabel) txt(P0.l + 4, P0.t + 2, ylabel, { 'font-style': unitish(ylabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' }, g);
     return { X, Y };
   };
   const pathOf = (fn, xr, X, Y, yr) => { let d = '', pen = false; for (let i = 0; i <= 240; i++) { const x = xr[0] + (xr[1] - xr[0]) * i / 240, y = fn(x); if (!isFinite(y) || y < yr[0] - (yr[1] - yr[0]) || y > yr[1] + (yr[1] - yr[0])) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(x).toFixed(1) + ' ' + Y(Math.max(yr[0] - (yr[1] - yr[0]) * .02, Math.min(yr[1] + (yr[1] - yr[0]) * .02, y))).toFixed(1); pen = true; } return d; };
-  const legend = rows => { if (!rows.length) return; const g = mk('g', {}, layer), w = Math.min(W * .45, Math.max(...rows.map(r => r.n.length)) * (fs * .58) + 28), x0 = W - P0.r - w - 4, y0 = P0.t + 4; mk('rect', { x: x0, y: y0, width: w, height: rows.length * (fs + 5) + 6, rx: 3, fill: 'rgba(251,246,234,.9)', stroke: FC.grid }, g); rows.forEach((r, i) => { const y = y0 + 5 + (i + .75) * (fs + 5); if (r.dot) mk('circle', { cx: x0 + 12, cy: y - 3, r: 3.2, fill: r.c }, g); else mk('rect', { x: x0 + 6, y: y - 5, width: 12, height: 3, fill: r.c }, g); txt(x0 + 24, y, r.n, { 'font-size': fs - 1 }, g); }); };
+  // the legend goes where it covers no data mark: the emptiest of the plot's corners (and top/bottom middles), or, when
+  // every spot inside would cover something, in a strip above the plot (the viewBox grows upward). The choice is made
+  // on the first drawing and kept, so an animated chart's legend never jumps.
+  let legendAt = null; const legendPlace = (w, h) => {
+    const L = P0.l + 6, R = W - P0.r - 4 - w, T = P0.t + 4, B = H - P0.b - 4 - h, M = (P0.l + W - P0.r - w) / 2;
+    const cand = [[R, T], [L + 30, T], [R, B], [L + 4, B], [M, T], [M, B]];
+    const cover = ([x, y]) => marks.reduce((a, m) => a + Math.max(0, Math.min(x + w + 3, m[2]) - Math.max(x - 3, m[0])) * Math.max(0, Math.min(y + h + 3, m[3]) - Math.max(y - 3, m[1])), 0);
+    let best = null, bc = Infinity; cand.forEach(c => { const v = cover(c); if (v < bc - 1e-6) { bc = v; best = c; } });
+    return bc <= 0 ? { x: best[0], y: best[1] } : { outside: true };
+  };
+  const legend = rows => { if (!rows.length) return; rec = false; const g = mk('g', { class: 'fig-legend' }, layer), w = Math.min(W * .45, Math.max(...rows.map(r => r.n.length)) * (fs * .58) + 28), rh = fs + 5;
+    if (!legendAt) legendAt = legendPlace(w, rows.length * rh + 6);
+    let x0, y0, pos;
+    clampTxt = !legendAt.outside;
+    if (legendAt.outside) { // one row above the plot, items side by side
+      const ws = rows.map(r => Math.min(W * .45, r.n.length * (fs * .58)) + 30), tot = ws.reduce((a, b) => a + b, 0), hh = rh + 6; x0 = Math.max(P0.l, W - P0.r - tot); y0 = -hh - 2;
+      svg.setAttribute('viewBox', `0 ${-hh - 6} ${W} ${H + hh + 6}`);
+      mk('rect', { x: x0, y: y0, width: tot, height: hh, rx: 3, fill: 'rgba(251,246,234,.9)', stroke: FC.grid }, g);
+      let x = x0; pos = rows.map((r, i) => { const p = [x, y0 + 5 + .75 * rh]; x += ws[i]; return p; });
+    } else { x0 = legendAt.x; y0 = legendAt.y; mk('rect', { x: x0, y: y0, width: w, height: rows.length * rh + 6, rx: 3, fill: 'rgba(251,246,234,.9)', stroke: FC.grid }, g); pos = rows.map((r, i) => [x0, y0 + 5 + (i + .75) * rh]); }
+    rows.forEach((r, i) => { const [x, y] = pos[i]; if (r.dot) mk('circle', { cx: x + 12, cy: y - 3, r: 3.2, fill: r.c }, g); else mk('rect', { x: x + 6, y: y - 5, width: 12, height: 3, fill: r.c }, g); txt(x + 24, y, r.n, { 'font-size': fs - 1 }, g); }); rec = true; clampTxt = true; };
   let draw = () => {}, loopT = 0, animated = false;
   const k = f.kind;
   if (k === 'flow') {
@@ -358,7 +402,7 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
     draw = () => { clear(); const row = (cells, y, head, ri) => cells.forEach((c, j) => { const hl = !head && f.highlight.some(h => +h[0] === ri && +h[1] === j); mk('rect', { x: 6 + j * cw, y: y - 15, width: cw, height: 22, fill: head ? '#efe4c8' : hl ? 'rgba(156,58,40,.18)' : ri % 2 ? '#fbf6ea' : '#fffaf0', stroke: FC.grid }, layer); txt(10 + j * cw, y, String(c).slice(0, Math.floor(cw / (fs * .55))), { 'font-weight': head ? 600 : 400, 'font-size': fs - 1 }); });
       if (f.columns.length) row(f.columns, 26, true, -1); f.rows.forEach((r, i) => row(r, 26 + (i + (f.columns.length ? 1 : 0)) * 22, false, i)); };
   } else if (k === 'contrast') {
-    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 }); const L = wrapText(side.text, Math.floor(w / (fs * .53))).slice(0, small ? 5 : 6); L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); }); };
+    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 }); const L = wrapText(side.text, Math.floor((w - 20) / (fs * (looksLikeCode(String(side.text)) ? .6 : .53))));   /* a code line is set in the wider mono face */ const cap = Math.max(1, Math.floor((H - 13 - 62) / (fs * 1.3)) + 1); if (L.length > cap) { L.length = cap; L[cap - 1] = L[cap - 1].replace(/[\s,;:.]*$/, '') + '…'; }   /* as many lines as the panel holds; a cut text ends in an ellipsis */ L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); }); };
   }
   // ---- run: a static drawing, or a loop (paused off screen, never with reduced motion unless asked)
   let raf = 0, alive = true, visible = true, t0 = performance.now(), playing = false;

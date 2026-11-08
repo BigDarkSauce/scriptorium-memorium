@@ -19,6 +19,9 @@ const PACE = { slow: 150, normal: 210, fast: 300 };   // words per minute
 const GMIN = 26;
 function shortLabel(t) { t = String(t || '').trim(); if (t.length <= 22) return t; const c = t.split(/\s*[,:;(—–]\s*|\s+-\s+|…/)[0].trim(); if (c.length >= 4 && c.length <= 24) return c;
   const w = t.split(/\s+/), out = []; for (const x of w) { if ((out.join(' ') + ' ' + x).length > 20) break; out.push(x); } while (out.length > 1 && /^(the|a|an|of|to|and|or|in|on|at|by|for|its|is|[+\-−×=])$/i.test(out[out.length - 1])) out.pop(); return out.join(' ') + '…'; }
+// the gap (px) between segment ab and the rectangle x, y, w, h (0 when they touch or cross)
+function segRectDist(a, b, x, y, w, h) { if (segRect(a, b, x, y, w, h)) return 0; const pd = (px, py) => { const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / L2)); return Math.hypot(a[0] + dx * t - px, a[1] + dy * t - py); };
+  const rd = (px, py) => Math.hypot(Math.max(x - px, 0, px - x - w), Math.max(y - py, 0, py - y - h)); return Math.min(pd(x, y), pd(x + w, y), pd(x, y + h), pd(x + w, y + h), rd(a[0], a[1]), rd(b[0], b[1])); }
 function segHit(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; }
 function segRect(a, b, x, y, w, h) {   // Liang–Barsky: does segment ab enter the rectangle?
   let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -40,7 +43,7 @@ export class Director {
     this.trail = new Map();      // object → recent screen positions (for motion arrows)
     this._f = V3(); this._qI = new THREE.Quaternion(); this._qL = new THREE.Quaternion(); this._m4 = new THREE.Matrix4(); this.tsV = 0;
   }
-  dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }
+  dispose() { this.endShots(true); this.layer.remove(); const g = this.v.gfx && this.v.gfx.grade && this.v.gfx.grade.uniforms; if (this.dip && g) { if (!(this.v.app && this.v.app.switching)) g.uFade.value = 0; if (this.dip.dark && this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; this.move = null; }   // (a switch disposes under its own veil: leave it up)
   readTime(text) { const words = String(text || '').trim().split(/\s+/).length; return clamp(1.6 + words / PACE[this.pace] * 60, 3, MAXT[this.pace] || 24); }
   userGrab() { this.hold = 6; this.move = null; if (this.zoom) { this.zoom.follow = false; this.zoom.sw = null; } this.fovTo = this.baseFov(); this.last = null; if (this.zoom && this.zoom.phase === 'back') { this.restoreLens(); this.zoom = null; if (this.sbar) this.sbar.hidden = true; if (this.ring) this.ring.style.opacity = 0; } else if (this.zoom && this.zoom.phase !== 'done') { this.zoom.phase = 'done'; this.zoomDone(); } if (this.track && this.track.phase !== 'post') this.endTrack(true); }   // grabbing ends rides at once (no delayed snap-back)
 
@@ -82,7 +85,7 @@ export class Director {
     if (this.cinematic && inStep && this.hold <= 0 && !b.noShot) this.frame(b);   // noShot: a label beat inside a move (peel layers) keeps the camera
     // the callout, beside what it describes
     b.el = el('div', { class: 'callout k-' + b.kind }, [
-      el('div', { class: 'co-kicker', mathLabel: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part : '') }),
+      el('div', { class: 'co-kicker', mathLabel: (b.kicker || (b.kind === 'event' ? 'Now' : b.kind === 'lesson' ? (b.title || 'Step') : 'Why')) + (b.part ? ' · ' + b.part.replace('/', ' of ') : '') }),   // "1 of 2": a typeset "1/2" read as the fraction ½
       b.question ? el('div', { class: 'co-q' }, [el('b', { text: 'Q' }), ' ', el('span', { math: b.question })]) : null,
       el('div', { class: 'co-text', math: b.text }),
       b.opens && (!b.part || b.part.split('/')[0] === b.part.split('/')[1]) ? el('div', { class: 'co-opens', html: '→ ' + mathHTML(b.opens) }) : null, el('div', { class: 'co-foot' }, [el('div', { class: 'co-time' }, [el('i')]), el('button', { class: 'co-next', title: 'Next', 'aria-label': 'Next', text: '›', onclick: () => { if (this.beat === b) this.endBeat(); } })])]);
@@ -94,7 +97,7 @@ export class Director {
     this.v.highlightPins && this.v.highlightPins([b.host, ...(b.names || [])].filter(Boolean));
   }
   endBeat(all) {
-    const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
+    const b = this.beat; if (b && b.capBar) b.capBar.remove(); if (this.v.readPanel) this.v.readPanel.classList.remove('under-sheet'); if (b && b.onEnd && !all) { try { b.onEnd(); } catch (e) { console.warn(e); } } if (b) { const e = b.el; e && e.classList.remove('in'); setTimeout(() => e && e.remove(), 450); b.line && b.line.remove(); b.dot && b.dot.remove(); (b.guides || []).forEach(g => g.remove()); }
     this.beat = null; this.v.highlightPins && this.v.highlightPins(null); if (all) { this.timeScale = 1; this.tsV = 0; this.targetScale = 1; return; } this.nextBeat();
   }
   // ---------- shots ----------
@@ -111,6 +114,10 @@ export class Director {
     // callout, it does not cut away (a cut would end the zoom or the ride half-way)
     // (nor during the pull-out after a ride or a POV, nor while a dolly is still on its way: the next shot waits for it)
     if (b.kind === 'event' && !b.poseOnly && ((this.zoom && this.zoom.phase !== 'back') || this.track || (this.bracket && this.bracket.phase !== 'pre') || this.move)) return;
+    // the beat's camera mode (grammar.js): global, object and mechanism shots hold while the process plays (an event is read in
+    // its callout, the frame stays); an operation that owns the frame (a comparison, an exploded view, a lineup) holds it too
+    if (b.kind === 'event' && !b.poseOnly && ((this.mode && /^(global|object|mechanism)$/.test(this.mode)) || (v.ops && v.ops.holdShot()))) return;
+    if (!b.poseOnly && v.ops && v.ops.ownsFrame()) return;   // a comparison or a lineup has its own fixed framing for the whole step
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
@@ -143,6 +150,7 @@ export class Director {
     // bottom sheet): the subject is centred in it, and the distance grows until the subject fits across the band and
     // across the free width (a portrait phone is narrow: its width, not its height, limits the shot)
     const H = innerHeight, fy = this.freeBand(H), bandF = Math.max(.25, (fy[1] - fy[0]) / H), wideF = Math.max(.25, (fr[1] - fr[0]) / W);
+    if (b.fit && box) return this.fitBox(b, box, dir, fov, kind, subj);   /* an operation that needs the whole box in view (an exploded assembly): fitted exactly, no distance cap */
     if (!b.dist) dist = Math.max(dist, Math.min(R * 1.6, r / Math.tan(half) * 1.12 / bandF, r / (Math.tan(half) * Math.min(1, aspect)) * 1.12 / wideF));
     const yd = 1 - (fy[0] + fy[1]) / H;   /* NDC y of the band's centre */
     const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), hw = dist * Math.tan(half) * aspect, up2 = V3().crossVectors(dir, right).normalize();
@@ -155,6 +163,34 @@ export class Director {
       this.last = { kind, moving: true, subj, t: this.clock, evKey: b.evKey };
     } else { this.cutTo(target, pos, fov, this.last ? this.last.kind !== kind || !this.near(pos) : true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey }; }
     this.accent(p, r);
+  }
+  // the safe rectangle of the frame in px [x0, y0, x1, y1]: below the title and the top buttons, above the time bar and (on a
+  // phone) the callout sheet, beside the instruction panel and the readouts, and (on a phone) clear of the round side buttons
+  safeRect() {
+    const v = this.v, W = innerWidth, H = innerHeight, phone = W < 760, fr = this.freeFrame(W), fy = this.freeBand(H);
+    let x0 = phone ? 10 : fr[0], x1 = phone ? W - 10 : fr[1], y0 = fy[0];
+    const t = v.titleEl && !v.titleEl.hidden ? v.titleEl.getBoundingClientRect() : null; if (t && t.height) y0 = Math.max(y0, t.bottom + 8);
+    if (phone) [document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].forEach(e => { const r = e && e.getBoundingClientRect(); if (r && r.width && r.bottom > y0 && r.top < fy[1]) x1 = Math.min(x1, r.left - 8); });
+    return [x0, y0, x1, Math.max(y0 + H * .2, fy[1])];
+  }
+  // a pose that holds a whole box inside the safe rectangle, for the actual aspect: every corner of the box is projected and
+  // the distance is the smallest one at which all of them land inside (the box centred in the rectangle); badges above the
+  // parts get a margin at the top
+  fitBox(b, box, dir, fov, kind, subj) {
+    const v = this.v, cam = v.camera, W = innerWidth, H = innerHeight, aspect = cam.aspect || W / H, th = Math.tan(THREE.MathUtils.degToRad(fov / 2)), ka = th * aspect;
+    const [px0, py0, px1, py1] = this.safeRect(), pad = 14, top = 34;
+    const x0 = (px0 + pad) / W * 2 - 1, x1 = (px1 - pad) / W * 2 - 1, y1 = 1 - (py0 + top) / H * 2, y0 = 1 - (py1 - pad) / H * 2, xd = (x0 + x1) / 2, yd = (y0 + y1) / 2;
+    const p = box.getCenter(V3()), right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), up2 = V3().crossVectors(dir, right).normalize(), q = V3();
+    let D = 1e-3;
+    for (let i = 0; i < 8; i++) {
+      q.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(p);
+      const cx = q.dot(right), cy = q.dot(up2), cz = q.dot(dir);   /* corner relative to the centre, in the camera's axes (cz toward the lens) */
+      /* NDC x of the corner = (xd·D·ka + cx) / ((D − cz)·ka): inside [x0, x1] gives a lower bound on D for each side */
+      D = Math.max(D, (cx + x1 * cz * ka) / (ka * (x1 - xd)), (-cx - x0 * cz * ka) / (ka * (xd - x0)), (cy + y1 * cz * th) / (th * (y1 - yd)), (-cy - y0 * cz * th) / (th * (yd - y0)), cz + .05);
+    }
+    const target = p.clone().addScaledVector(right, -xd * D * ka).addScaledVector(up2, -yd * D * th), pos = target.clone().addScaledVector(dir, D);
+    if (b.poseOnly) return { target, pos, fov };
+    this.cutTo(target, pos, fov, true); this.last = { kind, moving: false, subj, t: this.clock, evKey: b.evKey };
   }
   // the establishing view framed in the FREE part of the screen (not under the instruction panel or the readouts): the
   // model's overview, panned sideways so the significant bodies sit in the middle of the free frame, and pulled back
@@ -239,14 +275,14 @@ export class Director {
   occluders(a) {
     const out = [], ds = this.v.ds, mine = new Set(); if (a && a.obj) a.obj.traverse(o => mine.add(o));
     const shown = o => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
-    const see = []; [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o)) return; const ms = [].concat(o.material); if (ms.some(m => !m || m.visible === false)) return; if (ms.some(m => m.transmission > 0 || (m.transparent && m.opacity < .6))) see.push(o); else out.push(o); }));
+    const see = []; [ds.world, ds.extras].forEach(g => g && g.traverse(o => { if (!o.isMesh || mine.has(o) || o.userData.isInk || o.isSprite || !shown(o) || (o.isInstancedMesh && o.count > 200)) return;   /* dense instanced decor (grass tufts, fronds, molecules) never decides an approach */ const ms = [].concat(o.material); if (ms.some(m => !m || m.visible === false)) return; if (ms.some(m => m.transmission > 0 || (m.transparent && m.opacity < .6))) see.push(o); else out.push(o); }));
     out.see = see;   // see-through surfaces (glass, a membrane, water): they still dim and tint the view, so they count a little
     return out;
   }
   // how blocked the view of a target at c is from direction ax: five rays (centre and four around the target's rim) up to
   // the final distance d1 (heavy), and the centre ray up to the start distance d0 (light: the dolly passes through it)
   blockCost(c, ax, d0, d1, r, occ) {
-    const rc = this._rc || (this._rc = new THREE.Raycaster()), u = V3(), w = V3(), o = V3(); let cost = 0;
+    const rc = this._rc || (this._rc = new THREE.Raycaster()); rc.firstHitOnly = true; const u = V3(), w = V3(), o = V3(); let cost = 0;
     u.crossVectors(ax, Math.abs(ax.y) > .9 ? V3(1, 0, 0) : UP).normalize(); w.crossVectors(ax, u);
     const offs = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [.75, .75], [-.75, .75], [.75, -.75], [-.75, -.75]];
     for (const [i, j] of offs) {
@@ -304,7 +340,7 @@ export class Director {
     }
     if (Z.phase === 'done') {
       // after arrival the learner may orbit; until they grab the camera it keeps following (and swinging clear of) the subject
-      if (Z.follow && v.running != null && this.hold <= 0) { const dx = Z.c.x - c0x, dy = Z.c.y - c0y, dz = Z.c.z - c0z; v.controls.target.copy(Z.c); if (Z.sw) { cam.position.copy(Z.c).addScaledVector(Z.axis, cam.position.distanceTo(Z.c) || Z.d); cam.lookAt(Z.c); } else { cam.position.x += dx; cam.position.y += dy; cam.position.z += dz; } }
+      if (Z.follow && (v.running != null || (this.beat && this.beat.kind === 'explain')) && this.hold <= 0) { const dx = Z.c.x - c0x, dy = Z.c.y - c0y, dz = Z.c.z - c0z; v.controls.target.copy(Z.c); if (Z.sw) { cam.position.copy(Z.c).addScaledVector(Z.axis, cam.position.distanceTo(Z.c) || Z.d); cam.lookAt(Z.c); } else { cam.position.x += dx; cam.position.y += dy; cam.position.z += dz; } }
     } else if (Z.phase === 'hold') this.zoomPose(true);
     if (Z.phase === 'ring') { if (Z.t >= .5) { Z.phase = 'centre'; Z.t = 0; } }
     else if (Z.phase === 'centre') { const k = Math.min(1, Z.t / .6); this._m4.lookAt(cam.position, Z.c, UP); Z.qT.setFromRotationMatrix(this._m4); cam.quaternion.slerpQuaternions(Z.q0, Z.qT, k * k * (3 - 2 * k)); if (k >= 1) { Z.phase = 'travel'; Z.t = 0; } }
@@ -447,7 +483,7 @@ export class Director {
     const p = s && s.getPos && s.getPos(); if (!p) { if (!this.edge.hidden) this.edge.hidden = true; return; }
     const q = this._a.copy(p).project(v.camera), behind = q.z > 1; let x = behind ? -q.x : q.x, y = behind ? -q.y : q.y;
     if (!behind && Math.abs(x) < .95 && Math.abs(y) < .95) { if (!this.edge.hidden) this.edge.hidden = true; return; }
-    const m = Math.max(Math.abs(x), Math.abs(y), 1e-6); x /= m; y /= m; const w = innerWidth, h = innerHeight, px = (x * .5 + .5) * (w - 80) + 40, py = (-y * .5 + .5) * (h - 200) + 100;
+    const m = Math.max(Math.abs(x), Math.abs(y), 1e-6); x /= m; y /= m; const w = innerWidth, h = innerHeight, px = (x * .5 + .5) * (w - 80) + 40, py = (-y * .5 + .5) * (h - (w < 760 ? 340 : 200)) + 100;   /* (a phone's time bar is two rows tall, the POV bar above it) */
     this.edge.hidden = false; this.edge.style.transform = `translate(${px.toFixed(0)}px,${py.toFixed(0)}px) rotate(${Math.atan2(-y, x).toFixed(3)}rad)`;
     this.edge.title = 'Toward ' + s.name;
   }
@@ -457,7 +493,8 @@ export class Director {
   freeFrame(W, raw) { const v = this.v, P = v.panel, Rp = v.readPanel, ox = P && P.offsetParent ? P.offsetParent.getBoundingClientRect().left : 0; const L = P && !P.hidden && !P.classList.contains('folded') ? ox + P.offsetLeft + P.offsetWidth + 12 : 70; const R = Rp && !Rp.hidden && Rp.offsetWidth ? ox + Rp.offsetLeft - 12 : W - 24; return raw || R - L > W * .35 ? [L, R] : [0, W]; }   // raw: the gap itself, however narrow
   // the free band of the frame vertically: [top, bottom] in px. Top: below the title and the top button row. Bottom: above
   // the time bar, and on a phone above the callout's bottom sheet (its last measured height, else a typical one)
-  freeBand(H = innerHeight) { const phone = innerWidth < 760, top = phone ? 70 : 64; const bot = phone ? H - 128 - (this._sheetH || 170) - 10 : H - 84; return bot - top > H * .25 ? [top, bot] : [top, Math.max(top + H * .25, bot)]; }
+  lvSlot() { const L = this.v.ops && this.v.ops.lv; return L && L.slotB && L.box && L.box.isConnected ? L.slotB : 0; }   // a phone's level indicator: bottom of its reserved slot under the title (0: none)
+  freeBand(H = innerHeight) { const phone = innerWidth < 760, top = phone ? Math.max(70, this.lvSlot() + 8) : 64; const bot = phone ? H - 128 - (this._sheetH || 170) - 10 : H - 84; return bot - top > H * .25 ? [top, bot] : [top, Math.max(top + H * .25, bot)]; }
   near(pos) { return this.v.camera.position.distanceTo(pos) < (this.v.ds.orb ? this.v.ds.orb.r : 10) * .12; }
   // a cut: dip through the grade for a fraction of a second, change camera, come back up (or a short ease if the change is small)
   cutTo(target, pos, fov, dip, then) {
@@ -545,10 +582,10 @@ export class Director {
       F.pts = [[ax, ay], [ax + (cx - ax) * ease, ay + (cy - ay) * ease]]; });
     FE.forEach(F => setLine(F.path, F.pts));
     // while quantity arrows are drawn, the model's own 3D vector arrows step aside (VecArrow in models.js reads this)
-    if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts);
+    if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts) || !!(v.ops && v.ops.muteVectors());   // (runs after update()'s own mute: an exploded view or a lineup keeps the arrows off with Guides on too)
     // links: subject → each named actor, one bend at most, trimmed off both bodies
     (b.links || []).forEach(L2 => {
-      const q = L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; } const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }
+      const q = p && L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; } const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }   // (no anchor: no subject to link from)
       const dx = t.x - sx, dy = t.y - sy, d = Math.hypot(dx, dy); if (d < 40) { setLine(L2.path, null); return; }
       const r0 = 12, r1 = (L2.rimT == null || b.t - L2.rimT > .5) ? (L2.rimT = b.t, L2.rim = rimOf(L2.a.obj) + 6) : L2.rim;
       let pts;
@@ -562,31 +599,40 @@ export class Director {
     });
     // labels: greedy, in flow order; obstacles are every arrow (padded), the labels already placed, the pins, the callout and the frame
     const LH = 17, pad = 5, placed = [], boxes = [], pins = [];
-    (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));   // the pins (a label over a pin hides its name): weighed more than an arrow
+    (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));
+    const CC = v.cues && v.cues.chain; if (CC && CC.rects) CC.rects.forEach(r => pins.push([r[0] - 15 - (b.ox || 0), r[1] - 15 - (b.oy || 0), 30, 30]));   // the chain's numbered badges (centres)   // the pins (a label over a pin hides its name): weighed more than an arrow
     if (b.box) boxes.push(b.box);
+    if (b.dot && b.dot.style.opacity === '1') { boxes.push([sx - 11, sy - 11, 22, 22]); if (b.box) { const bx2 = b.box, ax2 = bx2[0] > sx - bx2[2] / 2 ? bx2[0] : bx2[0] + bx2[2]; segs.push([[ax2, bx2[1] + bx2[3] * .6], [sx, sy]]); } }   /* the callout's anchor dot and (roughly) its leader */
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
+    [b.timeR, b.titleR].forEach(A => { if (A) boxes.push([A.x, A.y, A.w, A.h]); });   // the time bar and the title
     if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
-    const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 50;
+    // a label's cost: 10 per arrow crossing its padded box (soft), 100 for leaving the frame or covering a HUD box,
+    // another label or a pin (hard: never accepted)
+    const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 100;
       for (const s of segs) if (segRect(s[0], s[1], x - pad, y - pad, wd + 2 * pad, LH + 2 * pad)) c += 10;
-      for (const B of boxes.concat(placed)) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 10; }
-      for (const B of pins) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 30; }
+      for (const B of boxes.concat(placed, pins)) { const ix = Math.min(x + wd + 6, B[0] + B[2]) - Math.max(x - 6, B[0]), iy = Math.min(y + LH + 6, B[1] + B[3]) - Math.max(y - 6, B[1]); if (ix > 0 && iy > 0) c += 100; }
       return c; };
     FE.forEach(F => {
       if (!F.pts || !F.full) { F.t.style.opacity = 0; if (F.pill) F.pill.style.opacity = 0; return; }
       const [[ax, ay], [cx, cy]] = F.pts, L = Math.hypot(cx - ax, cy - ay) || 1, ux = (cx - ax) / L, uy = (cy - ay) / L, side0 = F.lane ? 1 : (F.side || 1);
-      const cand = [];
+      // candidates hug their own arrow: beside the shaft (midpoint first, then along it), at a gap of 6–18 px, never
+      // more than LMAX from the arrow; the full text first, then the short form. No clear spot → the label hides and the
+      // arrow carries the full text as its tooltip (a label far from its arrow reads as belonging to something else).
+      const cand = [], seg = F.pts, LMAX = 24;
       [F.full, F.short].forEach((txt, vi) => { if (vi && txt === F.full) return; const wd = vi ? F.wS : F.wF;
-        [.5, .32, .68, 1, 0].forEach(k => [side0, -side0].forEach(sd => [0, 1, 2].forEach(far => {   /* beside the shaft, and out past either end, in up to three rows (a crowded body: pins, other arrows) */ const nx = -uy * sd, ny = ux * sd, off = 9 + far * (LH + 8) + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi, far }); }))); });
-      // keep last frame's choice while it is still clear (no flicker); otherwise the first clear candidate, else the least bad
+        [.5, .38, .62, .25, .75, .9, .1].forEach(k => [side0, -side0].forEach(sd => [0, 1].forEach(far => { const nx = -uy * sd, ny = ux * sd, off = 6 + far * 12 + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off, x = mx - wd / 2, y = my - LH / 2;
+          if (segRectDist(seg[0], seg[1], x, y, wd, LH) <= LMAX) cand.push({ txt, wd, x, y, sd, k, vi, far }); }))); });
+      // keep last frame's choice while it is still clear (no flicker); otherwise the cheapest acceptable candidate
       let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd && c.far === F.lc.far);
       if (keep && cost(keep.x, keep.y, keep.wd) === 0) best = keep;
-      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 2 + (c.k !== .5 ? 1 : 0) + (c.k === 1 || c.k === 0 ? 2 : 0) + c.far * 3; if (k < bc) { bc = k; best = c; if (k === 0) break; } }
-      F.lc = { vi: best.vi, k: best.k, sd: best.sd, far: best.far }; if (!F.lane) F.side = best.sd;
+      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 4 + Math.abs(c.k - .5) * 6 + c.far * 3; if (k < bc) { bc = k; best = c; if (k === 0) break; } }
+      if (!best || bc >= 100) { F.lc = null; F.t.style.opacity = 0; if (F.pill) F.pill.style.opacity = 0; F.hidden = true; if (!F.tip) { F.tip = document.createElementNS(NS, 'title'); F.tip.textContent = F.full; F.path.append(F.tip); } F.path.style.pointerEvents = 'stroke'; F.path.style.cursor = 'help'; return; }
+      F.hidden = false; F.path.style.pointerEvents = ''; F.lc = { vi: best.vi, k: best.k, sd: best.sd, far: best.far }; if (!F.lane) F.side = best.sd;
       if (F.vis.textContent !== best.txt) F.vis.textContent = best.txt;
       F.t.setAttribute('x', (best.x + best.wd / 2).toFixed(0)); F.t.setAttribute('y', (best.y + LH - 4).toFixed(0)); F.t.style.opacity = ease > .6 ? 1 : 0;
       // the backing: a dark translucent pill behind the text, so it reads on grass, sky or a bright model alike
       if (F.pill) { F.pill.setAttribute('x', (best.x - 6).toFixed(0)); F.pill.setAttribute('y', (best.y - 1).toFixed(0)); F.pill.setAttribute('width', (best.wd + 12).toFixed(0)); F.pill.setAttribute('height', LH + 2); F.pill.style.opacity = ease > .6 ? 1 : 0; }
-      placed.push([best.x, best.y, best.wd, LH]);
+      placed.push([best.x - 12, best.y - 7, best.wd + 24, LH + 14]);   // its pill plus 6 px: the next label's pill keeps ≥ 6 px away
     });
   }
   // ---------- per frame ----------
@@ -610,7 +656,14 @@ export class Director {
       else if (!this.dip) { const R = v.ds && v.ds.orb ? v.ds.orb.r : 10; if (this._cp) { const vel = (this._cv || (this._cv = V3())).subVectors(cam.position, this._cp).divideScalar(dt); if (vel.length() > R * 2.5) vel.set(0, 0, 0); }   /* a teleport (a cut) is not a motion */
         (this._cp || (this._cp = V3())).copy(cam.position); }
       else { this._cp = null; if (this._cv) this._cv.set(0, 0, 0); } } }
-    if (this.dip) { const d = this.dip; d.t += dt; if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) { if (d.t < dt * 1.5) { this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); } g.uFade.value = a; } if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } }
+    // timed by the wall clock when the app's loop drives the frame (a slow frame never keeps the view dark longer than the
+    // dip: each frame advances it by its real duration, at most 0.2 s so the dark frame is still drawn once); while the
+    // mode switch holds its veil the cut is applied at once and the veil is left to the switch (never two writers on it)
+    if (this.dip) { const d = this.dip, app = v.app, wd = app && app.loopDt;
+      if (app && app.switching) { if (!d.done) { d.done = true; d.apply(); } if (d.dark && g && this._fc) g.uFadeColor.value.copy(this._fc); this.dip = null; }
+      else { d.t += wd > 0 ? Math.max(dt, Math.min(.2, wd)) : dt; if (g && !d.dark) { d.dark = true; this._fc = g.uFadeColor.value.clone(); g.uFadeColor.value.setRGB(.02, .018, .015); }
+        if (!d.done && d.t >= .18) { d.apply(); d.done = true; } const a = d.t < .18 ? d.t / .18 : Math.max(0, 1 - (d.t - .18) / .3); if (g) g.uFade.value = a;
+        if (d.t >= .48) { if (g) { g.uFade.value = 0; if (this._fc) g.uFadeColor.value.copy(this._fc); } this.dip = null; } } }
     // a push: slow dolly, eased, then it simply holds
     if (this.move && this.hold <= 0) { const m = this.move; m.k = Math.min(1, m.k + dt / m.dur); const e = m.k * m.k * (3 - 2 * m.k); v.camera.position.lerpVectors(m.from, m.to, e);
       if (m.q0) { this._m4.lookAt(v.camera.position, m.t0, UP); this._qL.setFromRotationMatrix(this._m4); v.camera.quaternion.slerpQuaternions(m.q0, this._qL, e); } else v.camera.lookAt(m.t0);   // q0: turn from the previous heading over the move
@@ -620,7 +673,7 @@ export class Director {
     // lens: ease the field of view toward the shot's focal length (or back to the base lens after the learner takes over)
     if (this.fovTo && Math.abs(v.camera.fov - this.fovTo) > .05 && !v.pov) { v.camera.fov += (this.fovTo - v.camera.fov) * Math.min(1, dt * 2.5); v.camera.updateProjectionMatrix(); }
     this.updateShots(dt);
-    if (v.ds && v.ds.scene && v.ds.scene.userData.vecMute && !(this.guides && this.beat && this.beat.flowEls)) v.ds.scene.userData.vecMute = false;
+    if (v.ds && v.ds.scene) { const om = !!(v.ops && v.ops.muteVectors()); if (om) v.ds.scene.userData.vecMute = true; else if (v.ds.scene.userData.vecMute && !(this.guides && this.beat && this.beat.flowEls)) v.ds.scene.userData.vecMute = false; }   // (a model's own vector arrows step aside while parts are apart or a lineup shows)
     const b = this.beat; if (!b) return;
     if (!b.paused) b.t += dt;
     if (b.kind === 'event' && this.cinematic && v.running != null) this.targetScale = Math.max(riding ? .6 : 0, this.queue.length ? .12 : .3);   // more waiting → slower, so text never lags far behind the process
@@ -636,31 +689,32 @@ export class Director {
       // layout is read at most every 0.25 s (callout size, pins, panels), never between this frame's writes
       if (!b.rects || b.t - (b.rectT || -1) > .25) {
         b.rectT = b.t; b.cw = e.offsetWidth || 300; b.ch = e.offsetHeight || 80; b.rects = [...(v.labels ? v.labels.querySelectorAll('.pin') : [])].filter(e => e.style.visibility !== 'hidden').map(e => e.getBoundingClientRect()).filter(r => r.width > 1); const hr = this.layer.getBoundingClientRect(); b.ox = hr.left; b.oy = hr.top;
-        const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height }; };
+        const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox - 8, y: r.top - b.oy - 8, w: r.width + 16, h: r.height + 16 }; };   // inflated by the 8 px HUD margin: closer than 8 px counts as an overlap
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
-        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip].map(R).filter(Boolean);
-        const ch0 = R(this.chipEl); b.chipR = ch0;
+        b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box, ...(v.ops && v.ops.layer ? [...v.ops.layer.querySelectorAll('.ops-cap, .ops-badge')].filter(E => E.style.opacity !== '0' && +getComputedStyle(E).opacity > .05) : [])].map(R).filter(Boolean);   /* grammar.js: the level indicator, the compare captions (their own slots) and the lineup / explode badges (on their subjects); the anchor dot also hides under them (dotOn) */
+        const ch0 = R(this.chipEl); b.chipR = ch0; b.titleR = R(v.titleEl); b.timeR = R(v.ui && v.ui.querySelector('.dio-time')); b.panR = v.panel && !v.panel.hidden ? R(v.panel) : null;
       }
       const cw = b.cw, ch = b.ch;
       // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
-      const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h + 8) : 84;
+      const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h) : 84;
       const bounds = y => [panel, y < 176 ? w - cw - 66 : w - cw - 24];
-      const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
+      const place = c => { let x = c[2] != null ? sx + c[2] : c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
         b.avoidT = b.t; b.avoid = [];
         if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < 8; k++) { const q = V3(k & 1 ? bx.max.x : bx.min.x, k & 2 ? bx.max.y : bx.min.y, k & 4 ? bx.max.z : bx.min.z).project(cam); const qx = (q.x * .5 + .5) * w, qy = (-q.y * .5 + .5) * h; x0 = Math.min(x0, qx); y0 = Math.min(y0, qy); x1 = Math.max(x1, qx); y1 = Math.max(y1, qy); } b.avoid.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, k: 6 }); } }
         [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].forEach(P => { if (P && !P.hidden && P.getBoundingClientRect && !(P === v.panel && P.classList.contains('folded'))) { const r = P.getBoundingClientRect(); if (r.width) b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
         (b.hard || []).forEach(A => b.avoid.push(Object.assign({ k: 8 }, A)));
+        ((v.ops && v.ops.cmpRects && v.ops.cmpRects()) || []).forEach(A => b.avoid.push({ x: A.x - b.ox, y: A.y - b.oy, w: A.w, h: A.h, k: 6 }));   /* a comparison: off both models */
         if (this.track && this.track.phase === 'ride') b.avoid.push({ x: w * .3, y: h * .25, w: w * .4, h: h * .5, k: 6 });   // during a ride the middle of the frame is the view itself: text goes to the side
       }
-      const cost = ([x, y]) => { let o = 0; for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
-      const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
+      const cost = ([x, y]) => { let o = on && x < sx + 14 && x + cw > sx - 14 && y < sy + 14 && y + ch > sy - 14 ? 4e5 : 0; /* never over its own anchor dot */ for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
+      const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]]; if (v.ops && v.ops.cmpRects && v.ops.cmpRects()) C.push([0, -1e4, -cw / 2]);   /* a comparison: also centred over the divider at the top, between the two models (c[2]: x offset of the left edge) */
       const right0 = sx < w * .58; const first = b.side == null; if (first) b.side = right0 ? 0 : 1;
       // hysteresis: the side changes only when another is far better (less than half the cost, by a real margin) for 0.6 s
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
         if (first) b.side = best; else if (best !== b.side && bc < cur * .5 && cur - bc > 1500) { b.badT = (b.badT || 0) + dt; if (b.badT > .6) { b.side = best; b.badT = 0; if (b.rx != null) b.tw = { x0: b.rx, y0: b.ry, t: 0 }; } } else b.badT = 0; }
-      let [x, y] = place(C[b.side]);
-      if (phone) { x = 10; y = h - ch - 128; this._sheetH = ch; }   // phones: a bottom sheet above the time bar
+      let [x, y] = place(C[b.side]), sheetB = null;   // sheetB: a phone sheet's bottom edge (it is drawn from its bottom up)
+      if (phone) { const chp = e.offsetHeight || ch, tbe = v.ui && v.ui.querySelector('.dio-time'), tbr = tbe && tbe.getBoundingClientRect(), tb = Math.min(tbr && tbr.height ? tbr.top - this.layer.getBoundingClientRect().top : h, w <= 560 ? h - 110 : h - 64);   /* (on a narrow phone the bar may wrap to two rows any frame: keep room for both) */   /* read every frame: the bar rewraps */ if (v.readPanel && !v.readPanel.classList.contains('under-sheet')) v.readPanel.classList.add('under-sheet');   /* the readouts step aside while the sheet is up (no room for both on a phone) */ x = 10; y = Math.max(84, this.lvSlot() + 10, tb - chp - 8); this._sheetH = chp; sheetB = y + chp; }   // phones: a bottom sheet just above the time bar (measured: it wraps to two rows), its height read fresh
       else {
         // hard obstacles: step out of each by the smallest move that stays inside the frame (two passes)
         for (let pass = 0; pass < 2; pass++) for (const A of b.hard || []) {
@@ -669,18 +723,33 @@ export class Director {
           if (opts.length) { opts.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y)); [x, y] = opts[0]; }
         }
       }
+      const offHard = (yy, xx = x) => !(b.hard || []).some(A => xx < A.x + A.w && xx + cw > A.x && yy < A.y + A.h && yy + ch > A.y);   // the late steps below never move onto the HUD
+      // still over its own anchor dot (clamped against the panel or the frame): step above or below the dot instead
+      if (sheetB == null && on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) {   /* (a phone sheet stays on the time bar: the dot hides under it instead) (24: the measured height may lag the text by a line) */
+        const [xa, xb] = bounds(y), P = [[x, sy + 24], [x, sy - 24 - ch], [sx + 24, y], [sx - 24 - cw, y]].filter(([px, py]) => py >= topAt(px) - .5 && py <= h - ch - 16 && px >= xa - .5 && px <= xb + .5 && offHard(py, px));
+        if (P.length) [x, y] = P.sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y))[0]; }
+      // still over an object's name: step just above or below that name (if that stays in the frame and off the dot)
+      if (sheetB == null) for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
+        const ys = [ry - ch - 8, ry + r.height + 8].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && offHard(yy) && !(on && x < sx + 14 && x + cw > sx - 14 && yy < sy + 24 && yy + ch > sy - 24)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; break; }
       // the glide after a change of side: from where it was drawn toward where it now belongs
+      if (sheetB != null) b.tw = null;   // (a sheet never glides: it stays on the time bar)
       if (b.tw) { b.tw.t += dt; const k = Math.min(1, b.tw.t / .35), s = k * k * (3 - 2 * k); x = b.tw.x0 + (x - b.tw.x0) * s; y = b.tw.y0 + (y - b.tw.y0) * s; if (k >= 1) b.tw = null; }
       b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
       const right = x > sx - cw / 2;
-      e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
-      b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
+      // a phone sheet hangs from its bottom edge (just above the time bar): text that grows after this frame's measure (a
+      // step line or a legend added to the callout later in the frame, a reflow) extends it upward, never onto the bar
+      e.style.transform = sheetB != null ? `translate(${x.toFixed(0)}px,${sheetB.toFixed(0)}px) translateY(-100%)` : `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
+      // an anchor under the HUD (the title, the panel tab, the readouts, the buttons): no dot and no leader onto it
+      const dotOn = on && !(phone && sx > x - 4 && sx < x + cw + 4 && sy > y - 4 && sy < y + ch + 4) && ![...(b.hard || []), b.titleR, b.panR, b.timeR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
+      b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = dotOn ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
-      b.line.setAttribute('d', on ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
+      b.line.setAttribute('d', dotOn ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
       // guides (made when Guides is switched on mid-beat, hidden while it is off)
       if (this.guides && !b.guides) this.makeGuides(b);
       if (b.guides) {
-        if (!this.guides) { if (!b.gOff) this.showGuides(b, false); }
+        /* side by side (a comparison), a world-space guide projected through the full-frame camera would land at the divider,
+           in neither half: the guides step aside for the comparison, as the anchor dot does */
+        if (!this.guides || (v.ops && v.ops.noAnchor())) { if (!b.gOff) this.showGuides(b, false); }
         else { if (b.gOff) this.showGuides(b, true); this.drawGuides(b, cam, w, h, sx, sy, p); }
       }
     }

@@ -226,6 +226,285 @@
                       },
                       "pov": {
                         "type": "string"
+                      },
+                      "cameraMode": {
+                        "enum": [
+                          "global",
+                          "object",
+                          "component",
+                          "mechanism",
+                          "frame"
+                        ],
+                        "description": "the explanatory level of the beat: global (wide) | object (medium) | component (push) | mechanism (static, holds) | frame (POV)"
+                      },
+                      "level": {
+                        "type": "string",
+                        "description": "the level of the scene's \"levels\" the beat is on"
+                      },
+                      "explainBack": {
+                        "type": "string",
+                        "description": "a question the learner answers in their own words"
+                      },
+                      "explode": {
+                        "type": "object",
+                        "required": [
+                          "parts"
+                        ],
+                        "properties": {
+                          "parts": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "axis": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "auto",
+                                  "x",
+                                  "y",
+                                  "z"
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              }
+                            ]
+                          },
+                          "distance": {
+                            "type": "number"
+                          },
+                          "labels": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "const": "numbered"
+                              }
+                            ]
+                          },
+                          "hold": {
+                            "type": "number"
+                          },
+                          "reassemble": {
+                            "type": "boolean"
+                          },
+                          "anchor": {
+                            "type": "string"
+                          },
+                          "caption": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "assemble": {
+                        "type": "object",
+                        "required": [
+                          "parts"
+                        ],
+                        "properties": {
+                          "parts": {
+                            "type": "array",
+                            "minItems": 1
+                          },
+                          "from": {
+                            "enum": [
+                              "above",
+                              "outside"
+                            ]
+                          },
+                          "stagger": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "inspect": {
+                        "anyOf": [
+                          {
+                            "type": "array"
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "parts"
+                            ],
+                            "properties": {
+                              "parts": {
+                                "type": "array",
+                                "minItems": 1
+                              },
+                              "hold": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "section": {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "all",
+                                  "*"
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "axis": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "x",
+                                  "y",
+                                  "z"
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              }
+                            ]
+                          },
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              }
+                            ]
+                          },
+                          "keep": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "sweep": {
+                            "type": "number"
+                          },
+                          "depth": {
+                            "type": "number"
+                          },
+                          "caption": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "compare": {
+                        "type": "object",
+                        "required": [
+                          "b"
+                        ],
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "side",
+                              "split"
+                            ]
+                          },
+                          "a": {
+                            "type": "object"
+                          },
+                          "b": {
+                            "type": "object",
+                            "required": [
+                              "set"
+                            ],
+                            "properties": {
+                              "set": {
+                                "type": "object"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "read": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "progression": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "minItems": 2
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "stages"
+                            ],
+                            "properties": {
+                              "stages": {
+                                "type": "array",
+                                "minItems": 2
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "scaleTo": {
+                        "type": "object",
+                        "required": [
+                          "items"
+                        ],
+                        "properties": {
+                          "items": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "r"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "r": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0
+                                },
+                                "color": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        }
                       }
                     }
                   }
@@ -365,6 +644,12 @@
                     "sweep",
                     "topdown"
                   ]
+                },
+                "plan": {
+                  "$ref": "#/$defs/plan"
+                },
+                "levels": {
+                  "type": "array"
                 }
               },
               "description": "a 2D diagram, a built-in 3D model, or a scene (full spec or {type:'scene',request} to be authored later)"
@@ -752,5 +1037,225 @@
       "type": "integer"
     }
   },
-  "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md. Validate with any draft 2020-12 validator (load chain.schema.json, room.schema.json and scene.schema.json together; their $ids share one base so the relative $refs resolve). The strict profile used by tools/verify-chain.mjs is chain.strict.schema.json."
+  "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md. Validate with any draft 2020-12 validator (load chain.schema.json, room.schema.json and scene.schema.json together; their $ids share one base so the relative $refs resolve). The strict profile used by tools/verify-chain.mjs is chain.strict.schema.json.",
+  "$defs": {
+    "beat": {
+      "type": "object",
+      "required": [
+        "stage",
+        "technique",
+        "cameraMode",
+        "purpose",
+        "answers"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "curiosity",
+            "orientation",
+            "decomposition",
+            "inspection",
+            "mechanism",
+            "intuition",
+            "reconstruction",
+            "understanding"
+          ],
+          "description": "Jared Owen's explanatory sequence, used as a planning algorithm"
+        },
+        "technique": {
+          "enum": [
+            "establish",
+            "explode",
+            "assemble",
+            "inspect",
+            "section",
+            "peel",
+            "isolate",
+            "chain",
+            "zoom",
+            "scaleTo",
+            "compare",
+            "progression",
+            "track",
+            "pov",
+            "analogy",
+            "answer"
+          ],
+          "description": "an operation of the visual grammar (js/dio/grammar.js), by name"
+        },
+        "cameraMode": {
+          "enum": [
+            "global",
+            "object",
+            "component",
+            "mechanism",
+            "frame"
+          ]
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 4
+        },
+        "answers": {
+          "type": "string",
+          "minLength": 4
+        },
+        "opens": {
+          "type": "string"
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lesson": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "motion": {
+          "type": "object",
+          "properties": {
+            "explanatory": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "background": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "which motion explains, and which only makes the scene alive"
+        },
+        "sub": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/beat"
+          },
+          "description": "the sequence again, inside this beat (recursive)"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "description": "the didactic plan written before the demo (docs/PEDAGOGY.md); checked by tools/verify-chain.mjs",
+      "required": [
+        "question",
+        "knowledgeKind",
+        "sequence",
+        "comprehensionCheck"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 5
+        },
+        "knowledgeKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "structural",
+                "internal",
+                "causal",
+                "scale",
+                "history",
+                "pathology",
+                "movement",
+                "perspective"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "structural",
+                  "internal",
+                  "causal",
+                  "scale",
+                  "history",
+                  "pathology",
+                  "movement",
+                  "perspective"
+                ]
+              }
+            }
+          ]
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "sequence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/beat"
+          }
+        },
+        "analogy": {
+          "type": "object",
+          "required": [
+            "familiar",
+            "limit"
+          ],
+          "properties": {
+            "familiar": {
+              "type": "string"
+            },
+            "maps": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "string"
+            }
+          }
+        },
+        "comprehensionCheck": {
+          "type": "object",
+          "required": [
+            "explainBack",
+            "misconceptionToAvoid"
+          ],
+          "properties": {
+            "explainBack": {
+              "type": "string",
+              "minLength": 5
+            },
+            "misconceptionToAvoid": {
+              "type": "string",
+              "minLength": 3
+            },
+            "answer": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
 }
