@@ -203,7 +203,7 @@ export class Cues {
   // the current callout carries the k-of-n numbering too (S5.8)
   // a callout belongs to the chain when it is the step's own instruction or explanation, or an event about the link now lit
   beatAboutChain(b) { const C = this.chain; if (!b || !C) return false; if (b.kind !== 'event') return true; const f = C.front; if (!f) return false; const nm = f.name.split(' · ')[0].toLowerCase(); return b.host === f || (b.names || []).includes(f) || String(b.text || '').toLowerCase().includes(nm); }
-  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k || !this.beatAboutChain(b)) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = k.dataset.base + ' · ' + txt; }
+  kicker(txt) { const b = this.v.dir && this.v.dir.beat, k = b && b.el && b.el.querySelector('.co-kicker'); if (!k) return; if (k.dataset.base == null) k.dataset.base = k.textContent.split(' · Step')[0].split(' · Layer')[0]; k.textContent = this.beatAboutChain(b) ? k.dataset.base + ' · ' + txt : k.dataset.base; }   // a callout no longer about the link now lit drops its step number (never a stale one)
   // ---------- S3 peel ----------
   // P: {layers:[actor], mode, order, dwell, restore}, host: the inner subject
   startPeel(P, host) {
