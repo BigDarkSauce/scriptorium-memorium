@@ -155,7 +155,9 @@ window.POLISH = function (scope, ctx) {
   for (const e of document.querySelectorAll('#ui i, #ui em, #ui tspan, body > .modal-veil i')) {
     if (e.closest('.unf-hidden, [hidden], mjx-container') || !UNITS.test((e.textContent || '').trim())) continue;
     const it = e.tagName === 'tspan' ? (e.getAttribute('font-style') === 'italic' || getComputedStyle(e).fontStyle === 'italic') : getComputedStyle(e).fontStyle === 'italic'; if (!it) continue;
-    const pv = prevText(e); if (/(\d[\d.,]*\s?|%\s?\/\s?|\d\s?[A-Za-z]{1,3}\s?\/\s?)$/.test(pv)) { const host = e.closest('[class]'); if (e.tagName !== 'tspan' && !vis(e)) continue; out.push({ check: 'd', what: 'italic unit', el: name(host || e), text: (pv.slice(-12) + e.textContent).trim() }); }
+    // the text before it within the same typeset span / SVG text / line item (never across two readouts or labels)
+    const host0 = e.closest('em, text, li, p, td, dd, .pin-name, .reads > span, .lesson-text, h4, figcaption') || e.parentElement; let pv = ''; try { const rg = document.createRange(); rg.setStart(host0, 0); rg.setEndBefore(e); pv = rg.toString().slice(-14); } catch (x) { pv = prevText(e); }
+    if (/(\d[\d.,]*\s?|%\s?\/\s?|\d\s?[A-Za-z]{1,3}\s?\/\s?)$/.test(pv)) { const host = e.closest('[class]'); if (e.tagName !== 'tspan' && !vis(e)) continue; out.push({ check: 'd', what: 'italic unit', el: name(host || e), text: (pv.slice(-12) + e.textContent).trim() }); }
   }
   // (e) SVG figures
   for (const svg of document.querySelectorAll('.fig svg, .svgdemo svg')) {

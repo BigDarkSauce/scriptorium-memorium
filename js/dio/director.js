@@ -653,7 +653,7 @@ export class Director {
         const R = P => { if (!P || P.hidden || !P.getBoundingClientRect || P.style.visibility === 'hidden') return null; const r = P.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(P).display === 'none') return null; return { x: r.left - b.ox - 8, y: r.top - b.oy - 8, w: r.width + 16, h: r.height + 16 }; };   // inflated by the 8 px HUD margin: closer than 8 px counts as an overlap
         const ins = v.inset && v.inset.box && !v.inset.box.hidden && +v.inset.box.style.opacity > .05 ? v.inset.box : null, cueChip = v.cues && v.cues.chip && !v.cues.chip.hidden && v.cues.chip.style.visibility !== 'hidden' ? v.cues.chip : null;
         b.hard = [v.readPanel, v.povBar, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn'), ins, this.chipEl, cueChip, v.ops && v.ops.lv && v.ops.lv.box].map(R).filter(Boolean);   /* (the level indicator of grammar.js)*/
-        const ch0 = R(this.chipEl); b.chipR = ch0;
+        const ch0 = R(this.chipEl); b.chipR = ch0; b.titleR = R(v.titleEl); b.panR = v.panel && !v.panel.hidden ? R(v.panel) : null;
       }
       const cw = b.cw, ch = b.ch;
       // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
@@ -690,9 +690,11 @@ export class Director {
       b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
       const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
-      b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = on ? 1 : 0;
+      // an anchor under the HUD (the title, the panel tab, the readouts, the buttons): no dot and no leader onto it
+      const dotOn = on && ![...(b.hard || []), b.titleR, b.panR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
+      b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = dotOn ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
-      b.line.setAttribute('d', on ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
+      b.line.setAttribute('d', dotOn ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
       // guides (made when Guides is switched on mid-beat, hidden while it is off)
       if (this.guides && !b.guides) this.makeGuides(b);
       if (b.guides) {
