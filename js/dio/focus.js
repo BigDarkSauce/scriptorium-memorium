@@ -335,8 +335,10 @@ export class Cues {
     U.uIso.value = this.iso.w * this.iso.w * (3 - 2 * this.iso.w); U.uChain.value = C ? C.w : 0; U.uVig.value = this.vig < .005 ? 0 : this.vig;
     this.pass.enabled = U.uIso.value > .002 || U.uChain.value > .002 || U.uVig.value > 0;
     this.pass.camera = v.camera; this.pass.scene = v.scene;
-    if (C) this.drawChain();
   }
+  // the chain's badges, placed after the engine has laid out this frame's object labels: they step round where the
+  // names are now, not where they were a frame ago (a moving body's label pushes a still one's label aside)
+  draw() { if (this.chain) this.drawChain(); }
   // badges on the links (pin style), kept apart from each other; the arrow between consecutive links while the front crosses
   drawChain() {
     const C = this.chain, cam = this.v.camera, w = innerWidth, h = innerHeight, q = this._q, placed = [];

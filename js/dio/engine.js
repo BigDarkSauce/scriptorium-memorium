@@ -680,6 +680,7 @@ export class DioramaView {
       vis(it.pin, ok && !under ? 'visible' : 'hidden');
       if (ok && !under) { placed.push({ x: it.x, y, w: W0, h: H0 }); const tf = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px)`; if (it.pin._tf !== tf) { it.pin._tf = tf; it.pin.style.transform = tf; } }
     }
+    this.cues.draw();   // the chain badges keep off the labels as laid out just now
     // weather you can hear: rain follows the model's rain (its own weather() if it has one, else any visible 'rain' object's opacity)
     if (this.app.sfx && (!this._wt || t - this._wt > .5)) { this._wt = t; let rain = 0, wind = 0;
       try { const W = ds.sim && ds.sim.weather && ds.sim.weather(); if (W) { rain = +W.rain || 0; wind = +W.wind || 0; } else { if (!this._rainObjs || t - (this._rainScan || 0) > 4) { this._rainScan = t; this._rainObjs = []; ds.world.traverse(o => { if (/rain/i.test(o.name || '') && o.material && !o.isGroup) this._rainObjs.push(o); }); }
