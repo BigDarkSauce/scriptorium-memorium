@@ -66,6 +66,8 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
    instead of running under the panel or ending in an ellipsis. Phones: the panel stands above it, so it takes the full width. */
 .hint { position: absolute; left: calc(var(--gut) + max(0px, env(safe-area-inset-left,0px))); bottom: calc(var(--gut) + env(safe-area-inset-bottom,0px)); padding: 8px 16px; border-radius: 18px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: normal; text-wrap: balance; width: max-content; max-width: calc(100vw - 3 * var(--gut) - 300px); pointer-events: none !important; }
 @media (max-width: 700px) { .hint { max-width: calc(100vw - 2 * var(--gut)); font-size: 12.5px; padding: 7px 14px; } }
+/* any modal open (Add PDF, a confirm, the lightbox…): the hint steps away instead of being cut by the dialog's edge */
+body:has(.modal-veil) .hint { opacity: 0 !important; visibility: hidden; }
 /* the hall's cinematic opening of a scroll (hub.js openScroll): the interface fades out and comes back on cancel */
 .hub-ui > *, .sound-btn, .gfx-btn { transition: opacity .45s ease; }
 body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, body.cine .gfx-card { opacity: 0 !important; pointer-events: none !important; }
