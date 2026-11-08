@@ -574,6 +574,7 @@ export class Director {
     if (b.box) boxes.push(b.box);
     if (b.dot && b.dot.style.opacity === '1') { boxes.push([sx - 11, sy - 11, 22, 22]); if (b.box) { const bx2 = b.box, ax2 = bx2[0] > sx - bx2[2] / 2 ? bx2[0] : bx2[0] + bx2[2]; segs.push([[ax2, bx2[1] + bx2[3] * .6], [sx, sy]]); } }   /* the callout's anchor dot and (roughly) its leader */
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
+    [b.timeR, b.titleR].forEach(A => { if (A) boxes.push([A.x, A.y, A.w, A.h]); });   // the time bar and the title
     if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
     // a label's cost: 10 per arrow crossing its padded box (soft), 100 for leaving the frame or covering a HUD box,
     // another label or a pin (hard: never accepted)
@@ -698,7 +699,7 @@ export class Director {
       const right = x > sx - cw / 2;
       e.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
       // an anchor under the HUD (the title, the panel tab, the readouts, the buttons): no dot and no leader onto it
-      const dotOn = on && ![...(b.hard || []), b.titleR, b.panR, b.timeR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
+      const dotOn = on && !(phone && sx > x - 4 && sx < x + cw + 4 && sy > y - 4 && sy < y + ch + 4) && ![...(b.hard || []), b.titleR, b.panR, b.timeR].some(A => A && sx > A.x - 9 && sx < A.x + A.w + 9 && sy > A.y - 9 && sy < A.y + A.h + 9);
       b.dot.style.transform = `translate(${sx.toFixed(0)}px,${sy.toFixed(0)}px)`; b.dot.style.opacity = dotOn ? 1 : 0;
       const ax = right ? x : x + cw, ay = y + ch * .6;
       b.line.setAttribute('d', dotOn ? `M${ax} ${ay} C ${(ax + sx) / 2} ${ay}, ${sx} ${(ay + sy) / 2}, ${sx} ${sy - 7}` : '');
