@@ -349,7 +349,8 @@ export class Cues {
       [this.chip, d && d.chipEl].forEach(P => { if (!P || P.hidden || P.style.visibility === 'hidden') return; const r = P.getBoundingClientRect(); if (r.width > 1 && r.height > 1) R.push([r.left - 8, r.top - 8, r.right + 8, r.bottom + 8]); });   /* nor under the step chip */
       this._hudR = R; }
     // nor on an object's name: the pins move and appear every frame, so they are read on every call
-    const pinR = []; this.v.labels && this.v.labels.querySelectorAll('.pin.in').forEach(P => { const n = P.querySelector('.pin-name') || P, r = n.getBoundingClientRect(); if (r.width > 1 && r.height > 1) pinR.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); });
+    const pinR = []; this.v.labels && this.v.labels.querySelectorAll('.pin.in').forEach(P => { if (P.style.visibility === 'hidden') return; for (const n of P.querySelectorAll('.pin-name, .pin-num')) { const r = n.getBoundingClientRect(); if (r.width > 1 && r.height > 1) pinR.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); } });   /* a full name or, for a shrunk label, its number */
+    const dot = this.v.dir && this.v.dir.beat && this.v.dir.beat.dot; if (dot && dot.style.opacity === '1') { const r = dot.getBoundingClientRect(); pinR.push([r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]); }   // nor on the callout's anchor dot
     const onHud = (x, y) => this._hudR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]) || pinR.some(r => x + 11 > r[0] && x - 11 < r[2] && y + 11 > r[1] && y - 11 < r[3]);
     for (const o of order) {
       for (let k = 0; k < 6; k++) { const hit = placed.find(p => Math.abs(p.x - o.x) < 26 && Math.abs(p.y - o.y) < 26); if (!hit) break; o.y = hit.y + 27; }

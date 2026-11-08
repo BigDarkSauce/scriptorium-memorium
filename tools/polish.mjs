@@ -157,7 +157,7 @@ window.POLISH = function (scope, ctx) {
     const it = e.tagName === 'tspan' ? (e.getAttribute('font-style') === 'italic' || getComputedStyle(e).fontStyle === 'italic') : getComputedStyle(e).fontStyle === 'italic'; if (!it) continue;
     // the text before it within the same typeset span / SVG text / line item (never across two readouts or labels)
     const host0 = e.closest('em, text, li, p, td, dd, .pin-name, .reads > span, .lesson-text, h4, figcaption') || e.parentElement; let pv = ''; try { const rg = document.createRange(); rg.setStart(host0, 0); rg.setEndBefore(e); pv = rg.toString().slice(-14); } catch (x) { pv = prevText(e); }
-    if (/(\d[\d.,]*\s?|%\s?\/\s?|\d\s?[A-Za-z]{1,3}\s?\/\s?)$/.test(pv)) { const host = e.closest('[class]'); if (e.tagName !== 'tspan' && !vis(e)) continue; out.push({ check: 'd', what: 'italic unit', el: name(host || e), text: (pv.slice(-12) + e.textContent).trim() }); }
+    if (/(\d[\d.\u2009]*\s?|%\s?\/\s?|\d\s?[A-Za-z]{1,3}\s?\/\s?)$/.test(pv)) { const host = e.closest('[class]'); if (e.tagName !== 'tspan' && !vis(e)) continue; out.push({ check: 'd', what: 'italic unit', el: name(host || e), text: (pv.slice(-12) + e.textContent).trim() }); }
   }
   // (e) SVG figures
   for (const svg of document.querySelectorAll('.fig svg, .svgdemo svg')) {
@@ -257,7 +257,7 @@ async function runItem(id) {
   } else if (area === 'dio') {
     const [kind, key] = arg.split(':'); const tOpen = Date.now(); notes.ms = {};
     await page.evaluate(async ([kind, key]) => { let spec; if (kind === 'flag') { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); spec = FLAGSHIPS[+key]; } else spec = { type: key };
-      window._pKeys = null; window._pSeen = null; await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(3); }, [kind, key]);
+      window._pKeys = null; window._pSeen = null; await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false, title: kind + ' ' + key }); S.tick(20); }, [kind, key]);   // (1 s: the labels' HUD measure settles)
     const nLessons = Math.min(QUICK ? 1 : 99, await page.evaluate(() => (W.mode.lessons ? W.mode.lessons() : []).length)); notes.beats = 0;
     notes.lessons = nLessons; notes.ms.open = Date.now() - tOpen; let ts = Date.now(); keep(await sample(), 'idle'); notes.ms.sample = Date.now() - ts; notes.ms.ticks = 0; notes.ms.samples = 0;
     let shots = 0; const tItem = Date.now(), ITEM_MS = QUICK ? 120000 : 150000;
