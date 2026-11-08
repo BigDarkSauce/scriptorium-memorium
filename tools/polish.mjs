@@ -67,7 +67,7 @@ let state = { version: VERSION, url: URL0, items: null, done: {} };
 if (existsSync(STATE) && !opt('reset') && !(QUICK && !opt('resume'))) { try { const s = JSON.parse(readFileSync(STATE, 'utf8')); if (s.version === VERSION) state = s; } catch (e) { } }
 // --redo=regex: walk those finished items again; --redo-failed: walk again every item that had findings
 if (opt('redo') && opt('redo') !== true) { const re = new RegExp(opt('redo')); Object.keys(state.done).forEach(k => { if (re.test(k)) delete state.done[k]; }); }
-if (opt('redo-failed')) Object.keys(state.done).forEach(k => { if (state.done[k].issues.length) delete state.done[k]; });
+if (opt('redo-failed')) Object.keys(state.done).forEach(k => { if (state.done[k].issues.some(x => !x.justified)) delete state.done[k]; });
 const saveState = () => { const tmp = STATE + '.tmp'; writeFileSync(tmp, JSON.stringify(state, null, 1)); renameSync(tmp, STATE); };
 
 // a small valid PDF (three pages, numbered headings) for the Add-PDF walk, written on the fly
@@ -130,13 +130,16 @@ window.POLISH = function (scope, ctx) {
     let d = Math.min(pd(bb.x, bb.y), pd(bb.x + bb.width, bb.y), pd(bb.x, bb.y + bb.height), pd(bb.x + bb.width, bb.y + bb.height), ...[a, b].map(p => Math.hypot(Math.max(bb.x - p[0], 0, p[0] - bb.x - bb.width), Math.max(bb.y - p[1], 0, p[1] - bb.y - bb.height))));
     for (let k = 0; k <= 10; k++) if (inR(a[0] + dx * k / 10, a[1] + dy * k / 10)) d = 0;
     if (d > 28) out.push({ check: 'b', what: 'label far from its arrow', label: F.t.textContent.slice(0, 50), labelBox: [bb.x, bb.y, bb.x + bb.width, bb.y + bb.height].map(Math.round), arrow: [a, b].map(p => p.map(Math.round)), gap: Math.round(d) }); });
+  // guide labels keep ≥ 6 px apart (two equilibrium arrows' labels nearly touching read as one)
+  if (beat && beat.flowEls) { const L = beat.flowEls.filter(F => F.pts && vis(F.t)).map(F => { try { const b = (F.pill && vis(F.pill) ? F.pill : F.t).getBBox(); return [F.t.textContent.slice(0, 30), b]; } catch (e) { return null; } }).filter(Boolean);   /* the label as seen: its pill */
+    for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const a = L[i][1], b = L[j][1], gx = Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width)), gy = Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height)), gap = Math.max(gx, gy); if (gap < 6) out.push({ check: 'a', what: 'guide labels closer than 6 px', a: L[i][0], b: L[j][0], gap: Math.round(gap) }); } }
   // (c) clipped text and (d) raw notation / italic units, over the visible text
   const textEls = [...document.querySelectorAll('#ui *, body > .modal-veil *')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && !e.closest('script, style, code, pre, textarea, input, select, option, mjx-container, .code-lines, .code-out, svg, .unf-hidden, [hidden], details:not([open]) > :not(summary)'));
   const seen = new Set();
   for (const e of textEls) {
     if (!vis(e)) continue; const cs = getComputedStyle(e);
     const clipX = /hidden|clip|auto|scroll/.test(cs.overflowX) && !/auto|scroll/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 2, clipY = /hidden|clip/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 2;
-    const ell = cs.textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1;
+    const ell = (cs.textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1) || (cs.webkitLineClamp && cs.webkitLineClamp !== 'none' && e.scrollHeight > e.clientHeight + 1);   // an intended cut (ellipsis, line clamp): fine with a tooltip
     if ((clipX || clipY) && !(ell && (e.title || e.closest('[title]')))) out.push({ check: 'c', what: ell ? 'ellipsis without a tooltip' : 'text clipped', el: name(e), rect: R(e), scroll: [e.scrollWidth, e.scrollHeight], client: [e.clientWidth, e.clientHeight] });
   }
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const RAW = [[/\b[A-Za-z0-9)]\s?\*\s?[A-Za-z0-9(]/, '* as multiplication'], [/[A-Za-z0-9)]\^[A-Za-z0-9(\-]/, '^ (raw power)'], [/\bsqrt\(/, 'sqrt('], [/<=|>=/, '<= / >='], [/[^<\-]->(?!>)/, '->'], [/_\{/, '_{'], [/\$[^$\s][^$]{0,80}\$/, '$…$ (TeX not typeset)'], [/\\(frac|sqrt|theta|alpha|cdot|times|mathrm)\b/, 'raw TeX command']];
@@ -169,6 +172,13 @@ window.POLISH = function (scope, ctx) {
   for (const b of boxes) { if (b.kind === 'label' && /pin|guide/.test(b.n)) continue; const r = b.r; if (r[0] < -2 || r[1] < -2 || r[2] > vw + 2 || r[3] > vh + 2) out.push({ check: 'f', what: 'off screen', el: b.n, rect: r, viewport: [vw, vh] }); }
   return out;
 };`;
+
+// findings that are known and accepted, with the reason (they are reported, but do not fail the gate). Each entry:
+// [regex over "check · what · element(s) · text", why]. Keep this list short and specific.
+const JUSTIFIED = [
+];
+const justify = x => { const k = [x.check, x.what, x.a, x.b, x.el, x.label, x.where, x.text].filter(Boolean).join(' · '); const j = JUSTIFIED.find(([re]) => re.test(k)); if (j) x.justified = j[1]; return x; };
+const failing = r => (r.issues || []).filter(x => !x.justified);
 
 // ---------------------------------------------------------------- run
 const { chromium, devices } = await loadPlaywright();
@@ -280,23 +290,25 @@ async function runItem(id) {
   if (notes.colour) { const c = notes.colour; if (c.sat < .06 || c.sat > .45) issues.push({ check: 'g', what: `saturation ${c.sat} (brightness-weighted) outside [0.06, 0.45]` }); if (c.white > .02) issues.push({ check: 'g', what: `near-white blow-out on ${(c.white * 100).toFixed(1)} % of the frame (> 2 %)` }); }
   const errs = page._errors.splice(0); if (errs.length) issues.push({ check: 'errors', what: errs.length + ' page error(s)', text: errs.slice(0, 3).join(' | ') });
   if (issues.length && !issues.some(x => x.shot)) { const shot = await evidence(page, id); issues.forEach(x => { x.shot = x.shot || shot; }); }
-  issues.forEach(x => { delete x._k; });
+  issues.forEach(x => { delete x._k; justify(x); });
   return { issues, notes };
 }
 
 // ---------------------------------------------------------------- report
 function writeReport(final) {
-  const items = state.items || [], done = items.filter(i => state.done[i]), fails = done.filter(i => state.done[i].issues.length);
+  Object.values(state.done).forEach(r => (r.issues || []).forEach(x => { delete x.justified; justify(x); }));   // the list may have changed since
+  const items = state.items || [], done = items.filter(i => state.done[i]), fails = done.filter(i => failing(state.done[i]).length);
   const byCheck = {}; done.forEach(i => state.done[i].issues.forEach(x => { byCheck[x.check] = (byCheck[x.check] || 0) + 1; }));
   writeFileSync(join(OUT, 'results.json'), JSON.stringify({ when: new Date().toISOString(), url: URL0, quick: QUICK, total: items.length, done: done.length, byCheck, results: state.done }, null, 1));
   if (QUICK || opt('no-report')) return;
   const L = [`# Polish gate report`, ``, `Generated by \`node tools/polish.mjs\` (${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC) against ${URL0}.`, `${done.length} of ${items.length} items walked${done.length < items.length ? ' (incomplete: run again to continue)' : ''}; ${fails.length} with findings.`, ``,
     `Checks: a overlap · b label far from its arrow · c clipped text · d raw notation / italic units · e figure legend or text · f off screen · g colour · unfold (whole scroll at once) · errors.`, ``,
     `| check | findings |`, `|---|---|`, ...Object.entries(byCheck).sort().map(([k, v]) => `| ${k} | ${v} |`), ``];
-  if (state.justified) { L.push('## Justified (not fixed)', ''); state.justified.forEach(j => L.push('- ' + j)); L.push(''); }
+  const just = new Map(); done.forEach(i => state.done[i].issues.filter(x => x.justified).forEach(x => { const k = x.justified; if (!just.has(k)) just.set(k, []); just.get(k).push(i + ': ' + x.what + ' ' + (x.a || x.el || x.where || '') + (x.b ? ' / ' + x.b : '')); }));
+  if (just.size) { L.push('## Justified (reported, not failing)', ''); just.forEach((v, k) => L.push(`- ${k} — ${v.length} finding${v.length > 1 ? 's' : ''}, e.g. ${v[0]}`)); L.push(''); }
   L.push('## Findings', '');
   if (!fails.length) L.push('None.');
-  fails.forEach(i => { L.push(`### ${i}`, ''); const seen = new Map(); state.done[i].issues.forEach(x => { const k = x.check + ' ' + x.what + ' ' + (x.a || x.el || x.label || x.where || '') + (x.b ? ' / ' + x.b : ''); if (!seen.has(k)) seen.set(k, x); });
+  fails.forEach(i => { L.push(`### ${i}`, ''); const seen = new Map(); failing(state.done[i]).forEach(x => { const k = x.check + ' ' + x.what + ' ' + (x.a || x.el || x.label || x.where || '') + (x.b ? ' / ' + x.b : ''); if (!seen.has(k)) seen.set(k, x); });
     [...seen.values()].slice(0, 25).forEach(x => L.push(`- **${x.check}** ${x.what}${x.a ? `: \`${x.a}\` ${JSON.stringify(x.ra)} × \`${x.b}\` ${JSON.stringify(x.rb)} by ${JSON.stringify(x.by)}` : ''}${x.el ? `: \`${x.el}\`` : ''}${x.rect ? ' ' + JSON.stringify(x.rect) : ''}${x.label ? `: «${x.label}» gap ${x.gap} px` : ''}${x.where ? ` in ${x.where}` : ''}${x.text ? ` — “${x.text}”` : ''}${x.mark ? ` (${x.mark})` : ''}${x.at ? ` _(at ${x.at})_` : ''}${x.shot ? ` — screenshot \`${x.shot.split('/').pop()}\`` : ''}`)); L.push(''); });
   const notes = done.filter(i => state.done[i].notes && (state.done[i].notes.colour || state.done[i].notes.reader));
   if (notes.length) { L.push('## Measurements', '', '| item | measurement |', '|---|---|'); notes.forEach(i => { const n = state.done[i].notes; L.push(`| ${i} | ${n.colour ? `saturation ${n.colour.sat}, near-white ${(n.colour.white * 100).toFixed(2)} %, lightness ${n.colour.light}` : ''}${n.reader ? `${n.reader.folds} folds, first fold shows ${n.reader.firstVisible} of ${n.reader.all} units` : ''} |`); }); L.push(''); }
@@ -314,10 +326,10 @@ try {
     const t1 = Date.now(); let res;
     try { res = await runItem(id); } catch (e) { if (KILLED) break;   /* stopped from outside: this item is not done, it runs again next time */ res = { issues: [{ check: 'errors', what: 'the walk failed', text: String(e.message || e).split('\n')[0] }], notes: {} }; const v = id.split(':')[0]; try { await pages[v].close(); } catch (x) { } pages[v] = null; }
     if (KILLED) break; state.done[id] = { ...res, ms: Date.now() - t1 }; saveState(); writeReport(false);
-    console.log(`${res.issues.length ? 'FAIL' : 'ok  '}  ${id}  ${((Date.now() - t1) / 1000).toFixed(0)} s${res.issues.length ? '  ' + res.issues.slice(0, 2).map(x => x.check + ': ' + x.what + ' ' + (x.a || x.el || x.label || x.where || '')).join(' | ') : ''}`);
+    const fl = failing(res); console.log(`${fl.length ? 'FAIL' : 'ok  '}  ${id}  ${((Date.now() - t1) / 1000).toFixed(0)} s${fl.length ? '  ' + fl.slice(0, 2).map(x => x.check + ': ' + x.what + ' ' + (x.a || x.el || x.label || x.where || '')).join(' | ') : ''}`);
   }
 } catch (e) { console.error('polish: could not run: ' + e.message); await browser.close(); process.exit(2); }
 writeReport(true); await browser.close();
-const all = (state.items || []).filter(i => state.done[i] && VIEWS.includes(i.split(':')[0]) && (!ONLY || ONLY.test(i))), bad = all.filter(i => state.done[i].issues.length);
+const all = (state.items || []).filter(i => state.done[i] && VIEWS.includes(i.split(':')[0]) && (!ONLY || ONLY.test(i))), bad = all.filter(i => failing(state.done[i]).length);
 console.log(`\npolish: ${all.length - bad.length}/${all.length} items clean${exitCode === 3 ? ' (incomplete)' : ''} in ${((Date.now() - T0) / 1000).toFixed(0)} s` + (bad.length ? ' — see ' + join(OUT, 'results.json') : ''));
 process.exit(exitCode === 3 ? 3 : bad.length ? 1 : 0);

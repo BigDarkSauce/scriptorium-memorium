@@ -571,6 +571,7 @@ export class Director {
     const LH = 17, pad = 5, placed = [], boxes = [], pins = [];
     (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));   // the pins (a label over a pin hides its name): weighed more than an arrow
     if (b.box) boxes.push(b.box);
+    if (b.dot && b.dot.style.opacity === '1') { boxes.push([sx - 11, sy - 11, 22, 22]); if (b.box) { const bx2 = b.box, ax2 = bx2[0] > sx - bx2[2] / 2 ? bx2[0] : bx2[0] + bx2[2]; segs.push([[ax2, bx2[1] + bx2[3] * .6], [sx, sy]]); } }   /* the callout's anchor dot and (roughly) its leader */
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
     if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
     // a label's cost: 10 per arrow crossing its padded box (soft), 100 for leaving the frame or covering a HUD box,
@@ -599,7 +600,7 @@ export class Director {
       F.t.setAttribute('x', (best.x + best.wd / 2).toFixed(0)); F.t.setAttribute('y', (best.y + LH - 4).toFixed(0)); F.t.style.opacity = ease > .6 ? 1 : 0;
       // the backing: a dark translucent pill behind the text, so it reads on grass, sky or a bright model alike
       if (F.pill) { F.pill.setAttribute('x', (best.x - 6).toFixed(0)); F.pill.setAttribute('y', (best.y - 1).toFixed(0)); F.pill.setAttribute('width', (best.wd + 12).toFixed(0)); F.pill.setAttribute('height', LH + 2); F.pill.style.opacity = ease > .6 ? 1 : 0; }
-      placed.push([best.x, best.y, best.wd, LH]);
+      placed.push([best.x - 12, best.y - 7, best.wd + 24, LH + 14]);   // its pill plus 6 px: the next label's pill keeps ≥ 6 px away
     });
   }
   // ---------- per frame ----------
@@ -666,7 +667,7 @@ export class Director {
         (b.hard || []).forEach(A => b.avoid.push(Object.assign({ k: 8 }, A)));
         if (this.track && this.track.phase === 'ride') b.avoid.push({ x: w * .3, y: h * .25, w: w * .4, h: h * .5, k: 6 });   // during a ride the middle of the frame is the view itself: text goes to the side
       }
-      const cost = ([x, y]) => { let o = 0; for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
+      const cost = ([x, y]) => { let o = on && x < sx + 14 && x + cw > sx - 14 && y < sy + 14 && y + ch > sy - 14 ? 4e5 : 0; /* never over its own anchor dot */ for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
       const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
       const right0 = sx < w * .58; const first = b.side == null; if (first) b.side = right0 ? 0 : 1;
       // hysteresis: the side changes only when another is far better (less than half the cost, by a real margin) for 0.6 s
