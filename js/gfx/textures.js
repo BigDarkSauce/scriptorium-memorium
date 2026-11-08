@@ -205,7 +205,7 @@ export function gradientSky(top = '#1a2a44', bottom = '#e8b07a', key) {
 // rocaille stucco, book spines, damask. All canvas-drawn, tileable where they repeat, cached by key, ≤ 1024².
 // ---------------------------------------------------------------------------------------------------------------
 export const MARBLES = {
-  rose: { base: '#d3b2aa', cloud: ['#e6d0c8', '#bb928a', '#f0e4dc', '#a87c75', '#d8bcb4'], vein: '#7e514c', vein2: '#f4ece6' },   // a dusty, greyed rose (a vivid salmon read as plastic under the warm lamps)
+  rose: { base: '#d0b8b2', cloud: ['#e3d3cd', '#b89b95', '#eee5df', '#a5877f', '#d6c2bc'], vein: '#7d5a55', vein2: '#f3ede8' },   // a dusty, greyed rose (a vivid salmon read as plastic under the warm lamps)
   teal: { base: '#4f8886', cloud: ['#72a7a2', '#2f6061', '#a3c9c1', '#3d7072', '#5b9690'], vein: '#1b3a3c', vein2: '#dcefe8' },
   dark: { base: '#3b312d', cloud: ['#4c3f39', '#2a2220', '#5c4c44', '#332a26'], vein: '#dcd2c4', vein2: '#8e7d6c' },
   statuary: { base: '#ece8e1', cloud: ['#f7f4ef', '#ddd7ce', '#e6e1d9', '#f2eee8'], vein: '#a7a19a', vein2: '#cfc8bf', faint: true },
@@ -219,7 +219,7 @@ export const MARBLES = {
   // the antique marbles of the columns (Roman spolia): giallo antico (Chemtou: warm yellow, rust veins), verde antico
   // (Thessalian breccia: dark green with white and black fragments), rosso antico (Taenarum: deep oxblood, fine dark
   // veins) and pavonazzetto (Docimium: white with violet veins and clasts)
-  giallo: { base: '#d3c8b2', cloud: ['#e2d9c6', '#bdae92', '#ebe4d6', '#ad9f86', '#d6cab4'], vein: '#86684e', vein2: '#f0eadf' },   // pale, weathered giallo antico: honey-cream, not mustard
+  giallo: { base: '#d2cabb', cloud: ['#e1dacb', '#bcb09a', '#eae5da', '#aca290', '#d5ccbb'], vein: '#86705c', vein2: '#f0ebe2' },   // pale, weathered giallo antico: honey-cream, not mustard
   verde: { base: '#2c4a3b', cloud: ['#3e6550', '#1b2f26', '#5d8a70', '#24382e', '#e6eee6', '#0f1814'], vein: '#e8efe8', vein2: '#0c1410' },
   rosso: { base: '#7a221d', cloud: ['#8d2e26', '#5e1714', '#9c3b30', '#6a1c18'], vein: '#3a0c0a', vein2: '#c46a58' },
   pavonazzetto: { base: '#ece6df', cloud: ['#f6f2ee', '#d9cfd2', '#c9b4bf', '#efe9e4', '#b89aab'], vein: '#6e4a66', vein2: '#a17c95' }

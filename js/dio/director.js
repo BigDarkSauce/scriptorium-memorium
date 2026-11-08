@@ -19,6 +19,9 @@ const PACE = { slow: 150, normal: 210, fast: 300 };   // words per minute
 const GMIN = 26;
 function shortLabel(t) { t = String(t || '').trim(); if (t.length <= 22) return t; const c = t.split(/\s*[,:;(—–]\s*|\s+-\s+|…/)[0].trim(); if (c.length >= 4 && c.length <= 24) return c;
   const w = t.split(/\s+/), out = []; for (const x of w) { if ((out.join(' ') + ' ' + x).length > 20) break; out.push(x); } while (out.length > 1 && /^(the|a|an|of|to|and|or|in|on|at|by|for|its|is|[+\-−×=])$/i.test(out[out.length - 1])) out.pop(); return out.join(' ') + '…'; }
+// the gap (px) between segment ab and the rectangle x, y, w, h (0 when they touch or cross)
+function segRectDist(a, b, x, y, w, h) { if (segRect(a, b, x, y, w, h)) return 0; const pd = (px, py) => { const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / L2)); return Math.hypot(a[0] + dx * t - px, a[1] + dy * t - py); };
+  const rd = (px, py) => Math.hypot(Math.max(x - px, 0, px - x - w), Math.max(y - py, 0, py - y - h)); return Math.min(pd(x, y), pd(x + w, y), pd(x, y + h), pd(x + w, y + h), rd(a[0], a[1]), rd(b[0], b[1])); }
 function segHit(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; }
 function segRect(a, b, x, y, w, h) {   // Liang–Barsky: does segment ab enter the rectangle?
   let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -566,22 +569,28 @@ export class Director {
     if (b.box) boxes.push(b.box);
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
     if (v.panel && !v.panel.hidden) boxes.push([0, 0, v.panel.classList.contains('folded') ? 70 : 370, h]);   // the lesson panel (the same widths the callout keeps clear of)
-    const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 50;
+    // a label's cost: 10 per arrow crossing its padded box (soft), 100 for leaving the frame or covering a HUD box,
+    // another label or a pin (hard: never accepted)
+    const cost = (x, y, wd) => { let c = 0; if (x < 4 || y < 4 || x + wd > w - 4 || y + LH > h - 4) c += 100;
       for (const s of segs) if (segRect(s[0], s[1], x - pad, y - pad, wd + 2 * pad, LH + 2 * pad)) c += 10;
-      for (const B of boxes.concat(placed)) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 10; }
-      for (const B of pins) { const ix = Math.min(x + wd, B[0] + B[2]) - Math.max(x, B[0]), iy = Math.min(y + LH, B[1] + B[3]) - Math.max(y, B[1]); if (ix > -3 && iy > -3) c += 30; }
+      for (const B of boxes.concat(placed, pins)) { const ix = Math.min(x + wd + 6, B[0] + B[2]) - Math.max(x - 6, B[0]), iy = Math.min(y + LH + 6, B[1] + B[3]) - Math.max(y - 6, B[1]); if (ix > 0 && iy > 0) c += 100; }
       return c; };
     FE.forEach(F => {
       if (!F.pts || !F.full) { F.t.style.opacity = 0; if (F.pill) F.pill.style.opacity = 0; return; }
       const [[ax, ay], [cx, cy]] = F.pts, L = Math.hypot(cx - ax, cy - ay) || 1, ux = (cx - ax) / L, uy = (cy - ay) / L, side0 = F.lane ? 1 : (F.side || 1);
-      const cand = [];
+      // candidates hug their own arrow: beside the shaft (midpoint first, then along it), at a gap of 6–18 px, never
+      // more than LMAX from the arrow; the full text first, then the short form. No clear spot → the label hides and the
+      // arrow carries the full text as its tooltip (a label far from its arrow reads as belonging to something else).
+      const cand = [], seg = F.pts, LMAX = 24;
       [F.full, F.short].forEach((txt, vi) => { if (vi && txt === F.full) return; const wd = vi ? F.wS : F.wF;
-        [.5, .32, .68, 1, 0].forEach(k => [side0, -side0].forEach(sd => [0, 1, 2].forEach(far => {   /* beside the shaft, and out past either end, in up to three rows (a crowded body: pins, other arrows) */ const nx = -uy * sd, ny = ux * sd, off = 9 + far * (LH + 8) + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off; cand.push({ txt, wd, x: mx - wd / 2, y: my - LH / 2, sd, k, vi, far }); }))); });
-      // keep last frame's choice while it is still clear (no flicker); otherwise the first clear candidate, else the least bad
+        [.5, .38, .62, .25, .75, .9, .1].forEach(k => [side0, -side0].forEach(sd => [0, 1].forEach(far => { const nx = -uy * sd, ny = ux * sd, off = 6 + far * 12 + Math.abs(nx) * wd / 2 + Math.abs(ny) * LH / 2, mx = ax + (cx - ax) * k + nx * off, my = ay + (cy - ay) * k + ny * off, x = mx - wd / 2, y = my - LH / 2;
+          if (segRectDist(seg[0], seg[1], x, y, wd, LH) <= LMAX) cand.push({ txt, wd, x, y, sd, k, vi, far }); }))); });
+      // keep last frame's choice while it is still clear (no flicker); otherwise the cheapest acceptable candidate
       let best = null, bc = 1e9; const keep = F.lc && cand.find(c => c.vi === F.lc.vi && c.k === F.lc.k && c.sd === F.lc.sd && c.far === F.lc.far);
       if (keep && cost(keep.x, keep.y, keep.wd) === 0) best = keep;
-      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 2 + (c.k !== .5 ? 1 : 0) + (c.k === 1 || c.k === 0 ? 2 : 0) + c.far * 3; if (k < bc) { bc = k; best = c; if (k === 0) break; } }
-      F.lc = { vi: best.vi, k: best.k, sd: best.sd, far: best.far }; if (!F.lane) F.side = best.sd;
+      else for (const c of cand) { const k = cost(c.x, c.y, c.wd) + c.vi * 4 + Math.abs(c.k - .5) * 6 + c.far * 3; if (k < bc) { bc = k; best = c; if (k === 0) break; } }
+      if (!best || bc >= 100) { F.lc = null; F.t.style.opacity = 0; if (F.pill) F.pill.style.opacity = 0; F.hidden = true; if (!F.tip) { F.tip = document.createElementNS(NS, 'title'); F.tip.textContent = F.full; F.path.append(F.tip); } F.path.style.pointerEvents = 'stroke'; F.path.style.cursor = 'help'; return; }
+      F.hidden = false; F.path.style.pointerEvents = ''; F.lc = { vi: best.vi, k: best.k, sd: best.sd, far: best.far }; if (!F.lane) F.side = best.sd;
       if (F.vis.textContent !== best.txt) F.vis.textContent = best.txt;
       F.t.setAttribute('x', (best.x + best.wd / 2).toFixed(0)); F.t.setAttribute('y', (best.y + LH - 4).toFixed(0)); F.t.style.opacity = ease > .6 ? 1 : 0;
       // the backing: a dark translucent pill behind the text, so it reads on grass, sky or a bright model alike

@@ -675,3 +675,32 @@ i { font-style: italic; }
 .fig-play { position: absolute; right: 6px; bottom: 6px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--vellum-edge); background: rgba(251,246,234,.92); color: var(--iron); font-size: 11px; padding: 0; }
 .quality .cov-note a { color: var(--lapis); cursor: pointer; }
 .reader .explain code, .reader .stmt code, .reader .intuition code, .reader .miscon code, .reader .check code, .reader .ce code, .reader dd code, .reader .example-card code, .reader .code-int code { font-family: var(--f-mono); font-size: .88em; background: rgba(90,60,30,.08); padding: 0 3px; border-radius: 3px; }
+
+/* progressive unfolding (reader.js computeFolds / applyFolds): the sheet ends in a rolled edge on a rod; pressing it
+   unrolls the next fold. The rest of the scroll stays rolled up (display: none, so it is neither read aloud nor tabbed). */
+.unf-hidden { display: none !important; }
+.fold-bar { position: relative; margin: 6px -22px 0; padding: 0 0 4px; display: grid; justify-items: center; gap: 6px; }
+.unroll { position: relative; display: block; width: 100%; min-height: 64px; padding: 0; border: 0; background: none; color: var(--iron); cursor: pointer; font: inherit; text-align: center; -webkit-tap-highlight-color: transparent; }
+.unroll-sheet { position: absolute; left: 22px; right: 22px; top: 0; height: 22px; background: linear-gradient(180deg, rgba(90,60,30,0), rgba(90,60,30,.14) 70%, rgba(60,36,14,.32)); border-radius: 0 0 50% 50% / 0 0 100% 100%; pointer-events: none; }
+.unroll-rod { position: absolute; left: 4px; right: 4px; top: 18px; height: 20px; border-radius: 10px; background: repeating-linear-gradient(180deg, rgba(255,255,255,.08) 0 2px, transparent 2px 9px), linear-gradient(180deg, #6b4526, #a87447 28%, #5a3720 60%, #2a170b); background-size: 100% 18px, 100% 100%; box-shadow: 0 5px 10px -4px rgba(40,20,5,.6), inset 0 -1px 0 rgba(255,220,160,.2); }
+.unroll-rod::before, .unroll-rod::after { content: ""; position: absolute; top: -4px; width: 26px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #f3dc98, #c49a45 45%, #6e5120 80%); }
+.unroll-rod::before { left: -10px; } .unroll-rod::after { right: -10px; }
+.unroll-label { position: relative; display: inline-flex; align-items: baseline; gap: 10px; margin-top: 42px; padding: 3px 12px; border-radius: 999px; font-family: var(--f-display); font-size: 16px; }
+.unroll-label b { font-weight: 400; letter-spacing: .02em; }
+.unroll-prog { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--iron-soft); }
+.unroll:hover .unroll-label, .unroll:focus-visible .unroll-label { background: rgba(255,255,255,.4); }
+.unroll:hover .unroll-rod { filter: brightness(1.12); }
+.unroll:focus-visible { outline: none; } .unroll:focus-visible .unroll-label { box-shadow: 0 0 0 2px var(--lapis); }
+.unroll:active .unroll-rod { transform: translateY(1px); }
+.unroll.end { cursor: default; min-height: 58px; } .unroll.end .unroll-label { margin-top: 40px; color: var(--iron-soft); }
+.fold-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 80%; }
+.fold-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(90,60,30,.22); } .fold-dots i.on { background: var(--rubric); }
+.fold-bar .roll-up { font-size: 13px; }
+.reader-menu { position: relative; margin-right: 6px; }
+.reader-menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 200px; display: grid; padding: 6px; border-radius: 10px; background: #f6eedb; border: 1px solid var(--vellum-edge); box-shadow: 0 12px 28px -10px rgba(40,25,10,.6); }
+.reader-menu-pop[hidden] { display: none; }
+.rm-kicker { padding: 4px 8px 6px; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--iron-soft); }
+.rm-item { text-align: left; padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: var(--iron); font: inherit; font-size: 14px; cursor: pointer; min-height: 36px; }
+.rm-item:hover:not([disabled]), .rm-item:focus-visible { background: rgba(90,60,30,.12); outline: none; }
+.rm-item[disabled] { opacity: .45; cursor: default; }
+@media (pointer: coarse) { .reader-menu-btn.ibtn.tiny { width: 36px; height: 36px; font-size: 16px; } .unroll { min-height: 72px; } }

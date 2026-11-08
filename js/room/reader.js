@@ -48,6 +48,7 @@ export class Reader {
       // where the scroll sits (left / centre / right) and full screen; remembered in this browser
       el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
         el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
+      el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
     this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
     this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !(e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };
@@ -55,8 +56,97 @@ export class Reader {
     const body = el('div', { class: 'reader-body' }); this.body = body;
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.renderEmpty(); return; }
-    body.append(this.analyseBar(true), this.renderChain(P.analysis));
+    const chain = this.renderChain(P.analysis); body.append(this.analyseBar(true), chain, this.foldBar);
   }
+  // ---------- progressive unfolding ----------
+  // A scroll is never shown whole: its content is cut into folds at natural points (docs/ARCHITECTURE.md, "Reader
+  // folds") and revealed one fold at a time by unrolling the sheet past a rod. How far each scroll was unrolled is kept
+  // in the room record (part.unfold), so it survives a reload.
+  //  units: a step's head (badge, question, title, statement, its figure, quotes) · each explanation paragraph with its
+  //  figure · the display maths · the derivation · code · each example · table · figures · terms · intuition ·
+  //  misconception · Check yourself (question and answer are one element) · showcases. Sources, bodies, the next
+  //  question, figure links and number warnings are glued to the unit before them.
+  //  folds: units are added while the fold weighs ≤ FOLD_W (a unit weighs 1, plus 1 with a figure or a drawing, plus
+  //  .5 for a long text); a fold never ends between a step's head and its first unit, and a new step starts a new fold
+  //  once the current one is well filled.
+  computeFolds(wrap) {
+    const GLUE = /^(sources|bodies|q-out|num-warn|fig-refs|extras)$/, HEAD = /^(badge|q-in|meta|from|stmt|quote-ref|src-quote)$/;
+    const weigh = e => 1 + (e.querySelector('.fig-host, .pdf-figs figure, .sketch-card, .svg-slot, .src-table-wrap, .code-step') || /fig-host|pdf-figs|src-table-wrap|code-step/.test(e.className) ? 1 : 0) + ((e.textContent || '').length > 700 ? .5 : 0);
+    const units = []; let pre = [];
+    for (const c of [...wrap.children]) {
+      if (c.classList.contains('arcs') || c.classList.contains('fold-bar')) continue;
+      if (!c.classList.contains('step')) { if (!units.length || c.classList.contains('refs')) { if (c.classList.contains('refs')) units.push({ els: [c], w: 1, art: null, idx: 2 }); else pre.push(c); } else units[units.length - 1].els.push(c); continue; }
+      let cur = null, idx = 0;
+      for (const k of [...c.children]) {
+        const cls = k.classList[0] || '';
+        if (HEAD.test(cls) || (cur && cur.idx === 0 && cls === 'fig-host' && cur.els[cur.els.length - 1].classList.contains('stmt'))) { if (!cur || cur.idx !== 0) { cur = { els: [], w: 1, art: c, idx: 0, head: true }; units.push(cur); } cur.els.push(k); continue; }
+        if (GLUE.test(cls) && cur) { cur.els.push(k); continue; }
+        cur = { els: [k], w: weigh(k), art: c, idx: ++idx }; units.push(cur);
+      }
+    }
+    if (pre.length) { if (units.length) units[0].els.unshift(...pre); else units.push({ els: pre, w: 1, art: null, idx: 0 }); }
+    const FOLD_W = 4.5, folds = []; let f = null;
+    units.forEach(u => {
+      const brk = f && f.w > 0 && ((u.head && f.w >= FOLD_W * .6) || (u.idx >= 2 || u.head || !u.art) && f.w + u.w > FOLD_W);
+      if (!f || brk) { f = { units: [], w: 0 }; folds.push(f); }
+      f.units.push(u); f.w += u.w;
+    });
+    return folds;
+  }
+  setupFolds(wrap) {
+    const P = this.part; this.folds = this.computeFolds(wrap); const n = this.folds.length;
+    const saved = P.unfold && +P.unfold.n; this.shown = Math.max(1, Math.min(n, saved || 1));
+    this.folds.forEach((f, i) => f.units.forEach(u => u.els.forEach(e => { e.dataset.fold = i; })));
+    const bar = this.foldBar = el('div', { class: 'fold-bar' });
+    this.applyFolds(false); return bar;
+  }
+  // hide the folds beyond `shown`; a step whose every part is hidden is hidden too; then the rod and its label
+  applyFolds(animate, prevH) {
+    const wrap = this.el.querySelector('.chain') || this._wrap, n = this.folds.length, k = this.shown;
+    if (!wrap) return;
+    this.folds.forEach((f, i) => f.units.forEach(u => u.els.forEach(e => e.classList.toggle('unf-hidden', i >= k))));
+    wrap.querySelectorAll(':scope > .step').forEach(a => a.classList.toggle('unf-hidden', ![...a.children].some(c => !c.classList.contains('unf-hidden'))));
+    const bar = this.foldBar; bar.innerHTML = ''; bar.classList.toggle('done', k >= n);
+    if (k < n) {
+      const go = el('button', { class: 'unroll', type: 'button', 'aria-label': `Unfold further: fold ${k + 1} of ${n}`, onclick: () => this.unfold(1) }, [el('span', { class: 'unroll-sheet', 'aria-hidden': 'true' }), el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'Unfold further' }), el('span', { class: 'unroll-prog', text: `fold ${k} of ${n} read` })])]);
+      bar.append(go, el('div', { class: 'fold-dots', 'aria-hidden': 'true' }, this.folds.map((_, i) => el('i', { class: i < k ? 'on' : '' }))));
+    } else bar.append(el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null);
+    const mi = this.el.querySelector('.reader-menu-pop'); if (mi) this.fillMenu(mi);
+    this.typesetShown();
+    if (!animate) { requestAnimationFrame(() => drawArcs(wrap)); return; }
+    // the sheet unrolls: the new part is uncovered from the old bottom edge down while the rod rolls down with it
+    const dh = Math.max(0, wrap.offsetHeight - prevH), calm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (calm || !dh || !wrap.animate) { drawArcs(wrap); return; }
+    const dur = Math.round(clamp(dh * .9, 450, 1100)), ease = 'cubic-bezier(.3,.7,.25,1)';
+    wrap.animate([{ clipPath: `inset(0 0 ${dh}px 0)`, marginBottom: `-${dh}px` }, { clipPath: 'inset(0 0 0px 0)', marginBottom: '0px' }], { duration: dur, easing: ease });
+    const rod = bar.querySelector('.unroll-rod'); if (rod && rod.animate) rod.animate([{ backgroundPositionY: '0px' }, { backgroundPositionY: `${Math.round(dh / 3)}px` }], { duration: dur, easing: ease });
+    setTimeout(() => { if (wrap.isConnected) drawArcs(wrap); }, dur + 30);
+  }
+  unfold(m = 1, quiet = false) {
+    const n = this.folds.length; if (this.shown >= n) return; const wrap = this.el.querySelector('.chain'), prevH = wrap ? wrap.offsetHeight : 0;
+    this.shown = Math.min(n, this.shown + m); this.persistFolds();
+    if (!quiet && this.app.sfx) this.app.sfx.play('unroll', { gain: .35 });
+    this.applyFolds(!quiet && m === 1, prevH);
+    const b = this.foldBar.querySelector('button.unroll'); if (b && !quiet && document.activeElement && document.activeElement.closest && document.activeElement.closest('.fold-bar')) b.focus({ preventScroll: true });
+  }
+  unfoldAll() { this.unfold(this.folds.length, true); }
+  rollUp() { this.shown = 1; this.persistFolds(); if (this.app.sfx) this.app.sfx.play('paper', { gain: .5 }); this.applyFolds(false); if (this.body) this.body.scrollTo({ top: 0, behavior: 'smooth' }); }
+  persistFolds() { const P = this.part, n = this.folds.length; const old = P.unfold || {}; if (old.n === this.shown && old.of === n) return; P.unfold = { n: this.shown, of: n }; this.save(); }
+  // unroll as far as needed to show an element (a jump to a step, a coverage link)
+  unfoldTo(t) { const f = t && t.closest('[data-fold]') || (t && t.querySelector && t.querySelector('[data-fold]')); const i = f ? +f.dataset.fold : -1; if (this.folds && i >= this.shown) this.unfold(i + 1 - this.shown, true); }
+  // MathJax measures sizes, so maths is typeset only once its fold is shown (and once the scroll has finished opening)
+  typesetShown() {
+    if (!this._typesetReady) return; const wrap = this.el.querySelector('.chain'); if (!wrap) return;
+    const todo = [...wrap.querySelectorAll('[data-fold]')].filter(e => !e.classList.contains('unf-hidden') && !e._ts && !e.closest('.unf-hidden')); if (!todo.length) return;
+    todo.forEach(e => { e._ts = true; }); typeset(todo).then(() => drawArcs(wrap));
+  }
+  fillMenu(pop) {
+    const n = this.folds ? this.folds.length : 0; pop.innerHTML = '';
+    pop.append(el('div', { class: 'rm-kicker', text: n ? `Unrolled: fold ${this.shown} of ${n}` : 'Not analysed yet' }),
+      el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Unfold all', disabled: !n || this.shown >= n, onclick: () => { this.unfoldAll(); this.toggleMenu(false); } }),
+      el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Roll up', disabled: !n || this.shown <= 1, onclick: () => { this.rollUp(); this.toggleMenu(false); } }));
+  }
+  toggleMenu(on) { const pop = this.el.querySelector('.reader-menu-pop'), b = this.el.querySelector('.reader-menu-btn'); if (!pop) return; on = on ?? pop.hidden; pop.hidden = !on; b.setAttribute('aria-expanded', String(on)); if (on) { this.fillMenu(pop); const f = pop.querySelector('button:not([disabled])'); if (f) f.focus(); } }
   renderEmpty() {
     const P = this.part, b = this.body;
     b.append(el('div', { class: 'empty' }, [
@@ -140,7 +230,7 @@ export class Reader {
     if (bad || R.figuresUncited.length) { const st2 = el('span', { class: 'status' }); box.append(el('div', { class: 'row' }, [el('button', { class: 'btn small primary', text: 'Write the missing steps', onclick: e => this.fillGaps(e.target) }), st2])); }
     return box;
   }
-  jump(id) { const t = this.el.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } }
+  jump(id) { const t = this.el.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { this.unfoldTo(t.querySelector('[data-fold]') || t); t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } }
   // ---------- chain ----------
   renderChain(A) {
     const wrap = el('div', { class: 'chain' });
@@ -151,8 +241,10 @@ export class Reader {
     this._secTitle = new Map(((A.coverageReport && A.coverageReport.sections) || []).map(x => [x.id, x.title]));
     (A.chain || []).forEach(st => wrap.append(this.renderStep(st, wrap, A)));
     if (A.references && A.references.length) wrap.append(el('section', { class: 'refs' }, [el('h3', { text: 'References' }), el('ol', {}, A.references.map(r => el('li', {}, [renderSource(r)])))]));
-    // typeset only once the scroll has finished unrolling (MathJax measures sizes; a scaled container gives NaN)
-    setTimeout(() => { if (wrap.isConnected) typeset(wrap).then(() => drawArcs(wrap)); }, 1000); setTimeout(() => drawArcs(wrap), 400);
+    this._wrap = wrap; this.setupFolds(wrap);
+    // typeset only once the scroll has finished unrolling (MathJax measures sizes; a scaled container gives NaN), and only
+    // the folds on show (the rest when they are unrolled)
+    setTimeout(() => { if (wrap.isConnected) { this._typesetReady = true; this.typesetShown(); } }, 1000); setTimeout(() => drawArcs(wrap), 400);
     return wrap;
   }
   renderStep(st, wrap, A) {
@@ -163,7 +255,7 @@ export class Reader {
     art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: mathHTML(st.title) }),
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
       st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
-    if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => { const t = wrap.querySelector(`[data-sid="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); } } })); }); art.append(f); }
+    if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => this.jump(id) })); }); art.append(f); }
     if (st.statement) art.append(el('p', { class: 'stmt', html: prose(st.statement) }));
     if (st.statementFigure) art.append(this.figure(st.statementFigure));
     // short attributed excerpts (≤ 40 words); a passage quoted before is a link, never a second copy
@@ -422,9 +514,9 @@ function lightbox(f) {
 }
 export function drawArcs(wrap) {
   const svg = wrap.querySelector('.arcs'); if (!svg) return; svg.innerHTML = ''; svg.setAttribute('height', wrap.scrollHeight);
-  const pos = {}; wrap.querySelectorAll('.step').forEach(a => { pos[a.dataset.sid] = a.offsetTop + 27; });
+  const pos = {}; wrap.querySelectorAll('.step:not(.unf-hidden)').forEach(a => { pos[a.dataset.sid] = a.offsetTop + 27; });
   const NS = 'http://www.w3.org/2000/svg'; const defs = document.createElementNS(NS, 'defs'); defs.innerHTML = '<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#9c3a28"/></marker>'; svg.append(defs);
-  [...wrap.querySelectorAll('.step')].forEach((a, k) => { const f = a.querySelector('.from'); if (!f) return; [...f.querySelectorAll('a')].forEach((ln, j) => { const y0 = pos[ln.textContent], y1 = pos[a.dataset.sid]; if (y0 == null || y1 == null) return; const depth = 6 + ((k + j) % 4) * 3.5; const p = document.createElementNS(NS, 'path'); p.setAttribute('d', `M 18 ${y0} C ${depth - 6} ${y0}, ${depth - 6} ${y1}, 16 ${y1 - 1}`); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'rgba(156,58,40,.55)'); p.setAttribute('stroke-width', '1.3'); p.setAttribute('marker-end', 'url(#ah)'); svg.append(p); }); });
+  [...wrap.querySelectorAll('.step:not(.unf-hidden)')].forEach((a, k) => { const f = a.querySelector('.from'); if (!f) return; [...f.querySelectorAll('a')].forEach((ln, j) => { const y0 = pos[ln.textContent], y1 = pos[a.dataset.sid]; if (y0 == null || y1 == null) return; const depth = 6 + ((k + j) % 4) * 3.5; const p = document.createElementNS(NS, 'path'); p.setAttribute('d', `M 18 ${y0} C ${depth - 6} ${y0}, ${depth - 6} ${y1}, 16 ${y1 - 1}`); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'rgba(156,58,40,.55)'); p.setAttribute('stroke-width', '1.3'); p.setAttribute('marker-end', 'url(#ah)'); svg.append(p); }); });
 }
 
 function normSources(a) { return Array.isArray(a) ? a.filter(s => s && (s.title || s.doi)).slice(0, 30).map(s => ({ ...s, title: String(s.title || ''), doi: s.doi ? String(s.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : '' })) : []; }

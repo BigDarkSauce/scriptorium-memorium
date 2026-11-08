@@ -793,7 +793,7 @@ export function typeset(node, s, target) {
   return mathJax(node);
 }
 function mathJax(node) {
-  const go = () => window.MathJax.typesetPromise([node]).catch(() => {});
+  const go = () => window.MathJax.typesetPromise([].concat(node)).catch(() => {});   // one node or a list
   if (window.MathJax && window.MathJax.typesetPromise) return go();
   return new Promise(r => { const iv = setInterval(() => { if (window.MathJax && window.MathJax.typesetPromise) { clearInterval(iv); go().then(r); } }, 300); setTimeout(() => { clearInterval(iv); r(); }, 15000); });
 }

@@ -28,6 +28,10 @@
 //   context      WebGL context loss and restore: the app pauses, comes back and keeps running
 //   captures     two canvas captures (hub, diorama) are not blank
 //   errors       no uncaught exceptions, unhandled promise rejections or console errors during the run
+//   polish       node tools/polish.mjs --quick (its own browser): one view per area — hub, a room, a scroll unfolded,
+//                a diorama lesson with Guides on and off, the Add-PDF steps — free of overlaps, a label far from its
+//                arrow, clipped text, raw notation, italic units, legends over data, off-screen HUD and colour faults
+//                (SMOKE_POLISH=0 skips it; the full gate is node tools/polish.mjs, see its header)
 // EXIT CODE: 0 = all checks passed, 1 = at least one failed, 2 = could not start (no server / no playwright).
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -218,5 +222,13 @@ const errs = errors.filter(e => !/GL Driver Message|KHR_parallel_shader_compile|
 report('errors', !errs.length, errs.length ? `${errs.length}: ` + errs.slice(0, 5).join(' || ') : 'none');
 
 await browser.close();
+
+// ---- the polish gate, quick mode (a separate process: its own fresh browser profile)
+if (process.env.SMOKE_POLISH !== '0') {
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, [join(ROOT, 'tools/polish.mjs'), URL0, '--quick', '--budget=900'], { encoding: 'utf8', timeout: 20 * 60000, env: { ...process.env, POLISH_OUT: process.env.POLISH_OUT || join(OUT || '/tmp', 'polish-quick') } });
+  const lines = String(r.stdout || '').trim().split('\n'), last = lines[lines.length - 1] || String(r.stderr || '').trim().split('\n').pop() || 'no output';
+  report('polish', r.status === 0, last.replace(/^polish: /, '') + (r.status ? ' — ' + lines.filter(l => /^FAIL/.test(l)).slice(0, 3).join(' || ') : ''));
+}
 console.log(`\n${results.length - failed}/${results.length} checks passed in ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 process.exit(failed ? 1 : 0);

@@ -32,7 +32,9 @@ function marbleMat(stone, o = {}) {
   const m = new THREE.MeshPhysicalMaterial({ map: M.map, normalMap: NRM(M.normalMap), normalScale: V2(M.normalScale), roughnessMap: M.roughnessMap, roughness: o.k ?? 2.2, clearcoat: o.cc == null ? 1 : o.cc ? 1 : 0, clearcoatRoughness: o.cc || .05, vertexColors: !!o.vc, envMapIntensity: 1,
     sheen: pale ? .12 : 0, sheenRoughness: .5, sheenColor: new THREE.Color(0xfff2e6) });
   if (/statuary|cream|pavonazzetto/.test(stone)) m.color.setScalar(.92);   // keep white marble below 0.8 linear
-  return surface(m, { sss: pale ? [.85, .56, .4, .38] : null, macro: [.8, .07, .2], detail: [3.7, .35] });
+  // the shadow-side scatter is warm for white marbles; the tinted ones (giallo, rose) get a near-neutral one, because a
+  // red-heavy wrap on an already warm stone under warm lamps reads as mustard / salmon (rendered saturation ≤ ~0.35)
+  return surface(m, { sss: pale ? (/giallo|rose/.test(stone) ? [.52, .47, .42, .3] : [.85, .56, .4, .38]) : null, macro: [.8, .07, .2], detail: [3.7, .35] });
 }
 function giltMat(o = {}) {
   const t = gildTex(), C = companions(t.map) || {};

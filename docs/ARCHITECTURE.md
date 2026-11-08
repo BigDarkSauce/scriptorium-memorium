@@ -115,6 +115,16 @@ The specs and the evidence are in `research/explainer-animation.md` (§6); the l
 - The pedestal miniature is the real diorama world, scaled down, with every material forced to card (`uFrontR = -∞`) and ink added. That is the card-model look.
 - PDF ingestion (`js/ai/ingest.js`) merges the outline with numbered/bold headings (falling back to the contents page, then fixed windows), keeps every subsection with its pages, and cuts figures from the pages. The reader verifies coverage (`verifyChain`) and fills gaps with targeted follow-ups — see PROTOCOL.md, "Recipe for any AI". `tools/verify-chain.mjs` runs the same check, plus the strict schema, offline on any chain file.
 
+### Reader folds (`js/room/reader.js`, `computeFolds` / `applyFolds`)
+
+A scroll is never shown whole. After the chain is built, its DOM is cut into **units** and the units into **folds**:
+- *Units*: a step's head (badge, the question it settles, kind and title, the statement with its figure, short quotes); each explanation paragraph with its figure; the display maths; the derivation; code; each worked example; a table; the PDF's figures; terms; intuition; misconception; *Check yourself* (question and hidden answer are one element, so they never split); the showcases. Sources, attached bodies, the question the step opens, figure links and number warnings are glued to the unit before them. The chain head, evidence, coverage and quality boxes ride with the first unit; the references are a unit of their own.
+- *Folds*: units are added while a fold weighs at most 4.5 (a unit weighs 1, +1 when it holds a figure, drawing, table or code, +0.5 for a long text). A fold never ends between a step's head and its first unit, and a new step starts a new fold once the current one weighs 60 % of the budget. So a fold is about one step's question with its first two explanation blocks, or one section of a long step.
+- Folds after the shown ones are `display: none` (`.unf-hidden`; a step whose parts are all hidden is hidden too), so they are neither tabbed into nor read aloud. Below the sheet the **fold bar** shows the rolled edge on a rod: *Unfold further · fold k of n read* (a real `<button>`: Enter / Space / tap) and a row of dots. Pressing it reveals the next fold: the chain's `clip-path` and a negative bottom margin animate together for 0.45–1.1 s (∝ the height uncovered), so the rod rolls down the page uncovering the new part; the `unroll` sound plays; with reduced motion the fold appears at once.
+- **Persistence**: `part.unfold = {n, of}` in the room record (saved with the room), so a reload reopens the scroll as far as it was unrolled. The header's ⋯ menu has *Unfold all* and *Roll up*; at the end the bar offers *Roll it up again*.
+- A jump to a step (coverage table, *follows from*, *shown in*) unrolls as far as needed first. MathJax typesets only the folds on show (it measures sizes), each fold when it is unrolled; the dependency arcs skip hidden steps.
+- The 3D wall scroll in the room is unchanged.
+
 ## Presentation and navigation
 
 - **Shot grammar** (`director.frame`, see `docs/research/presentation-craft.md`): every beat gets one shot, never a floating drift.
@@ -156,6 +166,11 @@ The specs and the evidence are in `research/explainer-animation.md` (§6); the l
 - `verifySources()` batches all cited references (25 per call) into `resolve_references` and stores `verified` / `check` / `openalex` on each source.
 - Errors are reported per connector code (reconnect, add, not allowed…) and never collapsed into one message.
 - Without the capability, the rest of the app is unchanged and sources show as unchecked.
+
+## Quality gates
+
+- `tools/smoke.mjs` (14 checks; the 14th runs the polish gate in quick mode) and the unit tests `tools/test-math.mjs`, `tools/test-prose.mjs`, `tools/test-ingest.mjs`.
+- `tools/polish.mjs`: walks the hub, rooms, every seeded scroll unfolded (and the BYU fixture chains), every built-in model and flagship lesson beat by beat with Guides on and off, and the Add-PDF steps, at 1280×720 and iPhone 13 size, and checks overlaps, guide-label distance, clipped text, raw notation and italic units, figure legends and viewBox, off-screen HUD and colour. Resumable (`<out>/state.json` after every item); `--quick` for one view per area. The last full report is `docs/qa/polish-report.md`.
 
 ## Extending
 
