@@ -552,7 +552,7 @@ export class Director {
       F.pts = [[ax, ay], [ax + (cx - ax) * ease, ay + (cy - ay) * ease]]; });
     FE.forEach(F => setLine(F.path, F.pts));
     // while quantity arrows are drawn, the model's own 3D vector arrows step aside (VecArrow in models.js reads this)
-    if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts);
+    if (v.ds && v.ds.scene) v.ds.scene.userData.vecMute = FE.some(F => F.f.vec && F.pts) || !!(v.ops && v.ops.muteVectors());   // (runs after update()'s own mute: an exploded view or a lineup keeps the arrows off with Guides on too)
     // links: subject → each named actor, one bend at most, trimmed off both bodies
     (b.links || []).forEach(L2 => {
       const q = L2.a.getPos && L2.a.getPos(); if (!q) { setLine(L2.path, null); return; } const t = scr(q); if (!t.ok) { setLine(L2.path, null); return; }
