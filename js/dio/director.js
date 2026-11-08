@@ -569,7 +569,8 @@ export class Director {
     });
     // labels: greedy, in flow order; obstacles are every arrow (padded), the labels already placed, the pins, the callout and the frame
     const LH = 17, pad = 5, placed = [], boxes = [], pins = [];
-    (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));   // the pins (a label over a pin hides its name): weighed more than an arrow
+    (b.rects || []).forEach(r => pins.push([r.left - b.ox - 4, r.top - b.oy - 3, r.width + 8, r.height + 6]));
+    const CC = v.cues && v.cues.chain; if (CC && CC.rects) CC.rects.forEach(r => pins.push([r[0] - 15 - (b.ox || 0), r[1] - 15 - (b.oy || 0), 30, 30]));   // the chain's numbered badges (centres)   // the pins (a label over a pin hides its name): weighed more than an arrow
     if (b.box) boxes.push(b.box);
     if (b.dot && b.dot.style.opacity === '1') { boxes.push([sx - 11, sy - 11, 22, 22]); if (b.box) { const bx2 = b.box, ax2 = bx2[0] > sx - bx2[2] / 2 ? bx2[0] : bx2[0] + bx2[2]; segs.push([[ax2, bx2[1] + bx2[3] * .6], [sx, sy]]); } }   /* the callout's anchor dot and (roughly) its leader */
     (b.hard || []).forEach(A => boxes.push([A.x, A.y, A.w, A.h]));   // the readouts, button column, POV bar, inset
@@ -685,6 +686,9 @@ export class Director {
       }
       // still over its own anchor dot (clamped against the panel or the frame): step above or below the dot instead
       if (on && x < sx + 14 && x + cw > sx - 14 && y < sy + 24 && y + ch > sy - 24) { const ys = [sy + 24, sy - 24 - ch]   /* (24: the measured height may lag the text by a line) */.filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; }
+      // still over an object's name: step just above or below that name (if that stays in the frame and off the dot)
+      for (const r of b.rects || []) { const rx = r.left - b.ox, ry = r.top - b.oy; if (!(x < rx + r.width - 2 && x + cw > rx + 2 && y < ry + r.height - 2 && y + ch > ry + 2)) continue;
+        const ys = [ry - ch - 8, ry + r.height + 8].filter(yy => yy >= topAt(x) - .5 && yy <= h - ch - 16 && !(on && x < sx + 14 && x + cw > sx - 14 && yy < sy + 24 && yy + ch > sy - 24)); if (ys.length) y = ys.sort((p, q) => Math.abs(p - y) - Math.abs(q - y))[0]; break; }
       // the glide after a change of side: from where it was drawn toward where it now belongs
       if (b.tw) { b.tw.t += dt; const k = Math.min(1, b.tw.t / .35), s = k * k * (3 - 2 * k); x = b.tw.x0 + (x - b.tw.x0) * s; y = b.tw.y0 + (y - b.tw.y0) * s; if (k >= 1) b.tw = null; }
       b.rx = x; b.ry = y; b.box = [x, y, cw, ch];   // the callout as drawn this frame (labels test themselves against it)
