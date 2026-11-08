@@ -174,7 +174,8 @@ export class Ops {
   holdShot() { return !!(this.cmp || this.sc || (this.ex && this.ex.phase !== 'done') || (this.ins && !this.ins.done)); }   // the director does not cut away for an event while one of these owns the frame
   muteVectors() { return !!((this.ex && /^(frame|out|hold|in)$/.test(this.ex.phase)) || (this.sc && this.sc.phase !== 'wait')); }
   ownsFrame() { return !!((this.cmp && this.cmp.pose) || (this.sc && this.sc.phase !== 'wait')); }
-  noAnchor() { return !!(this.cmp && this.cmp.mode === 'side'); }   // side by side: a callout leader into one half would point at the wrong state
+  noAnchor() { return !!(this.cmp && this.cmp.mode === 'side'); }
+  cmpRects() { return (this.cmp && this.cmp.rects) || null; }   // the compared models' screen boxes (the director's callout keeps off them)   // side by side: a callout leader into one half would point at the wrong state
   hidePins() { return !!(this.cmp || this.sc || (this.ex && /^(out|hold|in)$/.test(this.ex.phase))); }   // the parts' own callouts replace the pins while they are apart
   endStep() { if (this.hid) { this.hid.forEach(h => { h.o.visible = h.v; }); this.hid = null; } this.endExplode(); this.endAssemble(); this.endInspect(); this.endProgression(); this.endScale(); this.endCompare(); this.endLevels(); this.legend(null); }
   reset() { this.endStep(); this.clearOff(); }
@@ -399,15 +400,26 @@ export class Ops {
     B.world.visible = false; B.extras.visible = false;   // (outside the pass, the second world is never drawn: shadow maps, the inset, the focus mask)
   }
   // one framing for both: the whole model centred, fitted to a half-width frame (side) or to the full frame (split)
-  frameCompare() {
+  frameCompare(dip = true) {
     const K = this.cmp, v = this.v, ds = v.ds, cam = v.camera, R0 = ds.orb ? ds.orb.r : 10, bx = new THREE.Box3(), all = new THREE.Box3();
     v.scene.updateMatrixWorld(true); ds.actors.concat(K.B.actors || []).forEach(a => { if (!a.obj) return; this.boxOf(a.obj, bx); if (!bx.isEmpty() && bx.getSize(V3()).length() < R0 * 1.6) all.union(bx); });
     if (all.isEmpty()) all.setFromCenterAndSize(ds.center.clone(), V3(4, 4, 4));
     const c = all.getCenter(V3()), r = Math.max(.5, all.getSize(V3()).length() * .5), fov = v.dir.baseFov(), asp = (cam.aspect || 1.6) / (K.mode === 'side' ? 2 : 1);
     const off = cam.position.clone().sub(v.controls.target); off.y = 0; if (off.lengthSq() < 1e-6) off.set(0, 0, 1); off.normalize(); const el2 = THREE.MathUtils.degToRad(12), dir = off.multiplyScalar(Math.cos(el2)); dir.y = Math.sin(el2);
-    const dist = Math.max(r / Math.tan(THREE.MathUtils.degToRad(fov / 2)) * 1.25, ds.orb ? ds.orb.r : 0) / Math.min(1, asp);   /* at least the model's own overview distance (its stand and scenery count), widened for a half-width frame */
-    K.pose = { target: c, pos: c.clone().addScaledVector(dir, dist), fov };
-    v.dir.cutTo(K.pose.target, K.pose.pos, fov, true);
+    // the models sit in the free band ABOVE the captions (which take the band's bottom, see updateCompare): the band's top is
+    // below the title and the buttons, its bottom above the time bar and (on a phone) the callout sheet; the caption height is
+    // estimated until they are filled (three lines on a phone)
+    const W = innerWidth, H = innerHeight, band = v.dir.freeBand(H), capH = Math.max(K.capA.offsetHeight || 0, K.capB.offsetHeight || 0, W < 760 ? 62 : 34);
+    const y0 = band[0] + 6, y1 = Math.max(y0 + H * .18, band[1] - capH - 18), th = Math.tan(THREE.MathUtils.degToRad(fov / 2)), ycN = 1 - (y0 + y1) / H;
+    const dist = Math.max(Math.max(r / th * 1.25, ds.orb ? ds.orb.r : 0) / Math.min(1, asp), r * H / ((y1 - y0) * th) * 1.05);   /* at least the model's own overview distance (its stand and scenery count), widened for a half-width frame, and far enough for the model to fit the height above the captions */
+    const right = V3().crossVectors(V3(0, 1, 0), dir).normalize(), up2 = V3().crossVectors(dir, right).normalize(), target = c.clone().addScaledVector(up2, -ycN * dist * th);   /* the model's centre at the middle of that height */
+    K.pose = { target, pos: target.clone().addScaledVector(dir, dist), fov }; K.fb = band[1]; K.capH = capH;
+    // where the models land on screen (each half has its own centred view at half the aspect): the callout keeps off them
+    { const pc = this._pc || (this._pc = new THREE.PerspectiveCamera()); pc.fov = fov; pc.aspect = asp; pc.near = .05; pc.far = 1e4; pc.position.copy(K.pose.pos); pc.lookAt(target); pc.updateProjectionMatrix(); pc.updateMatrixWorld();
+      let x0 = 1e9, x1 = -1e9, y0p = 1e9, y1p = -1e9; const q = V3(); for (let i = 0; i < 8; i++) { q.set(i & 1 ? all.max.x : all.min.x, i & 2 ? all.max.y : all.min.y, i & 4 ? all.max.z : all.min.z).project(pc); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0p = Math.min(y0p, q.y); y1p = Math.max(y1p, q.y); }
+      const fw = K.mode === 'side' ? W / 2 : W, top = (1 - Math.min(1, y1p)) / 2 * H, bot = (1 - Math.max(-1, y0p)) / 2 * H, a = (Math.max(-1, x0) * .5 + .5) * fw, bb = (Math.min(1, x1) * .5 + .5) * fw;
+      K.rects = (K.mode === 'side' ? [0, fw] : [0]).map(o => ({ x: o + a, y: top, w: bb - a, h: bot - top })); }
+    v.dir.cutTo(K.pose.target, K.pose.pos, fov, dip);
   }
   updateCompare(dt) {
     const K = this.cmp, w = innerWidth, h = innerHeight, half = w / 2; K.t += dt;
@@ -419,6 +431,9 @@ export class Ops {
     // the captions: bottom of the free band, centred in each half, stepped up off the HUD
     const band = this.v.dir.freeBand(h), place = (e, cx) => { if (!e._w) { e._w = e.offsetWidth || 160; e._h = e.offsetHeight || 26; } let x = clamp(cx - e._w / 2, 8, w - e._w - 8), y = band[1] - e._h - 8; const HR = this.hudNoCallout(); for (let k = 0; k < 10 && this.hits(x, y, e._w, e._h, HR); k++) y -= 30; const tf = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (e._tf !== tf) { e._tf = tf; e.style.transform = tf; } };
     place(K.capA, half / 2); place(K.capB, half * 1.5);
+    // the band or the captions changed size after the framing (the callout sheet measured, a caption grew a line): frame
+    // again, gliding, so the captions never sit on the models
+    if (K.pose && (!K._ft || K.t - K._ft > .5)) { K._ft = K.t; const capH = Math.max(K.capA._h ? K.capA.offsetHeight : 0, K.capB._h ? K.capB.offsetHeight : 0); if (Math.abs(band[1] - K.fb) > 10 || capH > K.capH + 6) this.frameCompare(false); }
   }
   // the second state runs in step with the first (same time scale)
   stepB(dt) { const K = this.cmp; if (!K) return; try { K.B.step(dt); } catch (e) { console.warn(e); this.endCompare(); } }

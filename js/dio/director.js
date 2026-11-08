@@ -698,16 +698,17 @@ export class Director {
       // top limit: below the director's chip where the callout would sit under it; right limit: clear of the button column
       const topAt = x => b.chipR && x < b.chipR.x + b.chipR.w && x + cw > b.chipR.x ? Math.max(84, b.chipR.y + b.chipR.h) : 84;
       const bounds = y => [panel, y < 176 ? w - cw - 66 : w - cw - 24];
-      const place = c => { let x = c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
+      const place = c => { let x = c[2] != null ? sx + c[2] : c[0] > 0 ? sx + c[0] : sx + c[0] - cw, y = c[1] < 0 ? sy + c[1] - ch : sy + c[1]; y = clamp(y, topAt(x), h - ch - 120); const [xa, xb] = bounds(y); x = clamp(x, xa, Math.max(xa, xb)); return [x, y]; };
       if (!b.avoid || b.t - (b.avoidT || -1) > .3) {
         b.avoidT = b.t; b.avoid = [];
         if (b.focus) { const bx = new THREE.Box3().setFromObject(b.focus); if (!bx.isEmpty()) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < 8; k++) { const q = V3(k & 1 ? bx.max.x : bx.min.x, k & 2 ? bx.max.y : bx.min.y, k & 4 ? bx.max.z : bx.min.z).project(cam); const qx = (q.x * .5 + .5) * w, qy = (-q.y * .5 + .5) * h; x0 = Math.min(x0, qx); y0 = Math.min(y0, qy); x1 = Math.max(x1, qx); y1 = Math.max(y1, qy); } b.avoid.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, k: 6 }); } }
         [v.readPanel, v.panel, v.titleEl, v.povBar, v.ticker, v.ui && v.ui.querySelector('.dio-actions'), document.querySelector('.sound-btn'), document.querySelector('.gfx-btn')].forEach(P => { if (P && !P.hidden && P.getBoundingClientRect && !(P === v.panel && P.classList.contains('folded'))) { const r = P.getBoundingClientRect(); if (r.width) b.avoid.push({ x: r.left - b.ox, y: r.top - b.oy, w: r.width, h: r.height, k: 8 }); } });
         (b.hard || []).forEach(A => b.avoid.push(Object.assign({ k: 8 }, A)));
+        ((v.ops && v.ops.cmpRects && v.ops.cmpRects()) || []).forEach(A => b.avoid.push({ x: A.x - b.ox, y: A.y - b.oy, w: A.w, h: A.h, k: 6 }));   /* a comparison: off both models */
         if (this.track && this.track.phase === 'ride') b.avoid.push({ x: w * .3, y: h * .25, w: w * .4, h: h * .5, k: 6 });   // during a ride the middle of the frame is the view itself: text goes to the side
       }
       const cost = ([x, y]) => { let o = on && x < sx + 14 && x + cw > sx - 14 && y < sy + 14 && y + ch > sy - 14 ? 4e5 : 0; /* never over its own anchor dot */ for (const A of b.avoid) { const ix = Math.max(0, Math.min(x + cw, A.x + A.w) - Math.max(x, A.x)), iy = Math.max(0, Math.min(y + ch, A.y + A.h) - Math.max(y, A.y)); o += ix * iy * A.k; } for (const r of b.rects) { const rx = r.left - b.ox, ry = r.top - b.oy, ix = Math.max(0, Math.min(x + cw, rx + r.width) - Math.max(x, rx)), iy = Math.max(0, Math.min(y + ch, ry + r.height) - Math.max(y, ry)); o += ix * iy * 3; } const ix = Math.max(0, Math.min(x + cw, sx + 12) - Math.max(x, sx - 12)), iy = Math.max(0, Math.min(y + ch, sy + 12) - Math.max(y, sy - 12)); return o + ix * iy * 50 + Math.hypot(x + cw / 2 - sx, y + ch / 2 - sy) * 2; };
-      const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]];
+      const C = [[110, -40], [-110, -40], [110, 40], [-110, 40], [0.01, -90]]; if (v.ops && v.ops.cmpRects && v.ops.cmpRects()) C.push([0, -1e4, -cw / 2]);   /* a comparison: also centred over the divider at the top, between the two models (c[2]: x offset of the left edge) */
       const right0 = sx < w * .58; const first = b.side == null; if (first) b.side = right0 ? 0 : 1;
       // hysteresis: the side changes only when another is far better (less than half the cost, by a real margin) for 0.6 s
       { const cur = cost(place(C[b.side])); let best = b.side, bc = cur; C.forEach((c, i) => { const k = cost(place(c)); if (k < bc) { bc = k; best = i; } });
@@ -746,7 +747,9 @@ export class Director {
       // guides (made when Guides is switched on mid-beat, hidden while it is off)
       if (this.guides && !b.guides) this.makeGuides(b);
       if (b.guides) {
-        if (!this.guides) { if (!b.gOff) this.showGuides(b, false); }
+        /* side by side (a comparison), a world-space guide projected through the full-frame camera would land at the divider,
+           in neither half: the guides step aside for the comparison, as the anchor dot does */
+        if (!this.guides || (v.ops && v.ops.noAnchor())) { if (!b.gOff) this.showGuides(b, false); }
         else { if (b.gOff) this.showGuides(b, true); this.drawGuides(b, cam, w, h, sx, sy, p); }
       }
     }
