@@ -30,7 +30,7 @@ function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(
 export async function material(ctx, part, { onStatus } = {}) {
   const { app, book } = ctx, P = part, src = P.subOf ? ((ctx.data.parts || []).find(x => x.id === P.subOf) || P) : P;
   if (!book.hasPdf) return { sections: null, figures: [], text: P.text || '' };
-  const blob = await app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [], text: P.text || '' };
+  const blob = app.ingest.keyPDF ? app.ingest.keyPDF(await app.store.get('pdf:' + book.id), book.id) : await app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [], text: P.text || '' };
   if (book.pdfTitle == null && app.ingest.pdfTitle) { try { book.pdfTitle = await app.ingest.pdfTitle(blob) || ''; if (app.saveLib) app.saveLib(); } catch (e) { } }
   onStatus && onStatus('Reading the subsections…');
   const sec = P.subOf ? { sections: null } : await cached(partKey('sections', book.id, src.id), () => app.ingest.partSections(blob, src));
@@ -201,7 +201,15 @@ export function fallbackDemo(st, d = {}) {
 }
 
 // ---------------------------------------------------------------- one part, all stages (resumable)
+// one analysis per part at a time (the book job, the reader's Analyse / Repair / Paste): a second caller gets code 'busy'
+const BUSY = new Set(), busyKey = (ctx, P) => ((ctx.book && ctx.book.id) || '?') + '/' + P.id;
+export const partBusy = (bookId, partId) => BUSY.has(bookId + '/' + partId);
+export const bookBusy = bookId => [...BUSY].some(k => k.startsWith(bookId + '/'));
 export async function analysePart(ctx, P, o = {}) {
+  const key = busyKey(ctx, P); if (BUSY.has(key)) { const e = new Error('This part is already being analysed. Wait until that run finishes.'); e.code = 'busy'; throw e; }
+  BUSY.add(key); try { return await analyseOne(ctx, P, o); } finally { BUSY.delete(key); }
+}
+async function analyseOne(ctx, P, o) {
   const auto = o.auto != null ? o.auto : aiAvailable(), say = o.onStatus || (() => {}), stage = s => { P.job = { ...(P.job || {}), stage: s, level: o.level || (P.job && P.job.level) || 'complete', n: o.n || (P.job && P.job.n) || null, updated: Date.now() }; o.onStage && o.onStage(s); };
   const save = () => ctx.save && ctx.save(P);
   if (o.force) { delete P.analysis; P.job = null; }
@@ -225,20 +233,36 @@ export async function analysePart(ctx, P, o = {}) {
 export function roomCtx(app, bookId) {
   const book = app.lib.books.find(b => b.id === bookId);
   const live = () => app.mode && app.mode.book && app.mode.book.id === bookId && app.mode.data ? app.mode : null;
+  const exists = () => app.lib.books.some(b => b.id === bookId);   // removed while the job ran: write nothing back
+  let chain = Promise.resolve();   // saves run one after another, each on a fresh copy of the stored room
   const ctx = { app, book, data: null,
-    async load() { const L = live(); ctx.data = L ? L.data : await app.loadRoom(bookId); return ctx.data; },
-    // a room opened (or reloaded) during a long call holds its own copy: the part is written into whichever is current
-    save(part) { const L = live(), D = L ? L.data : ctx.data; if (part && D && D.parts) { const i = D.parts.findIndex(p => p.id === part.id); if (i >= 0 && D.parts[i] !== part) D.parts[i] = part; } if (L) L.save(); else app.store.set('room:' + bookId, D); },
+    async load() { await chain; const L = live(); ctx.data = L ? L.data : await app.loadRoom(bookId); return ctx.data; },
+    // a room opened (or reloaded) during a long call holds its own copy: the part is written into whichever is current;
+    // with no room open, the stored room is read again and only this part replaced (edits made meanwhile are kept)
+    save(part) {
+      if (!exists()) return chain;
+      const L = live();
+      if (L) { const D = L.data; if (part && D && D.parts) { const i = D.parts.findIndex(p => p.id === part.id); if (i >= 0 && D.parts[i] !== part) D.parts[i] = part; } L.save(); return chain; }
+      const snap = part ? C(part) : null;
+      chain = chain.then(async () => {
+        if (!exists()) return; const D = await app.store.get('room:' + bookId); if (!D || !Array.isArray(D.parts)) return;
+        if (snap) { const i = D.parts.findIndex(p => p.id === snap.id); if (i < 0) return; D.parts[i] = snap; }
+        await app.store.set('room:' + bookId, D);
+      }).catch(e => console.warn('room save', e));
+      return chain;
+    },
     refresh(part) { const L = live(); if (L && L.refreshStation) { try { L.refreshStation(part); } catch (e) { } } } };
   return ctx;
 }
-export async function saveJob(app, job) { job.updated = Date.now(); await app.store.set('job:' + job.bookId, C(job)); }
+export async function saveJob(app, job) { if (app.lib && !app.lib.books.some(b => b.id === job.bookId)) return; job.updated = Date.now(); await app.store.set('job:' + job.bookId, C(job)); }   // never re-creates the job of a removed book
 export async function pendingJobs(app) { const ks = await app.store.keys('job:'); const out = []; for (const k of ks) { const j = await app.store.get(k); if (j && j.status !== 'done' && app.lib.books.some(b => b.id === j.bookId)) out.push(j); } return out; }
 export async function runJob(app, job, { signal, onProgress = () => {} } = {}) {
   const ctx = roomCtx(app, job.bookId); job.status = 'running'; job.error = null; await saveJob(app, job);
   try {
     for (let i = 0; i < job.parts.length; i++) {
       check(signal);
+      if (!app.lib.books.some(b => b.id === job.bookId)) throw cancelled();   // the book was removed
+      while (partBusy(job.bookId, job.parts[i])) { check(signal); await new Promise(r => setTimeout(r, 1000)); }   // the reader is analysing this part: wait, then take up what it left
       const D = await ctx.load(), P = D.parts.find(p => p.id === job.parts[i]); if (!P) continue;
       if (P.job && P.job.stage === 'done' && P.analysis) { onProgress({ index: i, part: P, stage: 'done', status: 'already analysed' }); continue; }
       job.current = P.id; await saveJob(app, job);
@@ -247,7 +271,7 @@ export async function runJob(app, job, { signal, onProgress = () => {} } = {}) {
       onProgress({ index: i, part: P, stage: 'done' });
     }
     job.status = 'done'; job.current = null; await saveJob(app, job);
-  } catch (e) { job.status = e && e.code === 'cancelled' ? 'paused' : 'failed'; job.error = e && e.code === 'cancelled' ? null : String((e && (e.message || e.code)) || e); await saveJob(app, job); throw e; }
+  } catch (e) { job.status = e && e.code === 'cancelled' ? 'paused' : 'failed'; job.error = e && e.code === 'cancelled' ? null : String((e && (e.message || e.code)) || e); if (app.lib.books.some(b => b.id === job.bookId)) await saveJob(app, job); throw e; } finally { const live = app.mode && app.mode.book && app.mode.book.id === job.bookId; if (!live && !bookBusy(job.bookId) && app.ingest.closePDF) app.ingest.closePDF(job.bookId); }   // the room, if open, closes it when it ends
   return job;
 }
 // N steps for the whole selected range, spread over the parts by how much text they hold (never fewer than a part's

@@ -14,6 +14,7 @@ import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces
 import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
+import { bookBusy } from '../ai/pipeline.js';
 import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree, measureMath, canvasMath, mathText, mathHTML } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -203,7 +204,7 @@ export class BookRoom {
   // ---------- ingestion: split the PDF into parts (outline → headings → contents page → windows) ----------
   async ingest() {
     if (!this.book.hasPdf) { this.status('This book has no PDF attached. Import a room JSON or add parts with AI.'); return; }
-    const blob = await this.app.store.get('pdf:' + this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return; }
+    const blob = await this.app.store.get('pdf:' + this.book.id); if (blob && this.app.ingest.keyPDF) this.app.ingest.keyPDF(blob, this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return; }
     this.status('Finding the chapters…');
     try {
       const r = await this.app.ingest.splitBook(blob, { onProgress: k => this.status('Finding the chapters… ' + Math.round(k * 100) + '%') });
@@ -540,6 +541,7 @@ export class BookRoom {
   }
   dispose() {
     if (this.disposed) return; this.disposed = true;
+    if (this.app.ingest && this.app.ingest.closePDF && !bookBusy(this.book.id)) this.app.ingest.closePDF(this.book.id);   // its parsed PDF (pdf.js worker memory); a running analysis keeps it
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();

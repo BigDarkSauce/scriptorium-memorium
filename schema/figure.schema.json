@@ -432,6 +432,43 @@
       "if": {
         "properties": {
           "kind": {
+            "const": "pdf"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "else": {
+        "anyOf": [
+          {
+            "required": [
+              "caption"
+            ],
+            "properties": {
+              "caption": {
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": "caption is required except for kind pdf (validateFigure accepts the title in its place)"
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
             "const": "flow"
           }
         }

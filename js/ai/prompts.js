@@ -632,7 +632,7 @@ Choose the kind by the idea: a process → flow; a curve or function → plot; a
 Return ONLY JSON: {"figures":[{"step":"S3","slot":"explain.0","figure":FIGURE}, …]}`;
 }
 export function mergeFigures(A, ans, setter) {
-  let n = 0; (ans && ans.figures || []).forEach(x => { const st = (A.chain || []).find(s => s.id === String(x && x.step)); if (!st || !x.figure) return; const v = validateFigure(x.figure); if (!v.ok) return; setter(st, String(x.slot), v.fig); n++; }); return n;
+  let n = 0; (ans && ans.figures || []).forEach(x => { const st = (A.chain || []).find(s => s.id === String(x && x.step)); if (!st || !x.figure) return; const slot = String(x.slot); if (!figureSlots(st).some(f => f.slot === slot)) return;   /* only a slot the step really has (no hole in explain[], no text-less paragraph) */ const v = validateFigure(x.figure); if (!v.ok) return; setter(st, slot, v.fig); n++; }); return n;
 }
 // How many 3D dioramas each subsection needs: the model's "dioramaPlan" when it gave one, else a reading of the text
 // (dynamic or spatial words: motion, process, flow, sampling, simulation, a mechanism, a time budget …).

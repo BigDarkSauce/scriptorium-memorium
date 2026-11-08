@@ -37,12 +37,25 @@ const SYNTH_PAGES = 2;                // synthetic subsection windows when a par
 
 // ---------------------------------------------------------------- pdf.js access
 function lib() { const L = (typeof window !== 'undefined' && window.pdfjsLib) || globalThis.pdfjsLib; if (!L) throw new Error('The PDF reader did not load. Reload the page and try again.'); return L; }
-const DOCS = new WeakMap();           // one parsed document per blob (re-opening a 500-page PDF costs seconds)
+// One parsed document per book (re-opening a 500-page PDF costs seconds). A blob read again from IndexedDB is a new
+// object, so blobs from the store are keyed by their book (keyPDF(blob, bookId)); others (a file being added) by the
+// blob itself. At most DOC_MAX stay open; the oldest is destroyed (pdf.js keeps its data in the worker until then),
+// and closePDF(bookId) frees a book's document when its job or room ends.
+const DOCS = new Map(), DOC_MAX = 2, PDFKEY = Symbol('pdfKey');
+export function keyPDF(blob, bookId) { if (blob && typeof blob === 'object' && bookId != null) { try { blob[PDFKEY] = 'book:' + bookId; } catch (e) { } } return blob; }
+const docKey = blob => (blob && blob[PDFKEY]) || blob;
+const destroyDoc = p => { Promise.resolve(p).then(d => d && d.destroy && d.destroy()).catch(() => {}); };
+export function closePDF(bookId) { const k = 'book:' + bookId, p = DOCS.get(k); if (!p) return; DOCS.delete(k); destroyDoc(p); }
 export async function openPDF(blob) {
-  if (blob && typeof blob === 'object' && DOCS.has(blob)) return DOCS.get(blob);
+  const key = docKey(blob);
+  if (key && typeof key !== 'number' && DOCS.has(key)) { const p = DOCS.get(key); DOCS.delete(key); DOCS.set(key, p); return p; }   // most recently used last
   const L = lib(); const data = new Uint8Array(await blob.arrayBuffer());
+  if (DOCS.has(key)) return DOCS.get(key);   // another caller opened it meanwhile
   const p = L.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
-  if (blob && typeof blob === 'object') DOCS.set(blob, p);
+  if (blob && typeof blob === 'object') {
+    DOCS.set(key, p); p.catch(() => { if (DOCS.get(key) === p) DOCS.delete(key); });
+    while (DOCS.size > DOC_MAX) { const [k0, p0] = DOCS.entries().next().value; DOCS.delete(k0); destroyDoc(p0); }
+  }
   return p;
 }
 export async function pageCount(blob) { try { const d = await openPDF(blob); return d.numPages; } catch (e) { return 0; } }

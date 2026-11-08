@@ -29,6 +29,15 @@ function preview(hub, P) {
 }
 function place(app, hub, b, P) {
   if (hub && typeof hub.placeScroll === 'function') { try { const r = hub.placeScroll(b.id, { caseId: P.caseId, row: P.row, slot: P.slot, ...(P.hang ? { hang: true } : {}) }); if (r && r.ok) return r; } catch (e) { console.warn(e); } }
+  // that bookcase is full (or gone): the first free place on any bookcase, never the taken one
+  if (hub && typeof hub.freeSlot === 'function' && typeof hub.placeScroll === 'function' && !hub.disposed) {
+    const shelves = (hub.lib && hub.lib.shelves) || app.lib.shelves || [], order = [...shelves.filter(s => s.id === P.caseId), ...shelves.filter(s => s.id !== P.caseId)];
+    for (const hang of P.hang ? [true, false] : [false]) for (const s of order) {
+      const fs = hub.freeSlot(s, hang); if (!fs) continue;
+      try { const r = hub.placeScroll(b.id, { caseId: s.id, row: fs.tier, slot: fs.slot, ...(hang ? { hang: true } : {}) }); if (r && r.ok) return r; } catch (e) { console.warn(e); }
+    }
+    if (typeof hub.makeDefaultShelf === 'function') { try { const s = hub.makeDefaultShelf(), fs = hub.freeSlot(s), r = fs && hub.placeScroll(b.id, { caseId: s.id, row: fs.tier, slot: fs.slot }); if (r && r.ok) return r; } catch (e) { console.warn(e); } }
+  }
   Object.assign(b, { shelf: P.caseId, tier: P.row, slot: P.slot });
   if (hub && typeof hub.addScrollObj === 'function' && !hub.disposed) { const o = hub.addScrollObj(b); if (o) { o.userData.arrive = 0; o.scale.setScalar(.01); } if (hub.refill) hub.refill(P.caseId); hub.glowDirty = true; }
   app.saveLib(); return { ok: true, caseId: P.caseId, row: P.row, slot: P.slot };
@@ -203,3 +212,5 @@ export async function offerResume(app) {
   try { const J = await pendingJobs(app); if (!J.length || RUN.job) return; const j = J[0]; RUN.job = j; RUN.last = new Map(); chip(app); } catch (e) { }
 }
 export const _addpdfState = RUN;   // for tests
+// a book is being removed (js/hub/hub.js removeBook): stop its running analysis and forget its job
+export function cancelJobFor(bookId) { if (!RUN.job || RUN.job.bookId !== bookId) return; if (RUN.ctrl) RUN.ctrl.abort(); RUN.job = null; RUN.last = new Map(); emit(); }

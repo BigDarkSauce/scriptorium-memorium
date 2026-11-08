@@ -145,7 +145,7 @@ export function figureSlots(st) {
   return out;
 }
 export function setSlotFigure(st, slot, fig) {
-  if (slot.startsWith('explain.')) { const k = +slot.split('.')[1]; const p = st.explain[k]; st.explain[k] = typeof p === 'string' ? { text: p, figure: fig } : { ...p, figure: fig }; }
+  if (slot.startsWith('explain.')) { const k = +slot.split('.')[1]; if (!Array.isArray(st.explain) || !Number.isInteger(k) || k < 0 || k >= st.explain.length || st.explain[k] == null) return; const p = st.explain[k]; st.explain[k] = typeof p === 'string' ? { text: p, figure: fig } : { ...p, figure: fig }; }
   else if (slot === 'statement') st.statementFigure = fig;
   else if (slot === 'intuition') st.intuitionFigure = fig;
   else if (slot === 'misconception') st.misconceptionFigure = fig;

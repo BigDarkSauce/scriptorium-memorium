@@ -106,7 +106,7 @@ export class Reader {
     const { manualRelay } = await import('../ai/claude.js');
     const P = this.part, book = this.room.book;
     let M = { sections: null, figures: [] }; try { M = await this.material(null); } catch (e) { }
-    let text = ''; if (!M.sections && book.hasPdf) { try { const blob = await this.app.store.get('pdf:' + book.id); if (blob) text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || 1, 60000); } catch (e) { } }
+    let text = ''; if (!M.sections && book.hasPdf) { try { const blob = await this.app.store.get('pdf:' + book.id); if (blob && this.app.ingest.keyPDF) this.app.ingest.keyPDF(blob, book.id); if (blob) text = await this.app.ingest.partText(blob, P.startPage || 1, P.endPage || 1, 60000); } catch (e) { } }
     try {
       const A = await manualRelay(chapterPrompt({ book: this.bookName(), chapter: P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : ''), text, depth: 'complete', sections: M.sections, figures: this.app.ingest.figureMeta(M.figures) }), 'Analyse "' + P.title + '" in any AI');
       if (!A || !Array.isArray(A.chain)) throw 0;
@@ -435,7 +435,7 @@ export function drawArcs(wrap) {
 
 function normSources(a) { return Array.isArray(a) ? a.filter(s => s && (s.title || s.doi)).slice(0, 30).map(s => ({ ...s, title: String(s.title || ''), doi: s.doi ? String(s.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : '' })) : []; }
 export function renderSource(s) {
-  const href = s.url || (s.doi ? doiUrl(s.doi) : s.openalex || '');
+  const href = [s.url, s.doi ? doiUrl(s.doi) : '', s.openalex].map(u => String(u || '').trim()).find(u => /^https?:\/\//i.test(u)) || '';   // model/imported text: never a javascript: or data: link
   const mark = s.verified === true ? el('span', { class: 'vmark ok', title: 'Found in OpenAlex' + (s.cited_by != null ? ` · cited ${s.cited_by.toLocaleString()} times` : ''), text: '✓' }) : s.verified === false ? el('span', { class: 'vmark bad', title: s.checkNote || 'Not found in OpenAlex: the reference may be garbled or invented. Check before relying on it.', text: s.check === 'uncertain' ? '?' : '✗' }) : el('span', { class: 'vmark', title: 'Not checked yet', text: '·' });
   const title = href ? el('a', { href, target: '_blank', rel: 'noopener', html: esc(s.title || s.matched || s.doi) }) : el('i', { html: esc(s.title) });
   return el('span', { class: 'src' }, [mark, ' ', s.authors ? String(s.authors) + ' ' : '', s.year ? '(' + s.year + ') ' : '', title, s.venue ? el('span', { class: 'dim', text: ' · ' + s.venue }) : null, s.matched && s.verified ? el('span', { class: 'dim small', text: ' — matched: ' + s.matched }) : null, s.note ? el('span', { class: 'note', text: ' — ' + s.note }) : null]);

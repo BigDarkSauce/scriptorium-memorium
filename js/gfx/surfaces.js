@@ -183,7 +183,7 @@ export class RoomProbe {
   // environment); step(), called once per frame, renders ONE cube face (≈ 1/6 of a frame of the hall at 128–256²), and
   // the pre-filtering (PMREM) gets its own frame. The window boost and hidden objects apply only inside each face
   // render, so the visible frames are untouched. capture() does it all at once (tests, tools).
-  begin(scene, o = {}) { this.job = { scene, o, face: 0, bounce: 0, at: performance.now() + (o.delay ?? 800), t0: 0, work: 0 }; }
+  begin(scene, o = {}) { this.dropJob(); this.job = { scene, o, face: 0, bounce: 0, at: performance.now() + (o.delay ?? 800), t0: 0, work: 0 }; }
   get busy() { return !!this.job; }
   step() {
     const J = this.job; if (!J || performance.now() < J.at) return false;
@@ -223,7 +223,8 @@ export class RoomProbe {
   stale() { return !!this.rt && this.q !== AAA.quality; }
   // write the probe's box into the shared uniforms (called before every render of this scene)
   apply(scene, on = true) { const U = SURF_U; U.smBoxMin.value.copy(this.box.min); U.smBoxMax.value.copy(this.box.max); U.smProbePos.value.copy(this.pos); U.smBoxK.value = on && this.rt ? 1 : 0; }
-  dispose() { if (this.rt) { this.rt.dispose(); this.rt = null; } }
+  dropJob() { const J = this.job; if (J && J.crt) J.crt.dispose(); this.job = null; }   // an unfinished capture's cube target
+  dispose() { this.dropJob(); if (this.rt) { this.rt.dispose(); this.rt = null; } }
 }
 // Bind a room's uniforms (probe box, room box, furniture footprints) to its scene, so the shared materials of the hall
 // and of a book room never see each other's values. room: { w, d, floor, cornice, ceiling, caseDepth, aisle }

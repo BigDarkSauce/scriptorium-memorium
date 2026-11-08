@@ -480,7 +480,7 @@ export class Hub {
     if (k >= 1) { this.camTween = null; if (!T.walk) { this.controls.target.copy(a); this.controls.update(); } }
   }
   sfx(name, o) { if (this.app.sfx) this.app.sfx.play(name, o); }
-  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); }
+  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); if (this.app.cancelJob) this.app.cancelJob(id); if (this.app.ingest && this.app.ingest.closePDF) this.app.ingest.closePDF(id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); await this.app.store.del('job:' + id); }
   // ---------- pointer ----------
   pick(e, list) { const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera); return this.ray.intersectObjects(list, true); }
   ownerOf(o, kind) { while (o && !(o.userData && o.userData.kind === kind)) o = o.parent; return o; }

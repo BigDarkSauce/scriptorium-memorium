@@ -9,7 +9,7 @@ import { Hub } from './hub/hub.js';
 import { BookRoom } from './room/room.js';
 import { DioramaView } from './dio/engine.js';
 import { normalizeChain } from './room/reader.js';
-import { openAddPdf, offerResume } from './room/addpdf.js';
+import { openAddPdf, offerResume, cancelJobFor } from './room/addpdf.js';
 import { legacyScrolls } from './seeds-legacy.js';
 import { FLAGSHIPS } from './seeds-scenes.js';
 import { groundChain } from './seeds-sources.js';
@@ -320,6 +320,7 @@ Return {"format":"scriptorium-room/1","book":{"title":str,"pages":n},"room":{"pa
 }
 // "+ Add PDF scroll" (and "+ Add PDF here" on a bookcase) open the guided dialog: place, pages, breakdown, analysis
 App.prototype.addPdfDialog = function (opts = {}) { return openAddPdf(this, opts); };
+App.prototype.cancelJob = function (bookId) { try { cancelJobFor(bookId); } catch (e) { console.warn(e); } };   // removing a book stops its analysis (js/hub/hub.js removeBook)
 Hub.prototype.pickPDF = function (shelfId) { return openAddPdf(this.app, { hub: this, shelfId: shelfId || this.selShelf || null }); };
 const app = new App(); window.__scriptorium = app;
 app.boot().catch(e => { console.error(e); app.fatal('Could not start: ' + e.message); });

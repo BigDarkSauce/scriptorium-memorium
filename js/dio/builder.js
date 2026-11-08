@@ -92,7 +92,7 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
     case 'grassfield': { const f = F(); if (!f) return g; const m = grassField(f, { density: shape.density, height: shape.height, amount: shape.amount, seed: ctx.seed, cover: shape.cover }); g.add(m); g.userData.stats = m.userData.stats; return g; }
     case 'flowers': { const f = F(); const m = f && flowerField(f, { amount: shape.amount, seed: ctx.seed, force: shape.force }); if (m) g.add(m); return g; }
     case 'reeds': { const f = F(); const m = f && reedField(f, { amount: shape.amount, seed: ctx.seed }); if (m) g.add(m); return g; }
-    case 'lake': { const f = F(); const l = f && buildLake(f, ctx.headless ? Object.assign({}, shape, { reflect: false }) : shape);   // sketches/pedestal minis: no live planar reflection if (l) return l; return buildShape(Object.assign({}, shape, { kind: 'water' }), matSpec, ctx); }
+    case 'lake': { const f = F(); const l = f && buildLake(f, ctx.headless ? Object.assign({}, shape, { reflect: false }) : shape); /* sketches, pedestal minis: no live planar reflection */ if (l) return l; return buildShape(Object.assign({}, shape, { kind: 'water' }), matSpec, ctx); }
     case 'river': case 'waterfall': { const f = F(); const rv = f && buildRiver(f, { flow: shape.flow, spray: shape.spray }); return rv || g; }
     // cabin{w,d}: log cabin with porch, stone chimney + smoke, woodpile (front = +z); jetty{from:[x,z],to:[x,z],width}; hills{r,layers,height}
     case 'cabin': return buildCabin(shape, ctx.seed || 7);
