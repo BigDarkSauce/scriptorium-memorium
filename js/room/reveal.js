@@ -88,7 +88,7 @@ export function renderReveal(st, ctx) {
   const R = revealSpec(st); if (!R) return null;
   const id = ctx.partId + '/' + st.id, card = el('div', { class: 'reveal-card', 'data-type': R.type });
   const prior = () => ledger && ledger.e[id];
-  const head = el('div', { class: 'rv-head' }, [el('span', { class: 'rv-kicker', text: 'Predict, then unfold' }), el('div', { class: 'rv-hook', html: prose(R.hook) })]);
+  const head = el('div', { class: 'rvl-head' }, [el('span', { class: 'rv-kicker', text: 'Predict, then unfold' }), el('div', { class: 'rv-hook', html: prose(R.hook) })]);
   card.append(head);
   const body = el('div', { class: 'rv-body' }); card.append(body);
   let pick = null, conf = null, free = '';
@@ -118,10 +118,10 @@ export function renderReveal(st, ctx) {
     else if (typeof e.p === 'string' && e.p) body.append(el('div', { class: 'rv-yours' }, [el('span', { class: 'dim small', text: 'You wrote: ' }), el('q', { text: e.p })]));
     if (R.answer) body.append(el('div', { class: 'rv-answer', html: prose(R.answer) }));
     if (R.figure && ctx.figure) body.append(ctx.figure(R.figure));
-    if (R.rule) body.append(el('div', { class: 'rv-rule' }, [el('span', { class: 'rv-tag', text: 'The rule' }), el('span', { html: prose(R.rule) })]));
+    if (R.rule) body.append(el('div', { class: 'rv-rule' }, [el('span', { class: 'rvl-tag', text: 'The rule' }), el('span', { html: prose(R.rule) })]));
     // a confident error is the best moment to correct a misconception: say what the wrong model was, and why it fails
-    if (surprise && R.misconception) body.append(el('div', { class: 'rv-refute' }, [el('span', { class: 'rv-tag', text: hyper ? 'Why it felt right' : 'The tempting model' }), el('span', { html: prose(R.misconception) })]));
-    if (hyper) body.append(el('p', { class: 'rv-note dim small', text: 'Confident errors, once corrected, are among the best-remembered things there are. This one is now worth more than a lucky guess.' }));
+    if (surprise && R.misconception) body.append(el('div', { class: 'rv-refute' }, [el('span', { class: 'rvl-tag', text: hyper ? 'Why it felt right' : 'The tempting model' }), el('span', { html: prose(R.misconception) })]));
+    if (hyper) body.append(el('p', { class: 'rvl-note dim small', text: 'Confident errors, once corrected, are among the best-remembered things there are. This one is now worth more than a lucky guess.' }));
     if (R.analogy) body.append(renderAnalogy(R.analogy));
     // the truth constraint: the rule's edge, opened by the reader (finding where it breaks is the second "aha")
     if (R.boundary) { const b = el('div', { class: 'rv-bound', hidden: true, html: '<b>Where it stops working.</b> ' + prose(R.boundary.case) + (R.boundary.why ? ' <span class="dim">' + prose(R.boundary.why) + '</span>' : '') }); body.append(el('button', { class: 'linkbtn rv-edge', type: 'button', text: 'Find the edge of this rule', onclick: ev => { b.hidden = false; ev.target.remove(); ctx.typeset && ctx.typeset(b); } }), b); }
@@ -142,7 +142,7 @@ export function renderReveal(st, ctx) {
   return card;
 }
 function renderAnalogy(a) {
-  return el('div', { class: 'rv-analogy' }, [el('span', { class: 'rv-tag', text: 'Like ' + (a.source || 'this') }),
+  return el('div', { class: 'rv-analogy' }, [el('span', { class: 'rvl-tag', text: 'Like ' + (a.source || 'this') }),
     Array.isArray(a.maps) && a.maps.length ? el('table', { class: 'rv-map' }, [el('tbody', {}, a.maps.slice(0, 6).map(m => el('tr', {}, [el('td', { html: prose(String(m[0] || '')) }), el('td', { class: 'dim', text: '↔' }), el('td', { html: prose(String(m[1] || '')) })])))]) : null,
     a.breaks ? el('div', { class: 'rv-breaks', html: '<b>Where the likeness breaks:</b> ' + prose(a.breaks) }) : null]);
 }
@@ -183,7 +183,7 @@ export async function openDeck(ctx = {}) {
   if (!items.length) list.append(el('p', { class: 'rv-empty', text: S.loops ? 'Nothing is due. The next ones come back on their own day.' : 'Predict in a scroll\'s "Predict, then unfold" cards: each rule you uncover comes back here later, in a new situation.' }));
   items.slice(0, 8).forEach(({ id, e }) => {
     const T = e.tr, row = el('div', { class: 'rv-item' }, [el('div', { class: 'rv-from dim small', text: e.part + ' · ' + e.title }), el('div', { class: 'rv-hook', html: prose(T.q) })]);
-    const finish = ok => { answerTransfer(id, ok); row.classList.add(ok ? 'rv-right' : 'rv-surprise'); row.append(el('div', { class: 'rv-answer', html: (ok ? '<b>Transferred.</b> ' : '<b>Not yet.</b> ') + prose(T.why || '') + (T.rule ? `<div class="rv-rule"><span class="rv-tag">The rule</span> ${prose(T.rule)}</div>` : '') + `<div class="dim small">Back ${dueText(T.due)}.</div>` })); ctx.typeset && ctx.typeset(row); };
+    const finish = ok => { answerTransfer(id, ok); row.classList.add(ok ? 'rv-right' : 'rv-surprise'); row.append(el('div', { class: 'rv-answer', html: (ok ? '<b>Transferred.</b> ' : '<b>Not yet.</b> ') + prose(T.why || '') + (T.rule ? `<div class="rv-rule"><span class="rvl-tag">The rule</span> ${prose(T.rule)}</div>` : '') + `<div class="dim small">Back ${dueText(T.due)}.</div>` })); ctx.typeset && ctx.typeset(row); };
     if (Array.isArray(T.options) && T.options.length) row.append(el('div', { class: 'rv-opts' }, T.options.map((o, i) => el('button', { class: 'rv-opt', type: 'button', html: '<i>' + String.fromCharCode(65 + i) + '</i> ' + prose(o.text), onclick: ev => { row.querySelectorAll('.rv-opt').forEach((b, j) => { b.disabled = true; if (T.options[j].correct) b.classList.add('right'); }); if (!o.correct) ev.currentTarget.classList.add('wrong'); finish(!!o.correct); } }))));
     else row.append(el('div', { class: 'rv-actions' }, [el('button', { class: 'btn small', type: 'button', text: 'I could apply it', onclick: ev => { ev.target.parentNode.remove(); finish(true); } }), el('button', { class: 'btn ghost small', type: 'button', text: 'I could not', onclick: ev => { ev.target.parentNode.remove(); finish(false); } })]));
     list.append(row);
