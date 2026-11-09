@@ -23,6 +23,7 @@ import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree } from './uti
 import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
+import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
 
 const LIB_KEY = 'library.v3', PENDING_DEL = 'sm-pending-deletes', UNDO_MS = 9000;
 // the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
@@ -128,16 +129,37 @@ class App {
     this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
   }
   // The explanatory compiler's example book (js/seeds-domains.js) reaches libraries seeded before it existed, once:
-  // on the Mathematics bookcase (else the first one), in the first free cradle from eye level down.
+  // on the Mathematics bookcase (else the first one), in the free place nearest to the books already on its eye-level
+  // tier (seedSpot). A library seeded with it already has it (seedLibrary); one whose owner deleted it never gets it
+  // back, not even from a later DOMAIN_BOOK_VERSION (lib.dismissedSeeds, written by deleteBook).
   async ensureDomainBook() {
     if ((this.lib.domainBookV || 0) >= DOMAIN_BOOK_VERSION) return; this.lib.domainBookV = DOMAIN_BOOK_VERSION;
-    if (!this.lib.books.some(b => b.title === DOMAIN_BOOK.title)) {
-      const shelf = this.lib.shelves.find(s => s.name === 'Mathematics') || this.firstShelf(), horiz = shelf.kind === 'horizontal', tiers = horiz ? 3 : 6, per = horiz ? 17 : 5, taken = new Set(this.lib.books.filter(b => b.shelf === shelf.id).map(b => b.tier + ':' + b.slot));
-      let tier = horiz ? 2 : 3, slot = 0; outer: for (const t of [...Array(tiers).keys()].map(k => (horiz ? 2 : 3) - k).filter(t => t >= 0)) for (let k = 0; k < per; k++) if (!taken.has(t + ':' + k)) { tier = t; slot = k; break outer; }
-      const b = { id: 'bk-' + uid(), title: DOMAIN_BOOK.title, shelf: shelf.id, tier, slot, color: shelf.color || '#2d5b8e', icon: DOMAIN_BOOK.icon, hasPdf: false, example: true };
-      this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: this.domainParts().map(p => ({ id: 'p-' + uid(), ...p })), threadV: 4, lessonsV: 5, grounded: 1 });
+    const gone = Array.isArray(this.lib.dismissedSeeds) && this.lib.dismissedSeeds.includes(DOMAIN_BOOK.title);
+    if (!gone && !this.lib.books.some(b => b.title === DOMAIN_BOOK.title)) {
+      const pref = this.lib.shelves.find(s => s.name === 'Mathematics') || this.firstShelf();
+      let shelf = pref, at = this.seedSpot(pref);
+      if (!at) for (const s of this.lib.shelves) if ((at = this.seedSpot(s))) { shelf = s; break; }
+      at = at || { tier: 0, slot: 0 };   /* every bookcase full: the hub's repairSlots finds it a place (a new bookcase if need be) */
+      const b = { id: 'bk-' + uid(), title: DOMAIN_BOOK.title, shelf: shelf.id, tier: at.tier, slot: at.slot, color: shelf.color || '#2d5b8e', icon: DOMAIN_BOOK.icon, hasPdf: false, example: true };
+      this.lib.books.push(b); await store.set('room:' + b.id, this.domainRoom());
     }
     this.saveLib();
+  }
+  domainRoom() { return { dims: { w: 12, d: 10, h: 5.5 }, parts: this.domainParts().map(p => ({ id: 'p-' + uid(), ...p })), threadV: 4, lessonsV: 5, grounded: 1, seedStamp: SEED_STAMP }; }
+  // A free cradle for a book added to a saved library, in data only (no hub yet): the bookcase's slot layout as the hub
+  // builds it (props.caseLayout), every place its books take (a hanging scroll reserves the 3 slots it spans,
+  // props.hangSlots), tiers from eye level down (props.caseTierOrder); on a tier, the free slot nearest to the books
+  // already there (the centre of an empty tier). null when the bookcase is full.
+  seedSpot(shelf) {
+    const u = caseLayout(shelf), so = { userData: u }, taken = new Set();
+    this.lib.books.filter(b => b.shelf === shelf.id).forEach(b => { const t = b.tier || 0; (b.hang ? hangSlots(so, b.slot || 0) : [b.slot || 0]).forEach(j => taken.add(t + ':' + j)); });
+    for (const t of caseTierOrder(u)) {
+      const here = this.lib.books.filter(b => b.shelf === shelf.id && (b.tier || 0) === t).map(b => b.slot || 0), mid = (u.slotsPerTier - 1) / 2;
+      const d = j => here.length ? Math.min(...here.map(k => Math.abs(k - j))) : Math.abs(j - mid);
+      const free = [...Array(u.slotsPerTier).keys()].filter(j => !taken.has(t + ':' + j)).sort((a, b) => d(a) - d(b) || a - b);
+      if (free.length) return { tier: t, slot: free[0] };
+    }
+    return null;
   }
   domainParts() { const C = o => JSON.parse(JSON.stringify(o)); return DOMAIN_BOOK.parts.map(p => ({ title: p.title, summary: p.summary, subsections: C(p.subsections), analysis: normalizeChain(C(p.analysis)) })); }
   // a library whose bookcases were all removed still gets a place for imported books
@@ -208,7 +230,9 @@ class App {
   deleteBook(id) {
     const i = this.lib.books.findIndex(b => b.id === id); if (i < 0) return false; const b = this.lib.books[i];
     this.cancelJob(id); try { ingest.closePDF && ingest.closePDF(id); } catch (e) { console.warn(e); }
-    this.lib.books.splice(i, 1); const last = this.lib.lastRoom && this.lib.lastRoom.book === id ? this.lib.lastRoom : null; if (last) delete this.lib.lastRoom; this.saveLib();
+    this.lib.books.splice(i, 1); const last = this.lib.lastRoom && this.lib.lastRoom.book === id ? this.lib.lastRoom : null; if (last) delete this.lib.lastRoom;
+    if (b.example) this.lib.dismissedSeeds = [...new Set([...(this.lib.dismissedSeeds || []), b.title])];   /* a built-in book the owner deleted is never added back (ensureDomainBook) */
+    this.saveLib();
     store.lsSet(PENDING_DEL, [...new Set([...store.lsGet(PENDING_DEL, []), id])]);
     if (this.mode instanceof Hub) this.mode.dropScroll(id, b.shelf);
     const timer = setTimeout(() => this.purgeBook(id), UNDO_MS);
@@ -217,6 +241,7 @@ class App {
   }
   restoreBook(b, i, last) {
     if (this.lib.books.some(x => x.id === b.id)) return;
+    if (b.example && Array.isArray(this.lib.dismissedSeeds)) this.lib.dismissedSeeds = this.lib.dismissedSeeds.filter(t => t !== b.title);
     store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== b.id));
     if (!this.lib.shelves.some(s => s.id === b.shelf)) b.shelf = this.firstShelf().id;   // its bookcase went meanwhile
     this.lib.books.splice(Math.min(i, this.lib.books.length), 0, b); if (last && !this.lib.lastRoom) this.lib.lastRoom = last;
@@ -323,15 +348,21 @@ class App {
     const bio = sh('Biology', 'vertical', -W / 2 + .28, .2, Math.PI / 2, '#6a8a3a');
     const econ = sh('Economics & Statistics', 'vertical', W / 2 - .28, -2.2, -Math.PI / 2, '#8f733a');
     const earth = sh('Earth Science', 'vertical', W / 2 - .28, .2, -Math.PI / 2, '#2f6f8f');
-    const slots = new Map(), shelves = { physics, maths, chem, bio, econ, earth };
+    const shelves = { physics, maths, chem, bio, econ, earth };
     const book = (shelf, title, parts, icon = 'EX') => {
-      const n = slots.get(shelf.id) || 0; slots.set(shelf.id, n + 1);
-      const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
-      const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
-      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
+      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: 0, slot: 0, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, seedStamp: SEED_STAMP, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
     this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
+    lib.domainBookV = DOMAIN_BOOK_VERSION;   /* seedBooks holds the explanatory compiler's example book; older libraries get it once (ensureDomainBook) */
+    // Each bookcase's example books are spread evenly along its eye-level tier (1.25 m on the wide cases, 1.59 m on the
+    // tall ones; the tier below once that is full), not packed from the left end: the k-th of n books on a tier of
+    // `per` slots takes slot floor((k + ½)·per / n), so one book sits in the middle, two at a quarter and three quarters.
+    lib.shelves.forEach(sh => {
+      const u = caseLayout(sh), per = u.slotsPerTier, eye = sh.kind === 'horizontal' ? 2 : 3, mine = lib.books.filter(b => b.shelf === sh.id);
+      const order = [eye, ...caseTierOrder(u).filter(t => t !== eye)];
+      mine.forEach((b, i) => { const r = Math.floor(i / per), onTier = Math.min(per, mine.length - r * per), k = i - r * per; b.tier = order[Math.min(order.length - 1, r)]; b.slot = Math.min(per - 1, Math.floor((k + .5) * per / onTier)); });
+    });
     return lib;
   }
   // The example books' content (parts without ids), in the chain format of docs/PROTOCOL.md: every part has its question

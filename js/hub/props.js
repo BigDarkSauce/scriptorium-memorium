@@ -15,6 +15,15 @@ export const SHELF_KINDS = {
   vertical: { w: 1.15, h: 2.9, d: .5, tiers: 6 }
 };
 export const SLOT = .17; // slot pitch along a tier (hub.js: per = floor((w - .2) / .17))
+// A bookcase's slot layout without building it (the same numbers makeBookcase puts in userData): for placing books in
+// data only, before any hub exists (main.js: the seed library, the explanatory compiler's example book). Wrapped as
+// { userData } it stands in for the bookcase object in slotX / hangSlots / caseTierOrder.
+export function caseLayout(shelf) {
+  const K = SHELF_KINDS[shelf.kind] || SHELF_KINDS.horizontal, w = shelf.w || K.w, tiers = shelf.tiers || K.tiers;
+  return { w, h: K.h, tiers, tierH: (K.h - .12) / tiers, slotsPerTier: Math.max(1, Math.floor((w - .2) / SLOT)) };
+}
+// the tiers in the order new scrolls take them: eye level first (scroll centres nearest 1.35 m), then the rest (hub.js)
+export const caseTierOrder = u => [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35));
 // Scrolls: radius .058 m (0.116 m across: 54 mm between neighbours at the 0.17 m pitch, 38 mm between their ribbons),
 // lying in velvet cradles whose hollow (radius R + 3 mm) is centred on the scroll's axis, AXIS above the tier board
 // (the scroll's underside 14 mm above the board). SCROLL_L 0.29 m: knob to knob a scroll is 0.40 m long, so it lies

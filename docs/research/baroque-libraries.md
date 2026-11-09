@@ -165,10 +165,16 @@ walls with pilasters and a few low free-standing cases. The second pass adds the
   - The wall cases are split into ~1 m sections, and any section a user bookcase stands in front of is left out.
     `shell.userData.setCases({ skip })` rebuilds only the case layer (≈ 0.1 s, on drop, not during a drag).
   - Free placement in the middle of the room is unaffected.
-  - Each user bookcase now packs leather-bound books around its scrolls (`fillBookcase`), so even an almost empty
-    subject reads as part of a library. The scrolls stay the only interactive objects: ivory tags, with a clear gap
-    to the books on either side.
-  - New scrolls go to the eye-level tiers first (scroll centres nearest 1.35 m).
+  - A user bookcase holds scrolls and nothing else. (An earlier version packed leather-bound books around the
+    scrolls, `fillBookcase`; it was removed when the bookcases became scroll cases, because the books competed with
+    the scrolls' name tags and hid which places were free.) Now every slot of every tier carries a pair of velvet
+    cradles (`scrollRests` / `setRestTiers` in js/hub/props.js, one instanced draw call per bookcase), and the tiers
+    are backed with sage silk damask, so an almost empty subject still reads as a finished display case that is
+    ready for scrolls. The scrolls stay the only interactive objects, with ivory name tags.
+  - Slots are 0.17 m apart and centred between the stiles (17 per tier on a 3.2 m case, 5 on a 1.15 m one). A
+    hanging scroll reserves the 3 slots its roll spans on its tier (`hangSlots`).
+  - New scrolls go to the eye-level tiers first (scroll centres nearest 1.35 m). The example books of a new library
+    are spread evenly along the eye-level tier of their bookcase instead of all starting at the left end.
 - **Book rooms.**
   - Each hanging scroll stands in an open niche of its bay. The niche has walnut panelling behind it, gilt jamb
     beads, and a shelf of books bridging over it when the room is tall enough.

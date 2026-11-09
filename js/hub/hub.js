@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell, doorPick, doorHit } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, slotAt, SCROLL_L, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, caseTierOrder, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, slotAt, SCROLL_L, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
 import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
@@ -185,7 +185,7 @@ export class Hub {
   caseSkip() { return this.lib.shelves.map(s => { const K = SHELF_KINDS[s.kind] || SHELF_KINDS.horizontal; return { x: s.x, z: s.z, w: (s.w || K.w) + .22, d: K.d + .08, rot: s.rot || 0 }; }); }
   updateWallCases() { this.shadowsDirty = true; this.obstaclesDirty = true; this.probeDirty = true; if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ skip: this.caseSkip() }); }
   // eye-level tiers first (scroll centres nearest 1.35 m), then the rest
-  tierOrder(u) { return [...Array(u.tiers).keys()].sort((a, b) => Math.abs(.2 + a * u.tierH - 1.35) - Math.abs(.2 + b * u.tierH - 1.35)); }
+  tierOrder(u) { return caseTierOrder(u); }
   // walk-mode collision boxes, recomputed only when bookcases or furniture change (or a bookcase is being dragged)
   obstacles() { if (this.obstaclesDirty || this.dragging || !this._obs) { this._obs = this._obsFn(); this.obstaclesDirty = false; } return this._obs; }
   addShelfObj(s) { this.obstaclesDirty = true; this.shadowsDirty = true; const o = makeBookcase(s); o.position.set(s.x, 0, s.z); o.rotation.y = s.rot || 0; this.scene.add(o); quietShadows(o); this.shelfObjs.set(s.id, o); return o; }

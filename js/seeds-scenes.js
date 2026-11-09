@@ -106,7 +106,7 @@ const heat=()=>api.param('sun')*Math.max(0,Math.sin((api.param('hour')-6)/12*Mat
 let Ts=target(), q=12, E=0, Emm=0, zb=300, Tb=15, rainSlope=0, rainLake=0, Tset=target(), settled=true, quiet=true, warming=true;
 // clouds: convection over the warm lake makes a new cloud whenever the last one has drifted away (two at most)
 const meshes=[cloud,api.body('cloud2'),api.body('cloud3')], C=[null,null,null]; let since=99;
-const newCloud=()=>({z:HOME,d:200,qt:q,qt0:q,zb:zb,Tb:Tb,Ts0:Ts,L:0,Tm:Tb,qc:0,raining:false,over:true,shadow:false,gone:0,rk:0,rained:0});
+const newCloud=()=>({z:HOME,d:200,qt:q,qt0:q,zb:zb,Tb:Tb,Ts0:Ts,L:0,Tm:Tb,qc:0,raining:false,over:true,shadow:false,seen:false,gone:0,rk:0,rained:0});
 // the parcel: one bubble of lake air rising into the newest cloud, then riding it
 let pp=V(LX+.35,lakeY+.05,LZ-.3), phase='rise', pc=0, poff=V(.15,0,.25);
 function step(h){
@@ -131,8 +131,8 @@ function step(h){
     if(c.raining){ const r=.3*(c.qc-.8)*h; c.qt-=r; const mm=r*c.d/1000; c.rained+=mm; if(c.over) rainLake+=mm; else rainSlope+=mm; }
     if(!quiet&&c.raining&&!was){ if(c.over) api.event('Rain falls back on the lake: the cloud, '+f0(c.d)+' m deep, now holds '+f1(c.qc)+' g of droplets per kg of air',V(PX,lakeY+A0+1.2,c.z),{id:'rainlake',sound:'pour'});
       else api.event('Rain on the windward slope: lifted '+f0(c.L)+' m, the cloud has cooled to '+f1(c.Tm)+' °C and holds '+f1(c.qc)+' g/kg of droplets',V(PX,base0+A0+(c.zb+c.L)/VS,c.z),{id:'rain',sound:'pour'}); }
-    const past=c.z<zCrest-.2;
-    if(past&&c.qc<.02){ if(!c.shadow&&!quiet&&c.rained>0){ const fw=2.49*Math.max(0,c.qt0-c.qt); api.event('Rain shadow: sinking down the lee side, the air warms and the cloud evaporates; back at valley level it would be '+f1(c.Ts0+fw)+' °C, '+f1(fw)+' K warmer than when it set out',V(PX,base0+A0+(c.zb+c.L)/VS,c.z),{id:'shadow',sound:'whoosh'}); } c.shadow=true; c.gone+=h; }
+    const past=c.z<zCrest-.2; if(!quiet&&!past) c.seen=true;   /* seen on the windward side: a cloud already past the crest when the scene opens (left by the warm-up) is never announced */
+    if(past&&c.qc<.02){ if(!c.shadow&&!quiet&&c.seen&&c.rained>0){ const fw=2.49*Math.max(0,c.qt0-c.qt); api.event('Rain shadow: sinking down the lee side, the air warms and the cloud evaporates; back at valley level it would be '+f1(c.Ts0+fw)+' °C, '+f1(fw)+' K warmer than when it set out',V(PX,base0+A0+(c.zb+c.L)/VS,c.z),{id:'shadow',sound:'whoosh'}); } c.shadow=true; c.gone+=h; }
     if((past&&c.gone>1.5)||c.z<-5.3) C[k]=null;    // dissolved
   });
   // the parcel
