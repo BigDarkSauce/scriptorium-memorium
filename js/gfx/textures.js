@@ -33,7 +33,7 @@ export const compRes = () => AAA.quality === 'high' ? 1 : .5;
 function pump() {
   if (pumping || !JOBS.length) return; pumping = true;
   const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 16));
-  idle(() => { const t0 = performance.now(); try { JOBS.shift()(); } catch (e) { console.warn('texture bake', e); } BAKE.ms += performance.now() - t0; BAKE.n++; pumping = false; if (JOBS.length) setTimeout(pump, 0); }, { timeout: 1200 });
+  idle(() => { const t0 = performance.now(); try { const f = JOBS.shift(); if (f) f(); } catch (e) { console.warn('texture bake', e); } BAKE.ms += performance.now() - t0; BAKE.n++; pumping = false; if (JOBS.length) setTimeout(pump, 0); }, { timeout: 1200 });
 }
 export const BAKE = { ms: 0, n: 0, log: [], pending: () => JOBS.length, now() { while (JOBS.length) JOBS.shift()(); } };
 // the placeholder already has the final size (r170 allocates immutable storage: a later image of another size cannot

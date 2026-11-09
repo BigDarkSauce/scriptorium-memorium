@@ -1,6 +1,7 @@
 // Scriptorium Memorium — boot, mode switching (library hub ↔ book room ↔ diorama), persistence, import/export.
 import { Gfx } from './gfx/renderer.js';
-import { detectQuality } from './gfx/aaa.js';
+import { detectQuality, scansReady } from './gfx/aaa.js';
+import { BAKE } from './gfx/textures.js';
 import * as store from './store.js';
 import * as ingest from './ai/ingest.js';
 import { initAI } from './ai/claude.js';
@@ -235,6 +236,16 @@ class App {
       const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, seedStamp: SEED_STAMP, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
+      // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
+      // starting 0.8 s after the veil had lifted, so the hall first showed under the flat studio light, then popped to its
+      // own reflections. Now: its materials are enriched and the capture scheduled (captureProbe draws nothing), the
+      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, every
+      // program is compiled for that look (in parallel where the browser can), and only then is the probe drawn in full
+      // (RoomProbe.finish), with programs that are already compiled
+      const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
+      if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
+      try { BAKE.now(); } catch (e) { console.warn(e); }
+      if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
     };
     this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
     return lib;

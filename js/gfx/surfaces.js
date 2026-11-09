@@ -219,6 +219,9 @@ export class RoomProbe {
     return true;
   }
   capture(scene, o = {}) { this.begin(scene, Object.assign({}, o, { delay: 0 })); let n = 0; while (this.job && n++ < 40) this.step(); return this.rt && this.rt.texture; }
+  // finish a scheduled capture now, every face and bounce in one go (main.js: under the veil of a switch, so a place is
+  // shown with its final reflections instead of popping to them ~1 s after it appears)
+  finish() { if (this.job) this.job.at = 0; let n = 0; while (this.job && n++ < 40) this.step(); return !this.job; }
   // captured at another quality level (probe size and bounces follow gfx.quality): capture again
   stale() { return !!this.rt && this.q !== AAA.quality; }
   // write the probe's box into the shared uniforms (called before every render of this scene)

@@ -188,16 +188,20 @@ export function prebake(kinds = Object.keys(KIND_ID)) {
 // lazily on the first AAA material; until they arrive (or if they never do) the weight is 0 and nothing changes.
 const SCAN_SETS = { ground: 'ground103', moss: 'moss002', bark: 'bark001' };
 const SCAN_OF = { meadow: ['ground', .6], mud: ['ground', .6], sand: ['ground', .8], crag: ['moss', .45], bark: ['bark', .32] };
-const SCAN = {}; let scanStarted = false;
+const SCAN = {}; let scanStarted = false, scanP = null;
+// settles once every scan set has loaded or failed (null before the first AAA material asked for them): main.js waits
+// for it under the veil, so a diorama never shows first without its scanned detail and then pops to it
+export const scansReady = () => scanP;
 function scanDefaults() {
   if (SCAN.ground) return; const px = (r, g, b) => { const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1); t.needsUpdate = true; t.userData.shared = true; return t; };
   for (const k in SCAN_SETS) SCAN[k] = { A: { value: px(128, 128, 128) }, N: { value: px(128, 128, 128) }, K: { value: 0 } };
 }
 export function loadScans(base = 'assets/textures/') {
   scanDefaults(); if (scanStarted || typeof document === 'undefined') return; scanStarted = true;
-  const L = new THREE.TextureLoader();
+  const L = new THREE.TextureLoader(); let left = Object.keys(SCAN_SETS).length * 2, settle; scanP = new Promise(r => { settle = r; });
+  const one = () => { if (--left <= 0) settle(); };
   for (const k in SCAN_SETS) { const S = SCAN[k]; let n = 0; const done = () => { if (++n === 2) S.K.value = 1; };
-    const get = (suffix, srgb, slot) => L.load(base + SCAN_SETS[k] + suffix, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.userData.shared = true; t.generateMipmaps = true; t.needsUpdate = true; S[slot].value = t; done(); }, undefined, () => { S.K.value = 0; });
+    const get = (suffix, srgb, slot) => L.load(base + SCAN_SETS[k] + suffix, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.userData.shared = true; t.generateMipmaps = true; t.needsUpdate = true; S[slot].value = t; done(); one(); }, undefined, () => { S.K.value = 0; one(); });
     get('_albedo.jpg', true, 'A'); get('_nrm.jpg', false, 'N'); }
 }
 export const scanState = () => Object.fromEntries(Object.keys(SCAN).map(k => [k, SCAN[k].K.value]));
