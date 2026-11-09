@@ -89,15 +89,30 @@ export function toast(msg, ms = 2800) {
 }
 
 // Simple in-page confirm (the viewer frame blocks window.confirm)
-export function confirmBox(text, okLabel = 'Confirm') {
+// The app's own confirm dialog (never the browser's): Enter confirms, Esc or a click on the dimmed backdrop cancels, the
+// focus starts on Cancel. opts: { danger: the confirm button styled as destructive, title: a heading }
+export function confirmBox(text, okLabel = 'Confirm', opts = {}) {
   return new Promise(res => {
-    const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass' }, [
+    const done = v => { box.remove(); removeEventListener('keydown', onKey, true); res(v); };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === 'Enter' && document.activeElement !== cancel) { e.preventDefault(); e.stopPropagation(); done(true); } };
+    const cancel = el('button', { class: 'btn', text: 'Cancel', onclick: () => done(false) });
+    const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': opts.title || okLabel }, [
+      opts.title ? el('h3', { text: opts.title }) : null,
       el('p', { text }),
-      el('div', { class: 'row end' }, [
-        el('button', { class: 'btn', text: 'Cancel', onclick: () => { box.remove(); res(false); } }),
-        el('button', { class: 'btn primary', text: okLabel, onclick: () => { box.remove(); res(true); } })])])]);
-    document.body.append(box);
+      el('div', { class: 'row end' }, [cancel, el('button', { class: 'btn ' + (opts.danger ? 'danger solid' : 'primary'), text: okLabel, onclick: () => done(true) })])])]);
+    box.addEventListener('pointerdown', e => { if (e.target === box) done(false); });
+    addEventListener('keydown', onKey, true);
+    document.body.append(box); try { cancel.focus({ preventScroll: true }); } catch (e) { }
   });
+}
+// a toast with one action (e.g. "Undo"), clickable for its whole life (ms); the action runs at most once
+export function toastAction(msg, label, fn, ms = 8000) {
+  if (!toastHost) { toastHost = el('div', { class: 'toasts', role: 'status' }); document.body.append(toastHost); }
+  let used = false; const close = () => { t.classList.remove('in'); t.classList.add('out'); setTimeout(() => t.remove(), 400); };
+  const t = el('div', { class: 'toast act' }, [el('span', { mathLabel: msg }), el('button', { class: 'toast-btn', type: 'button', text: label, onclick: () => { if (used) return; used = true; close(); fn(); } })]);
+  toastHost.append(t); requestAnimationFrame(() => t.classList.add('in')); setTimeout(close, ms);
+  while (toastHost.children.length > 3) toastHost.firstChild.remove();
+  return t;
 }
 export function promptBox(text, value = '', okLabel = 'Save') {
   return new Promise(res => {

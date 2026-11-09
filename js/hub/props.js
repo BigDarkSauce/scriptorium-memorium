@@ -128,8 +128,6 @@ export function setRestTiers(o, tiers) {
   for (let t = 0; t < u.tiers; t++) { if (tiers && !tiers.has(t)) continue; for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-REST_DZ, REST_DZ].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); } }
   im.count = i; im.visible = i > 0; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.computeBoundingBox && im.computeBoundingBox();
 }
-// (kept for callers of the old API: the user's bookcases no longer get filler books)
-export function fillBookcase() { return null; }
 // Slot position (local to the bookcase) for tier i, slot j: scrolls lie horizontally, ends facing out.
 // The slots of a tier are centred between the stiles (they started 0.14 m from the left end, so every row was shifted
 // left: on a vertical case 0.09 m of free board on the left against 0.28 m on the right).

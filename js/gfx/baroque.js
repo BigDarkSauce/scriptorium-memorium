@@ -651,6 +651,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     W.pil = piers.map((s, i) => i === 0 ? s + pw / 2 + .012 : i === piers.length - 1 ? s - pw / 2 - .012 : s);
   });
   const doorW = 1.76, doorH = Math.min(clamp(yE * .68, 2.1, 3.1), yE - .4, galleryOn ? yg - .6 : 99);
+  if (door) info.door = { w: doorW, h: doorH, z: d / 2 };   // the double door in the front wall (centred at x = 0): hub.js / room.js make it clickable
   // ---- walls (with arched window openings) ----
   walls.forEach(W => {
     const M = WM(W), L = W.len, isWin = W.name === windowWall, isDoor = door && W.name === 'front';

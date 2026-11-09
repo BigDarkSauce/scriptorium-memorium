@@ -18,10 +18,11 @@ import { SEED_LESSON_TITLES } from './seeds-history.js';
 import { groundChain } from './seeds-sources.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
-import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
+import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree } from './util.js';
 import { installBVH, BVH } from './gfx/bvh.js';
+import { parseHash, formatHash } from './route.js';
 
-const LIB_KEY = 'library.v3';
+const LIB_KEY = 'library.v3', PENDING_DEL = 'sm-pending-deletes', UNDO_MS = 9000;
 // the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
 // once (App.refreshSeedScenes)
 const SEED_STAMP = FLAGSHIPS.map(sceneFp).join('.');
@@ -73,10 +74,43 @@ class App {
     if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
     if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
-    this.openHub();
+    this.sweepDeleted();
+    // the place in the address (route.js): a link or a reload reopens that room (and scroll); otherwise the hub
+    addEventListener('popstate', () => this.onRoute());
+    const r = parseHash(location.hash), book = r.room ? this.lib.books.find(b => b.id === r.room) : null;
+    this.loop();   // drawing runs under the veil: the switch below draws (and counts) its settling frames
+    this._routing = true;   // the first place replaces the address instead of adding a history entry
+    try { await (book ? this.openRoom(book.id, { openPart: r.scroll || undefined }) : this.openHub()); } finally { this._routing = false; }
+    if (r.room && !book) toast('That room is not in this library any more: here is the hall');
     offerResume(this);   // an analysis interrupted by a reload is offered again (corner chip)
-    requestAnimationFrame(() => document.body.classList.add('ready'));
-    this.loop();
+    // the veil ("lighting the lamps…") lifts only now: the place has its final reflections, compiled programs and a few
+    // drawn frames behind it (_switch), so it never shows a provisional look first
+    document.body.classList.add('ready');
+  }
+  // ---------- the address of the place on screen (route.js) ----------
+  // A new place adds a history entry; one reached by Back / Forward, or the first at boot, replaces it instead.
+  route(r) {
+    const h = formatHash(r); this.here = r;
+    try { if (h === location.hash || (!h && !location.hash)) return; const url = h || location.pathname + location.search; if (this._routing) history.replaceState(null, '', url); else history.pushState(null, '', url); } catch (e) { }   /* a sandbox without history: the app still works */
+  }
+  // the room (and scroll) visited last: the hall's door leads back to it (hub.js)
+  rememberRoom(book, part) {
+    if (!this.lib) return; const L = this.lib.lastRoom; part = part || null;
+    if (L && L.book === book && (L.part || null) === part) return; this.lib.lastRoom = { book, part }; this.saveLib();
+  }
+  // Back / Forward (or a hash typed into the address bar): go to the place the address names
+  async onRoute() {
+    const r = parseHash(location.hash), m = this.mode; this._routing = true;
+    try {
+      if (!r.room) { if (!(m instanceof Hub) || this.switching) await this.openHub(); return; }
+      if (!this.lib.books.some(b => b.id === r.room)) { toast('That room is not in this library any more'); await this.openHub(); return; }
+      if (m instanceof BookRoom && m.book.id === r.room && !this.switching) {   // the same room: open or close the reader only
+        const p = r.scroll && m.data.parts.find(x => x.id === r.scroll);
+        if (p) { if (!(m.reader && m.reader.part === p)) m.openPart(p, true); } else if (m.reader) m.reader.close();
+        this.here = r; return;
+      }
+      await this.openRoom(r.room, { openPart: r.scroll || undefined });
+    } finally { this._routing = false; }
   }
   // Scrolls written with Scriptorium v2 (same page, localStorage) become a book on the first bookcase.
   async migrateV2() {
@@ -148,6 +182,36 @@ class App {
     }
     return n;
   }
+  // ---------- deleting a scroll (a book) from its shelf ----------
+  // The book leaves the library at once (its place on the shelf is free, the library is saved); its room, PDF, analysis
+  // job and per-part caches stay in storage for UNDO_MS, so "Undo" in the toast puts it all back as it was. Then they are
+  // deleted (purgeBook). Ids waiting for that are listed in localStorage, so a page closed during the undo window has
+  // its leftovers deleted at the next start (sweepDeleted) instead of keeping them for ever.
+  deleteBook(id) {
+    const i = this.lib.books.findIndex(b => b.id === id); if (i < 0) return false; const b = this.lib.books[i];
+    this.cancelJob(id); try { ingest.closePDF && ingest.closePDF(id); } catch (e) { console.warn(e); }
+    this.lib.books.splice(i, 1); const last = this.lib.lastRoom && this.lib.lastRoom.book === id ? this.lib.lastRoom : null; if (last) delete this.lib.lastRoom; this.saveLib();
+    store.lsSet(PENDING_DEL, [...new Set([...store.lsGet(PENDING_DEL, []), id])]);
+    if (this.mode instanceof Hub) this.mode.dropScroll(id, b.shelf);
+    const timer = setTimeout(() => this.purgeBook(id), UNDO_MS);
+    toastAction(`“${b.title}” was deleted`, 'Undo', () => { clearTimeout(timer); this.restoreBook(b, i, last); }, UNDO_MS);
+    return true;
+  }
+  restoreBook(b, i, last) {
+    if (this.lib.books.some(x => x.id === b.id)) return;
+    store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== b.id));
+    if (!this.lib.shelves.some(s => s.id === b.shelf)) b.shelf = this.firstShelf().id;   // its bookcase went meanwhile
+    this.lib.books.splice(Math.min(i, this.lib.books.length), 0, b); if (last && !this.lib.lastRoom) this.lib.lastRoom = last;
+    if (this.mode instanceof Hub) this.mode.restoreScroll(b);   // back in its place (the nearest free one if that was taken meanwhile)
+    this.saveLib(); toast(`“${b.title}” is back on its shelf`);
+  }
+  async purgeBook(id) {
+    if (this.lib.books.some(b => b.id === id)) return;
+    const own = k => k === 'pdf:' + id || k === 'room:' + id || k === 'job:' + id || k.startsWith('sections:' + id + ':') || k.startsWith('figs:' + id + ':');
+    try { for (const k of await store.keys()) if (own(String(k))) await store.del(k); } catch (e) { console.warn(e); return; }
+    store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id));
+  }
+  sweepDeleted() { const ids = store.lsGet(PENDING_DEL, []); if (!Array.isArray(ids)) return store.lsSet(PENDING_DEL, []); ids.forEach(id => this.lib.books.some(b => b.id === id) ? store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id)) : this.purgeBook(id)); }
   // ---------- modes, with a warm fade between them ----------
   // Switches run one at a time (a second request while one is fading waits, and only the latest waiting one runs),
   // so a double click or an exit pressed during a fade never leaves two modes alive.
@@ -172,8 +236,19 @@ class App {
       try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
       // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
       if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
+      // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
+      // starting 0.8 s after the veil had lifted, so the hall first showed under the flat studio light, then popped to its
+      // own reflections. Now: its materials are enriched and the capture scheduled (captureProbe draws nothing), the
+      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, every
+      // program is compiled for that look (in parallel where the browser can), and only then is the probe drawn in full
+      // (RoomProbe.finish), with programs that are already compiled
+      const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
+      if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
+      try { BAKE.now(); } catch (e) { console.warn(e); }
+      if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
       if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
+      if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } }
       this.gfx.resetAdapt();
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
@@ -184,10 +259,11 @@ class App {
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
   retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
   flushTrash() { if (!this.trash.length) return; const due = this.trash.filter(x => --x.frames <= 0); this.trash = this.trash.filter(x => x.frames > 0); due.forEach(x => { try { x.fn(); } catch (e) { console.warn(e); } }); }
-  openHub(opts = {}) { this.history = []; sfx.ambience('library'); return this.switchMode(() => new Hub(this, opts)); }
+  openHub(opts = {}) { this.route({}); sfx.ambience('library'); return this.switchMode(() => new Hub(this, opts)); }
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
-    const data = await this.loadRoom(bookId); this.currentRoom = bookId;
+    this.route({ room: bookId, scroll: opts.openPart || null }); this.rememberRoom(bookId, opts.openPart);
+    const data = await this.loadRoom(bookId);
     sfx.ambience('room'); sfx.play('door', { gain: .6 });
     return this.switchMode(() => new BookRoom(this, book, data, opts));
   }
@@ -236,16 +312,6 @@ class App {
       const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
       lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, seedStamp: SEED_STAMP, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
-      // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
-      // starting 0.8 s after the veil had lifted, so the hall first showed under the flat studio light, then popped to its
-      // own reflections. Now: its materials are enriched and the capture scheduled (captureProbe draws nothing), the
-      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, every
-      // program is compiled for that look (in parallel where the browser can), and only then is the probe drawn in full
-      // (RoomProbe.finish), with programs that are already compiled
-      const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
-      if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
-      try { BAKE.now(); } catch (e) { console.warn(e); }
-      if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
     };
     this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
     return lib;

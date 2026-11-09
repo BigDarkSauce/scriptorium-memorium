@@ -2,7 +2,7 @@
 // PDFs are added as folded scrolls, and opening a scroll unfolds it in a shaft of light and carries you into its room.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeRoomShell } from '../gfx/roomshell.js';
+import { makeRoomShell, doorPick, doorHit } from '../gfx/roomshell.js';
 import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, slotAt, SCROLL_L, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
 import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
@@ -55,13 +55,13 @@ export class Hub {
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => this.obstacles() });
     this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children.filter(o => o.visible) : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
-    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else if (this.menu) this.closeMenu(); else if (this.moveDlg) this.closeMove(); else { if (this.sdrag) this.endScrollDrag(false); this.selectShelf(null); } } if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); };
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else if (this.menu) this.closeMenu(); else if (this.moveDlg) this.closeMove(); else { if (this.sdrag) this.endScrollDrag(false); this.selectShelf(null); } } if (e.key === 'Delete' || e.key === 'Backspace') { if (this.menu && this.menuBook) { e.preventDefault(); this.deleteScroll(this.menuBook); } else if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); } };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
     this.gfx.canvas.addEventListener('pointerdown', this.onDown); addEventListener('pointermove', this.onMove); addEventListener('pointerup', this.onUp);
     // a scroll's options: right-click (mouse), long-press (touch; pointerDown starts the timer)
-    this.onCtx = e => { if (this.opening) return; const sc = this.scrollAt(e); if (!sc) return; e.preventDefault(); e.stopPropagation(); if (this.rdown && Math.hypot(e.clientX - this.rdown.x, e.clientY - this.rdown.y) > 6) return; this.openMenu(sc.userData.bookId, e.clientX, e.clientY); };
+    this.onCtx = e => { if (this.opening) return; const id = this.bookAt(e); if (!id) return; e.preventDefault(); e.stopPropagation(); if (this.rdown && Math.hypot(e.clientX - this.rdown.x, e.clientY - this.rdown.y) > 6) return; this.openMenu(id, e.clientX, e.clientY); };
     this.gfx.canvas.addEventListener('contextmenu', this.onCtx, true);
     this.onDocDown = e => { if (this.menu && !this.menu.contains(e.target)) this.closeMenu(); };
     addEventListener('pointerdown', this.onDocDown, true);
@@ -80,6 +80,7 @@ export class Hub {
     const gone = [];   // the old shell and furniture are freed once the rebuilt room has drawn
     if (this.shell) { this.scene.remove(this.shell); gone.push(this.shell); }
     this.shell = shell; this.scene.add(shell); shell.userData.dims = { w: R.w, d: R.d, h: R.h };
+    this.doorPick = doorPick(this.scene, shell, this.doorPick);
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     if (!this.decor) { this.decor = new THREE.Group(); this.scene.add(this.decor); }
     if (!fast || !this.furn.children.length) { gone.push(...this.furn.children); this.furn.clear(); this.buildFurniture(); }
@@ -488,15 +489,42 @@ export class Hub {
     if (k >= 1) { this.camTween = null; if (!T.walk) { this.controls.target.copy(a); this.controls.update(); } }
   }
   sfx(name, o) { if (this.app.sfx) this.app.sfx.play(name, o); }
-  async removeBook(id) { const bk = this.lib.books.find(b => b.id === id); this.lib.books = this.lib.books.filter(b => b.id !== id); if (this.app.cancelJob) this.app.cancelJob(id); if (this.app.ingest && this.app.ingest.closePDF) this.app.ingest.closePDF(id); const o = this.scrollObjs.get(id); if (o) { o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); if (bk) this.refill(bk.shelf); this.app.saveLib(); await this.app.store.del('pdf:' + id); await this.app.store.del('room:' + id); await this.app.store.del('job:' + id); }
+  // ---------- deleting a scroll (App.deleteBook does the library and storage; these keep the hall in step) ----------
+  // ask first, in the app's own dialog (never the browser's)
+  async deleteScroll(id) {
+    const b = this.lib.books.find(x => x.id === id); if (!b || this.opening) return false; this.closeMenu(); this.closeMove(); this.tip.hidden = true;
+    const ok = await confirmBox(`“${b.title}” leaves its shelf, with its room, its analysed chains and its dioramas. You can undo this for a few seconds.`, 'Delete scroll', { danger: true, title: 'Delete this scroll?' });
+    return ok && !this.disposed ? this.app.deleteBook(id) : false;
+  }
+  dropScroll(id, shelfId) { const o = this.scrollObjs.get(id); if (o) { if (this.hover === o) this.hover = null; o.removeFromParent(); this.trash([o]); } this.scrollObjs.delete(id); this.refill(shelfId); this.glowDirty = true; this.sfx('wood', { pitch: .7, gain: .4 }); }
+  restoreScroll(b) {
+    const so = this.shelfObjs.get(b.shelf);
+    if (so && !this.canPlace(b.shelf, b.tier || 0, b.slot || 0, !!b.hang, b.id)) { const f = this.findSpot(so, this.occ(b.shelf, b.id), !!b.hang, b.tier, b.slot) || this.findSpot(so, this.occ(b.shelf, b.id), false, b.tier, b.slot); if (f) { if (!this.canPlace(b.shelf, f.tier, f.slot, !!b.hang, b.id)) delete b.hang; Object.assign(b, f); } }
+    if (this.repairSlots()) this.app.saveLib();
+    const o = this.addScrollObj(b); if (o) { o.userData.arrive = 0; o.scale.setScalar(.01); } this.refill(b.shelf); this.glowDirty = true;
+  }
   // ---------- pointer ----------
   pick(e, list) { const r = this.gfx.canvas.getBoundingClientRect(); this.mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.mouse, this.camera); return this.ray.intersectObjects(list, true); }
   ownerOf(o, kind) { while (o && !(o.userData && o.userData.kind === kind)) o = o.parent; return o; }
+  // the hall's door leads to the room visited last (App.rememberRoom), with its scroll open if it was left open
+  lastRoom() { const L = this.lib.lastRoom, b = L && this.lib.books.find(x => x.id === L.book); return b ? { book: b, part: L.part || null } : null; }
+  doorAt(e) { if (e.target !== this.gfx.canvas || !this.doorPick) return false; this.pick(e, []); return doorHit(this.ray, this.doorPick, [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : [])]); }
+  enterDoor() {
+    const L = this.lastRoom(); if (!L) { toast('Open a scroll on a bookcase to enter its room: this door then leads back to it'); return false; }
+    this.tip.hidden = true; this.app.openRoom(L.book.id, { openPart: L.part || undefined }); return true;
+  }
+  // the book under the pointer: its scroll, or one of the cradles of the place it takes (its holder)
+  bookAt(e) {
+    const sc = this.scrollAt(e); if (sc) return sc.userData.bookId; if (e.target !== this.gfx.canvas) return null;
+    const rests = [...this.shelfObjs.values()].map(so => so.userData.rests).filter(Boolean), h = this.pick(e, rests)[0]; if (!h || h.instanceId == null) return null;
+    const so = h.object.parent, u = so.userData, k = h.instanceId >> 1, t = Math.floor(k / u.slotsPerTier), key = t + ':' + (k % u.slotsPerTier);   /* two cradles per place, tiers in order (setRestTiers(o, null)) */
+    const b = this.lib.books.find(x => x.shelf === u.shelfId && (x.tier || 0) === t && this.need(so, x).includes(key)); return b ? b.id : null;
+  }
   scrollAt(e) { if (e.target !== this.gfx.canvas) return null; const h = this.pick(e, [...this.scrollObjs.values()])[0]; return (h && this.ownerOf(h.object, 'scroll')) || null; }
   pointerDown(e) {
     if (this.opening) return; this.down = { x: e.clientX, y: e.clientY }; if (e.button === 2) this.rdown = { x: e.clientX, y: e.clientY };
     clearTimeout(this._lpT); this._lpFired = false;
-    if (e.pointerType && e.pointerType !== 'mouse') { const sc = this.scrollAt(e); if (sc) this._lpT = setTimeout(() => { if (!this.down || this.opening) return; this._lpFired = true; if (this.sdrag) this.endScrollDrag(false); this.openMenu(sc.userData.bookId, this.down.x, this.down.y); }, 550); }
+    if (e.pointerType && e.pointerType !== 'mouse') { const id = this.bookAt(e); if (id) this._lpT = setTimeout(() => { if (!this.down || this.opening) return; this._lpFired = true; if (this.sdrag) this.endScrollDrag(false); this.openMenu(id, this.down.x, this.down.y); }, 550); }
     if (e.button !== 0) return;
     if (this.build) {
       // a scroll first (drag it to another place), else its bookcase
@@ -521,7 +549,11 @@ export class Hub {
     if (sc) {
       const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false;
       const st = b.hang ? `hanging on ${METALS[b.hang.metal in METALS ? b.hang.metal : 'brass'].label.toLowerCase()} chains · ` : '';
-      this.tip.innerHTML = `<b>${b.important ? '★ ' : ''}${mathHTML(b.title, 'label')}</b><span>${st}${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span><span class="tip-more">${TOUCH() ? 'Long-press' : 'Right-click'} for options: important, hang on chains, move</span>`;
+      this.tip.innerHTML = `<b>${b.important ? '★ ' : ''}${mathHTML(b.title, 'label')}</b><span>${st}${b.pages ? b.pages + ' pages · ' : ''}${esc((this.lib.shelves.find(s => s.id === b.shelf) || {}).name || '')}</span><span class="tip-more">${TOUCH() ? 'Long-press' : 'Right-click'} for options: important, hang on chains, move, delete</span>`;
+      this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
+    } else if (this.doorAt(e)) {
+      const L = this.lastRoom(); this.gfx.canvas.style.cursor = L ? 'pointer' : ''; this.tip.hidden = false;
+      this.tip.innerHTML = L ? `<b>The door</b><span>Back to the room of “${mathHTML(L.book.title, 'label')}”${L.part ? ', its scroll open' : ''}</span>` : `<b>The door</b><span>Open a scroll to enter its book's room: this door then leads back to it</span>`;
       this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
     } else this.tip.hidden = true;
   }
@@ -533,7 +565,7 @@ export class Hub {
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || e.target !== this.gfx.canvas) return; this.down = null;
     if (this.build) { const h = this.pick(e, [...this.shelfObjs.values()])[0]; if (!h) this.selectShelf(null); return; }
     const sc = this.scrollAt(e);
-    if (sc) this.openScroll(sc);
+    if (sc) this.openScroll(sc); else if (this.doorAt(e)) this.enterDoor();
   }
   // Arrange mode: drag a scroll; a ghost shows the free place it would snap to (nearest free slot on the row under the
   // pointer; red when that row has none). Releasing over a free place moves it there.
@@ -580,6 +612,7 @@ export class Hub {
       m.append(el('label', { class: 'ctrl' }, [el('span', {}, ['Chain length (drop)', out]), inp]), el('div', { class: 'menu-note', text: `${cm(L.min)}–${cm(L.max)} on this row: the scroll stays clear of the shelf above and the cradles below` }));
     }
     m.append(item('Move to…', () => { this.closeMenu(); this.openMove(b.id); }));
+    m.append(el('div', { class: 'menu-sep', role: 'separator' }), item('Delete scroll…', () => this.deleteScroll(b.id), ' danger'));
   }
   closeMenu() { if (this.menu) { this.menu.remove(); this.menu = null; } }
   // "Move to…": bookcase, then a grid of rows × places (taken places disabled); the ghost and the camera preview the

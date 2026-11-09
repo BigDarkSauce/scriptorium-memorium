@@ -85,3 +85,17 @@ function skyTex() { // evening sky with distant hills seen through the window
   g.fillStyle = '#3f5040'; g.beginPath(); g.moveTo(0, 330); for (let x = 0; x <= 256; x += 8) g.lineTo(x, 322 - Math.sin(x / 19 + 1) * 10); g.lineTo(256, 384); g.lineTo(0, 384); g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+// The double door in the front wall, as an invisible box to pick (hub: back to the room visited last; room: back to the
+// hall). Replaces the previous one when the shell is rebuilt; null when the shell has no door.
+export function doorPick(scene, shell, old) {
+  if (old) { scene.remove(old); old.geometry.dispose(); old.material.dispose(); }
+  const dr = shell && shell.userData.baroque && shell.userData.baroque.door; if (!dr) return null;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(dr.w + .2, dr.h + .1, .3), new THREE.MeshBasicMaterial({ visible: false }));
+  m.position.set(0, (dr.h + .1) / 2, dr.z - .15); m.name = 'door-pick'; m.userData.noProbe = true; m.castShadow = m.receiveShadow = false; scene.add(m); return m;
+}
+// is the door the first thing under the pointer (in front of everything in `occluders`)?
+export function doorHit(ray, door, occluders) {
+  if (!door) return false; const h = ray.intersectObject(door, false)[0]; if (!h) return false;
+  const o = ray.intersectObjects(occluders, true).find(x => x.object !== door && x.object.visible !== false && !(x.object.material && x.object.material.visible === false));
+  return !o || o.distance > h.distance;
+}

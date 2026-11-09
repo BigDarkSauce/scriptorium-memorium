@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Navigator } from '../nav.js';
-import { makeRoomShell } from '../gfx/roomshell.js';
+import { makeRoomShell, doorPick, doorHit } from '../gfx/roomshell.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { canvasTex, parchment, radialGlow, labelTex } from '../gfx/textures.js';
 import { bmat } from '../gfx/baroque.js';
@@ -273,7 +273,7 @@ export class BookRoom {
     try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
-    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); if (!fast) this.probeDirty = true; return true;
+    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); if (!fast) this.probeDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   buildStations() {
@@ -498,23 +498,30 @@ export class BookRoom {
       const p = this.data.parts.find(x => x.id === o.station), st = this.stations.get(p.id), b = st && st.bays[o.bay], many = st && st.bays.length > 1;
       const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${mathHTML(b.spec.d.title || b.spec.st.title || 'Demo', 'label')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
       this.tip.hidden = false; this.tip.innerHTML = `<b>${mathHTML(p.title, 'label')}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
-    } else this.tip.hidden = true;
+    } else if (this.doorAt()) { this.gfx.canvas.style.cursor = 'pointer'; this.tip.hidden = false; this.tip.innerHTML = '<b>The door</b><span>Back to the library hall</span>'; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; }
+    else this.tip.hidden = true;
   }
+  // the room's double door leads back to the hall (pick() has just aimed the ray at the pointer)
+  doorAt() { return doorHit(this.ray, this.doorPick, [...this.stations.values()].flatMap(s => [s.sheet, s.ped]).filter(Boolean)); }
   pointerUp(e) {
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || this.anim) return; this.down = null;
-    const o = this.pick(e); if (!o) return; const p = this.data.parts.find(x => x.id === o.station);
+    const o = this.pick(e); if (!o) { if (this.doorAt() && !this.reader) this.app.openHub({ fromRoom: this.book.id }); return; } const p = this.data.parts.find(x => x.id === o.station);
     if (o.kind === 'pedestal') this.enterPedestal(p, o.bay); else this.openPart(p);
   }
   flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, k: 0, dur, then }; this.controls.enabled = false; }
   openPart(p, instant) {
-    const st = this.stations.get(p.id); if (!st) return; if (this.reader) this.reader.close();
+    const st = this.stations.get(p.id); if (!st) return; if (this.reader) { this._swapReader = true; try { this.reader.close(); } finally { this._swapReader = false; } }
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
     const pos = c.clone().addScaledVector(n, 2.2).add(V3(0, -.2, 0)).addScaledVector(V3().crossVectors(n, V3(0, 1, 0)), -.55);
-    const open = () => { st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); };
+    const open = () => { st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); this.app.route({ room: this.book.id, scroll: p.id }); this.app.rememberRoom(this.book.id, p.id); };
     if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open);
     this.hint.hidden = true; this.tip.hidden = true;
   }
-  onReaderClosed(r) { if (this.reader === r) this.reader = null; this.stations.forEach(s => s.sheet.material.emissiveIntensity = 0); this.hint.hidden = false; }
+  onReaderClosed(r) {
+    if (this.reader === r) this.reader = null; this.stations.forEach(s => s.sheet.material.emissiveIntensity = 0); this.hint.hidden = false;
+    // the address loses its scroll (unless another scroll replaces it, or the room is being left)
+    if (!this._swapReader && !this.disposed && this.app.mode === this) { this.app.route({ room: this.book.id }); this.app.rememberRoom(this.book.id, null); }
+  }
   enterPedestal(p, bi = 0) {
     const st = this.stations.get(p.id), bay = st && (st.bays[bi] || st.bays[0]);
     if (!st || !bay || !bay.spec) { toast(p.analysis ? 'No 3D showcase in this scroll yet' : 'Analyse the scroll first'); this.openPart(p); return; }
