@@ -898,3 +898,6 @@ button.rv-opt:hover { background: #fff; border-color: #b98a45; }
 
 .rv-deck h3 { color: var(--iron, #2b2118); } .rv-deck .dim, .rv-deck .rv-from { color: #6b5a45 !important; } .rv-deck p { color: #4a3b2c; }
 .rvl-tag { display: block; }
+.ev-kind { display: inline-block; font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; padding: 0 5px; border-radius: 4px; border: 1px solid currentColor; vertical-align: 1px; color: #6b5a45; }
+.ev-kind.ek-effect, .ev-kind.ek-method, .ev-kind.ek-visual { color: var(--verdigris); } .ev-kind.ek-inspiration { color: #8f733a; border-style: dashed; }
+.dio-sources .ev-kind { color: #ffd98a; }
