@@ -4,7 +4,7 @@
 // Spec: {matrix:[[a,b],[c,d]], presets?:[{label,matrix}], vector?:[x,y], eigen?:bool}
 import { FC, fmt, easeIO } from './kit.js';
 
-export const size = (f, o) => o.narrow ? { W: 360, H: 470 } : { W: 600, H: 330 };
+export const size = (f, o) => o.narrow ? { W: 360, H: 540 } : { W: 600, H: 330 };
 export function render(f, S) {
   const { W, H } = S, side = S.narrow ? 340 : 310, ox = S.narrow ? (W - side) / 2 : 10, oy = 10, R = 3.2, u = side / (2 * R);
   const X = x => ox + side / 2 + x * u, Y = y => oy + side / 2 - y * u, IX = px => (px - ox - side / 2) / u, IY = py => (oy + side / 2 - py) / u;
