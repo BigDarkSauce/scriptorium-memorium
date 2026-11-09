@@ -33,6 +33,17 @@ export class Gfx {
     this.canvas = canvas;
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     r.localClippingEnabled = true;
+    // A program that failed to link: three's own report, plus what it leaves out. One smoke run logged "Shader Error 0 -
+    // VALIDATE_STATUS false" for ShaderMaterials with every log empty (shaders compiled, link failed, no reason), which
+    // 20 forced context losses at each phase of a switch and switch churn under CPU load did not reproduce. A link that
+    // fails with no log points at the GPU process (a reset or an out-of-memory link under load) rather than at a shader
+    // source; the extra line says which: context lost or not, the program still valid, both stages compiled, sizes.
+    r.debug.onShaderError = (gl, prog, vs, fs) => {
+      const L = x => { try { return (x || '').trim(); } catch (e) { return ''; } }, q = f => { try { return f(); } catch (e) { return 'n/a'; } };
+      const pl = L(q(() => gl.getProgramInfoLog(prog))), vl = L(q(() => gl.getShaderInfoLog(vs))), fl = L(q(() => gl.getShaderInfoLog(fs)));
+      const d = { lost: q(() => gl.isContextLost()), glError: q(() => gl.getError()), program: q(() => gl.isProgram(prog)), vsCompiled: q(() => gl.getShaderParameter(vs, gl.COMPILE_STATUS)), fsCompiled: q(() => gl.getShaderParameter(fs, gl.COMPILE_STATUS)), vsLen: q(() => (gl.getShaderSource(vs) || '').length), fsLen: q(() => (gl.getShaderSource(fs) || '').length) };
+      console.error('THREE.WebGLProgram: Shader Error - link failed' + (pl || vl || fl ? '' : ' with empty logs') + ' ' + JSON.stringify(d) + (pl ? '\nProgram Info Log: ' + pl : '') + (vl ? '\nVERTEX: ' + vl : '') + (fl ? '\nFRAGMENT: ' + fl : ''));
+    };
     // three.js keeps one transmission render target per (scene, camera) in a private render state and never frees it:
     // each new diorama/room scene with glass leaked one GPU texture. Remember the target on its scene (it is the one three
     // binds inside render() with resolveDepthBuffer === false and mipmaps), so disposeTree(scene) frees it with the rest.
