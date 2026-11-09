@@ -10,18 +10,24 @@ export const size = (f, o) => o.narrow ? { W: 360, H: 300 } : { W: 600, H: f.mod
 const nice = r => { const s = r / 5, p = Math.pow(10, Math.floor(Math.log10(s || 1))), n = s / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; };
 export function render(f, S) {
   const { W, H } = S, slides = f.mode === 'slides', P = { l: 46, r: 12, t: slides ? 54 : 40, b: 34 }, names = f.series.map(s => s.name), nC = f.categories.length;
+  // a line or dot chart over numeric categories (years) places each point by its value: 1960 … 2020, 2023 keeps the last
+  // gap at three years instead of drawing it as long as a decade
+  const XS = f.chart !== 'bars' && nC > 1 && f.categories.every(c => /^\s*-?\d+(\.\d+)?\s*$/.test(String(c))) ? f.categories.map(Number) : null;
+  const band = () => (W - P.l - P.r) / nC, xAt = i => XS ? P.l + band() / 2 + (XS[i] - XS[0]) / ((XS[nC - 1] - XS[0]) || 1) * (W - P.l - P.r - band()) : P.l + (i + .5) * band();
+  const nearestCat = px => { if (!XS) return Math.floor((px - P.l) / band()); let b = 0; for (let i = 1; i < nC; i++) if (Math.abs(xAt(i) - px) < Math.abs(xAt(b) - px)) b = i; return b; };
   const prov = el('div', { class: 'prim-prov', html: `<b>Source</b> ${mathHTML(f.source.name)}${f.source.year ? ', ' + mathHTML(f.source.year) : ''}${f.source.note ? ' · ' + mathHTML(f.source.note) : ''}` }); S.box.insertBefore(prov, S.ctrls);
   const target = k => { const s = f.states[k], shown = s.show === 'all' ? names : s.show, vals = f.series.map(x => shown.includes(x.name) ? x.values.map(v => v ?? 0) : x.values.map(() => 0)); const all = f.series.filter(x => shown.includes(x.name)).flatMap(x => x.values.filter(v => v != null)); const lo = s.y ? s.y[0] : Math.min(0, ...all), hi = s.y ? s.y[1] : Math.max(...all, 1e-9) * (slides && (s.annotate || []).length ? 1.34 : 1.15);   /* a slide's tallest bar keeps room for its value label and a callout above it */ return { shown, vals, lo, hi, s }; };
   let k = 0, cur = target(0), from = cur, t = 1;
   const draw = () => {
     S.clear(); const e = easeIO(Math.min(1, t)), lo = from.lo + (cur.lo - from.lo) * e, hi = from.hi + (cur.hi - from.hi) * e, s = cur.s;
-    const X = i => P.l + (i + .5) * (W - P.l - P.r) / nC, Y = v => H - P.b - (v - lo) / ((hi - lo) || 1) * (H - P.t - P.b), gw = (W - P.l - P.r) / nC;
+    const X = xAt, Y = v => H - P.b - (v - lo) / ((hi - lo) || 1) * (H - P.t - P.b), gw = (W - P.l - P.r) / nC;
     if (slides) { S.mk('rect', { x: 0, y: 0, width: W, height: 30, fill: FC.ink }); S.txt(10, 20, s.title, { fill: '#f3e3b8', 'font-weight': 600, 'font-size': S.fs + .5, fit: W - 70 }); S.txt(W - 10, 20, `${k + 1}/${f.states.length}`, { 'text-anchor': 'end', fill: '#d8c8a4', mono: true, 'font-size': 11 }); }
     else S.txt(10, 20, s.title, { 'font-weight': 600, fit: W - 20 });
     const st = nice(hi - lo); for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) { S.mk('line', { x1: P.l, x2: W - P.r, y1: Y(v), y2: Y(v), stroke: FC.grid }); S.txt(P.l - 5, Y(v) + 3.5, fmt(+v.toFixed(10), 3), { 'text-anchor': 'end', mono: true, 'font-size': 10, fill: FC.soft }); }
     S.mk('line', { x1: P.l, x2: W - P.r, y1: Y(Math.max(lo, 0)), y2: Y(Math.max(lo, 0)), stroke: FC.soft });
     if (f.ylabel) S.txt(P.l + 4, P.t - 6, f.ylabel, { 'font-size': S.fs - 2, fill: FC.soft, 'font-style': 'italic', fit: W - P.l - 20 });
-    const every = Math.ceil(nC / (S.narrow ? 6 : 12)); f.categories.forEach((c, i) => { if (i % every === 0) S.txt(X(i), H - P.b + 14, c, { 'text-anchor': 'middle', 'font-size': 10, fill: FC.soft, fit: gw * every - 2 }); });
+    const every = Math.ceil(nC / (S.narrow ? 6 : 12)); const tick = XS ? (() => { const pick = [nC - 1]; for (let i = nC - 2; i >= 0; i--) if (X(pick[0]) - X(i) >= 36) pick.unshift(i); return new Set(pick); })() : null;   /* by value: keep the last year, drop a label that would touch its neighbour */
+    f.categories.forEach((c, i) => { if (tick ? tick.has(i) : i % every === 0) S.txt(X(i), H - P.b + 14, c, { 'text-anchor': 'middle', 'font-size': 10, fill: FC.soft, fit: tick ? 34 : gw * every - 2 }); });
     if (f.xlabel) S.txt(W - P.r, H - 4, f.xlabel, { 'text-anchor': 'end', 'font-size': S.fs - 2.5, fill: FC.soft, 'font-style': 'italic' });
     const hl = new Set(s.highlight), visible = f.series.map((x, j) => cur.shown.includes(x.name) || from.shown.includes(x.name));
     const val = (j, i) => from.vals[j][i] + (cur.vals[j][i] - from.vals[j][i]) * e, nShown = Math.max(1, cur.shown.length), bw = gw * .74 / nShown;
@@ -43,7 +49,7 @@ export function render(f, S) {
     S.read([['showing', cur.shown.join(', ')], s.highlight.length ? ['highlighted', s.highlight.map(i => f.categories[i]).join(', ')] : null]); };
   const sp = S.stepper(f.states.length, j => { from = { ...cur, shown: cur.shown.slice() }; const prev = k; k = j; cur = target(j); t = S.calm || slides || prev === j ? 1 : 0; if (prev === j) from = cur; tell(); draw(); if (t < 1) S.animate(dt => { t = Math.min(1, t + dt / .7); draw(); return t < 1; }); }, j => f.states[j].title);
   // reader-driven: hover or tap a mark to read its value
-  S.svg.addEventListener('pointermove', ev => { const p = S.pt(ev), i = Math.floor((p[0] - P.l) / ((W - P.l - P.r) / nC)); if (i < 0 || i >= nC) return; S.read([['category', f.categories[i]], ...f.series.filter(x => cur.shown.includes(x.name)).map(x => [x.name, x.values[i] == null ? '—' : fmt(x.values[i], 4)])]); });
+  S.svg.addEventListener('pointermove', ev => { const p = S.pt(ev), i = nearestCat(p[0]); if (i < 0 || i >= nC) return; S.read([['category', f.categories[i]], ...f.series.filter(x => cur.shown.includes(x.name)).map(x => [x.name, x.values[i] == null ? '—' : fmt(x.values[i], 4)])]); });
   sp.set(0); S.redraw = draw; S.go = j => sp.set(j);
   return { draw };
 }
