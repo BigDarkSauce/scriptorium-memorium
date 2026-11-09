@@ -275,6 +275,10 @@ class App {
       const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
       if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
       g.value = 1;
+      // from here until the new place's reflections are captured nothing is drawn: the screen is black (uFade 1) and the
+      // frames would only compete with the bakes, the compile and the probe for the GPU (with a software GPU a hall frame
+      // costs seconds, and a bake's canvas read-back waited for it). The settle frames below draw again.
+      this.veilHold = true;
       const old = this.mode;
       if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
       try { this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32; this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true; } catch (e) { console.warn(e); }   /* a reset that throws never skips opening the next mode */
@@ -289,17 +293,23 @@ class App {
       // (RoomProbe.finish), with programs that are already compiled
       const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
       if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
-      mark('sm:sw-mode'); try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
+      // the programs are queued first (r.compile; flushed so the GPU process starts on them now) and the surface maps baked
+      // meanwhile: the bakes are CPU canvases, the compile and link run in the GPU process, so the two overlap instead of
+      // the probe's first draw waiting for every link afterwards. (Baking only swaps a texture's pixels: no program
+      // changes.) The awaited prewarm below picks up what a diorama's scanned detail adds.
+      mark('sm:sw-mode'); const early = this.mode && this.mode.scene && this.mode.camera ? this.mode : null;
+      if (early) { try { this.gfx.prewarm(early.scene, early.camera, [{ apply() { }, restore() { } }]).catch(() => { }); this.gfx.renderer.getContext().flush(); } catch (e) { console.warn(e); } }
+      try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
       if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
       if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
       mark('sm:sw-prewarm'); if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
-      this.gfx.resetAdapt();
+      this.gfx.resetAdapt(); this.veilHold = false;
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       mark('sm:sw-frames'); await sleep(60); await fade(1, 0, 330); g.value = 0; done = true; mark('sm:sw-end');
-    } finally { this.switching = false; if (!done) g.value = 0; }
+    } finally { this.switching = false; this.veilHold = false; if (!done) g.value = 0; }
   }
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
   retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
@@ -327,8 +337,8 @@ class App {
     this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
     if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
     this.loopDt = 0;   // (an update driven by hand, outside this loop, steps by its own dt only)
-    this.gfx.adapt(raw); this.gfx.render(dt, this.t);
-    this.flushTrash();
+    // nothing to see under a closed veil (_switch); the old place's GPU resources wait for the new one's first drawn frames
+    if (!this.veilHold) { this.gfx.adapt(raw); this.gfx.render(dt, this.t); this.flushTrash(); }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
   }
   // the context came back: environments are rebuilt by the renderer; reopen the current place so every render target is fresh
