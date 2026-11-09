@@ -4,11 +4,13 @@ import { mulberry, makeNoise, measureMath, canvasMath } from '../util.js';
 import { AAA } from './aaa.js';
 
 const cache = new Map();
-export function canvasTex(key, w, h, draw, { repeat, srgb = true, aniso = 8 } = {}) {
+// read: the drawing reads its own pixels back (getImageData), so the canvas is a CPU one (willReadFrequently): a GPU-backed
+// canvas's read-back waits for everything queued in the GPU process first
+export function canvasTex(key, w, h, draw, { repeat, srgb = true, aniso = 8, read = false } = {}) {
   // the cached original is shared (never disposed); a clone shares its image and GPU upload but is the caller's to dispose
   if (key && cache.has(key)) { const t = cache.get(key).clone(); delete t.userData.shared; if (repeat) t.repeat.set(repeat[0], repeat[1]); t.needsUpdate = true; return t; }
   const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const g = c.getContext('2d'); draw(g, w, h);
+  const g = c.getContext('2d', read ? { willReadFrequently: true } : undefined); draw(g, w, h);
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = aniso; t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -261,7 +263,9 @@ function marbleCanvas(name, size, seed = 1, mode = 'color') {
     }
   }
   const cloudy = []; for (let i = 0; i < (P.faint ? 10 : 16); i++) { const pts = walk(r() * size, r() * size, r() * 6.3, Math.round(25 + r() * 40), 11 * s, .4); cloudy.push({ pts, lw: (14 + r() * 30) * s, col: hx(P.cloud[i % P.cloud.length]), t: .35 + r() * .5 }); }
-  const layer = () => { const L = document.createElement('canvas'); L.width = L.height = size; const x = L.getContext('2d'); x.lineJoin = x.lineCap = 'round'; return x; };
+  // the mask pass is read back (marbleComp: readCh), so its layers are CPU canvases too: a GPU-backed layer drawn into it
+  // made that read-back wait for the GPU process (with a software GPU, for every program it was still compiling: 14 s at boot)
+  const layer = () => { const L = document.createElement('canvas'); L.width = L.height = size; const x = L.getContext('2d', { willReadFrequently: mask }); x.lineJoin = x.lineCap = 'round'; return x; };
   // a vein drawn segment by segment (its width changes along the run); opaque on its layer, so joints never darken
   const segs = (x, v, wk, colAt) => { for (let k = 1; k < v.pts.length; k++) { x.lineWidth = Math.max(.3, v.w[k] * wk); x.strokeStyle = colAt(k / v.pts.length); x.beginPath(); x.moveTo(v.pts[k - 1][0], v.pts[k - 1][1]); x.lineTo(v.pts[k][0], v.pts[k][1]); x.stroke(); } };
   const all = []; veins.forEach(v => { all.push(v); v.kids.forEach(k => all.push(k)); });
@@ -521,7 +525,7 @@ export function windowSkyTex() {
     });
     g.putImageData(img, 0, 0);
     g.filter = 'blur(1.2px)'; g.drawImage(g.canvas, 0, 0); g.filter = 'none';   // a lens's softness: no hard cut-out edges
-  });
+  }, { read: true });
 }
 // Additive light-shaft texture: bright at the window (v=1), fading to the floor, soft at the edges, faint dust streaks.
 // (falls off quickly, so the shafts read as beams near the windows instead of a golden haze over the window wall)
