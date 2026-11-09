@@ -55,7 +55,7 @@ const R = s => new RegExp(s, 'gi');
 const DOMAIN_WORDS = {
   cs: [R('\\b(code|program(s|ming)?|software|compil\\w*|algorithm\\w*|cpu|processor|register\\w*|clock (cycle|tick|pulse)|bits?|bytes?|binary|memory|cache|instruction\\w*|tokens?|tokeni[sz]\\w*|tensors?|neural|transformer|self-attention|attention head|array|queue|stack|pointer|python|javascript|function calls?|logic gates?|adder|data bus|bus|bigram|gradient descent|backprop\\w*|graph search|pathfind\\w*|dijkstra|breadth-first|a\\*)'), 2],
   maths: [R('\\b(matri(x|ces)|vectors?|eigen\\w*|determinant|linear (map|transformation)|basis|theorem|lemma|proofs?|integral|derivative|probabilit\\w*|distribution|variance|standard deviation|random variable|gaussian|normal (curve|distribution)|invariant|polynomial|parallelogram|unit square|shear|rotation by|axiom|μ|σ)'), 2],
-  economics: [R('\\b(prices?|inflation|deflation|demand|supply|markets?|interest rates?|unemploy\\w*|wages?|gdp|monetary|fiscal|central bank|incentives?|elasticit\\w*|tax(es|ation)?|recession|money supply|labou?r market|households|consumption|output gap|economists?|economic)'), 2],
+  economics: [R('\\b(prices?|inflation|deflation|demand|supply|markets?|interest rates?|unemploy\\w*|wages?|gdp|monetary|fiscal|central bank|incentives?|elasticit\\w*|tax(es|ation)?|recession|money supply|labou?r market|households|consumption|output gap|economists?|economic|game theory|prisoner\'?s dilemma|payoffs?|tit for tat)'), 2],
   business: [R('\\b(revenue|customers?|suppliers?|margins?|profit\\w*|unit economics|franchise\\w*|subscriptions?|churn|acquisition cost|lifetime value|retail\\w*|airlines?|platform|marketplace|commission|distributors?|competitors?|business model|restaurant|rent|payroll|ingredients?|sales|pricing|startup|company|companies|firm)'), 2],
   philosophy: [R('\\b(arguments?|premises?|conclusions?|objections?|counterexamples?|claims?|valid(ity)?|sound(ness)?|thought experiment|utilitarian\\w*|moral\\w*|ethic\\w*|epistem\\w*|justified|belief|free will|consequential\\w*|deontolog\\w*|virtue|philosoph\\w*|knowledge|gettier|trolley)'), 2],
   data: [R('\\b(data(set)?|survey\\w*|charts?|per ?cent|percentage|trends?|respondents|statistics? (show|office)|census|polls?|share of|year[- ]on[- ]year|per capita|time series|figures? show|evidence shows|sample of \\d+|source:)'), 2],
@@ -72,7 +72,7 @@ const STRUCT_WORDS = {
   transformation: [R('\\b(matri(x|ces)|transform\\w*|linear map|basis vectors?|determinant|rotation|shear|eigen\\w*|unit square|parallelogram|grid lines)'), 3],
   distribution: [R('\\b(distribution|normal|gaussian|variance|standard deviation|σ|μ|samples?|random|bell curve|histogram|mean of)'), 2],
   data_narrative: [R('\\b(per ?cent|percentage|survey|respondents|trend|rose|fell|grew|declined|from \\d{4} to \\d{4}|in \\d{4}|share of|chart|data show|compared with)'), 1.5],
-  taxonomy: [R('\\b(types of|kinds of|classif\\w*|branches of|taxonomy|categor\\w*|families of|map of)'), 2],
+  taxonomy: [R('\\b(types of|kinds of|classif\\w*|branches of|taxonomy|categor\\w*|families of|map of|divides?( roughly)? into|divided into|belongs to|beside|sits? under|a map)'), 2.5],
   mechanism: [R('\\b(mechanism|moves?|rotat\\w*|gears?|levers?|pistons?|valves?|pumps?|engine|machine|assembly|inside the|cutaway|parts? of the)'), 2],
   agent_system: [R('\\b(agents?|traders?|players?|strategies|strategy|repeated game|prisoner|cooperat\\w*|defect\\w*|population of|tit for tat|tournament)'), 2.5]
 };

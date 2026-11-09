@@ -73,5 +73,17 @@ EXPLAINER RULES (how a 3D demo's lessons show a mechanism):
 11. Choose the operation by the KIND of knowledge: structure → explode; inside → section/inspect; cause → chain with "cameraMode":"mechanism"; scale → zoom with stations and "level", or scaleTo; history/assembly → assemble; change or disease → compare/progression; movement through a system → track; a point of view → "cameraMode":"frame".
 12. Never show an inside without its place in the whole: a section, inspect or zoom comes after (or inside) a global/object beat.
 13. Motion must mean something: say which motion explains (the clot that breaks off) and which is only background (blood that always flows); never move a part only to look busy.
-Return ONLY the JSON scene spec.
+IF THE IDEA IS NOT SPATIAL (an argument, rival explanations, a business model, a feedback loop, a transformation, a distribution, a data series, a search, a build-up, a state machine): a 3D scene would be decoration. Return instead {"type":"figure","title":str,"purpose":str,"figure":PRIMITIVE} with the primitive of its structure:
+DOMAIN PRIMITIVES (interactive figures; same "kind"/"caption"; labels ≤ 40 characters, notes ≤ 160; plain maths notation, never LaTeX inside them):
+ progressive_construction{parts:[{id,label,note?}],stages:[{label,adds:[part ids],problem:"what the previous version could not do",why:"why this part is needed",test?}],links:[{from,to,label?}]} (stage 1 = the simplest version that runs; every part added by exactly one stage)
+ state_machine{nodes:[{id,label,value? (a register: its value before tick 1)}],wires:[{from,to,label?}],ticks:[{label,note,packets:[{from,to,value}],set:{nodeId:newValue},state?}]} (one clock tick per entry; packets travel on existing wires; "set" latches registers)
+ transform2d{matrix:[[a,b],[c,d]],presets:[{label,matrix}],vector?:[x,y],eigen?:bool} (entries in [−3, 3]; the columns are where î and ĵ land)
+ distribution_lab{dist:"normal|uniform|exponential",mu,sigma,range:[lo,hi],muRange:[a,b],sigmaRange:[a,b],xlabel?,unit?}
+ causal_loop{nodes:[{id,label,x?:0-100,y?:0-60}],edges:[{from,to,sign:"+"|"-",label?,delay?:true}],loops:[{name,nodes:[ids]}],start?} (R/B labels are computed from the signs: never state them by hand)
+ competing_explanations{question,hypotheses:[{id,label,claim,predicts:[str]}] (2–4),evidence:[{id,label,fits:{hypothesisId:"+"|"-"|"0"},note?}]} (at least one row where the marks differ)
+ flow_network{actors:[{id,label,role:"customer|firm|supplier|intermediary|competitor|platform|regulator|partner",note?}],flows:[{from,to,kind:"money|goods|info",label,amount?}],units?:{title,price,currency,items:[{label,value}]}} (money flows against the goods it pays for; item values sum to at most the price unless the unit loses money)
+ argument_map{question,nodes:[{id,type:"question|claim|premise|conclusion|objection|counterexample|response|revised",text,short?}],links:[{from,to,rel:"supports|attacks|answers|revises|addresses"}]} (premise → supports → claim; objection → attacks → premise or claim; counterexample → supports → objection; response → answers → objection or supports → revised; revised → revises → claim; claim → addresses → question)
+ data_narrative{question,chart:"bars|line|dots",categories:[…],series:[{name,values}],ylabel,states:[{title,show:"all"|[series names],highlight:[i],annotate:[{at:i,series?,text}],note,y?:[lo,hi]}],source:{name,year,note,url?},mode?:"slides"} (source is required; "slides" = a plain analytic slide)
+ algorithm_sandbox{rows:["..S..#..G.."] ('#' wall, 'F' costly cell, 'S' start, 'G' goal) or {grid:{w,h},start,goal,walls},algorithm:"bfs|dijkstra|greedy|astar",cost?}
+Return ONLY the JSON scene spec (or that figure).
 ```

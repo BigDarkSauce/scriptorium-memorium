@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://scriptorium.invalid/schema/figure.schema.json",
   "title": "Figure spec (an explanatory drawing the reader renders)",
-  "description": "A small JSON drawing a chain carries for a text-heavy paragraph (explain[k].figure, statementFigure) or a teaching box (intuitionFigure, misconceptionFigure, check.figure). The model returns data, never pictures or SVG code; js/room/diagrams.js (renderFigure) draws it with typeset labels; js/room/figspec.js (validateFigure) checks it. Every figure has kind and caption; 'animate' makes a short loop (shown as a still with a play button under prefers-reduced-motion). Data from the PDF gives 'ref'; data from outside gives 'extra' with sources.",
+  "description": "A small JSON drawing a chain carries for a text-heavy paragraph (explain[k].figure, statementFigure) or a teaching box (intuitionFigure, misconceptionFigure, check.figure). The model returns data, never pictures or SVG code; js/room/diagrams.js (renderFigure) draws it with typeset labels; js/room/figspec.js (validateFigure) checks it. Every figure has kind and caption; 'animate' makes a short loop (shown as a still with a play button under prefers-reduced-motion). Data from the PDF gives 'ref'; data from outside gives 'extra' with sources. The domain primitives (progressive_construction … algorithm_sandbox) are interactive figures of the explanatory compiler (js/dio/domains.js validatePrimitive, drawn by js/dio/prims/*.js; docs/research/explanatory-compiler.md).",
   "type": "object",
   "required": [
     "kind"
@@ -25,7 +25,17 @@
         "codetrace",
         "table",
         "contrast",
-        "pdf"
+        "pdf",
+        "progressive_construction",
+        "state_machine",
+        "transform2d",
+        "distribution_lab",
+        "causal_loop",
+        "competing_explanations",
+        "flow_network",
+        "argument_map",
+        "data_narrative",
+        "algorithm_sandbox"
       ]
     },
     "caption": {
@@ -80,22 +90,43 @@
     "nodes": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "label"
-        ],
-        "properties": {
-          "id": {
+        "oneOf": [
+          {
             "type": "string"
           },
-          "label": {
-            "type": "string"
-          },
-          "note": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "short": {
+                "type": "string"
+              },
+              "value": {},
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
           }
-        }
-      }
+        ]
+      },
+      "description": "flow / state_machine / causal_loop: {id,label,…}; argument_map: {id,type,text,short?}"
     },
     "edges": {
       "type": "array",
@@ -407,8 +438,16 @@
     "rows": {
       "type": "array",
       "items": {
-        "type": "array"
-      }
+        "oneOf": [
+          {
+            "type": "array"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "description": "table rows (arrays of cells), or an algorithm_sandbox map as strings ('#' wall, 'F' costly, 'S' start, 'G' goal)"
     },
     "wrong": {
       "type": "object",
@@ -425,6 +464,577 @@
     "id": {
       "type": "string",
       "description": "pdf: the PDF figure id (fig-3-2, fig-p12-1)"
+    },
+    "parts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              },
+              "h": {
+                "type": "number"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "adds",
+          "why"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "adds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "why": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "test": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "array"
+          },
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "rel": {
+                "enum": [
+                  "supports",
+                  "attacks",
+                  "answers",
+                  "revises",
+                  "addresses"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "array"
+          },
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ticks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "packets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "value": {}
+              }
+            }
+          },
+          "set": {
+            "type": "object"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "matrix": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "matrix"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "matrix": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "vector": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "eigen": {
+      "type": "boolean"
+    },
+    "mu": {
+      "type": "number"
+    },
+    "sigma": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "range": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "muRange": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "sigmaRange": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "loops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "nodes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "question": {
+      "type": "string"
+    },
+    "hypotheses": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "claim"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "claim": {
+            "type": "string"
+          },
+          "predicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "fits"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "fits": {
+            "type": "object"
+          },
+          "note": {
+            "type": "string"
+          },
+          "observed": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "customer",
+              "firm",
+              "supplier",
+              "intermediary",
+              "competitor",
+              "platform",
+              "regulator",
+              "partner"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "kind"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "money",
+              "goods",
+              "info"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "units": {
+      "type": "object",
+      "required": [
+        "price",
+        "items"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "price": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "value"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "show": {},
+          "highlight": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "annotate": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "at",
+                "text"
+              ],
+              "properties": {
+                "at": {
+                  "type": "number"
+                },
+                "series": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "y": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "year": {},
+        "note": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "mode": {
+      "enum": [
+        "story",
+        "slides"
+      ]
+    },
+    "chart": {
+      "enum": [
+        "bars",
+        "line",
+        "dots"
+      ]
+    },
+    "grid": {
+      "type": "object",
+      "properties": {
+        "w": {
+          "type": "number"
+        },
+        "h": {
+          "type": "number"
+        }
+      }
+    },
+    "goal": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "forest": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "algorithm": {
+      "enum": [
+        "bfs",
+        "dijkstra",
+        "greedy",
+        "astar"
+      ]
+    },
+    "algorithms": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "bfs",
+          "dijkstra",
+          "greedy",
+          "astar"
+        ]
+      }
+    },
+    "cost": {
+      "type": "number"
+    },
+    "start": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      ]
     }
   },
   "allOf": [
@@ -599,6 +1209,196 @@
       "then": {
         "required": [
           "id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "progressive_construction"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "parts",
+          "stages"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "state_machine"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "nodes",
+          "wires",
+          "ticks"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "transform2d"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "matrix"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "distribution_lab"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "mu",
+          "sigma"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "causal_loop"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "nodes",
+          "edges"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "competing_explanations"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "hypotheses",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "flow_network"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "actors",
+          "flows"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "argument_map"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "nodes",
+          "links"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "data_narrative"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "categories",
+          "series",
+          "states",
+          "source"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "algorithm_sandbox"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "rows"
+            ]
+          },
+          {
+            "required": [
+              "grid"
+            ]
+          }
         ]
       }
     }

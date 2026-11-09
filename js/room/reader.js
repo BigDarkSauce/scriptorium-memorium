@@ -324,7 +324,7 @@ export class Reader {
   }
   // the quality gate's report: what was repaired, what the app fixed itself, what is still open
   renderQuality(A) {
-    const Q = A.qualityReport; if (!Q) return null; const fin = Q.final || {}, open = (fin.issues || Q.remaining || []).filter(i => i.kind !== 'dioramas');
+    const Q = A.qualityReport; if (!Q) return null; const fin = Q.final || {}, open = (fin.issues || Q.remaining || []).filter(i => i.kind !== 'dioramas' && i.kind !== 'grammar');
     const R = Q.rounds || [], first = R[0] ? R[0].issues : 0;
     const box = el('details', { class: 'coverage quality' + (open.length ? ' warn' : ' ok') }, [el('summary', {}, [el('span', { class: 'cov-ic', text: open.length ? '◔' : '●' }), el('span', { text: `Quality check: ${open.length ? open.length + ' open issue' + (open.length > 1 ? 's' : '') : 'passed'}` + (Q.repaired ? ` · ${Q.repaired} step${Q.repaired > 1 ? 's' : ''} rewritten` : '') + (first ? ` (${first} found at first)` : '') + (A.figureReport ? ` · ${A.figureReport.slots} figures` : '') + (A.dioramaReport ? ` · ${A.dioramaReport.made.length} diorama${A.dioramaReport.made.length === 1 ? '' : 's'} built` : '') })])]);
     if (Q.fixed && Q.fixed.length) box.append(el('p', { class: 'cov-note', text: 'Fixed by the app: ' + Q.fixed.slice(0, 8).join('; ') + (Q.fixed.length > 8 ? '…' : '') + '.' }));

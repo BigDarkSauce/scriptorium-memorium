@@ -28,6 +28,8 @@
 //   quality    qualityGate(): no more than 40 words pasted from the PDF, no step repeating another, every step explained,
 //              every code block explained line by line, every figure spec valid (faults); paragraphs or teaching boxes
 //              without a figure, and subsections short of their planned dioramas (warnings: the app completes them)
+//   grammar    the explanatory compiler: each step's domain and structure (js/dio/domains.js); a step whose structure has a
+//              domain primitive but carries none, or one of another structure (warnings: the app compiles them)
 //   cues       checkCues(): the explainer cues of every lesson (chain, isolate, peel, zoom, track): names must be the
 //              model's actors or the scene's bodies, enums and track points valid (faults); a chain link the lesson's
 //              text never names, a zoom without the diorama's "scale", and directed-motion wording ("travels to",
@@ -109,6 +111,8 @@ function check(A, sections, figures, label) {
   const QG = P.qualityGate(JSON.parse(JSON.stringify(B)), secs, figures || []); out.quality = QG;
   QG.issues.filter(i => ['copied', 'duplicate', 'longQuote', 'unexplained', 'codeUnexplained', 'badFigure'].includes(i.kind)).forEach(i => F('quality', `${i.step || i.section}: ${i.kind}: ${i.detail}`));
   QG.issues.filter(i => i.kind === 'noFigure' || i.kind === 'dioramas').forEach(i => W('quality', `${i.step || i.section}: ${i.detail}`));
+  // the visual grammar (js/dio/domains.js): a step whose structure has a primitive but carries none (warning: the app compiles it)
+  QG.issues.filter(i => i.kind === 'grammar').forEach(i => W('grammar', `${i.step}: ${i.detail}`));
   rep.missing.forEach(m => F('verify', `subsection ${m.id} ${m.title ? '"' + m.title + '" ' : ''}has no step`));
   rep.thin.forEach(t => F('verify', `subsection ${t.id} is coarser than the source: ${t.steps} step(s) for about ${t.expect}`));
   rep.unknownSections.forEach(id => F('verify', `${id}.section is not a subsection of this part`));
