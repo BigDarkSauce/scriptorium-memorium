@@ -8,7 +8,10 @@ $l = New-Object System.Net.HttpListener
 $l.Prefixes.Add("http://localhost:$Port/")
 try { $l.Start() } catch { Write-Host "Could not start the server on port ${Port}: $($_.Exception.Message)"; exit 1 }
 Write-Host "Scriptorium Memorium is running at http://localhost:$Port  (close this window to stop)"
-$rootFull = [IO.Path]::GetFullPath($Root)
+# the folder check compares against the root WITH its trailing separator: without it, a request like
+# /../scriptorium-memorium-old/x resolves to a sibling folder sharing the root's name as a prefix and would pass.
+# Windows paths are case-insensitive, so the comparison is too.
+$rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 while ($l.IsListening) {
   $c = $l.GetContext()
   # one request at a time; a browser that cancels a request must not stop the server
@@ -16,7 +19,7 @@ while ($l.IsListening) {
     $p = [Uri]::UnescapeDataString($c.Request.Url.AbsolutePath)
     if ($p -eq '/') { $p = '/index.html' }
     $full = [IO.Path]::GetFullPath((Join-Path $Root ($p.TrimStart('/') -replace '/', '\')))
-    if ($full.StartsWith($rootFull) -and (Test-Path $full -PathType Leaf)) {
+    if ($full.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path $full -PathType Leaf)) {
       $b = [IO.File]::ReadAllBytes($full); $ext = [IO.Path]::GetExtension($full).ToLower()
       $c.Response.ContentType = $(if ($types[$ext]) { $types[$ext] } else { 'application/octet-stream' })
       $c.Response.ContentLength64 = $b.Length
