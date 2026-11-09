@@ -6,8 +6,12 @@
 //   autoFigure(step, slot, i) → a valid figure built from the step itself (the fallback that keeps no box bare)
 //   figureSlots(step)         → [{slot, text, fig, small}]  every place in a step that needs a figure
 import { compile } from '../util.js';
+import { PRIMITIVES, PRIMITIVE_KINDS, validatePrimitive } from '../dio/domains.js';
 
-export const FIGURE_KINDS = ['flow', 'plot', 'distribution', 'bars', 'hist', 'scatter', 'boxplot', 'numberline', 'tree', 'venn', 'timeline', 'sketch', 'codetrace', 'table', 'contrast', 'pdf'];
+export const BASE_KINDS = ['flow', 'plot', 'distribution', 'bars', 'hist', 'scatter', 'boxplot', 'numberline', 'tree', 'venn', 'timeline', 'sketch', 'codetrace', 'table', 'contrast', 'pdf'];
+// the domain primitives (js/dio/domains.js, drawn by js/dio/prims/*.js): interactive figures of the explanatory compiler
+export const FIGURE_KINDS = [...BASE_KINDS, ...PRIMITIVE_KINDS];
+export const isPrimitive = k => PRIMITIVE_KINDS.includes(k);
 // one line per kind: what it is for (the prompt lists these, so any AI picks the same kind for the same idea)
 export const FIGURE_USES = {
   flow: 'a process, a pipeline, cause → effect, a decision path, input → function → output',
@@ -25,7 +29,8 @@ export const FIGURE_USES = {
   codetrace: 'code run line by line: what each line does and the values it leaves behind; the output',
   table: 'a small table with highlighted cells',
   contrast: 'a wrong idea set against the right one (✗ / ✓), for common mistakes',
-  pdf: 'the PDF\'s own figure (by id), only when it is the best illustration; shown once in the whole scroll'
+  pdf: 'the PDF\'s own figure (by id), only when it is the best illustration; shown once in the whole scroll',
+  ...Object.fromEntries(PRIMITIVE_KINDS.map(k => [k, PRIMITIVES[k].use]))
 };
 const DISTS = ['normal', 't', 'chisq', 'binomial', 'poisson', 'uniform', 'exponential'];
 const SHAPES = ['rect', 'circle', 'ellipse', 'line', 'arrow', 'text', 'path'];
@@ -124,7 +129,7 @@ export function validateFigure(spec) {
     f.wrong = side(f.wrong); f.right = side(f.right); if (!f.wrong || !f.right) E.push('contrast needs "wrong" and "right"');
   } else if (k === 'pdf') {
     f.id = str(f.id || f.figure, 40); if (!f.id) E.push('pdf needs the figure "id"');
-  }
+  } else if (isPrimitive(k)) validatePrimitive(f, E);
   if (f.animate === true || f.animate === false) { /* keep */ } else if (k !== 'plot') delete f.animate;
   return { ok: !E.length, errors: E, fig: f };
 }

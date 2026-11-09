@@ -1,7 +1,8 @@
 // Interactive 2D diagrams (plot with optional measured "points", tangent, riemann, vectors, matrix, complex, unitcircle, fourier, distribution, parametric, phase, customsvg).
 // Ported from Scriptorium v2; used inline in the reading scroll.
 import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathText, unitish } from '../util.js';
-import { validateFigure } from './figspec.js';
+import { validateFigure, isPrimitive } from './figspec.js';
+import { renderPrimitive } from '../dio/prims/index.js';
 import { isCodeCall } from './prose.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
@@ -223,6 +224,8 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
     else box.append(el('div', { class: 'fig-bad', text: 'The PDF figure ' + f.id + ' is not stored in this browser.' }));
     return () => {};
   }
+  // the domain primitives of the explanatory compiler (js/dio/prims): interactive, step-controlled, drawn by their module
+  if (isPrimitive(f.kind)) { let stop = () => {}; try { stop = renderPrimitive(f, box, { small }); } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + e.message })); return () => {}; } const c = capEl(); if (c) box.append(c); return stop; }
   const W = small ? 340 : 600, H = small ? 190 : f.kind === 'codetrace' ? Math.max(170, 40 + f.lines.length * 22 + (f.output.length ? 16 + f.output.length * 16 : 0)) : f.kind === 'table' ? 36 + (f.rows.length + 1) * 22 : f.kind === 'contrast' ? 150 : f.kind === 'flow' && f.dir === 'TB' ? 70 + Math.min(6, f.nodes.length) * 58 : 300;
   const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', f.alt || f.caption || f.kind);
   box.append(el('div', { class: 'fig-frame' }, [svg])); const c = capEl(); if (c) box.append(c);
