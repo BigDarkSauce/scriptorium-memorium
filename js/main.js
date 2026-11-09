@@ -25,6 +25,8 @@ import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
 import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
 
+// boot and switch phases on the performance timeline (DevTools, tools/: performance.getEntriesByType('mark'))
+const mark = n => { try { performance.mark(n); } catch (e) { } };
 const LIB_KEY = 'library.v3', PENDING_DEL = 'sm-pending-deletes', UNDO_MS = 9000;
 // the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
 // once (App.refreshSeedScenes)
@@ -79,8 +81,8 @@ class App {
     if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
     this.sweepDeleted();
-    await this.ensureDomainBook();
-    await kit; this.kit = kitStatus();
+    await this.ensureDomainBook(); mark('sm:lib');
+    await kit; this.kit = kitStatus(); mark('sm:kit');
     // the place in the address (route.js): a link or a reload reopens that room (and scroll); otherwise the hub
     addEventListener('popstate', () => this.onRoute());
     const r = parseHash(location.hash), book = r.room ? this.lib.books.find(b => b.id === r.room) : null;
@@ -91,7 +93,7 @@ class App {
     offerResume(this);   // an analysis interrupted by a reload is offered again (corner chip)
     // the veil ("lighting the lamps…") lifts only now: the place has its final reflections, compiled programs and a few
     // drawn frames behind it (_switch), so it never shows a provisional look first
-    document.body.classList.add('ready');
+    document.body.classList.add('ready'); mark('sm:ready');
   }
   // ---------- the address of the place on screen (route.js) ----------
   // A new place adds a history entry; one reached by Back / Forward, or the first at boot, replaces it instead.
@@ -276,7 +278,7 @@ class App {
       const old = this.mode;
       if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
       try { this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32; this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true; } catch (e) { console.warn(e); }   /* a reset that throws never skips opening the next mode */
-      try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
+      mark('sm:sw-start'); try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
       // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
       if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
       // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
@@ -287,16 +289,16 @@ class App {
       // (RoomProbe.finish), with programs that are already compiled
       const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
       if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
-      try { BAKE.now(); } catch (e) { console.warn(e); }
+      mark('sm:sw-mode'); try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
       if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
       if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
-      if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } }
+      mark('sm:sw-prewarm'); if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
       this.gfx.resetAdapt();
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await sleep(60); await fade(1, 0, 330); g.value = 0; done = true;
+      mark('sm:sw-frames'); await sleep(60); await fade(1, 0, 330); g.value = 0; done = true; mark('sm:sw-end');
     } finally { this.switching = false; if (!done) g.value = 0; }
   }
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
