@@ -6,7 +6,8 @@
 // that fills only what is missing (followUpPrompt + mergeFollowUp). See docs/PROTOCOL.md, "Recipe for any AI".
 
 import { EVIDENCE_RULES } from './evidence.js';
-import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY } from '../room/figspec.js';
+import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY, isPrimitive } from '../room/figspec.js';
+import { classifyStep, ROUTES, DOMAINS, STRUCTURES, PRIMITIVES, PRIMITIVE_KINDS } from '../dio/domains.js';
 export { EVIDENCE_RULES };
 
 // How authors write maths in any text the app shows (titles, labels, body names, lessons, events, readouts, terms,
@@ -217,10 +218,34 @@ When a diorama repeats in a chain (the same model or scene in a later step), nam
 export const DIAGRAM_TYPES = `2D interactive diagrams: plot{exprs,labels,x,y,params,xlabel,ylabel,points,ref} tangent{expr,x,y} riemann{expr,a,b,y} vectors{a,b} matrix{m} complex{z,w} unitcircle fourier{wave,n} distribution{mode:normal|clt,mu,sigma} parametric{xt,yt,t,x,y} phase{dx,dy,range,yrange,params} customsvg{svg}. "params" is {"key":[min,max,value]}. On a plot, "labels":[str] names each curve in the legend (default: the demo's "ylabel", else its "title"); "points" marks data as [[x,y],…] or [[x,y,"label"],…] (the label is printed beside the dot).
 DATA PROVENANCE (every demo): data and points come FROM THE PDF by default: say where in the demo's "ref" (e.g. "Table 1.1, p. 4"), and the reader labels it "From the PDF · Table 1.1, p. 4". Only data from outside the PDF goes in the demo's "extra":[{"what","source"}] (or "source":{…,"outside":true}); the reader labels that "Data added from outside the PDF" with its source. A demo with neither is labelled "Our drawing".`;
 
+// The domain primitives (js/dio/domains.js, drawn by js/dio/prims): interactive figures, one per structure.
+export const PRIMITIVE_FIELDS = `DOMAIN PRIMITIVES (interactive figures; same "kind"/"caption"; labels ≤ 40 characters, notes ≤ 160; plain maths notation, never LaTeX inside them):
+ progressive_construction{parts:[{id,label,note?}],stages:[{label,adds:[part ids],problem:"what the previous version could not do",why:"why this part is needed",test?}],links:[{from,to,label?}]} (stage 1 = the simplest version that runs; every part added by exactly one stage)
+ state_machine{nodes:[{id,label,value? (a register: its value before tick 1)}],wires:[{from,to,label?}],ticks:[{label,note,packets:[{from,to,value}],set:{nodeId:newValue},state?}]} (one clock tick per entry; packets travel on existing wires; "set" latches registers)
+ transform2d{matrix:[[a,b],[c,d]],presets:[{label,matrix}],vector?:[x,y],eigen?:bool} (entries in [−3, 3]; the columns are where î and ĵ land)
+ distribution_lab{dist:"normal|uniform|exponential",mu,sigma,range:[lo,hi],muRange:[a,b],sigmaRange:[a,b],xlabel?,unit?}
+ causal_loop{nodes:[{id,label,x?:0-100,y?:0-60}],edges:[{from,to,sign:"+"|"-",label?,delay?:true}],loops:[{name,nodes:[ids]}],start?} (R/B labels are computed from the signs: never state them by hand)
+ competing_explanations{question,hypotheses:[{id,label,claim,predicts:[str]}] (2–4),evidence:[{id,label,fits:{hypothesisId:"+"|"-"|"0"},note?}]} (at least one row where the marks differ)
+ flow_network{actors:[{id,label,role:"customer|firm|supplier|intermediary|competitor|platform|regulator|partner",note?}],flows:[{from,to,kind:"money|goods|info",label,amount?}],units?:{title,price,currency,items:[{label,value}]}} (money flows against the goods it pays for; item values sum to at most the price unless the unit loses money)
+ argument_map{question,nodes:[{id,type:"question|claim|premise|conclusion|objection|counterexample|response|revised",text,short?}],links:[{from,to,rel:"supports|attacks|answers|revises|addresses"}]} (premise → supports → claim; objection → attacks → premise or claim; counterexample → supports → objection; response → answers → objection or supports → revised; revised → revises → claim; claim → addresses → question)
+ data_narrative{question,chart:"bars|line|dots",categories:[…],series:[{name,values}],ylabel,states:[{title,show:"all"|[series names],highlight:[i],annotate:[{at:i,series?,text}],note,y?:[lo,hi]}],source:{name,year,note,url?},mode?:"slides"} (source is required; "slides" = a plain analytic slide)
+ algorithm_sandbox{rows:["..S..#..G.."] ('#' wall, 'F' costly cell, 'S' start, 'G' goal) or {grid:{w,h},start,goal,walls},algorithm:"bfs|dijkstra|greedy|astar",cost?}`;
+// The explanatory compiler (docs/research/explanatory-compiler.md): classify each step by domain and structure, and
+// draw it in that structure's visual grammar. The same rules run deterministically in js/dio/domains.js.
+export const FIGURE_KINDS_LIST = FIGURE_KINDS.join(', '), DOMAIN_LIST = DOMAINS.join(', ');
+export const DOMAIN_COMPILER = `DOMAIN-AWARE VISUAL GRAMMAR (choose each step's picture by the STRUCTURE of its idea, not by habit):
+DOMAINS: ${DOMAINS.join(', ')}. STRUCTURES → primitive (medium): ${STRUCTURES.map(k => `${k} → ${ROUTES[k].primitive} (${ROUTES[k].medium})`).join('; ')}.
+- Give every step "visual":{"domain":"…","structure":"…","primitive":"…","why":"≤ 15 words"}.
+- 3D diorama ONLY for spatial ideas (parts with places, physical mechanisms, agents moving in space). Abstract structures get their primitive as the "figure" of the explaining paragraph, or as a demo {"type":"figure","title":str,"purpose":str,"figure":{…primitive…}}.
+- A network (flows, loops, state machines) may also be opened on the lectern (2.5D) and, for construction, state_machine, causal_loop and flow_network, as a topdown diorama: the app does that from the same spec.
+- A dense table of numbers is a plain analytic slide (data_narrative with "mode":"slides"), not a spectacle.
+- PhET rules: at most two continuous controls, every control with immediate feedback, the invisible made visible (state, flows, frontier, signs), the formula's symbols linked to the picture.
+- Programming: build it up (simplest version first, each part because the last version fails) and show state changing per step. Maths: an equation as an operation (a continuous motion), what is invariant, samples before the curve. Economics: causal chains and loops with signs; rival explanations with the evidence that separates them. Business: actors, goods and money, the unit economics of one sale. Philosophy: question → claim → premises → objection → response → revised claim, each a node. Data: a question, chart states, annotations, the provenance line.`;
 // The figure format (js/room/figspec.js, schema/figure.schema.json): data the reader draws, never pictures or SVG code.
 export const FIGURE_SPEC = `FIGURE (a JSON drawing the app renders; every figure has "kind" and "caption" (what to see, ≤ 25 words); optional "animate":true for a short loop (or, on a plot, {"param":"a","from":0.1,"to":1,"period":4}); data from the PDF gives "ref", data from outside gives "extra":[{what,source}]). Kinds:
 ${FIGURE_KINDS.map(k => ` ${k}: ${FIGURE_USES[k]}`).join('\n')}
-Fields: flow{nodes:[{id,label,note?}],edges:[{from,to,label?}],dir:"LR|TB"} · plot{x:[a,b],y:[a,b]?,curves:[{expr,label}],points:[[x,y,"label"?]],vlines:[{x,label}],hlines:[{y,label}],shade:{expr?,from,to,label},xlabel,ylabel} (expr in x and the animate param; sin cos exp log sqrt abs pow min max) · distribution{dist:"normal|t|chisq|binomial|poisson|uniform|exponential",params:{mean,sd | df | size,prob | lambda | min,max | rate},shade:{from?,to?,label},marks:[{x,label}],xlabel} · bars{categories:[…],series:[{name,values:[…]}],highlight:[i],ylabel} or bars{table:{columns,rows}} (a table turned into a chart) · hist{values:[…] | bins:[{from,to,count}],xlabel} · scatter{points:[[x,y,"label"?]],fit:"ols"|{slope,intercept},residuals:bool,logx:bool,xlabel,ylabel} · boxplot{groups:[{label,values:[…]} | {label,min,q1,median,q3,max,outliers:[…]}],ylabel} · numberline{min,max,step?,points:[{x,label,open?}],intervals:[{from,to,label,closedL,closedR}]} · tree{root:{label,children:[{label,edge,children}]}} · venn{sets:["A","B"],regions:{"A":str,"B":str,"AB":str},shade:["AB"],universe?} · timeline{events:[{t,label}]} · sketch{w:100,h:60,items:[{shape:"rect|circle|ellipse|line|arrow|text|path",x,y,w,h,r,x2,y2,d,text,tone:"accent|muted|ok|warn"}]} · codetrace{lang,lines:[{code,note,state:{var:value}}],output:[…]} · table{columns,rows,highlight:[[r,c]]} · contrast{wrong:{title,text},right:{title,text}} · pdf{id:"fig-…"} (the PDF's own figure; at most once in the whole chain).`;
+Fields: flow{nodes:[{id,label,note?}],edges:[{from,to,label?}],dir:"LR|TB"} · plot{x:[a,b],y:[a,b]?,curves:[{expr,label}],points:[[x,y,"label"?]],vlines:[{x,label}],hlines:[{y,label}],shade:{expr?,from,to,label},xlabel,ylabel} (expr in x and the animate param; sin cos exp log sqrt abs pow min max) · distribution{dist:"normal|t|chisq|binomial|poisson|uniform|exponential",params:{mean,sd | df | size,prob | lambda | min,max | rate},shade:{from?,to?,label},marks:[{x,label}],xlabel} · bars{categories:[…],series:[{name,values:[…]}],highlight:[i],ylabel} or bars{table:{columns,rows}} (a table turned into a chart) · hist{values:[…] | bins:[{from,to,count}],xlabel} · scatter{points:[[x,y,"label"?]],fit:"ols"|{slope,intercept},residuals:bool,logx:bool,xlabel,ylabel} · boxplot{groups:[{label,values:[…]} | {label,min,q1,median,q3,max,outliers:[…]}],ylabel} · numberline{min,max,step?,points:[{x,label,open?}],intervals:[{from,to,label,closedL,closedR}]} · tree{root:{label,children:[{label,edge,children}]}} · venn{sets:["A","B"],regions:{"A":str,"B":str,"AB":str},shade:["AB"],universe?} · timeline{events:[{t,label}]} · sketch{w:100,h:60,items:[{shape:"rect|circle|ellipse|line|arrow|text|path",x,y,w,h,r,x2,y2,d,text,tone:"accent|muted|ok|warn"}]} · codetrace{lang,lines:[{code,note,state:{var:value}}],output:[…]} · table{columns,rows,highlight:[[r,c]]} · contrast{wrong:{title,text},right:{title,text}} · pdf{id:"fig-…"} (the PDF's own figure; at most once in the whole chain).
+${PRIMITIVE_FIELDS}`;
 
 export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","section":"the id of the ONE subsection this step covers, e.g. 1.2","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
@@ -241,6 +266,7 @@ export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","question":"t
    "extra":[{"what":"exactly what was added from outside the PDF","source":{"title":str,"authors":str,"year":n,"doi":"or empty","url":"or empty"}}],
    "sources":[{"title":str,"authors":"Surname A; Surname B","year":n,"doi":"10.… or empty","url":"or empty","note":"what exactly it supports"}],
    "from":["S#",...],"bodies":["the concrete bodies/events this step is about"],
+   "visual":{"domain":"cs|maths|economics|business|philosophy|data|physical","structure":"construction|state_machine|transformation|distribution|causal_graph|competing|flow_network|argument_graph|taxonomy|data_narrative|algorithm|mechanism|agent_system","primitive":"the figure kind or scene that draws it","why":"≤ 15 words"},
    "demos":[ a 2D diagram {"type":"plot",...,"purpose":"the question it answers","points":[[x,y] or [x,y,"label"],…],"ref":"where its data is in the PDF, e.g. Table 1.1, p. 4"} | a built-in 3D model {"type":"pendulum","purpose":str,"params":{...},"lessons":[LESSON... 3–6 of them]} | a 3D scene to be authored later {"type":"scene","title":str,"purpose":str,"technique":"card|sweep|topdown","request":"precise description: actors, decor, variables, events, and 3–6 lessons each with question/opens"}; data is from the PDF unless the demo carries "extra":[{"what","source"}] (or "source":{…,"outside":true}) ]}],
  "coverage":[{"subsection":"1.2","steps":["S3","S4"]}],
  "dioramaPlan":[{"subsection":"1.2","count":0-3,"why":"the dynamic or spatial idea that needs a 3D diorama, or why none is needed"}],
@@ -276,13 +302,13 @@ export const CODE_RULES = `CODE (R, Python, console output; the PART TEXT marks 
 - A long block (more than 8 lines) is split over several steps; a list of functions (a cheat sheet) becomes steps grouped by purpose, each function with what it does and a one-line usage example.
 - Statistics: name the test or model, its assumptions, the statistic and its value, the p-value or interval, and the conclusion in words; say what the number does not mean (a p-value is not the probability that H₀ is true).
 - Figures for code: a "codetrace" (lines, notes, the values each line leaves) or the plot the code would draw (plot, distribution, hist, scatter, boxplot, bars) from the source's own numbers.`;
-export const DIORAMA_RULES = `DIORAMAS PER SUBSECTION: give "dioramaPlan" with one entry per subsection: "count" = how many 3D dioramas it needs (0 when it has no dynamic or spatial idea; 1 for one mechanism, process or arrangement; 2–3 for a complex subsection with several), and "why". Every subsection with count ≥ 1 gets that many 3D demos in its steps: a built-in model when one fits exactly (params = the source's numbers), else {"type":"scene","title":str,"purpose":str,"technique":"card|sweep|topdown","request":"actors (2–7), decor, variables with ranges, events, and 3–6 lessons with question/opens"}. Abstract ideas get an honest embodiment (a predator searching and handling prey; balls through pegs for a distribution; a conveyor of values through a function; an assembly line of code steps).`;
+export const DIORAMA_RULES = `DIORAMAS PER SUBSECTION: give "dioramaPlan" with one entry per subsection: "count" = how many 3D dioramas it needs (0 when it has no dynamic or spatial idea; 1 for one mechanism, process or arrangement; 2–3 for a complex subsection with several), and "why". Every subsection with count ≥ 1 gets that many 3D demos in its steps: a built-in model when one fits exactly (params = the source's numbers), else {"type":"scene","title":str,"purpose":str,"technique":"card|sweep|topdown","request":"actors (2–7), decor, variables with ranges, events, and 3–6 lessons with question/opens"}. Abstract ideas get an honest embodiment (a predator searching and handling prey; balls through pegs for a distribution; a conveyor of values through a function; an assembly line of code steps), or, when their structure is not spatial (an argument, rival explanations, a matrix, a feedback loop, a business model, a data series), their DOMAIN PRIMITIVE instead of a diorama: {"type":"figure","title":str,"purpose":str,"figure":PRIMITIVE}; count only real 3D dioramas in "dioramaPlan".`;
 export const BREAKDOWN = {
   complete: 'COMPLETE chain: as many steps as the content needs to reach the source\'s resolution or finer (no cap; never merge across subsections): one step per definition, rule, equation, worked example, table, figure, code block and panel item',
   essential: 'ESSENTIAL chain: the spine of the part: at least one step per subsection (never coarser than the subsection list, nothing merged across subsections), keeping every definition, result and worked example that later steps build on; side remarks may be folded into the step they qualify',
   exact: n => `EXACTLY ${n} steps; spread them over the subsections by how much each contains`
 };
-const DEMO_RULES = `Give as many demos as the material needs: one for each distinct mechanism, process, relationship or result (not one per step, not one per part). Choose, in this order: a built-in 3D model when it fits the idea exactly (set its params to the source's numbers); a 2D diagram for graphs, functions, vectors, distributions and tables; otherwise a {"type":"scene","request":…} that names actors, decor, variables, events and its lessons. A diorama may come back in a later step only with a distinct "purpose" (other params, a new lesson); name its actors in that step's "bodies" (the app shows the repeat as a stage plate of exactly those actors). Every demo has "purpose": the question it answers. 3D demos carry 3–6 lessons in the LESSON format; each lesson settles one question and opens the next; a built-in model's "until":"event:…" uses a substring of one of its listed event texts. Data shown by a demo is the PDF's own unless it sits in the demo's "extra" (see DATA PROVENANCE).`;
+const DEMO_RULES = `Give as many demos as the material needs: one for each distinct mechanism, process, relationship or result (not one per step, not one per part). Choose, in this order: the step's DOMAIN PRIMITIVE when its structure is one of those listed (see DOMAIN-AWARE VISUAL GRAMMAR); a built-in 3D model when it fits the idea exactly (set its params to the source's numbers); a 2D diagram for graphs, functions, vectors, distributions and tables; otherwise a {"type":"scene","request":…} that names actors, decor, variables, events and its lessons. A diorama may come back in a later step only with a distinct "purpose" (other params, a new lesson); name its actors in that step's "bodies" (the app shows the repeat as a stage plate of exactly those actors). Every demo has "purpose": the question it answers. 3D demos carry 3–6 lessons in the LESSON format; each lesson settles one question and opens the next; a built-in model's "until":"event:…" uses a substring of one of its listed event texts. Data shown by a demo is the PDF's own unless it sits in the demo's "extra" (see DATA PROVENANCE).`;
 
 const SHAPE_EXAMPLE = `EXAMPLE (shape only — your content comes from the PART TEXT; ids, numbers and figures here are illustrative):
 {"title":"Motion in one dimension","summary":"Position, velocity and constant acceleration of a cart on a straight track.","question":"How do we describe where a moving object is and how fast that changes?",
@@ -373,6 +399,7 @@ PROCEDURE — do these in order:
 5. ORDER AND DEPENDENCY. Never use a symbol before defining it; "from" lists the steps each step relies on. State every assumption. Fix errors in the source and say so in "sourceNote".
 6. EMBODIMENT. Attach every step to concrete bodies, objects or events ("bodies"). Abstract ideas get an honest physical embodiment (probability → balls through pegs; a market → buyers and sellers walking to a price; an argument → weights on a balance).
 7. DEMOS. ${DEMO_RULES} ${DIORAMA_RULES}
+${DOMAIN_COMPILER}
 8. COVERAGE. Return "coverage" with one entry for EVERY subsection id: {"subsection": id, "steps": [step ids]}, and "dioramaPlan" with one entry for every subsection.
 9. SELF-CHECK (below), then answer.
 
@@ -698,8 +725,10 @@ export function qualityGate(A, sections = [], figures = []) {
   sections.forEach(sec => { if (!covered.has(sec.id)) issues.push({ step: null, section: sec.id, kind: 'missing', detail: `[${sec.id}] ${sec.title}: no step covers it` }); });
   // 8. dioramas: the plan against the 3D demos present
   planDioramas(A, sections).forEach(p => { if (p.have < p.need) issues.push({ step: null, section: p.subsection, kind: 'dioramas', detail: `[${p.subsection}] needs ${p.need} diorama(s), has ${p.have}` }); });
+  // 9. the visual grammar (js/dio/domains.js): abstract structures carry their primitive; primitive demos are valid
+  issues.push(...grammarIssues(A));
   const stats = { steps: chain.length, copied: issues.filter(i => i.kind === 'copied').length, figures: chain.reduce((a, st) => a + figureSlots(st).filter(x => x.fig).length, 0), slots: chain.reduce((a, st) => a + figureSlots(st).length, 0) };
-  return { ok: !issues.some(i => i.kind !== 'dioramas'), issues, fixed, stats };
+  return { ok: !issues.some(i => i.kind !== 'dioramas' && i.kind !== 'grammar'), issues, fixed, stats };
 }
 // Which steps a repair call must rewrite (copied, duplicate, longQuote, unexplained, codeUnexplained); figure-only gaps go
 // to figuresPrompt; missing subsections to followUpPrompt; dioramas to the diorama stage.
@@ -746,7 +775,8 @@ PART: ${chapter}
 NEEDED:
 ${list}
 ${FIGURE_SPEC}
-Choose the kind by the idea: a process → flow; a curve or function → plot; a probability → distribution; a table → bars; one variable's shape → hist; two variables → scatter; groups → boxplot; an inequality or interval → numberline; a decision → tree; overlapping events → venn; an order → timeline; an arrangement → sketch; code → codetrace; a mistake → contrast. Small figures: few elements, large labels. Never invent data: use the numbers in the text, or draw the idea without numbers.
+Choose the kind by the idea (and by the step's structure, DOMAIN-AWARE VISUAL GRAMMAR below: a build-up → progressive_construction; registers and a clock → state_machine; a matrix → transform2d; sampling → distribution_lab; feedback → causal_loop; rival accounts → competing_explanations; a business model → flow_network; an argument → argument_map; evidence over time → data_narrative; a search → algorithm_sandbox): a process → flow; a curve or function → plot; a probability → distribution; a table → bars; one variable's shape → hist; two variables → scatter; groups → boxplot; an inequality or interval → numberline; a decision → tree; overlapping events → venn; an order → timeline; an arrangement → sketch; code → codetrace; a mistake → contrast. Small figures: few elements, large labels. Never invent data: use the numbers in the text, or draw the idea without numbers.
+${DOMAIN_COMPILER}
 Return ONLY JSON: {"figures":[{"step":"S3","slot":"explain.0","figure":FIGURE}, …]}`;
 }
 export function mergeFigures(A, ans, setter) {
@@ -768,6 +798,44 @@ export function planDioramas(A, sections = []) {
   });
 }
 
+// ---------------------------------------------------------------- the domain compiler's own call (prompts/12-domain-compiler.md)
+// For steps whose structure is abstract and that have no primitive yet: one small, tool-free call returns, per step, the
+// visual routing and the primitive spec, built only from the step's own content and numbers.
+export function domainPrompt({ book, chapter, A, steps }) {
+  const list = steps.map(({ st, route }) => `- ${st.id} "${st.title}" (${st.section || ''}); the app's classifier says ${route.domain} / ${route.structure} → ${route.primitive} (${route.medium}, ${route.source}):\n   statement: ${String(st.statement || '').slice(0, 400)}\n   explain: ${(st.explain || []).map(p => p && p.text).join(' ').slice(0, 900)}${st.table ? '\n   table: ' + JSON.stringify(st.table).slice(0, 600) : ''}`).join('\n');
+  return `You are the domain-aware explanatory compiler of a study app. For each step listed, decide its visual grammar and write the interactive primitive that explains it, using ONLY the step's own content and numbers (draw the idea without numbers rather than inventing data; data from outside the step goes in "extra" with a source).
+BOOK: ${book}
+PART: ${chapter}
+STEPS:
+${list}
+${DOMAIN_COMPILER}
+${PRIMITIVE_FIELDS}
+Correct the classifier when it is wrong (say why in "visual.why"). Keep every label short; every "why", "note" and "claim" one plain sentence; maths in plain notation (x², √, σ), never LaTeX.
+Return ONLY JSON: {"steps":[{"step":"S3","visual":{"domain","structure","primitive","why"},"figure":{"kind":<primitive>,"caption":"what to do and see, ≤ 25 words",…}}, …]}`;
+}
+// merge: the figure goes to the step's first explain paragraph without one (else a demo of type "figure"); visual kept
+export function mergeDomains(A, ans) {
+  let n = 0; ((ans && ans.steps) || []).forEach(x => { const st = (A.chain || []).find(s => s.id === String(x && x.step)); if (!st || !x.figure) return; const v = validateFigure(x.figure); if (!v.ok || !isPrimitive(v.fig.kind)) return;
+    if (x.visual && typeof x.visual === 'object') st.visual = Object.fromEntries(['domain', 'structure', 'primitive', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)]));
+    placePrimitive(st, v.fig); n++; });
+  return n;
+}
+export function placePrimitive(st, fig) {
+  const ex = Array.isArray(st.explain) ? st.explain : (st.explain = []), k = ex.findIndex(p => p && p.text && !p.figure);
+  if (k >= 0) ex[k] = { ...ex[k], figure: fig }; else (st.demos = st.demos || []).push({ type: 'figure', title: fig.title || st.title, purpose: st.answers || '', figure: fig, compiled: true });
+}
+// a step "has its grammar" when it carries a primitive (in a paragraph, a box or a demo) of its routed kind, or a 3D demo
+// when it is routed to a diorama
+export const stepFigures = st => [...(st.explain || []).map(p => p && p.figure), st.statementFigure, st.intuitionFigure, st.misconceptionFigure, st.check && st.check.figure, ...(st.demos || []).map(d => d && (d.figure || (d.type === 'figure' ? d : null)))].filter(Boolean);
+export function grammarIssues(A) {
+  const out = [];
+  (A.chain || []).forEach(st => { const r = classifyStep(st), F = stepFigures(st), prims = F.filter(f => isPrimitive(f.kind));
+    (st.demos || []).filter(d => d && d.type === 'figure' && d.figure).forEach(d => { const v = validateFigure(d.figure); if (!v.ok) out.push({ step: st.id, section: st.section, kind: 'badFigure', detail: `demo "${d.title || ''}": ${v.errors.join('; ')}` }); });
+    if (r.primitive === 'scene' || r.primitive === 'tree') return;
+    if (!prims.length && r.confidence >= .55) out.push({ step: st.id, section: st.section, kind: 'grammar', detail: `${r.domain} / ${r.structure}: drawn best as ${r.primitive} (${r.medium}); the step has no domain primitive` });
+    else if (prims.length && !prims.some(f => PRIMITIVES[f.kind].structure === r.structure) && r.source !== 'ai') out.push({ step: st.id, section: st.section, kind: 'grammar', detail: `carries ${prims.map(f => f.kind).join(', ')} but reads as ${r.structure} (→ ${r.primitive}); say which in "visual"` }); });
+  return out;
+}
 // ---------------------------------------------------------------- other prompts
 export function authorPrompt(req, context = '', { simple = false } = {}) {
   if (simple) return `Author a SIMPLE interactive 3D diorama (a second try: the first one failed${req.failure ? ': ' + req.failure : ''}). Keep it small and robust.
@@ -784,7 +852,9 @@ ${req.plan ? 'DIDACTIC PLAN (written first; follow it): ' + JSON.stringify(req.p
 Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI. Values that are not in the study step are additions from outside the book: list them in a top-level "extra" array ({what, source}).
 ${SCENE_SPEC}
 ${EXPLAINER_RULES}
-Return ONLY the JSON scene spec.`;
+IF THE IDEA IS NOT SPATIAL (an argument, rival explanations, a business model, a feedback loop, a transformation, a distribution, a data series, a search, a build-up, a state machine): a 3D scene would be decoration. Return instead {"type":"figure","title":str,"purpose":str,"figure":PRIMITIVE} with the primitive of its structure:
+${PRIMITIVE_FIELDS}
+Return ONLY the JSON scene spec (or that figure).`;
 }
 
 export function editPrompt(spec, sel, request, context = '') {

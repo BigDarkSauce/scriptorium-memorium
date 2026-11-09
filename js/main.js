@@ -16,6 +16,7 @@ import { FLAGSHIPS } from './seeds-scenes.js';
 import { sceneFp, sceneKey, isSeedCopy } from './seeds-version.js';
 import { SEED_LESSON_TITLES } from './seeds-history.js';
 import { groundChain } from './seeds-sources.js';
+import { DOMAIN_BOOK, DOMAIN_BOOK_VERSION } from './seeds-domains.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
 import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree } from './util.js';
@@ -75,6 +76,7 @@ class App {
     if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
     this.sweepDeleted();
+    await this.ensureDomainBook();
     // the place in the address (route.js): a link or a reload reopens that room (and scroll); otherwise the hub
     addEventListener('popstate', () => this.onRoute());
     const r = parseHash(location.hash), book = r.room ? this.lib.books.find(b => b.id === r.room) : null;
@@ -122,6 +124,19 @@ class App {
     const b = { id: 'bk-' + uid(), title: 'My earlier scrolls', shelf: shelf.id, tier: 2 - Math.floor(n / 17), slot: n % 17, color: '#9c3a28', icon: 'V2', hasPdf: false };
     this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: mine }); this.saveLib(); toast(`Your ${mine.length} earlier scroll(s) are on ${shelf.name} as "My earlier scrolls"`);
   }
+  // The explanatory compiler's example book (js/seeds-domains.js) reaches libraries seeded before it existed, once:
+  // on the Mathematics bookcase (else the first one), in the first free cradle from eye level down.
+  async ensureDomainBook() {
+    if ((this.lib.domainBookV || 0) >= DOMAIN_BOOK_VERSION) return; this.lib.domainBookV = DOMAIN_BOOK_VERSION;
+    if (!this.lib.books.some(b => b.title === DOMAIN_BOOK.title)) {
+      const shelf = this.lib.shelves.find(s => s.name === 'Mathematics') || this.firstShelf(), horiz = shelf.kind === 'horizontal', tiers = horiz ? 3 : 6, per = horiz ? 17 : 5, taken = new Set(this.lib.books.filter(b => b.shelf === shelf.id).map(b => b.tier + ':' + b.slot));
+      let tier = horiz ? 2 : 3, slot = 0; outer: for (const t of [...Array(tiers).keys()].map(k => (horiz ? 2 : 3) - k).filter(t => t >= 0)) for (let k = 0; k < per; k++) if (!taken.has(t + ':' + k)) { tier = t; slot = k; break outer; }
+      const b = { id: 'bk-' + uid(), title: DOMAIN_BOOK.title, shelf: shelf.id, tier, slot, color: shelf.color || '#2d5b8e', icon: DOMAIN_BOOK.icon, hasPdf: false, example: true };
+      this.lib.books.push(b); await store.set('room:' + b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: this.domainParts().map(p => ({ id: 'p-' + uid(), ...p })), threadV: 4, lessonsV: 5, grounded: 1 });
+    }
+    this.saveLib();
+  }
+  domainParts() { const C = o => JSON.parse(JSON.stringify(o)); return DOMAIN_BOOK.parts.map(p => ({ title: p.title, summary: p.summary, subsections: C(p.subsections), analysis: normalizeChain(C(p.analysis)) })); }
   // a library whose bookcases were all removed still gets a place for imported books
   firstShelf() { if (!this.lib.shelves.length) { const R = this.lib.hub; this.lib.shelves.push({ id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .28, z: 0, rot: Math.PI / 2, color: '#8a2a1e' }); } return this.lib.shelves[0]; }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
@@ -330,6 +345,7 @@ class App {
     const scenePart = (spec, title, summary, { question, subsections, purpose }, steps) => covered({ title, summary, subsections: subs(subsections), analysis: normalizeChain(groundChain({ title, summary, question, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s.kind, title: s.title, section: s.section, answers: i ? steps[i - 1].opens : question, opens: s.opens, statement: s.statement, math: s.math || '', from: i ? ['S' + i] : [], bodies: s.bodies || [], demos: i === steps.length - 1 || s.demo ? [{ ...C(spec), purpose, seedFp: sceneFp(spec) }] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
     const [water, galton, market, osmo] = FLAGSHIPS;
     return [
+      { shelf: DOMAIN_BOOK.shelf, title: DOMAIN_BOOK.title, icon: DOMAIN_BOOK.icon, parts: this.domainParts() },
       { shelf: 'physics', title: 'Classical Mechanics', icon: 'PHY', parts: L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart) },
       { shelf: 'earth', title: 'The Weather Glass', icon: 'ATM', parts: L[0].filter(s => /Weather/.test(s.title)).map(asPart) },
       { shelf: 'maths', title: 'Calculus & Linear Maps', icon: 'MATH', parts: L[1].map(asPart) },

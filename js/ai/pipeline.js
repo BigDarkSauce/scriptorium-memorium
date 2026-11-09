@@ -11,10 +11,11 @@
 // through the copy/paste relay and the later stages run without AI: deterministic fixes, figures built from the steps,
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
 import { askJSON, aiAvailable, imageLimit } from './claude.js';
-import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan } from './prompts.js';
+import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
+import { classifyStep, autoPrimitive } from '../dio/domains.js';
 import { evidenceTools } from './evidence.js';
 import { partKey, cached } from '../store.js';
-import { validateFigure, figureSlots, setSlotFigure, autoFigure } from '../room/figspec.js';
+import { validateFigure, figureSlots, setSlotFigure, autoFigure, isPrimitive } from '../room/figspec.js';
 import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
 
@@ -115,6 +116,22 @@ export async function completeFigures(ctx, P, o = {}) {
   // whatever is still bare gets a figure built from the step itself (never an empty box)
   need.forEach(x => { const st = A.chain.find(s => s.id === x.step); if (st) setSlotFigure(st, x.slot, autoFigure(st, x.slot.replace(/\.\d+$/, ''), x.text)); });
   A.figureReport = { asked, auto: need.length, slots: (A.chain || []).reduce((a, st) => a + figureSlots(st).length, 0) };
+  await compileDomains(ctx, P, o);
+}
+// stage 4b, the explanatory compiler (docs/research/explanatory-compiler.md): every step is classified (domain, structure
+// → primitive, medium); steps whose grammar is a primitive and that carry none get one: from the AI (prompts/12, ≤ 12
+// steps a call), else built from the step's own table (autoPrimitive). The routing is kept in A.domainReport.
+export async function compileDomains(ctx, P, o = {}) {
+  const A = P.analysis; let asked = 0, auto = 0;
+  const todo = () => grammarIssues(A).filter(i => i.kind === 'grammar' && /no domain primitive/.test(i.detail)).map(i => A.chain.find(st => st.id === i.step)).filter(Boolean);
+  let need = todo();
+  if (need.length && o.auto !== false && aiAvailable()) for (let i = 0; i < need.length; i += 12) {
+    check(o.signal); o.onStatus && o.onStatus(`Choosing the visual grammar of ${need.length} step${need.length > 1 ? 's' : ''}…`);
+    try { const ans = await ask(domainPrompt({ book: bookName(ctx), chapter: P.title, A, steps: need.slice(i, i + 12).map(st => ({ st, route: classifyStep(st) })) }), { ...o, tools: false, writing: 'Compiling the explanations' }, 'Compile the visual grammar in any AI'); asked += mergeDomains(A, ans); } catch (e) { if (e && e.code === 'cancelled') throw e; }
+  }
+  need = todo(); need.forEach(st => { const f = autoPrimitive(st, classifyStep(st)); if (f && validateFigure(f).ok) { placePrimitive(st, validateFigure(f).fig); auto++; } });
+  A.domainReport = { asked, auto, routes: (A.chain || []).map(st => { const r = classifyStep(st); return { step: st.id, domain: r.domain, structure: r.structure, primitive: r.primitive, medium: r.medium, source: r.source, confidence: r.confidence }; }) };
+  return A.domainReport;
 }
 // stage 5: dioramas per subsection — planned, inserted, authored (retry simpler), else a fitting built-in or a diagram
 export const needsAuthoring = d => d && d.type === 'scene' && !Array.isArray(d.bodies);
@@ -125,9 +142,11 @@ export function planAndInsertDioramas(A, sections) {
   plan.forEach(p => {
     let k = p.need - p.have; if (k <= 0) return;
     const steps = (A.chain || []).filter(st => st.section === p.subsection); if (!steps.length) return;
-    const score = st => ((st.title + ' ' + st.statement + ' ' + (st.explain || []).map(e => e && e.text).join(' ')).match(DYN) || []).length - (st.demos || []).filter(isThreeD).length * 3;
+    // the explanatory compiler first: a step routed to a 3D diorama scores high; one drawn by its own primitive low
+    const route = st => classifyStep(st), score = st => ((st.title + ' ' + st.statement + ' ' + (st.explain || []).map(e => e && e.text).join(' ')).match(DYN) || []).length - (st.demos || []).filter(isThreeD).length * 3 + (route(st).medium === 'diorama' ? 6 : (st.explain || []).some(e => e && e.figure && isPrimitive(e.figure.kind)) ? -12 : 0);
     while (k-- > 0) {
       const st = steps.slice().sort((a, b) => score(b) - score(a))[0]; st.demos = st.demos || [];
+      if (score(st) < -6) break;   // every step of this subsection is explained by its own primitive: no 3D decoration
       const d = { type: 'scene', title: st.title.slice(0, 70), purpose: st.answers || `How does “${st.title}” work?`, technique: 'card', request: `Embody "${st.title}" as a living miniature: ${st.statement} ${(st.explain || []).map(e => e && e.text).join(' ').slice(0, 600)} Actors: the bodies this step is about (${(st.bodies || []).join(', ') || 'choose 2–5'}); variables the learner can change with the source's numbers; events at the meaningful moments; 3–6 lessons, the first answering "${st.answers || st.title}", the last opening "${st.opens || 'the next question'}".`, auto: true, planned: p.why };
       st.demos.push(d); added.push({ step: st.id, subsection: p.subsection });
     }
@@ -178,7 +197,10 @@ export async function authorDemo(ctx, st, d, o = {}) {
       check(o.signal); o.onStatus && o.onStatus(`${simple ? 'Retrying, simpler' : 'Authoring'}: diorama “${d.title || st.title}” for ${st.id}…`);
       try {
         const spec = await ask(authorPrompt({ ...d, plan: simple ? null : plan, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
-        const s = spec && (spec.spec || spec); const why = validScene(s);
+        const s = spec && (spec.spec || spec);
+        // the author may answer that the idea is not spatial, with the primitive of its structure (prompts/03)
+        if (s && s.type === 'figure' && s.figure) { const v = validateFigure(s.figure); if (v.ok && isPrimitive(v.fig.kind)) { const req = { request: d.request, title: d.title, purpose: d.purpose }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'figure', title: s.title || req.title, purpose: s.purpose || req.purpose, figure: v.fig, request: req.request, authored: 'primitive' }); return 'primitive'; } fail = 'figure: ' + v.errors.join('; '); continue; }
+        const why = validScene(s);
         if (!why) { s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; s.purpose = s.purpose || d.purpose; s.request = d.request; s.authored = simple ? 'simple' : 'full';
           if (plan) { s.plan = s.plan && s.plan.sequence ? s.plan : plan; if (!s.levels && plan.levels) s.levels = plan.levels; if (!simple) await critiqueDemo(s, s.plan, o); }
           Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored; }

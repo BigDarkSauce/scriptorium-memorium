@@ -25,6 +25,7 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` â
 3. \`07-fill-gaps.md\`: only when the coverage check finds a missing or coarse subsection: a small call with just that subsection's text.
 3b. \`08-repair-steps.md\`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. \`09-figures.md\`: only for paragraphs and teaching boxes that still lack a figure.
+3d. \`12-domain-compiler.md\`: the explanatory compiler: for steps whose structure (an argument, a feedback loop, a business model, a matrix, a data seriesâ€¦) is drawn best by a domain primitive and that have none yet, the visual routing and the interactive primitive spec (\`../docs/research/explanatory-compiler.md\`).
 4. \`10-didactic-plan.md\`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with \`node tools/verify-chain.mjs plan.json\`.
 4b. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`), built from the plan (paste the plan into the request's "plan").
 4c. \`11-self-critique.md\`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
@@ -45,7 +46,7 @@ The formats are documented in \`../docs/PROTOCOL.md\`, \`../docs/SCENE_SPEC.md\`
 
 ## What a good answer looks like (the quality gate)
 
-The app (and \`node tools/verify-chain.mjs\`) rejects: more than 40 words pasted from the PDF in any paragraph; two steps repeating the same passage; a PDF figure shown by two steps or a page-sized crop; a step without \`explain\` paragraphs; code without a line-by-line \`code\` explanation and its interpreted output. Every paragraph of 60+ words, and every *Picture it*, *Common mistake* and *Check yourself*, carries a figure spec (\`../schema/figure.schema.json\`; kinds: flow, plot, distribution, bars, hist, scatter, boxplot, numberline, tree, venn, timeline, sketch, codetrace, table, contrast, pdf). Every chain gives a \`dioramaPlan\` (how many 3D dioramas each subsection needs). Breakdown levels: complete, essential, or exactly N steps (never coarser than the subsections). A worked answer for a 7-sheet statistics tutorial (infographics) is in \`../tools/fixtures/byu-stub/chain-0*.json\`.
+The app (and \`node tools/verify-chain.mjs\`) rejects: more than 40 words pasted from the PDF in any paragraph; two steps repeating the same passage; a PDF figure shown by two steps or a page-sized crop; a step without \`explain\` paragraphs; code without a line-by-line \`code\` explanation and its interpreted output. Every paragraph of 60+ words, and every *Picture it*, *Common mistake* and *Check yourself*, carries a figure spec (\`../schema/figure.schema.json\`; kinds: ${P.FIGURE_KINDS_LIST}). Every chain gives a \`dioramaPlan\` (how many 3D dioramas each subsection needs). Breakdown levels: complete, essential, or exactly N steps (never coarser than the subsections). A worked answer for a 7-sheet statistics tutorial (infographics) is in \`../tools/fixtures/byu-stub/chain-0*.json\`.
 
 ## Where demo data comes from
 
@@ -127,6 +128,14 @@ w('prompts/09-figures.md', `# Design the missing figures
 Sent for paragraphs of 60+ words and teaching boxes (Picture it, Common mistake, Check yourself) that still have no valid figure. Whatever is still missing afterwards, the app builds from the step itself.
 
 ` + block(P.figuresPrompt({ book: '<book title>', chapter: '<part title>', A: { chain: [{ id: 'S3', title: '<step title>', section: '<1.2>' }] }, slots: [{ step: 'S3', slot: 'explain.0', text: '<the paragraph>' }, { step: 'S3', slot: 'misconception', text: '<the mistake>', small: true }] })));
+
+w('prompts/12-domain-compiler.md', `# Compile the visual grammar (domain primitives)
+
+Different disciplines explain with different visual languages (the study and the routing table: \`../docs/research/explanatory-compiler.md\`). The app classifies every step by **domain** (${P.DOMAIN_LIST}) and **structure**, and routes it to a visual grammar: a 3D diorama only for spatial ideas; for abstract structures one of the interactive primitives below, shown in the scroll, on the lectern (2.5D) and, for four of them, as a topdown diorama. This call is sent only for steps whose structure has a primitive and that carry none; without AI, a step with a table gets a data narrative built from it.
+
+Check an answer with \`node tools/verify-chain.mjs chain.json\` (the "grammar" lines) and \`node tools/test-domains.mjs\` (the classifier's routing).
+
+` + block(P.domainPrompt({ book: '<book title>', chapter: '<part title>', A: { chain: [] }, steps: [{ st: { id: 'S3', title: '<step title>', section: '<1.2>', statement: '<the step statement>', explain: [{ text: '<its explanation>' }] }, route: { domain: '<domain>', structure: '<structure>', primitive: '<primitive>', medium: '<medium>', source: 'heuristic' } }] })));
 
 // docs/SCENE_SPEC.md: replace the generated block between the first ```text fence and its closing fence
 const specPath = path.join(root, 'docs/SCENE_SPEC.md'); let spec = fs.readFileSync(specPath, 'utf8');

@@ -28,6 +28,8 @@
 //   dio:...      every built-in model and each flagship scene: every lesson's beats with Guides on and off, the DOM
 //                sampled once per beat (and once per chain step)
 //   addpdf       the Add-PDF dialog, every step (a generated three-page PDF)
+//   prim:<k>     the domain primitives of part k of "Ways of Explaining" (js/dio/prims): in the scroll, after one
+//                interaction each (a step, a slider moved, a premise challenged, a wall drawn), and on the lectern
 //
 // CHECKS (each failure: selector, rects, screenshot path)
 //   a overlap    two visible HUD / text boxes (labels, pins, guide labels, badges, chips, callouts, readouts, panels,
@@ -38,6 +40,7 @@
 //                italic units (a unit after a number set in italics, in HTML or SVG)
 //   e figure     an SVG figure's legend over its data marks, or text outside its viewBox
 //   f offscreen  a HUD element that should be visible extends past the viewport
+//   h primitive  inside a domain primitive: two labels on top of each other, or a control outside its figure
 //   g colour     saturation of the hub / room views (Σ(max − min) / Σ max over the frame) outside [0.06, 0.45], or
 //                near-white blow-outs (all channels > 97.5 %) on > 2 % of the frame
 // EXIT CODE: 0 = clean, 1 = failures, 2 = could not start, 3 = stopped by the budget before every item was done.
@@ -173,6 +176,13 @@ window.POLISH = function (scope, ctx) {
         else if (!m.getAttribute('transform') && !(m.getAttribute('stroke') === 'none' && m.getAttribute('fill') === 'none')) { let len = 0; try { len = m.getTotalLength(); } catch (x) { continue; } for (let s = 0; s <= len && !hit; s += 3) { const p = m.getPointAtLength(s); if (p.x > L.x + 1 && p.x < L.x + L.width - 1 && p.y > L.y + 1 && p.y < L.y + L.height - 1) hit = m.tagName + ' at ' + Math.round(p.x) + ',' + Math.round(p.y); } if (hit) break; } }
       if (hit) out.push({ check: 'e', what: 'legend over a data mark', where, legend: [L.x, L.y, L.width, L.height].map(Math.round), mark: hit }); }
   }
+  // (h) domain primitives (js/dio/prims): labels on top of each other inside one figure; controls outside their figure
+  for (const svg of document.querySelectorAll('.fig.prim svg.prim-svg')) {
+    if (!vis(svg) || svg.closest('.unf-hidden')) continue; const f = svg.closest('.fig'), c = f.querySelector('.fig-cap'), st = svg.closest('[data-sid]'), where = (st ? st.dataset.sid + ' ' : '') + (svg.closest('.prim-lectern') ? 'lectern ' : '') + (c ? '«' + c.textContent.trim().slice(0, 40) + '»' : '');
+    const T = [...svg.querySelectorAll('text')].map(t => { let b; try { b = t.getBBox(); } catch (x) { return null; } let op = 1; for (let p = t; p && p !== svg; p = p.parentNode) op *= +(p.getAttribute && p.getAttribute('opacity') || 1); return b.width && op > .5 ? { t: t.textContent, b } : null; }).filter(Boolean);
+    for (let i = 0; i < T.length; i++) for (let j = i + 1; j < T.length; j++) { const a = T[i].b, b = T[j].b, x = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x), y = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y); if (x > 2 && y > 2) out.push({ check: 'h', what: 'labels overlap in a primitive', where, a: T[i].t.slice(0, 30), b: T[j].t.slice(0, 30), by: [Math.round(x), Math.round(y)] }); }
+  }
+  for (const box of document.querySelectorAll('.fig.prim')) { if (!vis(box)) continue; const fr = box.getBoundingClientRect(); box.querySelectorAll('.prim-ctrls > *, .prim-reads, .prim-note').forEach(e => { const r = e.getBoundingClientRect(); if (r.width > 2 && (r.right > fr.right + 2 || r.left < fr.left - 2)) out.push({ check: 'h', what: 'control outside its figure', el: name(e), rect: R(e) }); }); }
   // (f) HUD boxes that should be visible but leave the viewport
   // (only a box that is mostly on screen and cut off: one parked wholly or mostly outside is a hidden state)
   for (const b of boxes) { if (b.kind === 'label' && /pin|guide/.test(b.n)) continue; const r = b.r, on = Math.max(0, Math.min(r[2], vw) - Math.max(r[0], 0)) * Math.max(0, Math.min(r[3], vh) - Math.max(r[1], 0)), area = (r[2] - r[0]) * (r[3] - r[1]) || 1; if (on / area < .5) continue; if (r[0] < -2 || r[1] < -2 || r[2] > vw + 2 || r[3] > vh + 2) out.push({ check: 'f', what: 'off screen', el: b.n, rect: r, viewport: [vw, vh] }); }
@@ -225,6 +235,7 @@ async function enumerate() {
     if (!QUICK) for (let k = 1; k <= 7; k++) items.push(`${view}:reader:BYU fixture/${k - 1}`);
     (QUICK ? ['pendulum'] : L.models).forEach(t => items.push(`${view}:dio:model:${t}`));
     if (!QUICK) L.flags.forEach(f => items.push(`${view}:dio:flag:${f.i}`));
+    const ways = L.books.find(b => b.title === 'Ways of Explaining'); if (ways) ways.parts.filter(p => p.analysed).forEach(p => items.push(`${view}:prim:${p.i}`));
     items.push(view + ':addpdf');
   }
   return items;
@@ -284,6 +295,20 @@ async function runItem(id) {
       }
       await page.evaluate(() => { window._pSeen = null; const v = W.mode; if (v.running != null && v.stopLesson) v.stopLesson(); });
     }
+  } else if (area === 'prim') {
+    // one interaction per primitive, through its stage (box._prim): what a learner does first
+    const ACT = { progressive_construction: 'S.go(2)', state_machine: 'S.go(4)', transform2d: "(()=>{const i=box.querySelector('.pslider input');i.value=0.45;i.dispatchEvent(new Event('input'))})()", distribution_lab: "(()=>{S.addSamples(400);const i=box.querySelectorAll('.pslider input');i[0].value=1.2;i[0].dispatchEvent(new Event('input'));i[1].value=0.6;i[1].dispatchEvent(new Event('input'))})()", causal_loop: "(()=>{S.calm=true;S.pulse(S.cycles.length?S.cycles[0].nodes[0]:'',1)})()", competing_explanations: "(()=>{const t=box.querySelector('.rv-matrix tbody tr.tells');if(t)t.click()})()", flow_network: "(()=>{const n=box.querySelector('.pnode');if(n)n.dispatchEvent(new MouseEvent('click',{bubbles:true}))})()", argument_map: "(()=>{const n=box.querySelector('.pnode');if(n)n.dispatchEvent(new MouseEvent('click',{bubbles:true}))})()", data_narrative: 'S.go(1)', algorithm_sandbox: 'S.wall([[3,1],[3,2],[3,4],[3,5]])' };
+    const pi = +arg, r = await page.evaluate(async ([pi]) => {
+      const b = W.lib.books.find(x => x.title === 'Ways of Explaining'); if (!(W.mode && W.mode.book && W.mode.book.id === b.id)) { await W.openRoom(b.id); await S.settle(); }
+      const R = W.mode; if (R.reader) { R.reader.close(); await S.sleep(50); } R.openPart(R.data.parts[pi], true); await S.sleep(1300); const rd = R.reader; if (rd.unfoldAll) rd.unfoldAll(); await S.sleep(600);
+      const boxes = [...rd.el.querySelectorAll('.fig.prim')]; return { n: boxes.length, kinds: boxes.map(x => [...x.classList].find(c => /^prim-/.test(c)).slice(5)) };
+    }, [pi]);
+    notes.prims = r.kinds; if (!r.n) issues.push({ check: 'errors', what: 'no primitive in this part' });
+    for (let k = 0; k < r.n; k++) {
+      await page.evaluate(async k => { const box = document.querySelectorAll('.reader .fig.prim')[k]; box.scrollIntoView({ block: 'start' }); await S.sleep(500); box._prim.fit(); }, k); keep(await sample(), `${r.kinds[k]} as drawn`);
+      await page.evaluate(async ([k, act]) => { const box = document.querySelectorAll('.reader .fig.prim')[k], S = box._prim; try { eval(act); } catch (e) { } await new Promise(res => setTimeout(res, 1600)); S.fit(); }, [k, ACT[r.kinds[k]] || '0']); keep(await sample(), `${r.kinds[k]} after one interaction`);
+    }
+    if (r.n) { const opened = await page.evaluate(async () => { const b = document.querySelector('.reader .fig.prim .prim-tools .pbtn'); if (!b || !/Lectern/.test(b.textContent)) return false; b.click(); await S.sleep(900); const s2 = document.querySelector('.prim-lectern .fig.prim'); if (s2 && s2._prim) s2._prim.fit(); return true; }); if (opened) { keep(await sample(), 'on the lectern'); await page.evaluate(() => document.querySelectorAll('.prim-lectern').forEach(x => x.remove())); } }
   } else if (area === 'addpdf') {
     await page.evaluate(async () => { await W.openHub(); await S.settle(); S.tick(10); W.addPdfDialog(); await S.sleep(300); });
     keep(await sample(), 'step 1 (empty)');

@@ -4,6 +4,9 @@
 // purpose, the sub-question it settles and the one it opens, and which motion explains and which is only background),
 // one analogy with its limit, and the comprehension check the demo is judged by. `lesson` = the index of the lesson
 // that plays the beat. Pure data (no three.js): tools/verify-chain.mjs --builtins checks these plans offline.
+// domainGrammar(step), at the end, plans every other step: the explanatory compiler (js/dio/domains.js) classifies the
+// step, and its domain picks the grammar (the primitive, its medium, the beat sequence with valid operations).
+import { classifyStep, domainSequence } from './domains.js';
 export const PLANS = {
   lever: {
     question: 'Why does a light weight far out balance a heavy weight close in?',
@@ -97,3 +100,30 @@ export const PLANS = {
     comprehensionCheck: { explainBack: 'Why does a planet keep missing the star instead of falling in?', misconceptionToAvoid: 'In orbit there is no gravity, or the planet is held up by its speed alone.', answer: 'Gravity pulls it inward all the time, but its sideways speed carries it past before it can reach the star; it keeps falling and keeps missing.' }
   }
 };
+
+// ---------------------------------------------------------------- the domain picks the grammar
+// knowledge kinds and the operation of the mechanism beat, per structure (operations: js/ai/prompts.js OPERATIONS)
+const STRUCT_PLAN = {
+  construction: { kinds: ['history', 'structural'], op: 'assemble', motion: 'each new part arrives because the last version failed' },
+  state_machine: { kinds: ['movement', 'causal'], op: 'chain', motion: 'a value travels one wire per clock tick' },
+  transformation: { kinds: ['causal', 'structural'], op: 'compare', motion: 'the plane moves continuously from the identity to the map' },
+  distribution: { kinds: ['scale', 'causal'], op: 'compare', motion: 'samples arrive one by one and pile into the histogram' },
+  causal_graph: { kinds: ['causal'], op: 'chain', motion: 'a change travels the signed links and comes back' },
+  competing: { kinds: ['causal', 'pathology'], op: 'compare', motion: 'evidence rows strike out the accounts they contradict' },
+  flow_network: { kinds: ['causal', 'structural'], op: 'chain', motion: 'goods and money travel between the actors' },
+  argument_graph: { kinds: ['structural'], op: 'inspect', motion: 'a challenged premise dims everything resting on it' },
+  taxonomy: { kinds: ['structural'], op: 'inspect', motion: 'none: a still map' },
+  data_narrative: { kinds: ['history', 'causal'], op: 'progression', motion: 'the chart changes state at each step' },
+  algorithm: { kinds: ['movement', 'causal'], op: 'track', motion: 'the frontier grows cell by cell' },
+  mechanism: { kinds: ['structural', 'causal'], op: 'chain', motion: 'the parts move in the order of cause' },
+  agent_system: { kinds: ['causal', 'movement'], op: 'compare', motion: 'agents act and the population changes' }
+};
+const STAGE_OP = { curiosity: 'establish', orientation: 'establish', decomposition: 'explode', inspection: 'inspect', intuition: 'compare', reconstruction: 'answer', understanding: 'answer' };
+export function domainGrammar(st, o = {}) {
+  const r = classifyStep(st, o), P = STRUCT_PLAN[r.structure] || STRUCT_PLAN.mechanism, seq = domainSequence(r.domain), flat = r.medium !== 'diorama';
+  const question = st.answers || st.title || 'What does this step explain?';
+  const sequence = seq.map(([stage, purpose], i) => { const technique = stage === 'mechanism' ? P.op : stage === 'decomposition' && flat ? 'isolate' : STAGE_OP[stage] || 'establish', beat = { stage, technique, cameraMode: flat ? (i === 0 ? 'global' : 'object') : stage === 'mechanism' ? 'mechanism' : stage === 'inspection' ? 'component' : 'object', purpose, answers: i === 0 ? question : purpose.replace(/^the /, 'What is the ') + '?', opens: i < seq.length - 1 ? seq[i + 1][1].replace(/^the /, 'What is the ') + '?' : (st.opens || 'What comes next?') };
+    if (stage === 'mechanism' || ['chain', 'track', 'progression', 'compare'].includes(technique)) beat.motion = { explanatory: [P.motion], background: [] };
+    return beat; });
+  return { ...r, question, knowledgeKind: P.kinds, sequence, comprehensionCheck: { explainBack: st.check ? st.check.q : 'Explain ' + (st.title || 'the idea') + ' in your own words.', misconceptionToAvoid: st.misconception || 'Reading the picture as decoration instead of as the structure of the idea.', answer: st.check ? st.check.a : st.statement || '' } };
+}

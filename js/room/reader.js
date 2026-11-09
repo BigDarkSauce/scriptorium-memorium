@@ -324,7 +324,7 @@ export class Reader {
   }
   // the quality gate's report: what was repaired, what the app fixed itself, what is still open
   renderQuality(A) {
-    const Q = A.qualityReport; if (!Q) return null; const fin = Q.final || {}, open = (fin.issues || Q.remaining || []).filter(i => i.kind !== 'dioramas');
+    const Q = A.qualityReport; if (!Q) return null; const fin = Q.final || {}, open = (fin.issues || Q.remaining || []).filter(i => i.kind !== 'dioramas' && i.kind !== 'grammar');
     const R = Q.rounds || [], first = R[0] ? R[0].issues : 0;
     const box = el('details', { class: 'coverage quality' + (open.length ? ' warn' : ' ok') }, [el('summary', {}, [el('span', { class: 'cov-ic', text: open.length ? '◔' : '●' }), el('span', { text: `Quality check: ${open.length ? open.length + ' open issue' + (open.length > 1 ? 's' : '') : 'passed'}` + (Q.repaired ? ` · ${Q.repaired} step${Q.repaired > 1 ? 's' : ''} rewritten` : '') + (first ? ` (${first} found at first)` : '') + (A.figureReport ? ` · ${A.figureReport.slots} figures` : '') + (A.dioramaReport ? ` · ${A.dioramaReport.made.length} diorama${A.dioramaReport.made.length === 1 ? '' : 's'} built` : '') })])]);
     if (Q.fixed && Q.fixed.length) box.append(el('p', { class: 'cov-note', text: 'Fixed by the app: ' + Q.fixed.slice(0, 8).join('; ') + (Q.fixed.length > 8 ? '…' : '') + '.' }));
@@ -496,7 +496,9 @@ export function normalizeChain(A) {
     code: x.code && Array.isArray(x.code.lines) ? { lang: String(x.code.lang || 'r'), lines: x.code.lines.slice(0, 60).map(l => typeof l === 'string' ? { code: l, explain: '' } : { code: String(l && l.code || ''), explain: String(l && l.explain || '') }), output: Array.isArray(x.code.output) ? x.code.output.map(String).slice(0, 30) : x.code.output ? String(x.code.output).split('\n').slice(0, 30) : [], interpret: String(x.code.interpret || '') } : null,
     examples: (Array.isArray(x.examples) ? x.examples : []).filter(e => e && (e.problem || e.title)).slice(0, 4).map(e => ({ title: String(e.title || ''), origin: e.origin === 'added' ? 'added' : 'pdf', ref: String(e.ref || ''), problem: String(e.problem || ''), solution: (Array.isArray(e.solution) ? e.solution : []).map(y => typeof y === 'string' ? { text: y } : { text: String(y && y.text || ''), math: y && y.math ? String(y.math) : '' }).slice(0, 12), answer: String(e.answer || ''), ...(e.source ? { source: normSources([typeof e.source === 'string' ? { title: e.source } : e.source])[0] || null } : {}) })),
     ...(fig(x.statementFigure) ? { statementFigure: fig(x.statementFigure) } : {}), ...(fig(x.intuitionFigure) ? { intuitionFigure: fig(x.intuitionFigure) } : {}), ...(fig(x.misconceptionFigure) ? { misconceptionFigure: fig(x.misconceptionFigure) } : {}),
-    ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}) }));
+    ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}),
+    // the explanatory compiler's routing (js/dio/domains.js): the AI's own choice of domain, structure and primitive
+    ...(x.visual && typeof x.visual === 'object' ? { visual: Object.fromEntries(['domain', 'structure', 'primitive', 'medium', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)])) } : {}) }));
   A.chain.forEach((st, i) => { const x = src[i]; if (st.check && x && x.check && fig(x.check.figure)) st.check.figure = fig(x.check.figure); });
   if (Array.isArray(A.dioramaPlan)) A.dioramaPlan = A.dioramaPlan.filter(p => p && p.subsection != null).map(p => ({ subsection: String(p.subsection), count: Math.max(0, Math.min(3, +p.count || 0)), why: String(p.why || '') }));
   A.references = normSources(A.references);
