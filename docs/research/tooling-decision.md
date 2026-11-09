@@ -216,3 +216,47 @@ copies (`/vendor-bvh/…` next to `/vendor-three/…`). The browser of a real us
   **123× faster** on the water-cycle valley (2.69 s → 22 ms), **6.7×** on the weather glass (5.76 s → 0.85 s), **2.7×**
   on osmosis; edit picking 2–80× faster; small scenes unchanged (± a few ms). One-off tree builds of 4–90 ms per scene,
   0.07–1 MB of memory. Results identical to three's raycast in every comparison made.
+
+---
+
+## 7. Blender pilot, 2026-11-09: three hub props (`tools/blender/`, `assets/kit/`, `js/hub/kit.js`)
+
+**Requirement:** cheap to make and to ship, yet clearly better than the procedural pieces, in a page with no build step
+whose files are published beside it (≤ 16 MB per file; aim < 1–2 MB per prop).
+
+### Routes weighed (checked in this container on 2026-11-09)
+
+| Route | Reachable here | Cost per prop | Quality | Verdict |
+|---|---|---|---|---|
+| `pip install bpy==5.2.3` (Blender 5.2 LTS as a Python module) | **yes** (PyPI, with `NO_PROXY` cleared); wheel is for **Python 3.13**, which is the system Python (3.13.18); 985 MB venv | ~25–60 s of CPU per prop (build + Cycles AO bake), 0 per page load beyond the file | real bevels, fillets on every turned edge, gadroons, swept mouldings, baked contact/cavity occlusion; reproducible from a script | **taken** |
+| Blender binary from download.blender.org | **no** (proxy `connect_rejected`) | same as bpy, plus a GUI for hand sculpting | same, plus sculpting | not needed: bpy has the full modelling API, Cycles and the glTF exporter |
+| CC0 libraries (Poly Haven models, ambientCG) | **no** (`api.polyhaven.com`, `dl.polyhaven.org`, `ambientcg.com` all rejected) | 0 authoring, but 2–20 MB per model at 2K/4K textures before reduction | photo-scanned realism, but not in the hall's baroque idiom (and nothing we can re-style by script) | a good source when the network allows; must still be cut to < 1 MB (1K textures, meshopt) |
+| More procedural code (three.js primitives in `props.js`) | yes | 0 bytes, but tokens and code per detail; no AO bake | lathe + boxes; no fillets, gadroons or baked occlusion without a lot of code | keep for things that change at runtime (bookcases, rooms) |
+
+Notes: the bpy wheel lacks Blender's Draco and meshoptimizer bridge libraries (the exporter logs "Draco is not
+available"), so compression is done after export with gltf-transform 4.5.1 (npm). Meshopt rather than Draco: its
+decoder ships in `three/addons/libs/meshopt_decoder.module.js` (no WASM fetch from a second path) and decodes faster;
+the props are small enough that Draco's smaller files do not matter. KTX2 was not used: `toktx` is not installable
+here, and one 512–1024² occlusion map per prop is 20–60 KB as WebP (`EXT_texture_webp`, read by three's GLTFLoader).
+Licence: everything is authored here from a script, so no third-party licence applies.
+
+### What was built
+
+| Prop (file) | Replaces | Triangles | Raw .glb | Shipped .glb | Bake (Cycles CPU, 96 spp) |
+|---|---|---|---|---|---|
+| Candlestick (`candlestick.glb`): cast brass, gadrooned domed foot, knopped baluster, beaded drip pan, wax candle with runs and a cupped top, wick | a 10-point lathe + cylinder | 32,940 | 1.05 MB | **215 KB** | 512², 39 s |
+| Inkstand (`inkstand.glb`): silver tray with swept ogee rim on bun feet, lobed inkwell with glossy ink, pounce pot with pierced top, goose quill (calamus, rachis, ragged vanes) | a cylinder and a 6-sided cone as the quill | 23,528 | 0.83 MB | **193 KB** | 512², 23 s |
+| Globe stand (`globestand.glb`): four turned walnut legs, cross stretcher with gilt finial, horizon ring with a printed paper band (inked circles, degree ticks) and gilt beads, engraved brass meridian and axis; the globe stays procedural (its canvas map) | cabriole tubes and tori | 40,600 | 1.68 MB | **378 KB** | 1024², 38 s (the globe sphere occludes in the bake) |
+
+Total 0.79 MB for three props. Load: three fetches in parallel under the opening veil (`main.js` waits at most 6 s),
+parsed once per session; each hub clones them (shared geometry, materials and texture, marked `userData.shared`, so
+leaving the hub frees nothing the next hub would refetch and the GPU counts stay flat). If a file is missing or the
+network is slow, `kitAdd()` returns false and the builder makes the procedural piece with the same footprint, so the
+layout never depends on the download. Reproduce: `bpy` venv → `python tools/blender/props.py -- <out>` →
+`tools/blender/build.sh <out>`.
+
+**Before/after (golden tool, `--compare` main 0bd794c → r8-c, 22 views):** only the two views that show the props
+changed: `hub-desk` 2.57 % (desktop) / 6.87 % (phone) of pixels, `hub-globe` 2.45 % / 6.06 %. The hall overview
+changed 0.17 % / 0.22 % (props seen small from the entrance, under the 0.4 % tolerance), and every room, reader and
+diorama view is unchanged (0.000–0.019 %, the noise floor). Smoke 14/14 (leaks: geometries +0, textures +0 over three
+cycles), polish --quick 5/5.

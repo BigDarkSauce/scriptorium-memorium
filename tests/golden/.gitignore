@@ -1,0 +1,3 @@
+# Baselines written by node tools/golden.mjs --update (about 25 MB for both viewports: too large for git).
+# Generate them on demand from a base ref, see docs/qa/golden.md.
+*.png

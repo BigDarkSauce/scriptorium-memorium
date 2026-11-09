@@ -8,6 +8,7 @@ import { parchment, labelTex, leather, damaskTex, canvasTex, runnerTex, radialGl
 import { hashStr } from '../util.js';
 import { makeMaterial } from '../gfx/materials.js';
 import { Acc, bmat, Mx, cartoucheShape, pedestal, addColumn, colDiameter, bandPlane, rng } from '../gfx/baroque.js';
+import { kitAdd } from './kit.js';
 
 export const SHELF_KINDS = {
   horizontal: { w: 3.2, h: 1.7, d: .5, tiers: 3 },
@@ -362,11 +363,16 @@ export function readingDesk() {
   A.add(new THREE.MeshStandardMaterial({ color: 0x5a2418, roughness: .6 }), new THREE.BoxGeometry(.5, .012, .35), LM.clone().multiply(Mx(0, .026, .19)));
   [-1, 1].forEach(s => A.add(pageM, new THREE.BoxGeometry(.235, .022, .33), LM.clone().multiply(Mx(s * .12, .044, .19, 0, 0, -s * .07))));
 
-  // inkwell, quill, candlestick
-  A.add(gilt, new THREE.CylinderGeometry(.035, .04, .05, 16), Mx(.42, .815, -.15)); A.add(new THREE.MeshStandardMaterial({ color: 0x15100c, roughness: .2 }), new THREE.CylinderGeometry(.022, .022, .006, 12), Mx(.42, .842, -.15));
-  A.add(bmat('paint'), new THREE.ConeGeometry(.012, .28, 6), Mx(.45, .93, -.15, .2, 0, -.35));
-  A.add(gilt, new THREE.LatheGeometry([[0, 0], [.07, 0], [.07, .015], [.025, .03], [.015, .12], [.03, .2], [.012, .23], [.04, .25], [.04, .26], [0, .26]].map(([r, y]) => new THREE.Vector2(r, y)), 18), Mx(.58, .79, .12));
-  A.add(bmat('candle'), new THREE.CylinderGeometry(.018, .018, .14, 12), Mx(.58, 1.12, .12));
+  // an inkstand (inkwell, pounce pot, quill) and a candlestick: the hand-made props (js/hub/kit.js) when they are loaded,
+  // else procedural ones with the same footprint (candle top 0.40 m above the desk top, so the flame sits on the wick)
+  if (!kitAdd(g, 'inkstand', Mx(.4, .7942, -.14, 0, .2))) {   /* its bun feet on the leather (0.7925) */
+    A.add(gilt, new THREE.CylinderGeometry(.035, .04, .05, 16), Mx(.42, .815, -.15)); A.add(new THREE.MeshStandardMaterial({ color: 0x15100c, roughness: .2 }), new THREE.CylinderGeometry(.022, .022, .006, 12), Mx(.42, .842, -.15));
+    A.add(bmat('paint'), new THREE.ConeGeometry(.012, .28, 6), Mx(.45, .93, -.15, .2, 0, -.35));
+  }
+  if (!kitAdd(g, 'candlestick', Mx(.58, .79, .12))) {
+    A.add(gilt, new THREE.LatheGeometry([[0, 0], [.07, 0], [.07, .015], [.025, .03], [.015, .12], [.03, .2], [.012, .23], [.04, .25], [.04, .26], [0, .26]].map(([r, y]) => new THREE.Vector2(r, y)), 18), Mx(.58, .79, .12));
+    A.add(bmat('candle'), new THREE.CylinderGeometry(.018, .018, .14, 12), Mx(.58, 1.12, .12));
+  }
   A.add(bmat('flame'), new THREE.SphereGeometry(.013, 8, 6), Mx(.58, 1.205, .12, 0, 0, 0, 1, 1.9, 1));
   A.build(g); return g;
 }
@@ -425,6 +431,9 @@ export function bench({ L = 2.0 } = {}) {
 // A library globe (terrestrial or celestial) in a horizon ring on four cabriole legs, ~1.2 m tall.
 export function globeStand({ celestial = false } = {}) {
   const g = new THREE.Group(), A = new Acc(), wn = bmat('walnut'), gilt = bmat('gilt'), R = .3, yc = .9; g.name = 'globe';
+  // the stand: hand-made (turned legs, horizon ring with gilt beads, an engraved brass meridian; js/hub/kit.js) when
+  // loaded, else built here; the globe itself is always drawn here (its map is a canvas texture)
+  if (kitAdd(g, 'globestand')) { addGlobe(g, R, yc, celestial); return g; }
   [0, 1, 2, 3].forEach(i => { const a = i * Math.PI / 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a); cabriole(A, wn, gilt, c * .3, s * .3, .84, c, s, .026); });
   A.add(wn, new THREE.BoxGeometry(.78, .035, .05), Mx(0, .16, 0, 0, Math.PI / 4)); A.add(wn, new THREE.BoxGeometry(.78, .035, .05), Mx(0, .16, 0, 0, -Math.PI / 4));
   A.add(gilt, lathe([[0, 0], [.04, 0], [.03, .04], [.012, .1], [.02, .14], [0, .16]], 12), Mx(0, .175, 0));
@@ -433,10 +442,12 @@ export function globeStand({ celestial = false } = {}) {
   A.add(gilt, new THREE.TorusGeometry(R + .025, .009, 6, 48, Math.PI * 1.6), Mx(0, yc, 0, 0, 0, Math.PI * .7 + .41));
   A.add(gilt, new THREE.CylinderGeometry(.008, .008, R * 2 + .12, 6), Mx(0, yc, 0, 0, 0, .41));
   [0, 1, 2, 3].forEach(i => { const a = i * Math.PI / 2 + Math.PI / 4; A.add(wn, new THREE.BoxGeometry(.03, yc - .84 + .02, .03), Mx(Math.cos(a) * (R + .07), (yc + .84) / 2 - .01, Math.sin(a) * (R + .07))); });
-  A.build(g);
+  A.build(g); addGlobe(g, R, yc, celestial);
+  return g;
+}
+function addGlobe(g, R, yc, celestial) {
   const globe = m(new THREE.SphereGeometry(R, 40, 28), new THREE.MeshPhysicalMaterial({ map: celestial ? celestialTex() : globeTex(), roughness: .42, clearcoat: .7, clearcoatRoughness: .2 }));
   globe.position.set(0, yc, 0); globe.rotation.set(0, celestial ? 1.2 : -.6, .41); g.add(globe);
-  return g;
 }
 function celestialTex() {
   return canvasTex('celestial', 512, 256, (g, w, h) => {

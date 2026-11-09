@@ -22,6 +22,7 @@ import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, 
 import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree } from './util.js';
 import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
+import { preloadKit, kitStatus } from './hub/kit.js';
 
 const LIB_KEY = 'library.v3', PENDING_DEL = 'sm-pending-deletes', UNDO_MS = 9000;
 // the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
@@ -71,12 +72,14 @@ class App {
   fatal(msg) { const f = $('#fatal'); f.textContent = msg; f.style.display = 'block'; }
   async boot() {
     try { performance.mark('sm:boot'); } catch (e) { }
+    const kit = preloadKit();   // the hub's hand-made props load under the veil (at most 6 s; else procedural ones)
     this.lib = await store.get(LIB_KEY);
     if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
     if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
     await this.migrateV2();
     this.sweepDeleted();
     await this.ensureDomainBook();
+    await kit; this.kit = kitStatus();
     // the place in the address (route.js): a link or a reload reopens that room (and scroll); otherwise the hub
     addEventListener('popstate', () => this.onRoute());
     const r = parseHash(location.hash), book = r.room ? this.lib.books.find(b => b.id === r.room) : null;
