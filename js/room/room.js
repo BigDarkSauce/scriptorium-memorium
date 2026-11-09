@@ -558,6 +558,6 @@ export class BookRoom {
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
-    this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.releaseFigures(); this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }

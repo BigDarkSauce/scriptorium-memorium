@@ -44,23 +44,27 @@ export function renderPrimitive(f, box, { small = false, panel = false } = {}) {
 }
 function openScene(sc, f) {
   const app = window.__scriptorium, m = app.mode, back = m && m.book ? { room: m.book.id, part: m.reader && m.reader.part ? m.reader.part.id : null } : null;
-  const lec = document.querySelector('.prim-lectern'); if (lec) lec.remove();
+  closeLecterns();
   app.openDiorama(JSON.parse(JSON.stringify(sc)), { title: sc.title, subtitle: f.caption, returnTo: back, skipIntro: false, autoTransition: true });
 }
+// every open lectern, closed properly (its stage disposed, its key listener removed): a scroll closing, a new lectern,
+// a diorama opening or a move through the history
+export function closeLecterns() { document.querySelectorAll('.prim-lectern').forEach(x => x._close ? x._close() : x.remove()); }
 // ---- the lectern: a 2.5D panel. The board is tilted toward the reader and the figure's layers (wires below, nodes
 // above, labels on top) shift with the pointer at different depths; under reduced motion it lies flat and still.
 export function openLectern(f) {
-  document.querySelectorAll('.prim-lectern').forEach(x => x.remove());
+  closeLecterns();
   const still = calm(), host = el('figure', { class: 'fig prim-board' });
-  const close = () => { cleanup(); veil.remove(); document.removeEventListener('keydown', key); };
+  let shut = false; const close = () => { if (shut) return; shut = true; cleanup(); veil.remove(); document.removeEventListener('keydown', key); };
   const head = el('div', { class: 'lect-head' }, [el('span', { class: 'lect-kicker', text: 'on the lectern · ' + LABEL[f.kind] }), el('b', { html: mathHTML(f.title || f.caption, 'label') }), el('button', { type: 'button', class: 'pbtn', 'aria-label': 'Close the lectern', text: 'Close ✕', onclick: close })]);
   const desk = el('div', { class: 'lect-desk' + (still ? ' still' : '') }, [host]);
   const veil = el('div', { class: 'modal-veil prim-lectern', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Lectern: ' + (f.caption || f.kind) }, [el('div', { class: 'lect-wrap' }, [head, desk])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); });
-  const key = e => { if (e.key === 'Escape') close(); }; document.addEventListener('keydown', key);
+  const key = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }; document.addEventListener('keydown', key);   /* the Escape closes the lectern only, not the reader under it (window listener) */
+  veil._close = close;
   document.body.append(veil);
   const cleanup = renderPrimitive(f, host, { panel: true });
-  if (f.caption) host.append(el('figcaption', { class: 'fig-cap', html: mathHTML(f.caption) }));
+  if (f.caption && f.title) host.append(el('figcaption', { class: 'fig-cap', html: mathHTML(f.caption) }));
   if (!still) desk.addEventListener('pointermove', e => { const r = desk.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; desk.style.setProperty('--rx', (6 - y * 4).toFixed(2) + 'deg'); desk.style.setProperty('--ry', (x * 5).toFixed(2) + 'deg'); desk.style.setProperty('--px', (-x * 5).toFixed(2) + 'px'); desk.style.setProperty('--py', (-y * 4).toFixed(2) + 'px'); });   /* nodes (the lifted layer) move against the wires: css/app.css .lect-desk */
   setTimeout(() => { const b = veil.querySelector('.lect-head .pbtn'); if (b) b.focus(); }, 30);
   return veil;

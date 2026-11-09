@@ -2,6 +2,7 @@
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
 import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML } from '../util.js';
 import { SVGDEMO, SVG_TYPES, renderFigure } from './diagrams.js';
+import { closeLecterns } from '../dio/prims/index.js';
 import { prose } from './prose.js';
 import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
@@ -42,8 +43,11 @@ export class Reader {
     this.el.querySelectorAll('[data-dock]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dock === mode)));
     if (!initial || mode !== 'full') { try { localStorage.setItem('scriptorium.readerDock', mode === 'full' ? (this.lastDock || 'right') : mode); } catch (e) { } }
   }
+  // the interactive figures stop with the scroll: their stages are disposed (observers, frame loops) and a lectern
+  // opened from it is closed
+  releaseFigures() { try { closeLecterns(); this.el.querySelectorAll('.fig.prim').forEach(b => b._prim && b._prim.dispose()); } catch (e) { console.warn(e); } }
   close() {
-    if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
+    this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
   render() {
