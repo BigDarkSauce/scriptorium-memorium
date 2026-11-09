@@ -1,0 +1,11 @@
+{
+  "name": "scriptorium-tools",
+  "private": true,
+  "description": "Dev-only tools (never loaded by the app). npm install --prefix tools",
+  "type": "module",
+  "devDependencies": {
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0",
+    "@gltf-transform/cli": "4.5.1"
+  }
+}
