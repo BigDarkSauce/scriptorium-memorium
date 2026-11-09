@@ -146,12 +146,14 @@ export const slotX = (u, slot) => (slot - (u.slotsPerTier - 1) / 2) * SLOT;
 export const slotAt = (u, x) => Math.max(0, Math.min(u.slotsPerTier - 1, Math.round(x / SLOT + (u.slotsPerTier - 1) / 2)));
 // Along the scroll (local z), from its middle: the back knob reaches KNOB_TIP behind and the front knob as far before;
 // the name tag hangs from the front knob TAG_Z before the middle (odd slots 7 mm further). SLOT_Z puts the front knob's
-// tip at the tier board's front edge and the tag just before the board (2 mm clear of its gilt bead), where it hangs over
+// tip 7.5 mm past the tier board's front edge and the tag just before the board (4 mm clear of its gilt bead), where it hangs over
 // the edge like a shelf label, still behind the stiles' face (d/2): nothing of a lying scroll leaves its bookcase, and
 // the back knob stays 3 cm before the silk liner.
 const KNOB_TIP = SCROLL_L / 2 + SCROLL_R * .95, TAG_Z = KNOB_TIP + .006;
 const BOARD_FRONT = (SHELF_KINDS.horizontal.d - .05) / 2 - .01;
-export const SLOT_Z = BOARD_FRONT + .006 - TAG_Z;
+// (the bead on a tier board's front edge reaches 8 mm before the board, BOARD_FRONT + .008: the tag hangs 4 mm before
+// that, its tilt included, so the bead never cuts a band through the tag's lettering)
+export const SLOT_Z = BOARD_FRONT + .0135 - TAG_Z;
 // the cradles: one under each end of the roll, 4 cm in from the spiral caps
 export const REST_DZ = SCROLL_L / 2 - .04;
 export function slotPos(shelfObj, tier, slot) {
