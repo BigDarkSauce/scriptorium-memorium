@@ -82,7 +82,9 @@ const run = async (fn, arg) => { try { return await page.evaluate(fn, arg); } ca
 const failMsg = v => v && v.__error ? 'error: ' + v.__error : '';
 
 // ---- boot
-const booted = await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 120000 }).then(() => true, () => false);
+// 'ready' (the page veil lifting) now waits for the hall's final look: its probe, compiled programs and settled frames,
+// which takes minutes on a busy software GPU
+const booted = await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 600000 }).then(() => true, () => false);
 await page.evaluate(HELPERS).catch(() => { });
 const boot = booted ? await run(() => ({ mode: W.mode.constructor.name, books: W.lib.books.length, ms: Math.round(performance.now()) })) : null;
 report('boot', !!boot && boot.mode === 'Hub' && boot.books >= 8, boot ? `${boot.mode}, ${boot.books} books, ready after ${boot.ms} ms` : 'the hub never appeared');

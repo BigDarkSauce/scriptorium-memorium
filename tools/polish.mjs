@@ -197,7 +197,7 @@ async function pageFor(view) {
   const ctx = await browser.newContext({ ...VIEWPORTS[view] }); const page = await ctx.newPage(); page._errors = [];
   page.on('pageerror', e => page._errors.push('uncaught: ' + e.message)); page.on('console', m => { if (m.type() === 'error' && !/GL Driver|ReadPixels|favicon|KHR_parallel/.test(m.text())) page._errors.push('console: ' + m.text().slice(0, 200)); });
   await page.goto(URL0, { timeout: 60000 });
-  await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 240000 });
+  await page.waitForFunction(() => window.__scriptorium && window.__scriptorium.mode && document.body.classList.contains('ready'), null, { timeout: 600000 });   /* the veil waits for the final look (main.js _switch) */
   // drawing at half resolution: a software-rendered frame is slow, and colour and layout do not depend on it
   // no backdrop blur and no CSS transitions in the gate: every sample sees final states (a box fading out is not a
   // finding), and a software compositor is not re-blurring the canvas under every glass panel on each DOM change
