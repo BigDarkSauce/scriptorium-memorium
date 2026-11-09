@@ -6,7 +6,7 @@
 import { FC, wrapText } from './kit.js';
 import { glyphFor, drawGlyph } from '../../room/glyphs.js';
 
-export const size = (f, o) => { const rows = f.maps.length, br = f.breaks.length; return o.narrow ? { W: 360, H: 64 + rows * 46 + 30 + br * 34 } : { W: 600, H: 60 + rows * 40 + 30 + br * 24 }; };
+export const size = (f, o) => { const rows = f.maps.length, br = f.breaks.length; return o.narrow ? { W: 360, H: 64 + rows * 46 + 34 + br * 46 } : { W: 600, H: 60 + rows * 40 + 34 + br * 32 }; };
 export function render(f, S) {
   const { W } = S, nar = S.narrow, colW = nar ? (W - 60) / 2 : W * .36, xa = 10, xb = W - 10 - colW, rowH = nar ? 46 : 40, y0 = 48;
   let sel = -1;
@@ -22,9 +22,9 @@ export function render(f, S) {
       if (m.rel && !nar) S.txt(mx, yy - 4, m.rel, { 'text-anchor': 'middle', 'font-size': S.fs - 3, 'font-style': 'italic', fill: FC.soft, fit: xb - xa - colW - 12, stroke: FC.bg, 'stroke-width': 3, 'paint-order': 'stroke', opacity: op });
       const hit = S.mk('rect', { x: xa, y, width: W - 20, height: rowH - 8, fill: 'transparent', style: 'cursor:pointer' }); hit.addEventListener('click', () => { sel = sel === i ? -1 : i; draw(); }); });
     // where the likeness breaks: a torn edge, in rubric
-    let y = y0 + f.maps.length * rowH + 8; S.mk('path', { d: `M10 ${y}` + [...Array(Math.ceil((W - 20) / 12))].map((_, k) => `l6 ${k % 2 ? -4 : 4}`).join(''), fill: 'none', stroke: FC.rubric, 'stroke-width': 1.2 });
+    let y = y0 + f.maps.length * rowH + 8; S.mk('path', { d: `M10 ${y}` + [...Array(Math.ceil((W - 20) / 6))].map((_, k) => `l6 ${k % 2 ? -4 : 4}`).join(''), fill: 'none', stroke: FC.rubric, 'stroke-width': 1.2 });
     S.txt(10, y + 18, 'Where the likeness breaks', { 'font-weight': 700, fill: FC.rubric, 'font-size': S.fs - 1 }); y += 26;
-    f.breaks.forEach(b => { const L = wrapText(b, Math.floor((W - 34) / (S.fs * .52))).slice(0, nar ? 2 : 1); S.txt(14, y + 10, '✗', { fill: FC.rubric, 'font-size': S.fs - 1 }); L.forEach((l, k) => S.txt(28, y + 10 + k * S.fs * 1.2, l, { 'font-size': S.fs - 1, fit: W - 40 })); y += nar ? 34 : 24; });
+    f.breaks.forEach(b => { const L = wrapText(b, Math.floor((W - 44) / (S.fs * .5))); if (L.length > 2) { L.length = 2; L[1] = L[1].replace(/[\s,;:.]*$/, '') + '…'; } S.txt(14, y + 10, '✗', { fill: FC.rubric, 'font-size': S.fs - 1 }); L.forEach((l, k) => S.txt(28, y + 10 + k * S.fs * 1.2, l, { 'font-size': S.fs - 1, fit: W - 40 })); y += 12 + L.length * S.fs * 1.2; });
   };
   S.say('<p>Each line carries one correspondence across. Click a row to follow it alone. Then read the torn edge: the parts of the target the source would get wrong.</p>');
   draw(); S.redraw = draw; return { draw };

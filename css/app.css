@@ -882,3 +882,16 @@ button.rv-opt:hover { background: #fff; border-color: #b98a45; }
 .rv-empty { color: var(--iron-soft); font-style: italic; }
 .rv-deck { background: linear-gradient(180deg, #fbf5e6, #f1e6cc); color: var(--iron, #2b2118); border-radius: 14px; border: 1px solid rgba(143,115,58,.5); box-shadow: 0 30px 80px -20px rgba(0,0,0,.6); padding: 16px 18px 18px; }
 .rv-deck .ibtn { color: var(--iron, #2b2118); background: rgba(0,0,0,.05); }
+/* the uncertainty conventions (docs/research/revelation-engine.md): one meaning per line style, in every primitive */
+.prim-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--iron-soft); margin-top: 4px; }
+.prim-legend span { display: inline-block; width: 22px; height: 0; border-top: 2px solid #5b4532; vertical-align: middle; }
+.prim-legend .lg-dot { border-top-style: dotted; } .prim-legend .lg-faint { opacity: .4; } .prim-legend b { color: #8f733a; font-weight: 400; }
+/* predict, then play (engine.js lessonPredict) — inside the dark diorama panel */
+.lesson-predict { display: grid; gap: 5px; margin: 4px 0 2px; }
+.lp-opt { text-align: left; font: inherit; font-size: 13.5px; line-height: 1.4; padding: 6px 10px; border-radius: 9px; border: 1px solid rgba(255,217,138,.25); background: rgba(255,255,255,.04); color: var(--ink-2, #e9dcc0); cursor: pointer; }
+.lp-opt:hover:not([disabled]) { border-color: rgba(255,217,138,.6); background: rgba(255,217,138,.08); }
+.lp-opt[aria-checked="true"] { border-color: var(--brass); background: rgba(255,217,138,.14); color: #fff3d6; }
+.lp-opt[disabled]:not([aria-checked="true"]) { opacity: .45; cursor: default; }
+.lesson-verdict { font-size: 13.5px; padding: 6px 10px; border-radius: 8px; border-left: 3px solid; }
+.lesson-verdict.ok { border-color: #6fbf9f; background: rgba(111,191,159,.1); } .lesson-verdict.no { border-color: #e0896f; background: rgba(224,137,111,.1); }
+.btn[disabled] { opacity: .5; cursor: default; }

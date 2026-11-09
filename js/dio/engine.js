@@ -2,6 +2,7 @@
 // Stages: sketch (the drawing) → materialise (camera dives in, the world turns real) → guided tour of the significant
 // bodies (one per scroll step, names pinned beside them) → explore (foldable left panel: step-by-step instructions,
 // variables, objects) with a full edit tool (select anything; move, hide, remove, replace, add, or ask AI to change it).
+import { LESSON_PREDICT, withPredict } from './predicts.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -149,7 +150,8 @@ export class DioramaView {
     if (immediate) this.ds.actors.forEach(a => this.ensurePin(a, false));
     this.ds.playing = true; this.syncTimeUI(); this._wideFix = 2;   // the opening view is re-framed into the free frame once the panels are laid out
   }
-  lessons() {
+  lessons() { const raw = this._lessonsRaw(); if (!raw || !raw.some(l => l && !l.predict && LESSON_PREDICT[l.title])) return raw; if (this._lp && this._lp.raw === raw) return this._lp.out; const out = raw.map(withPredict); this._lp = { raw, out }; return out; }   /* the built-in steps' predictions, merged by title (predicts.js) */
+  _lessonsRaw() {
     if (Array.isArray(this.spec.lessons) && this.spec.lessons.length) return this.spec.lessons;
     { const D = DIO[this.spec.type]; if (D && Array.isArray(D.lessons) && D.lessons.length) return D.lessons; }   // a model's own authored lessons
     if (this._auto) return this._auto;
@@ -169,13 +171,26 @@ export class DioramaView {
         done && l.explain ? el('div', { class: 'lesson-explain', html: mathHTML(l.explain) }) : null,
         done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + mathHTML(l.opens) }) : null,
         done && l.explainBack ? el('div', { class: 'lesson-explain', html: '<b>Say it back:</b> ' + mathHTML(l.explainBack) }) : null,
-        !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : 'Play this step', onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
+        // predict, then play (Crouch et al. 2004; Miller et al. 2013): a step that names its outcomes asks first, and
+        // says afterwards whether the model did what the reader expected (js/room/reveal.js, the same loop as in scrolls)
+        this.lessonPredict(l, i, done),
+        !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : this.needsPredict(l, i) ? 'Predict, then play' : 'Play this step', disabled: this.needsPredict(l, i) && this.running !== i, onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
       box.append(card); if (!done) requestAnimationFrame(() => card.classList.add('in'));
     });
     if (this.lessonI >= L.length) box.append(el('div', { class: 'lesson-all', text: 'All instructions complete. Change any variable or object and explore freely.' }));
     // the comprehension check of the demo's didactic plan: can the learner now explain it? (weighed above "was it attractive")
     { const P = this.spec.plan || (DIO[this.spec.type] || {}).plan, K = P && P.comprehensionCheck; if (K && K.explainBack && this.lessonI >= L.length) box.append(el('div', { class: 'lesson-explain lesson-check' }, [el('b', { text: 'Explain it back' }), el('div', { html: mathHTML(K.explainBack) }), P.question ? el('div', { class: 'dim small', html: 'It answers: ' + mathHTML(P.question) }) : null, K.misconceptionToAvoid ? el('details', {}, [el('summary', { text: 'A common wrong answer' }), el('div', { html: mathHTML(K.misconceptionToAvoid) })]) : null, K.answer ? el('details', {}, [el('summary', { text: 'Compare with' }), el('div', { html: mathHTML(K.answer) })]) : null])); }
     typeset(box);
+  }
+  // a lesson's prediction: {predict:{options:[{text, correct?, why?}]}}; the choice is kept per diorama visit
+  predictOpts(l) { const o = l && l.predict && (Array.isArray(l.predict) ? l.predict : l.predict.options); return Array.isArray(o) && o.length >= 2 && o.some(x => x && x.correct) ? o.filter(x => x && x.text).slice(0, 4) : null; }
+  needsPredict(l, i) { return !!this.predictOpts(l) && !(this._pred && this._pred.has(i)); }
+  lessonPredict(l, i, done) {
+    const O = this.predictOpts(l); if (!O) return null; const P = this._pred || (this._pred = new Map()), pick = P.get(i);
+    if (done || (pick != null && this.running !== i && i < this.lessonI)) { if (pick == null || pick < 0) return null; const o = O[pick]; return el('div', { class: 'lesson-verdict ' + (o.correct ? 'ok' : 'no'), html: (o.correct ? '<b>As you predicted.</b> ' : '<b>Not what you predicted.</b> ') + mathHTML(o.correct ? (o.why || o.text) : ((O.find(x => x.correct) || {}).why || (O.find(x => x.correct) || {}).text || '')) }); }
+    return el('div', { class: 'lesson-predict', role: 'radiogroup', 'aria-label': 'Predict what will happen' }, [el('div', { class: 'dim small', text: pick != null ? 'Your prediction is in: now watch.' : 'What will happen? Choose before you play.' }),
+      ...O.map((o, j) => el('button', { class: 'lp-opt', type: 'button', role: 'radio', 'aria-checked': String(pick === j), html: mathHTML(o.text), disabled: pick != null, onclick: () => { P.set(i, j); this.app.sfx && this.app.sfx.play('tick'); this.renderLessons(); } })),
+      pick == null ? el('button', { class: 'linkbtn small', type: 'button', text: 'Just play it', onclick: () => { P.set(i, -1); this.renderLessons(); } }) : null]);
   }
   runLesson(i, replay) {
     const l = this.lessons()[i]; if (!l) return;

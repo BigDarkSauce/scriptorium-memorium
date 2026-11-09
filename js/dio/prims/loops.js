@@ -15,6 +15,7 @@ export function cycles(nodes, edges) {
   return res.map(c => ({ ...c, sign: c.edges.reduce((a, e) => a * e.sign, 1) }));
 }
 export function render(f, S) {
+  if (f.edges.some(e => e.status)) { const k = document.createElement('div'); k.className = 'prim-legend'; k.innerHTML = '<span class="lg-solid"></span> established <span class="lg-dot"></span> hypothesised <span class="lg-faint"></span> weak evidence <b>⚠</b> simplified'; S.box.append(k); }   /* the uncertainty conventions, said once where they are used */
   const { W, H } = S, nw = S.narrow ? 104 : 126, nh = 40, my = 34;
   const P = new Map(); if (f.nodes.every(n => n.x != null)) f.nodes.forEach(n => P.set(n.id, [nw / 2 + 8 + n.x / 100 * (W - nw - 16), my + n.y / 60 * (H - 2 * my)])); else ring(f.nodes.length, W, H, nw / 2 + 12, my + 6).forEach((p, i) => P.set(f.nodes[i].id, p));
   // Author positions are percentages of the figure, so on the narrow (phone, lectern) layout two boxes on one row could
@@ -51,7 +52,7 @@ export function render(f, S) {
   const draw = () => {
     S.clear();
     C.forEach(c => { const col = c.sign > 0 ? FC.verd : FC.brass; S.mk('circle', { cx: c.at[0], cy: c.at[1], r: 15, fill: '#fffaf0', stroke: col, 'stroke-width': 1.6, 'stroke-dasharray': '30 5' }); S.mk('path', { d: `M${c.at[0] + 13} ${c.at[1] - 6}l3 6l4 -5`, fill: 'none', stroke: col, 'stroke-width': 1.6 }); S.txt(c.at[0], c.at[1] + 4.5, c.tag, { 'text-anchor': 'middle', 'font-weight': 700, fill: col, 'font-size': 12.5 }); });
-    f.edges.forEach(e => { const g = G.get(e), hot = tokens.some(t => t.e === e); S.mk('path', { d: `M${g.a[0]} ${g.a[1]}Q${g.c[0]} ${g.c[1]} ${g.b[0]} ${g.b[1]}`, fill: 'none', stroke: hot ? FC.ink : FC.soft, 'stroke-width': hot ? 2.2 : 1.5, 'stroke-dasharray': e.delay ? '7 3' : null, 'marker-end': S.arrow(hot ? FC.ink : FC.soft) });
+    f.edges.forEach(e => { const g = G.get(e), hot = tokens.some(t => t.e === e); S.mk('path', { d: `M${g.a[0]} ${g.a[1]}Q${g.c[0]} ${g.c[1]} ${g.b[0]} ${g.b[1]}`, fill: 'none', stroke: hot ? FC.ink : FC.soft, 'stroke-width': hot ? 2.2 : 1.5, 'stroke-dasharray': e.status === 'hypothesis' ? '1.5 4' : e.delay ? '7 3' : null, 'stroke-linecap': e.status === 'hypothesis' ? 'round' : null, opacity: e.status === 'weak' ? .45 : null, 'marker-end': S.arrow(hot ? FC.ink : FC.soft) }); if (e.status === 'simplified') { const m = qpt(g.a, g.c, g.b, .5); S.txt(m[0], m[1] + 4, '⚠', { 'text-anchor': 'middle', 'font-size': 12, fill: FC.brass }); }
       const s = qpt(g.a, g.c, g.b, .74), col = e.sign > 0 ? FC.verd : FC.rubric; S.mk('circle', { cx: s[0], cy: s[1], r: 8.5, fill: col }); S.txt(s[0], s[1] + 4.5, e.sign > 0 ? '+' : '−', { 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, 'font-size': 13 });
       if (e.delay) { const d = qpt(g.a, g.c, g.b, .45); S.txt(d[0], d[1] - 6, '‖ delay', { 'text-anchor': 'middle', 'font-size': S.fs - 3, fill: FC.soft, 'font-style': 'italic' }); }
       if (e.label) S.txt(e._lab[0], e._lab[1] + 3.5, e.label, { 'text-anchor': 'middle', 'font-size': S.fs - 2.5, fill: FC.soft, 'font-style': 'italic', fit: 120 }); });

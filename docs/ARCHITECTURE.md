@@ -210,3 +210,16 @@ Design and sources: `docs/research/explanatory-compiler.md`. Different disciplin
 - **Planner** (`js/dio/plans.js` `domainGrammar(step)`): the domain picks the grammar: primitive, medium, knowledge kinds and an Owen-stage sequence with valid operations (`domainSequence`).
 - **Pipeline** (`js/ai/pipeline.js`): stage 4b `compileDomains` after the figures: steps whose structure has a primitive and that carry none are sent to the domain prompt (`domainPrompt`, `prompts/12-domain-compiler.md`, ≤ 12 steps a call, tool-free), else get `autoPrimitive` (a table → a data narrative); `A.domainReport` keeps every step's route. Diorama planning skips steps their primitive already explains; the diorama author may answer `{type:"figure", figure: primitive}` for a non-spatial idea. The quality gate's check 9 (`grammarIssues`) reports `grammar` (advisory) and invalid primitive demos (`badFigure`).
 - **Example book**: "Ways of Explaining" (`js/seeds-domains.js`, on the Mathematics bookcase; `ensureDomainBook` adds it once to libraries seeded before it).
+
+## The Revelation Engine (round 9)
+
+`js/room/reveal.js` turns a step's central idea into a loop: hook → predict (with confidence) → reveal → refutation of a
+confident error → the rule's boundary case → explain back → a transfer question that returns days later in the ◆ deck
+(spaced, interleaved across scrolls). Its record (`reveal:ledger` in IndexedDB) holds the reader's predictions,
+confidence, explanations and transfer history; nothing leaves the browser. A step's `reveal` field is written by the
+analysis prompt (`js/ai/prompts.js`) or by hand; without one, a step with a *Check yourself* gets the loop in
+free-prediction form, unless its epistemic type is a taxonomy or a chronology. The quality gate's check 10 enforces the
+truth constraint (no rule without its boundary). Dioramas: `engine.js lessonPredict` + `predicts.js` (predict, then
+play). Pictures of what labels refer to: `js/room/glyphs.js` (figures, the cast strip under each figure, terms).
+New primitives: `bayes_update`, `emergence`, `control_loop`, `analogy_map` (`js/dio/prims/`). Rationale and sources:
+`docs/research/revelation-engine.md`. Tests: `node tools/test-reveal.mjs`.
