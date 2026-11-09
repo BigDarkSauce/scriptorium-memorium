@@ -4,7 +4,7 @@ export const SEED_HISTORY = {
   "scene|A market finds its price": ["17mmaoy0i72","scacgahghq","kzi15lnzbu","k973fjo5hn"],
   "scene|Galton board: many coin flips make a bell": ["31ta9czn5u","1yktxbduaok","lr5diz2ea5","21b6o67uek9"],
   "scene|Osmosis across a semi-permeable membrane": ["1cphn0p2zj6","palb5p95bj","1q93blbjjxs","12phvf14nqk","2dmwj0g9rk2","3h3xlyhbx5","1hvueqot2o7"],
-  "scene|The water cycle in a glass valley": ["v6g6yronkh","c3p58fpmtb","143qetn9pw8","1sy1y8h357l","213d60vbn5","ezho42640a","quqfs126pa","1fi8o4t9lo8","sjoo6z4ber","19dtw9zafos","2692vg89pjt","17r5njgetri","u4qsdhodv8","1a9r6jg94en","bwsg89cm9x","kzi6ywkkyf","mxt1ubl2re"]
+  "scene|The water cycle in a glass valley": ["lf3ibpwx69","v6g6yronkh","c3p58fpmtb","143qetn9pw8","1sy1y8h357l","213d60vbn5","ezho42640a","quqfs126pa","1fi8o4t9lo8","sjoo6z4ber","19dtw9zafos","2692vg89pjt","17r5njgetri","u4qsdhodv8","1a9r6jg94en","bwsg89cm9x","kzi6ywkkyf","mxt1ubl2re"]
 };
 // every lesson title any version of the scene had: lessons whose titles are all here were never rewritten by the learner
 export const SEED_LESSON_TITLES = {
