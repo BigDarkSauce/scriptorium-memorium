@@ -12,6 +12,8 @@ import { normalizeChain } from './room/reader.js';
 import { openAddPdf, offerResume, cancelJobFor } from './room/addpdf.js';
 import { legacyScrolls } from './seeds-legacy.js';
 import { FLAGSHIPS } from './seeds-scenes.js';
+import { sceneFp, sceneKey, isSeedCopy } from './seeds-version.js';
+import { SEED_LESSON_TITLES } from './seeds-history.js';
 import { groundChain } from './seeds-sources.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
@@ -19,6 +21,9 @@ import { el, $, uid, toast, sleep, clamp, disposeTree } from './util.js';
 import { installBVH, BVH } from './gfx/bvh.js';
 
 const LIB_KEY = 'library.v3';
+// the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
+// once (App.refreshSeedScenes)
+const SEED_STAMP = FLAGSHIPS.map(sceneFp).join('.');
 class App {
   constructor() {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
@@ -107,12 +112,40 @@ class App {
         if (!(d.lessons && d.lessons.length) || d.lessons.every(l => l && (T.has(l.title) || OLD.has(l.title)))) { d.lessons = JSON.parse(JSON.stringify(n.lessons)); if (n.plan) d.plan = JSON.parse(JSON.stringify(n.plan)); if (n.levels) d.levels = JSON.parse(JSON.stringify(n.levels)); } });
       r.lessonsV = 5; store.set('room:' + id, r);
     }
+    // v6, seed versioning (js/seeds-version.js): a room keeps its own copy of every diorama it shows, so an example room
+    // seeded by an older version kept that version's scene (the water cycle's cone mountains and sphere clouds after the
+    // valley was rebuilt). Untouched copies of a built-in scene are replaced by the current one; edited ones are kept.
+    if (b && b.example && r.seedStamp !== SEED_STAMP) { try { this.refreshSeedScenes(r); } catch (e) { console.warn(e); } r.seedStamp = SEED_STAMP; store.set('room:' + id, r); }
     if (b && b.example && !r.grounded) { r.parts.forEach(p => { if (p.analysis) p.analysis = normalizeChain(groundChain(p.analysis)); }); r.grounded = 1; store.set('room:' + id, r); }
     // example rooms saved before the question thread existed get it once (v1): part question, subsections and coverage,
     // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
     // v4: the explanatory paragraphs and the figures of every teaching box (seeds-figures.js), where the learner has not edited
     if (b && b.example && (r.threadV || 0) < 4) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 4; store.set('room:' + id, r); }
     return r;
+  }
+  // Bring the built-in scenes of an example room up to date. A copy of a flagship scene (matched by type + title) that is
+  // an untouched copy of any shipped version (isSeedCopy: its fingerprint is stamped on it or in js/seeds-history.js, and
+  // it has no edits) becomes the current scene; the learner's slider values are kept where the parameter still exists,
+  // and lessons are replaced only while every title is a seed title (rewritten or added lessons stay). Copies the learner
+  // edited (moved, retinted, added or removed objects, rewrote the scene) are kept as they are. Returns the number replaced.
+  refreshSeedScenes(room) {
+    const cur = new Map(FLAGSHIPS.map(f => [sceneKey(f), f])), C = o => JSON.parse(JSON.stringify(o)); let n = 0;
+    for (const p of room.parts || []) for (const st of (p.analysis && p.analysis.chain) || []) for (const d of st.demos || []) {
+      const key = sceneKey(d), f = cur.get(key); if (!f || !d || !Array.isArray(d.bodies)) continue;
+      const fp = sceneFp(f);
+      if (sceneFp(d) === fp) { d.seedFp = fp; continue; }
+      if (!isSeedCopy(d, key)) continue;
+      const titles = new Set([...(SEED_LESSON_TITLES[key] || []), ...(f.lessons || []).map(l => l.title)]);
+      const ownLessons = Array.isArray(d.lessons) && d.lessons.length && !d.lessons.every(l => l && titles.has(l.title));
+      const keep = { purpose: d.purpose, lessons: ownLessons ? d.lessons : null, plan: ownLessons ? d.plan : null, levels: ownLessons ? d.levels : null };
+      const vals = d.values && typeof d.values === 'object' ? d.values : null, pk = new Set((f.params || []).map(q => q.key));
+      Object.keys(d).forEach(k => delete d[k]); Object.assign(d, C(f));
+      if (keep.purpose) d.purpose = keep.purpose;
+      if (keep.lessons) { d.lessons = keep.lessons; if (keep.plan) d.plan = keep.plan; else delete d.plan; if (keep.levels) d.levels = keep.levels; else delete d.levels; }
+      if (vals) { const v = {}; Object.keys(vals).forEach(k => { if (pk.has(k)) v[k] = vals[k]; }); if (Object.keys(v).length) d.values = v; }
+      d.seedFp = fp; n++;
+    }
+    return n;
   }
   // ---------- modes, with a warm fade between them ----------
   // Switches run one at a time (a second request while one is fading waits, and only the latest waiting one runs),
@@ -201,7 +234,7 @@ class App {
       const tiers = shelf.kind === 'horizontal' ? 3 : 6, per = shelf.kind === 'horizontal' ? 17 : 5;
       const eye = shelf.kind === 'horizontal' ? 2 : 3; // eye-level tier: scroll centres at 1.25 m (horizontal) / 1.59 m (vertical), then the tier below
       const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: Math.max(0, Math.min(tiers - 1, eye - Math.floor(n / per))), slot: n % per, color: shelf.color, icon, hasPdf: false, example: true };
-      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
+      lib.books.push(b); this.seedRooms.set(b.id, { dims: { w: 12, d: 10, h: 5.5 }, seedStamp: SEED_STAMP, parts: parts.map(p => ({ id: 'p-' + uid(), ...p })) });
     };
     this.seedBooks().forEach(B => book(shelves[B.shelf], B.title, B.parts, B.icon));
     return lib;
@@ -217,7 +250,7 @@ class App {
     const subs = list => list.map(([id, title]) => ({ id, num: id, title, level: 2 }));
     // a part built around one flagship scene; steps: {kind, title, statement, math?, bodies?, section, opens, demo?}.
     // The thread is unbroken by construction: step 1 answers the part's question, step k+1 answers step k's "opens".
-    const scenePart = (spec, title, summary, { question, subsections, purpose }, steps) => covered({ title, summary, subsections: subs(subsections), analysis: normalizeChain(groundChain({ title, summary, question, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s.kind, title: s.title, section: s.section, answers: i ? steps[i - 1].opens : question, opens: s.opens, statement: s.statement, math: s.math || '', from: i ? ['S' + i] : [], bodies: s.bodies || [], demos: i === steps.length - 1 || s.demo ? [{ ...C(spec), purpose }] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
+    const scenePart = (spec, title, summary, { question, subsections, purpose }, steps) => covered({ title, summary, subsections: subs(subsections), analysis: normalizeChain(groundChain({ title, summary, question, sourceNote: 'Example diorama authored in the universal scene format (see docs/SCENE_SPEC.md).', chain: steps.map((s, i) => ({ id: 'S' + (i + 1), kind: s.kind, title: s.title, section: s.section, answers: i ? steps[i - 1].opens : question, opens: s.opens, statement: s.statement, math: s.math || '', from: i ? ['S' + i] : [], bodies: s.bodies || [], demos: i === steps.length - 1 || s.demo ? [{ ...C(spec), purpose, seedFp: sceneFp(spec) }] : [] })) })), pedestal: { step: 'S' + steps.length, demo: 0 } });
     const [water, galton, market, osmo] = FLAGSHIPS;
     return [
       { shelf: 'physics', title: 'Classical Mechanics', icon: 'PHY', parts: L[0].filter(s => /Pendulum|Projectiles|Five/.test(s.title)).map(asPart) },
