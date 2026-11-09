@@ -3,7 +3,7 @@
 // response ⟶ objection; revised claim ⟶ claim. Press a node to inspect it; challenge it and every statement whose
 // support runs through it changes status (shown as "affected").
 // Spec: {question, nodes:[{id,type,text,short?}], links:[{from,to,rel:'supports'|'attacks'|'answers'|'revises'}]}
-import { FC, nodeBox, boxExit, short, mathHTML } from './kit.js';
+import { FC, nodeBox, short, route, qpath, qpt, mathHTML } from './kit.js';
 
 const TYPE = { question: [FC.ink, 'mute', 'Question'], claim: [FC.lapis, 'lapis', 'Claim'], conclusion: [FC.lapis, 'lapis', 'Conclusion'], premise: [FC.verd, 'verd', 'Premise'], objection: [FC.rubric, 'rubric', 'Objection'], counterexample: [FC.rubric, 'rubric', 'Counterexample'], response: [FC.brass, 'brass', 'Response'], revised: [FC.violet, '#efe8f3', 'Revised claim'] };
 const REL = { supports: [FC.soft, null], attacks: [FC.rubric, '6 4'], answers: [FC.brass, null], revises: [FC.violet, '2 4'], addresses: [FC.mute, '1 3'] };
@@ -22,12 +22,20 @@ function layers(f) { const L = new Map(f.nodes.map(n => [n.id, 0])); for (let it
 function rowsOf(f, L, per) { const max = Math.max(...L.values()), rows = []; for (let d = 0; d <= max; d++) { const ns = f.nodes.filter(n => L.get(n.id) === d); for (let i = 0; i < ns.length; i += per) rows.push(ns.slice(i, i + per)); } return rows.filter(r => r.length); }
 export function render(f, S) {
   const { W } = S, per = S.narrow ? 2 : 3, L = layers(f), rows = rowsOf(f, L, per), rh = S.narrow ? 86 : 84, P = new Map(), nw = S.narrow ? 158 : 178, nh = S.narrow ? 62 : 58;
-  rows.forEach((row, ri) => row.forEach((n, j) => P.set(n.id, [(j + .5) * W / row.length, 18 + (ri + .5) * rh])));
+  // rows top-down; in each row a node sits under the mean x of the statements it points to, then the row is spread
+  // apart (≥ one box + 12 px) and kept inside the frame
+  rows.forEach((row, ri) => { const y = 18 + (ri + .5) * rh, want = row.map((n, j) => { const xs = f.links.filter(l => l.from === n.id && P.has(l.to)).map(l => P.get(l.to)[0]); return { n, x: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : (j + .5) * W / row.length }; }).sort((a, b) => a.x - b.x);
+    const gap = nw + 12, lo = nw / 2 + 6, hi = W - nw / 2 - 6; want.forEach((w, i) => { w.x = Math.max(lo, Math.min(hi, w.x)); if (i && w.x < want[i - 1].x + gap) w.x = want[i - 1].x + gap; }); const over = want.length ? want[want.length - 1].x - hi : 0; if (over > 0) want.forEach(w => { w.x -= over; }); want.forEach((w, i) => { if (i && w.x < want[i - 1].x + gap) w.x = want[i - 1].x + gap; P.set(w.n.id, [w.x, y]); }); });
+  const RT = new Map(f.links.map(l => [l, route([P.get(l.from)[0], P.get(l.from)[1] + 6], [P.get(l.to)[0], P.get(l.to)[1] + 6], [nw, nh], [nw, nh], f.nodes.filter(n => n.id !== l.from && n.id !== l.to).map(n => [P.get(n.id)[0], P.get(n.id)[1] + 6, nw, nh + 14]))]));
   let sel = null; const challenged = new Set(), base = evaluate(f, new Set());
   const draw = () => {
     S.clear(); const st = evaluate(f, challenged), affected = new Set(f.nodes.filter(n => st.get(n.id) !== base.get(n.id) && !challenged.has(n.id)).map(n => n.id));
-    f.links.forEach(l => { const a = P.get(l.from), b = P.get(l.to), [c, dash] = REL[l.rel], p = boxExit(a, nw, nh, b, 2), q = boxExit(b, nw, nh, a, 6), dim = st.get(l.from) !== 'in'; S.mk('line', { x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: c, 'stroke-width': 1.6, 'stroke-dasharray': dash, opacity: dim ? .35 : 1, 'marker-end': S.arrow(c) });
-      if (l.rel !== 'supports' && l.rel !== 'addresses') { const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; S.mk('rect', { x: m[0] - 25, y: m[1] - 8, width: 50, height: 15, rx: 7, fill: FC.bg, stroke: c, 'stroke-width': .7 }); S.txt(m[0], m[1] + 3.5, l.rel, { 'text-anchor': 'middle', 'font-size': 9.5, fill: c, 'font-style': 'italic' }); } });
+    const boxes = f.nodes.map(n => [P.get(n.id)[0], P.get(n.id)[1] + 6, nw + 4, nh + 18]), pills = [];
+    f.links.forEach(l => { const g = RT.get(l), [c, dash] = REL[l.rel], dim = st.get(l.from) !== 'in'; S.mk('path', { d: qpath(g), fill: 'none', stroke: c, 'stroke-width': 1.6, 'stroke-dasharray': dash, opacity: dim ? .35 : 1, 'marker-end': S.arrow(c) });
+      if (l.rel === 'supports' || l.rel === 'addresses') return;
+      // the relation's pill on the curve, where it covers no box and no other pill
+      let at = null; for (const t of [.5, .4, .6, .3, .7, .22, .78]) { const m = qpt(g.a, g.c, g.b, t), hit = b => Math.abs(m[0] - b[0]) < b[2] / 2 + 26 && Math.abs(m[1] - b[1]) < b[3] / 2 + 8; if (!boxes.some(hit) && !pills.some(p => Math.abs(m[0] - p[0]) < 54 && Math.abs(m[1] - p[1]) < 17)) { at = m; break; } } if (!at) return; pills.push(at);
+      S.mk('rect', { x: at[0] - 25, y: at[1] - 8, width: 50, height: 15, rx: 7, fill: FC.bg, stroke: c, 'stroke-width': .7 }); S.txt(at[0], at[1] + 3.5, l.rel, { 'text-anchor': 'middle', 'font-size': 9.5, fill: c, 'font-style': 'italic' }); });
     f.nodes.forEach(n => { const [x, y] = P.get(n.id), [col, tone, name] = TYPE[n.type], s = st.get(n.id), on = sel === n.id, aff = affected.has(n.id);
       if (aff) S.mk('rect', { x: x - nw / 2 - 5, y: y - nh / 2 - 5, width: nw + 10, height: nh + 10, rx: 12, fill: 'rgba(207,168,79,.35)', stroke: FC.gold, 'stroke-width': 1.5 });
       const g = nodeBox(S, x, y + 6, nw, nh, n.short || short(n.text, S.narrow ? 64 : 76), { tone: s === 'rejected' ? '#eee6d8' : tone, stroke: on ? FC.ink : col, sw: on ? 2.6 : 1.3, fs: S.fs - 1.5, maxL: 3, cls: 'pnode', dash: s === 'unsupported' || s === 'contested' ? '5 3' : null }); g.dataset.id = n.id; g.style.cursor = 'pointer';

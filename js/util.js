@@ -659,8 +659,10 @@ function texPlain(s) {
 }
 
 // ---- public: typeset a text into boxes per segment
-const PROTECT = /(\$\$[^$]+\$\$|\$[^$\n]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|`[^`\n]+`|\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|[\w.+-]+@[\w-]+\.[\w.]+|\b[\w-]+(?:\/[\w.-]+)*\.(?:js|mjs|json|md|pdf|html?|css|py|txt|png|jpe?g|svg|gif|webp|csv|xml|zip|bat|sh|glb|gltf)\b)/g;
+const PROTECT = /(\$\$[^$]+\$\$|\$(?:[^\s$]|[^\s$][^$\n]*[^\s$])\$(?!\d)|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|`[^`\n]+`|\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|[\w.+-]+@[\w-]+\.[\w.]+|\b[\w-]+(?:\/[\w.-]+)*\.(?:js|mjs|json|md|pdf|html?|css|py|txt|png|jpe?g|svg|gif|webp|csv|xml|zip|bat|sh|glb|gltf)\b)/g;
 const CACHE = new Map();
+// $…$ is maths only as in pandoc: a non-space right after the opening $, a non-space right before the closing $, and no
+// digit right after it — so prices ("a $5.00 cup, about $4.40") stay text
 function typesetText(str, C) {   // → [{k:'box', b} | {k:'tex', v} | {k:'code', v} | {k:'text', v}]
   const parts = String(str).split(PROTECT), out = [];
   parts.forEach((seg, i) => {

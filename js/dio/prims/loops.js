@@ -19,11 +19,18 @@ export function render(f, S) {
   const P = new Map(); if (f.nodes.every(n => n.x != null)) f.nodes.forEach(n => P.set(n.id, [nw / 2 + 8 + n.x / 100 * (W - nw - 16), my + n.y / 60 * (H - 2 * my)])); else ring(f.nodes.length, W, H, nw / 2 + 12, my + 6).forEach((p, i) => P.set(f.nodes[i].id, p));
   const C = cycles(f.nodes, f.edges); let nR = 0, nB = 0;
   C.forEach(c => { const named = f.loops.find(l => l.nodes.length === c.nodes.length && l.nodes.every(x => c.nodes.includes(x))); c.tag = (c.sign > 0 ? 'R' : 'B') + (c.sign > 0 ? ++nR : ++nB); c.name = named ? named.name : ''; const xs = c.nodes.map(i => P.get(i)); c.at = [xs.reduce((a, p) => a + p[0], 0) / xs.length, xs.reduce((a, p) => a + p[1], 0) / xs.length]; });
-  // markers of loops with the same centre are spread apart
-  C.forEach((c, i) => { for (let j = 0; j < i; j++) if (Math.hypot(C[j].at[0] - c.at[0], C[j].at[1] - c.at[1]) < 34) c.at = [c.at[0] + 40, c.at[1] + (i % 2 ? 22 : -22)]; c.at = [Math.max(30, Math.min(W - 30, c.at[0])), Math.max(30, Math.min(H - 30, c.at[1]))]; });
   // curves: control point to the left of the direction of travel, so A→B and B→A part
   const geo = e => { const a = P.get(e.from), b = P.get(e.to), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, k = .2 * L, c = [m[0] + dy / L * k, m[1] - dx / L * k]; return { a: boxExit(a, nw, nh, c, 2), b: boxExit(b, nw, nh, c, 6), c }; };
   const G = new Map(f.edges.map(e => [e, geo(e)]));
+  // clearance: loop markers and edge labels go where they are farthest from every curve, badge and box
+  const pts = []; G.forEach(g => { for (let i = 0; i <= 24; i++) pts.push(qpt(g.a, g.c, g.b, i / 24)); });
+  const boxes = f.nodes.map(n => [...P.get(n.id), nw + 8, nh + 8]), taken = [];
+  const clear = (x, y, rx = 14, ry = 14) => { if (x < rx + 4 || x > W - rx - 4 || y < ry + 4 || y > H - ry - 4) return -1; if (boxes.some(b => Math.abs(x - b[0]) < b[2] / 2 + rx && Math.abs(y - b[1]) < b[3] / 2 + ry)) return -1; let d = Infinity; pts.forEach(p => { d = Math.min(d, Math.max(Math.abs(p[0] - x) - rx, Math.abs(p[1] - y) - ry)); }); taken.forEach(t => { d = Math.min(d, Math.max(Math.abs(t[0] - x) - rx - t[2], Math.abs(t[1] - y) - ry - t[3])); }); return d; };
+  const spot = (cands, rx, ry) => { let best = cands[0], bd = -Infinity; cands.forEach(c => { const d = clear(c[0], c[1], rx, ry); if (d > bd + .5) { bd = d; best = c; } }); taken.push([best[0], best[1], rx, ry]); return best; };
+  C.forEach(c => { const cand = []; for (let r = 0; r <= 70; r += 10) for (let a = 0; a < 12; a++) cand.push([c.at[0] + r * Math.cos(a * Math.PI / 6), c.at[1] + r * Math.sin(a * Math.PI / 6) * .8]); c.at = spot(cand, 17, 17); });
+  // each edge's sign badge sits at 0.74 of its curve; its label beside the curve's middle, on the clearer side
+  f.edges.forEach(e => { const g = G.get(e); taken.push([...qpt(g.a, g.c, g.b, .74), 9, 9]); });
+  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); }); e._lab = spot(cand, w, 7); });
   let sel = f.start || f.nodes[0].id, state = new Map(), tokens = [], arrivals = new Map(), log = [];
   const draw = () => {
     S.clear();
@@ -31,7 +38,7 @@ export function render(f, S) {
     f.edges.forEach(e => { const g = G.get(e), hot = tokens.some(t => t.e === e); S.mk('path', { d: `M${g.a[0]} ${g.a[1]}Q${g.c[0]} ${g.c[1]} ${g.b[0]} ${g.b[1]}`, fill: 'none', stroke: hot ? FC.ink : FC.soft, 'stroke-width': hot ? 2.2 : 1.5, 'stroke-dasharray': e.delay ? '7 3' : null, 'marker-end': S.arrow(hot ? FC.ink : FC.soft) });
       const s = qpt(g.a, g.c, g.b, .74), col = e.sign > 0 ? FC.verd : FC.rubric; S.mk('circle', { cx: s[0], cy: s[1], r: 8.5, fill: col }); S.txt(s[0], s[1] + 4.5, e.sign > 0 ? '+' : '−', { 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, 'font-size': 13 });
       if (e.delay) { const d = qpt(g.a, g.c, g.b, .45); S.txt(d[0], d[1] - 6, '‖ delay', { 'text-anchor': 'middle', 'font-size': S.fs - 3, fill: FC.soft, 'font-style': 'italic' }); }
-      if (e.label) { const d = qpt(g.a, g.c, g.b, .5); S.txt(d[0], d[1] + 14, e.label, { 'text-anchor': 'middle', 'font-size': S.fs - 2.5, fill: FC.soft, 'font-style': 'italic', fit: 120 }); } });
+      if (e.label) S.txt(e._lab[0], e._lab[1] + 3.5, e.label, { 'text-anchor': 'middle', 'font-size': S.fs - 2.5, fill: FC.soft, 'font-style': 'italic', fit: 120 }); });
     tokens.forEach(t => { const g = G.get(t.e), p = qpt(g.a, g.c, g.b, Math.min(1, t.u)); S.mk('circle', { cx: p[0], cy: p[1], r: 7, fill: t.dir > 0 ? FC.verd : FC.rubric, stroke: '#fff', 'stroke-width': 1.5 }); S.txt(p[0], p[1] + 3.5, t.dir > 0 ? '▲' : '▼', { 'text-anchor': 'middle', fill: '#fff', 'font-size': 8 }); });
     f.nodes.forEach(n => { const [x, y] = P.get(n.id), d = state.get(n.id), on = n.id === sel;
       const g = nodeBox(S, x, y, nw, nh, n.label, { tone: d ? (d > 0 ? 'verd' : 'rubric') : on ? 'hot' : 'card', stroke: on ? FC.ink : FC.lapis, sw: on ? 2.2 : 1.3, rx: 20, maxL: 2, cls: 'pnode' }); g.dataset.id = n.id; g.style.cursor = 'pointer';

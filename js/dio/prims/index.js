@@ -30,14 +30,14 @@ export function renderPrimitive(f, box, { small = false, panel = false } = {}) {
   const S = makeStage(box, { ...dims, small, panel }); S.narrow = narrow;
   if (M.html) { S.svg.remove(); S.frame.classList.add('html'); }
   else S.svg.setAttribute('aria-label', (f.alt || f.caption || f.kind) + ' — interactive ' + LABEL[f.kind]);
-  // the tag in the frame's corner says what kind of explanation this is; lectern / diorama buttons end the control row
-  S.frame.append(el('span', { class: 'prim-kind', text: LABEL[f.kind] }));
+  // the control row ends with a tag naming the kind of explanation, and the lectern / diorama buttons
   M.render(f, S);
-  if (!panel) {
-    const tools = el('span', { class: 'prim-tools' });
+  { const tools = el('span', { class: 'prim-tools' }, [el('span', { class: 'prim-kind', text: LABEL[f.kind] })]);
+    if (!panel) {
     if (PRIMITIVES[f.kind].panel) tools.append(el('button', { type: 'button', class: 'pbtn ghost', title: 'Open it large on the lectern', html: '⤢ Lectern', onclick: e => { e.stopPropagation(); openLectern(f); } }));
     const sc = sceneFor(f); if (sc && typeof window !== 'undefined' && window.__scriptorium) tools.append(el('button', { type: 'button', class: 'pbtn ghost', title: 'Walk into it as a 3D diorama', html: '◫ Diorama', onclick: e => { e.stopPropagation(); openScene(sc, f); } }));
-    if (tools.childNodes.length) S.ctrls.append(tools);
+    }
+    S.ctrls.append(tools);
   }
   box._prim = S;   // the test and polish harnesses drive a primitive through this
   return () => S.dispose();
