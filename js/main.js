@@ -253,7 +253,7 @@ class App {
   async purgeBook(id) {
     if (this.lib.books.some(b => b.id === id)) return;
     const own = k => k === 'pdf:' + id || k === 'room:' + id || k === 'job:' + id || k.startsWith('sections:' + id + ':') || k.startsWith('figs:' + id + ':');
-    try { for (const k of await store.keys()) if (own(String(k))) await store.del(k); } catch (e) { console.warn(e); return; }
+    try { for (const k of await store.keys()) { if (this.lib.books.some(b => b.id === id)) return; /* restored meanwhile: keep the rest */ if (own(String(k))) await store.del(k); } } catch (e) { console.warn(e); return; }
     store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id));
   }
   sweepDeleted() { const ids = store.lsGet(PENDING_DEL, []); if (!Array.isArray(ids)) return store.lsSet(PENDING_DEL, []); ids.forEach(id => this.lib.books.some(b => b.id === id) ? store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id)) : this.purgeBook(id)); }

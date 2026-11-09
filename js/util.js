@@ -108,7 +108,7 @@ export function confirmBox(text, okLabel = 'Confirm', opts = {}) {
 // a toast with one action (e.g. "Undo"), clickable for its whole life (ms); the action runs at most once
 export function toastAction(msg, label, fn, ms = 8000) {
   if (!toastHost) { toastHost = el('div', { class: 'toasts', role: 'status' }); document.body.append(toastHost); }
-  let used = false; const close = () => { t.classList.remove('in'); t.classList.add('out'); setTimeout(() => t.remove(), 400); };
+  let used = false; const close = () => { used = true; /* a closing toast's action never runs: its undo window is over */ t.classList.remove('in'); t.classList.add('out'); setTimeout(() => t.remove(), 400); };
   const t = el('div', { class: 'toast act' }, [el('span', { mathLabel: msg }), el('button', { class: 'toast-btn', type: 'button', text: label, onclick: () => { if (used) return; used = true; close(); fn(); } })]);
   toastHost.append(t); requestAnimationFrame(() => t.classList.add('in')); setTimeout(close, ms);
   while (toastHost.children.length > 3) toastHost.firstChild.remove();
