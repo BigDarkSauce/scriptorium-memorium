@@ -19,8 +19,8 @@ export function render(f, S) {
   const draw = () => {
     S.clear(); const xs = Z.map(z => mu + sg * z), n = xs.length, bins = new Array(B).fill(0); xs.forEach(x => { const b = Math.floor((x - lo) / bw); if (b >= 0 && b < B) bins[b]++; });
     const top = Math.max(pdf(mu) * 1.3, Math.min(peakMax(), Math.max(...bins.map(c => n ? c / (n * bw) : 0)) * 1.1)), Y = y => H - P.b - y / top * (H - P.t - P.b);
-    const ft = S.txt(10, 22, FORMULA[f.dist], { 'font-size': S.narrow ? 13 : 15, fit: W - 20 }); colorize(ft, { 'μ': FC.lapis, 'σ': FC.rubric });
-    S.txt(W - 10, 40, `μ = ${fmt(mu, 2)}   σ = ${fmt(sg, 2)}`, { 'text-anchor': 'end', mono: true, 'font-size': 11.5, fill: FC.soft });
+    const ft = S.txt(10, 24, FORMULA[f.dist], { 'font-size': S.narrow ? 15.5 : 17, fit: W - 20 }); colorize(ft, { 'μ': FC.lapis, 'σ': FC.rubric });
+    S.txt(W - 10, 44, `μ = ${fmt(mu, 2)}   σ = ${fmt(sg, 2)}`, { 'text-anchor': 'end', mono: true, 'font-size': 11.5, fill: FC.soft });
     // axis
     S.mk('line', { x1: P.l, x2: W - P.r, y1: H - P.b, y2: H - P.b, stroke: FC.soft }); const step = (hi - lo) > 20 ? 5 : (hi - lo) > 8 ? 2 : 1;
     for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) { S.mk('line', { x1: X(v), x2: X(v), y1: H - P.b, y2: H - P.b + 4, stroke: FC.soft }); S.txt(X(v), H - P.b + 16, fmt(v, 2), { 'text-anchor': 'middle', mono: true, 'font-size': 10, fill: FC.soft }); }

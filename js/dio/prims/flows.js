@@ -22,11 +22,11 @@ export function render(f, S) {
   const pairN = (x, i) => f.flows.slice(0, i).filter(y => (y.from === x.from && y.to === x.to)).length;
   const G = f.flows.map((x, i) => { const a = P.get(x.from), b = P.get(x.to), dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, k = 16 + 14 * pairN(x, i) + L * .06, c = [(a[0] + b[0]) / 2 + dy / L * k, (a[1] + b[1]) / 2 - dx / L * k], sh = (p, q, d) => { const vx = q[0] - p[0], vy = q[1] - p[1], l = Math.hypot(vx, vy) || 1; return [p[0] + vx / l * d, p[1] + vy / l * d]; }; return { a: sh(a, c, r + 3), b: sh(b, c, r + 8), c }; });
   // label places: along each curve, on either side, wherever they cover no actor, no actor label, no other label
-  const actorBoxes = f.actors.map(a => { const [x, y] = P.get(a.id); return [x, y + 10, (S.narrow ? 100 : 130), 2 * r + 34]; });
+  const actorBoxes = f.actors.map(a => { const [x, y] = P.get(a.id); return [x, y + 10 - (S.narrow ? 6 : 0), (S.narrow ? 100 : 130), 2 * r + (S.narrow ? 22 : 34)]; });
   const labelAt = []; f.flows.forEach((x, i) => { if (!x.label) { labelAt.push(null); return; } const g = G[i], txt = x.label + (x.amount != null ? ' · ' + fmt(x.amount) : ''), w = Math.min(130, txt.length * (S.fs - 2.5) * .54 + 14), h = 16; let best = null, bo = Infinity;
     for (const t of [.5, .4, .6, .32, .68, .25, .75, .18, .82]) for (const o of [0, 12, -12, 24, -24]) { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, cx = p[0] - dy / L * o, cy = p[1] + dx / L * o, box = [cx - w / 2, cy - h / 2, w, h];
       const ov = (b, X) => Math.max(0, Math.min(b[0] + b[2], X[0] + X[2]) - Math.max(b[0], X[0])) * Math.max(0, Math.min(b[1] + b[3], X[1] + X[3]) - Math.max(b[1], X[1]));
-      const cost = labelAt.filter(Boolean).reduce((s, b) => s + ov(b.box, box) * 3, 0) + actorBoxes.reduce((s, A) => s + ov([A[0] - A[2] / 2, A[1] - A[3] / 2, A[2], A[3]], box), 0) + (box[0] < 2 || box[0] + w > W - 2 || box[1] < 18 || box[1] + h > H0 - 2 ? 5000 : 0) + Math.abs(o) * .5 + Math.abs(t - .5) * 20;
+      const cost = labelAt.filter(Boolean).reduce((s, b) => s + ov(b.box, box) * 3, 0) + actorBoxes.reduce((s, A) => s + ov([A[0] - A[2] / 2, A[1] - A[3] / 2, A[2], A[3]], box) * 4, 0) + (box[0] < 2 || box[0] + w > W - 2 || box[1] < 18 || box[1] + h > H0 - 2 ? 5000 : 0) + Math.abs(o) * .5 + Math.abs(t - .5) * 20;
       if (cost < bo) { bo = cost; best = { box, txt }; } }
     labelAt.push(best); });
   let show = { money: true, goods: true, info: true }, sel = null, t = 0;
@@ -46,7 +46,7 @@ export function render(f, S) {
       const L = labelAt[i]; if (L) { const b = L.box; S.mk('rect', { x: b[0], y: b[1], width: b[2], height: b[3], rx: 8, fill: 'rgba(251,246,234,.95)', stroke: col, 'stroke-width': .8 }); S.txt(b[0] + b[2] / 2, b[1] + 11.5, L.txt, { 'text-anchor': 'middle', 'font-size': S.fs - 2.5, fill: col === FC.brass ? '#6b5426' : col, fit: b[2] - 6 }); } });
     f.actors.forEach(a => { const [x, y] = P.get(a.id), act = !sel || sel === a.id || f.flows.some(z => (z.from === sel && z.to === a.id) || (z.to === sel && z.from === a.id)); const g = S.g({ class: 'pnode', opacity: act ? 1 : .35, style: 'cursor:pointer' }); g.dataset.id = a.id;
       S.mk('circle', { cx: x, cy: y, r, fill: sel === a.id ? FC.hot : a.role === 'competitor' ? '#f6e4dc' : FC.card, stroke: sel === a.id ? FC.ink : a.role === 'competitor' ? FC.rubric : FC.brass, 'stroke-width': sel === a.id ? 2.4 : 1.6 }, g); glyph(a, x, y, g);
-      const lw = S.narrow ? 100 : 130; S.txt(x, y + r + 14, a.label, { 'text-anchor': 'middle', 'font-weight': 600, 'font-size': S.fs - .5, fit: lw }, g); S.txt(x, y + r + 27, a.note || a.role, { 'text-anchor': 'middle', 'font-size': S.fs - 3, fill: FC.soft, 'font-style': 'italic', fit: lw }, g); });
+      const lw = S.narrow ? 100 : 130; S.txt(x, y + r + 14, a.label, { 'text-anchor': 'middle', 'font-weight': 600, 'font-size': S.fs - .5, fit: lw }, g); if (!S.narrow) S.txt(x, y + r + 27, a.note || a.role, { 'text-anchor': 'middle', 'font-size': S.fs - 3, fill: FC.soft, 'font-style': 'italic', fit: lw }, g); });
     // legend, top left
     [...new Set(f.flows.map(x => x.kind))].forEach((k, i) => { const x = 8 + i * 70, y = 12; S.mk('line', { x1: x, x2: x + 18, y1: y, y2: y, stroke: COL[k], 'stroke-width': 2, 'stroke-dasharray': k === 'info' ? '2 4' : k === 'goods' ? null : '7 3' }); S.txt(x + 22, y + 4, k, { 'font-size': S.fs - 2.5, fill: FC.soft }); });
     if (units) waterfall();
