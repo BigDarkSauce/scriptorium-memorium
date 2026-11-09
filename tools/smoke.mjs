@@ -23,6 +23,10 @@
 //   edit         edit mode: select an object, move it, undo (Ctrl+Z), hide, add an object, remove it
 //   hub          arrange the library: add / rotate / retype / delete a bookcase
 //   import       examples/room-example.json imports as a new book and its room opens
+//   link         the address names the place (#room=…, &scroll=… with the reader open, none in the hall); the hall's door
+//                knows the room visited last
+//   delete       a scroll is deleted from its shelf after the app's own confirm, comes back with Undo, and once deleted
+//                for real its room leaves storage
 //   ui           no "NaN", "undefined" or "[object Object]" in any visible text
 //   leaks        3 cycles hub → room → diorama → room → hub: GPU geometries/textures and DOM nodes stay flat
 //   context      WebGL context loss and restore: the app pauses, comes back and keeps running
@@ -181,6 +185,28 @@ report('hub', !hub.__error && Object.values(hub).every(Boolean), hub.__error ? f
 const roomJSON = JSON.parse(readFileSync(join(ROOT, 'examples/room-example.json'), 'utf8')); roomJSON.book.title = 'Smoke import';
 const imp = await run(async j => { const n0 = W.lib.books.length; await W.importJSON(j); const b = W.lib.books.find(x => x.title === 'Smoke import'); if (!b) return { ok: false }; await W.openRoom(b.id); const ok = W.mode.constructor.name === 'BookRoom' && W.mode.stations.size > 0; await W.openHub(); return { ok, added: W.lib.books.length - n0 }; }, roomJSON);
 report('import', !imp.__error && imp.ok && imp.added === 1, imp.__error ? failMsg(imp) : `room-example.json → ${imp.added} book`);
+
+// ---- the address names the place: #room=<id>, then &scroll=<id> with the reader open; the hall has none
+const link = await run(async () => {
+  const b = S.book('Classical Mechanics'); await W.openRoom(b.id); const h1 = location.hash, R = W.mode, p = [...R.stations.values()][0].part;
+  R.openPart(p, true); await S.sleep(50); const h2 = location.hash; R.reader && R.reader.close(); await S.sleep(20); const h3 = location.hash;
+  await W.openHub(); await W._sw;
+  return { room: h1 === '#room=' + encodeURIComponent(b.id), scroll: h2 === h1 + '&scroll=' + encodeURIComponent(p.id), closed: h3 === h1, hall: location.hash === '', door: !!W.mode.doorPick && !!W.mode.lastRoom() && W.mode.lastRoom().book.id === b.id };
+});
+report('link', !link.__error && Object.values(link).every(Boolean), link.__error ? failMsg(link) : JSON.stringify(link));
+
+// ---- delete a scroll from its shelf: the app's own confirm, undo, then for real (its room leaves storage)
+const del = await run(async () => {
+  const H = W.mode, b = S.book('Smoke import'); if (!b) return { noBook: true };
+  const asked = H.deleteScroll(b.id); await S.sleep(30); const dlg = document.querySelector('.modal-veil [role=alertdialog]'); if (!dlg) return { dialog: false };
+  dlg.querySelector('.btn.danger').click(); await asked;
+  const gone = !W.lib.books.includes(b) && !H.scrollObjs.has(b.id), undo = [...document.querySelectorAll('.toast.act .toast-btn')].pop();
+  if (undo) undo.click(); const back = W.lib.books.some(x => x.id === b.id) && H.scrollObjs.has(b.id);
+  const again = H.deleteScroll(b.id); await S.sleep(30); document.querySelector('.modal-veil .btn.danger').click(); await again;
+  await W.purgeBook(b.id); const left = (await W.store.keys()).filter(k => String(k).includes(b.id));
+  return { dialog: true, gone, undo: !!undo, back, purged: !left.length && !W.lib.books.some(x => x.id === b.id) };
+});
+report('delete', !del.__error && Object.values(del).every(Boolean), del.__error ? failMsg(del) : JSON.stringify(del));
 
 // ---- visible text
 const ui = await run(() => S.bad());

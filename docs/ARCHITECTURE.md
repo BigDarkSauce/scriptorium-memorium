@@ -10,6 +10,23 @@
 | Book room | `js/room/room.js` | one book: wall scrolls, pedestals with card models, reading overlay (`reader.js`) |
 | Diorama | `js/dio/engine.js` | one diorama with its HUD |
 
+**Switching** (`App._switch`): fade to the veil, dispose the old mode, build the new one, then give it its final look before
+anything shows: a room's reflection probe is scheduled (`captureProbe`, which draws nothing), pending surface-map bakes run
+(`BAKE.now`), a diorama's scanned detail is awaited (`aaa.scansReady`), every program is compiled (`gfx.prewarm`, parallel
+where `KHR_parallel_shader_compile` exists), the probe is drawn in full (`RoomProbe.finish`), and a few frames are drawn.
+Only then does the fade lift; at boot the page veil ("lighting the lamps…", `body.ready`) waits for the same switch.
+
+**Address** (`js/route.js`, `App.route` / `App.onRoute`): the hash names the place, `#room=<bookId>` and
+`#room=<bookId>&scroll=<partId>` (ids percent-encoded), nothing in the hall. A new place pushes a history entry; Back /
+Forward and boot replace instead, and `onRoute` opens or closes the reader when only the scroll changed. `lib.lastRoom`
+(`App.rememberRoom`) is the room and scroll visited last: the hall's double door (`roomshell.doorPick`, an invisible box at
+`shell.userData.baroque.door`) leads back to it, and a book room's door leads back to the hall.
+
+**Seed versioning** (`js/seeds-version.js`, `js/seeds-history.js` from `tools/seed-history.mjs`): a room stores its own copy
+of each diorama spec, so `App.refreshSeedScenes` replaces untouched copies of an older built-in scene (fingerprint stamped
+in `seedFp`, or listed in the history) with the current one, once per seed version (`room.seedStamp`), keeping slider values
+and rewritten lessons; copies with the learner's edits are kept.
+
 ## Rendering (`js/gfx/renderer.js`)
 
 The post chain follows Weatherglass's miniature look:
@@ -92,12 +109,12 @@ The specs and the evidence are in `research/explainer-animation.md` (§6); the l
 
 ### Hub shelves, scrolls and their API (`js/hub/hub.js`, `js/hub/props.js`)
 
-- **Places.** A user bookcase has `tiers` rows (index 0 = the bottom row; people count rows from the top, `row label = tiers − index`) of `slotsPerTier` places at a 0.17 m pitch (horizontal case 3 × 17, vertical 6 × 5). A cradled scroll lies across the case depth with its middle at `SLOT_Z` = 0.095 m in front of the case centre. Its back knob stays 7 mm in front of the silk liner, and its front knob and name tag stand out past the face, as on a scroll rack. Every place of every row carries one holder, a pair of small dark velvet cradles (one `InstancedMesh` per bookcase, `scroll-rests`). User bookcases hold scrolls only; empty places stay empty. The built-in wall cases keep their books.
+- **Places.** A user bookcase has `tiers` rows (index 0 = the bottom row; people count rows from the top, `row label = tiers − index`) of `slotsPerTier` places at a 0.17 m pitch (horizontal case 3 × 17, vertical 6 × 5). The places of a row are centred between the stiles (`slotX`, and `slotAt` for the reverse). A cradled scroll (0.29 m, 0.40 m knob to knob) lies across the case depth with its middle at `SLOT_Z` ≈ 0.015 m in front of the case centre: its front knob ends at the tier board's front edge, its name tag hangs just before the board like a shelf label (behind the stiles' face), and its back knob stays 3 cm in front of the silk liner, so nothing of it leaves the bookcase. Every place of every row carries one holder, a pair of small dark velvet cradles under the roll's ends (one `InstancedMesh` per bookcase, `scroll-rests`). User bookcases hold scrolls only; empty places stay empty. The built-in wall cases keep their books.
 - **Book fields** (persisted with the library, `library.v3`): `shelf`, `tier`, `slot`, plus `important: true` (a gold star on the name tag, ★ in the tooltip) and `hang: {metal, drop}` for a scroll hanging on chains (`metal` ∈ `brass | iron | silver | gold | black`, `drop` = metres from the board above to the roll's axis).
-- **Hanging scrolls** (`props.poseScroll`, `setChains`, `hangLimits`, `hangSlots`). The roll hangs across the case (axis along x), 0.11 m behind the case front, its tag at the middle, on two chains from the underside of the board above (top row: the case's top board) to the knob tops. It spans ±0.305 m, so it reserves every place within 0.40 m of its centre (5 places; a whole row of a vertical case). Its centre is kept 2 cm inside the stiles. The drop is clamped per row: from 0.11 m (the roll and seal clear the board above by 4 cm or more) to `row height − 0.163 m` (the tag's lower edge stays 1.2 cm or more above the cradles). That gives 0.11–0.34 m on a horizontal case and 0.11–0.28 m on a vertical one. The chains are link instances (pitch 10.6 mm, alternately turned 90°): one `InstancedMesh` per metal used on a bookcase.
+- **Hanging scrolls** (`props.poseScroll`, `setChains`, `hangLimits`, `hangSlots`). The roll hangs across the case (axis along x), 0.11 m behind the case front, its tag at the middle, on two chains from the underside of the board above (top row: the case's top board) to the knob tops. It spans ±0.20 m, so it reserves every place within 0.29 m of its centre (3 places). Its centre is kept 2 cm inside the stiles. The drop is clamped per row: from 0.11 m (the roll and seal clear the board above by 4 cm or more) to `row height − 0.163 m` (the tag's lower edge stays 1.2 cm or more above the cradles). That gives 0.11–0.34 m on a horizontal case and 0.11–0.28 m on a vertical one. The chains are link instances (pitch 10.6 mm, alternately turned 90°): one `InstancedMesh` per metal used on a bookcase.
 - **Occupancy.** `need(so, b)` gives the `'tier:slot'` keys a book takes, `occ(caseId, exceptId)` gives everything placed on a bookcase, and `canPlace(caseId, tier, slot, hang, exceptId)` and `findSpot()` (the preferred row and the nearest places first, then eye-level rows) work from those. `repairSlots()` keeps hanging scrolls first. A scroll that clashes moves to the nearest free place. A hanging scroll that fits nowhere is laid in a cradle.
 - **User interface.**
-  - Right-click (mouse) or long-press (touch) a scroll, or click it in Arrange mode, to open a small menu: *Open*, *Tag as important*, *Hang on chains* / *Lay it back in a cradle*, chain metal swatches, a chain-length slider (bounded by the row), and *Move to…*.
+  - Right-click (mouse) or long-press (touch) a scroll, or click it in Arrange mode, to open a small menu: *Open*, *Tag as important*, *Hang on chains* / *Lay it back in a cradle*, chain metal swatches, a chain-length slider (bounded by the row), *Move to…* and *Delete scroll…*. A right-click on a holder opens the menu of the scroll that takes that place. With the menu open, Delete (or Backspace) also deletes. Deleting asks first in the app's own dialog (`util.confirmBox`), then `App.deleteBook` takes the book out of the library at once and offers *Undo* for 9 s (`util.toastAction`); its room, PDF, job and part caches are deleted from storage only after that (`App.purgeBook`; ids waiting are listed in localStorage `sm-pending-deletes` and swept at the next start).
   - *Move to…* is a dialog at the bottom of the screen with no dark veil: pick a bookcase, then a grid of rows × places with taken places disabled. The chosen place is previewed live.
   - In Arrange mode a scroll can be dragged. A ghost snaps to the nearest free place on the row under the pointer, and turns red when that row is full.
   - Hanging a scroll whose span is taken moves it to the nearest free span (the same row first, then other rows, then other bookcases) and says where it went.

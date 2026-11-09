@@ -2,7 +2,8 @@
 
 A walkable 3D library for studying anything. Each PDF becomes a **room**. Its chapters hang as **scrolls** along the walls, each rebuilt as one rigorous logical chain. Beside each scroll stands a **pedestal** carrying a small card model. Step into it and the idea plays out as a living 3D **diorama** of bodies, events and processes.
 
-- **Library hub.** A cozy room whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs; each appears as a folded scroll with its name. Click a scroll: it unfolds in a shaft of light and carries you into its room.
+- **Library hub.** A baroque hall whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs; each appears as a scroll lying in its holder, with its name tag. Click a scroll: it unfolds in a shaft of light and carries you into its room. Right-click it to move, hang or delete it (with undo). The hall's door leads back to the room you visited last.
+- **Links.** The address names the room and the open scroll (`#room=…&scroll=…`): a reload or a shared link reopens it, and Back / Forward step through the places you visited.
 - **Book rooms.** Parts are found automatically: from the PDF's bookmarks, then from chapter headings, then from a printed contents page, then in 20-page windows. They hang from the left wall onward. The room grows when more scrolls need hanging, and you can resize it.
 - **Reading scrolls.** Each part becomes a chain where every step follows from earlier ones: definitions, axioms, derivations line by line, results. Each step names the bodies it is about. You choose the length: complete, essential, or an exact number of steps. Any step can grow its own sub-scroll.
 - **Nothing coarser than the book.** Import finds the hierarchy (chapter → section → subsection) from the bookmarks, numbered and bold headings, or the contents page, and keeps every subsection's text with its pages. Each scroll shows a coverage map: which steps cover which subsection. Missing or coarse subsections are filled by a small follow-up call that sends only their text.
@@ -25,7 +26,7 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 
 Notes for running locally:
 - three.js, MathJax, pdf.js and the fonts load from CDNs, so you need to be online.
-- Your library, rooms and PDFs are stored in the browser (IndexedDB) for that address. Use the same address and port each time (http://localhost:8000) or you will see an empty library; *Import / export* moves a library between browsers.
+- Your library, rooms and PDFs are stored in the browser (IndexedDB) for that address. The example books' dioramas are brought up to date by themselves when a new version changes them, unless you edited them (`js/seeds-version.js`). Use the same address and port each time (http://localhost:8000) or you will see an empty library; *Import / export* moves a library between browsers.
 - The built-in Claude analysis and the research connectors only work inside claude.ai. Locally every AI step shows its prompt for *Copy prompt / Paste JSON* with any AI (see `docs/PROTOCOL.md`), and `tools/verify-chain.mjs` checks the answer before you paste it.
 
 ## Check a chain from another AI
@@ -74,7 +75,8 @@ js/room/              book room, reading scroll, 2D diagrams
 js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
 prompts/              the portable prompt pack (same text the app sends; regenerate with `node prompts/build.mjs`)
 schema/               JSON Schemas: chain (with coverage, question thread, figures, extra) and its strict profile, scene, room
-tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test)
+tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test), polish.mjs (layout and
+                      colour gate), test-math / test-prose / test-seeds (unit checks), seed-history.mjs (regenerates js/seeds-history.js)
 examples/             example scenes, a room file, and a complete chain with its coverage map
 skill/                a Claude skill that turns a PDF into a room file
 docs/                 architecture, protocol, scene spec, user guide, pedagogy & grounding, research notes
@@ -82,4 +84,4 @@ launcher/             Windows launcher helpers (local server, shortcut maker)
 assets/               app icon (scriptorium.ico / .png)
 ```
 
-Built with three.js r170, MathJax 3 and pdf.js 3.11. Every texture is drawn in code; the only image files are the app icon.
+Built with three.js r170, MathJax 3 and pdf.js 3.11. Almost every texture is drawn in code; the image files are the app icons and three CC0 scanned surface sets (ground, moss, bark) in `assets/textures` (see `CREDITS.txt` there) that add fine detail to the dioramas' landscapes.
