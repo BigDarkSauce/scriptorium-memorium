@@ -319,6 +319,12 @@ class App {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
     this.route({ room: bookId, scroll: opts.openPart || null }); this.rememberRoom(bookId, opts.openPart);
     const data = await this.loadRoom(bookId);
+    // a scroll the room no longer has (a stale link, a re-split book) leaves the address (replaced, not a new entry) and
+    // the door's memory
+    if (opts.openPart && !(data.parts || []).some(p => p.id === opts.openPart)) {
+      opts = { ...opts, openPart: undefined }; this.rememberRoom(bookId, null);
+      if (this.here && this.here.room === bookId && this.here.scroll) { const r0 = this._routing; this._routing = true; try { this.route({ room: bookId }); } finally { this._routing = r0; } }
+    }
     sfx.ambience('room'); sfx.play('door', { gain: .6 });
     return this.switchMode(() => new BookRoom(this, book, data, opts));
   }
