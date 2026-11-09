@@ -144,6 +144,9 @@ class App {
       at = at || { tier: 0, slot: 0 };   /* every bookcase full: the hub's repairSlots finds it a place (a new bookcase if need be) */
       const b = { id: 'bk-' + uid(), title: DOMAIN_BOOK.title, shelf: shelf.id, tier: at.tier, slot: at.slot, color: shelf.color || '#2d5b8e', icon: DOMAIN_BOOK.icon, hasPdf: false, example: true };
       this.lib.books.push(b); await store.set('room:' + b.id, this.domainRoom());
+    } else if (!gone) {   /* the book is already there: a later version's new parts are appended (the reader's own parts and edits stay) */
+      const b = this.lib.books.find(x => x.title === DOMAIN_BOOK.title), room = b && await store.get('room:' + b.id);
+      if (room && Array.isArray(room.parts)) { const have = new Set(room.parts.map(p => p.title)), add = this.domainParts().filter(p => !have.has(p.title)); if (add.length) { room.parts.push(...add.map(p => ({ id: 'p-' + uid(), ...p }))); await store.set('room:' + b.id, room); } }
     }
     this.saveLib();
   }

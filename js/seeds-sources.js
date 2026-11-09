@@ -74,9 +74,60 @@ const G = {
 const PART_REFS = { 'The water cycle': ['trenberth', 'oki', 'jasechko', 'koutsoyiannis', 'roe'], 'Galton board': ['galton', 'lecam'], 'Supply and demand': ['smith62', 'gode'], 'Osmosis': ['vanthoff', 'kedem', 'kramer', 'agre'] };
 
 // sources and teaching text (G), then the explanatory paragraphs and the figures of every teaching box (seeds-figures.js)
+// The Revelation Engine's loops (js/room/reveal.js) for the example library: what the reader predicts, the rule that
+// is revealed, the case where that rule stops working (every rule ships with its edge), and a new situation that comes
+// back days later. Numbers checked: 8° → (1/16)θ² ≈ 0.12 %; T(90°)/T₀ = 2K(sin 45°)/π ≈ 1.180, T(60°)/T₀ ≈ 1.073;
+// a clock decaying 4° → 3° shortens its period by ≈ 0.0134 %, ≈ 11.6 s a day; √(g_E/g_M) = √(9.81/1.62) ≈ 2.46.
+const RV = {
+  'The simple pendulum': {
+    S5: { type: 'quantitative', hook: 'You double the release angle from 4° to 8°. What happens to the time of one swing?',
+      predict: { options: [
+        { text: 'About twice as long: the bob travels twice as far.', why: 'It also moves about twice as fast: for small angles the restoring push grows in proportion to the distance, so the two cancel.' },
+        { text: 'Noticeably longer, by roughly a tenth.', why: 'That happens only for big swings (about 7 % at 60°).' },
+        { text: 'The same, to about a tenth of a percent.', correct: true, why: 'The first correction is (1/16)θ₀², about 0.12 % at 8°.' }] },
+      rule: 'For small swings the period does not depend on the amplitude: $T_0 = 2\pi\sqrt{L/g}$.',
+      misconception: 'That a wider swing must take longer because its path is longer. For small angles the bob also moves proportionally faster.',
+      boundary: { case: 'Large swings: the period is about 7 % longer at 60° and about 18 % longer at 90°.', why: 'The restoring push grows like sin θ, not θ, so near the top it is weaker than the straight-line rule assumes.' },
+      transfer: { q: 'The same 1 m pendulum is taken to the Moon, where g ≈ 1.62 m/s² (about 1/6 of Earth’s). Its period becomes…', options: [{ text: 'About 6 times longer.' }, { text: 'About 2.5 times longer.', correct: true }, { text: 'Unchanged: the length is the same.' }], why: 'T₀ ∝ 1/√g, and √(9.81/1.62) ≈ 2.46.' } },
+    S8: { type: 'quantitative', hook: 'Released from 90°, is one swing longer or shorter than $2\pi\sqrt{L/g}$, and by about how much?',
+      predict: { options: [{ text: 'Shorter, by about 18 %.' }, { text: 'The same: amplitude never matters.', why: 'True only for small swings.' }, { text: 'Longer, by about 18 %.', correct: true, why: 'T/T₀ = (2/π)·K(sin 45°) ≈ 1.18.' }, { text: 'About twice as long.' }] },
+      rule: 'The period grows with amplitude: $T = T_0\cdot\frac{2}{\pi}K\!\left(\sin\frac{\theta_0}{2}\right)$.',
+      misconception: 'That a pendulum is isochronous at every amplitude (Galileo’s claim). It is only for small angles.',
+      boundary: { case: 'Towards 180° the period grows without limit (the bob balances at the top), and a bob on a string released from rest above 90° does not follow the circle at all: the string goes slack.', why: 'The formula assumes a rigid rod, or a string that stays taut.' },
+      transfer: { q: 'A pendulum clock’s swing slowly dies down from 4° to 3° over a week. What happens to the time it keeps?', options: [{ text: 'Nothing: the period does not depend on amplitude.' }, { text: 'It runs fast, by roughly ten seconds a day.', correct: true }, { text: 'It runs slow, by minutes a day.' }], why: 'A smaller swing has a slightly shorter period: (1/16)(θ₁² − θ₂²) ≈ 0.013 %, about 12 s a day. Tiny for a swing, large for a clock, which is why clocks hold their amplitude constant.' } },
+  },
+  'The water cycle': {
+    S3: { type: 'causal', hook: 'Moist wind blows over a mountain range. Which side ends up drier?',
+      predict: { options: [{ text: 'The windward side, which the wind hits first.', why: 'That is where it rains: the air is forced up and cools there.' }, { text: 'The lee side, beyond the crest.', correct: true, why: 'The air arrives there already wrung out, and warms as it sinks.' }, { text: 'Neither: the wind carries the same water over both.' }] },
+      rule: 'Air forced up a slope cools by expansion (about 10 °C per km while clear, about 6 °C per km once cloudy) and rains out on the windward side; the sinking air beyond is warm and dry: a rain shadow.',
+      misconception: 'That clouds “run into” mountains. The air is forced upward and cools by expansion; the cloud forms in it.',
+      boundary: { case: 'Air too dry to reach saturation before the crest gives little rain and only a weak shadow; and where drops form and drift slowly, much of the rain spills over onto the lee side.', why: 'Roe (2005) reviews both.' },
+      transfer: { q: 'Seattle lies west of the Cascade Range, Yakima just east of it; the moist winds come mostly off the Pacific. Which city is drier?', options: [{ text: 'Seattle' }, { text: 'Yakima', correct: true }, { text: 'About the same' }], why: 'Yakima is in the Cascades’ rain shadow: about 20 cm of precipitation a year against Seattle’s nearly a metre.' } },
+  },
+  'Galton board': {
+    S3: { type: 'quantitative', hook: 'Doubling the number of rows makes the spread of the pile grow by what factor?',
+      predict: { options: [{ text: 'It doubles.', why: 'That would need every bounce to push the same way.' }, { text: 'By about √2 ≈ 1.41.', correct: true, why: 'σ = √(Np(1−p)): twice N, √2 times σ.' }, { text: 'It stays the same.' }, { text: 'It quadruples.' }] },
+      rule: 'Independent nudges add their variances, so the spread grows as the square root of their number: $\sigma = \sqrt{Np(1-p)}$.',
+      misconception: 'That each ball “aims” for the centre. Each bounce is fair; the hump comes only from counting paths.',
+      boundary: { case: 'Correlated bounces (a ball that went right tends to go right again) spread faster than √N.', why: 'Variances add only for independent steps.' },
+      transfer: { q: 'You average 4 times as many measurements of the same quantity. The random error of the average…', options: [{ text: 'Halves.', correct: true }, { text: 'Falls to a quarter.' }, { text: 'Does not change.' }], why: 'The error of a mean falls as 1/√N: four times the data, half the error.' } },
+  },
+  'Supply and demand': {
+    S3: { type: 'causal', hook: 'A tax raises sellers’ costs. Which curve shifts, and which way does the price $p^*$ move?',
+      predict: { options: [{ text: 'Demand shifts left, so $p^*$ falls.', why: 'Buyers’ willingness to pay has not changed; sellers’ costs have.' }, { text: 'Supply shifts left (up), so $p^*$ rises and less is traded.', correct: true }, { text: 'Both shift and $p^*$ stays put.' }] },
+      rule: 'A cost on sellers lifts the supply curve by the tax; buyers pay part through a higher price, sellers absorb the rest, and the quantity traded falls.',
+      misconception: 'That whoever the law says pays the tax bears it. Who bears it depends on the slopes of the curves, not on the law.',
+      boundary: { case: 'If demand is perfectly inelastic (people buy the same amount at any price), the quantity does not fall and buyers bear all of the tax.', why: 'The burden falls on the side less able to walk away.' },
+      transfer: { q: 'A tax of $1 a pack is put on cigarettes, whose demand barely responds to price. Who ends up paying most of it?', options: [{ text: 'Smokers, through higher prices.', correct: true }, { text: 'Tobacco companies, through lower margins.' }, { text: 'It splits evenly, whatever the curves.' }], why: 'Inelastic demand: buyers cannot easily walk away, so most of the tax shows up in the price.' } },
+  },
+};
+// the example scrolls in libraries seeded before the loops existed get them on first open (reader.js); a step that
+// already has one (or that the reader edited) keeps it. Returns whether anything was added.
+export function addReveals(A) { const rv = A && RV[A.title]; let n = 0; if (rv) for (const st of A.chain || []) if (rv[st.id] && !st.reveal) { st.reveal = JSON.parse(JSON.stringify(rv[st.id])); n++; } return n > 0; }
 export function groundChain(A) {
   const g = G[A.title];
   if (g) for (const st of A.chain || []) { const x = g[st.id]; if (x) Object.assign(st, JSON.parse(JSON.stringify(x))); }
+  const rv = RV[A.title]; if (rv) for (const st of A.chain || []) if (rv[st.id] && !st.reveal) st.reveal = JSON.parse(JSON.stringify(rv[st.id]));
   if (PART_REFS[A.title]) A.references = PART_REFS[A.title].map(k => ({ ...REF[k] }));
   return figureChain(A);
 }

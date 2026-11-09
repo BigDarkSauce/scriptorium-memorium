@@ -134,6 +134,15 @@ export class Gfx {
   resetAdapt() { this._acc = 0; this._n = 0; this._skip = 8; }
   adapt(dtMs) {
     if (!(dtMs > 0)) return; if (this._skip > 0) { this._skip--; return; }
+    // A scene that draws at one frame a second must be lightened at once, not after minutes: frames used to be counted
+    // as at most 100 ms each with a 2 s window, so at 1 fps a window took 20 s and the step-down several windows, and
+    // the scene looked frozen. Now four slow frames in a row (each over 150 ms; a single stall from a compile or a
+    // collection is not a run, and a frame over 3 s is a hidden tab, not a slow one) drop straight to the floor: the
+    // lowest resolution, no bloom, one quality level down.
+    if (dtMs > 3000) { this._slowRun = 0; return; }
+    this._slowRun = dtMs > 150 ? (this._slowRun || 0) + 1 : 0;
+    if (this._slowRun >= 4) { this._slowRun = 0; this._acc = 0; this._n = 0; this.frameMs = dtMs; this._skip = 3; if (this.dpr > .75) { this.dpr = .75; this.resize(); } this.bloom.enabled = false;
+      if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } this.onSevere && this.onSevere(q, dtMs); } return; }
     this._acc += Math.min(dtMs, 100); this._n++;
     if (this._acc > 2000) {
       const avg = this._acc / this._n; this._acc = 0; this._n = 0; this.frameMs = avg;

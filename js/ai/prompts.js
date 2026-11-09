@@ -5,6 +5,7 @@
 // This module also holds the pure checks the app runs on every answer (verifyChain) and the targeted follow-up
 // that fills only what is missing (followUpPrompt + mergeFollowUp). See docs/PROTOCOL.md, "Recipe for any AI".
 
+import { revealIssues } from '../room/reveal.js';
 import { EVIDENCE_RULES } from './evidence.js';
 import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY, isPrimitive } from '../room/figspec.js';
 import { classifyStep, ROUTES, DOMAINS, STRUCTURES, PRIMITIVES, PRIMITIVE_KINDS } from '../dio/domains.js';
@@ -261,6 +262,7 @@ export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","question":"t
    "intuition":"one or two plain sentences: the picture to hold in mind (no new symbols)","intuitionFigure":FIGURE (small),
    "misconception":"the most common wrong belief about this step and why it is wrong (or empty)","misconceptionFigure":FIGURE (small; "contrast" fits most),
    "check":{"q":"a short question that tests understanding, not recall","a":"its answer with one line of reasoning","figure":FIGURE (small; shown after the answer is revealed)},
+   "reveal":{"type":"mechanism|causal|formal|quantitative|taxonomy|narrative|skill","hook":"the question to predict BEFORE reading the explanation (a real gap, answerable from the model)","predict":{"options":[{"text":"a tempting wrong answer (the common misconception)","why":"why it is tempting and wrong"},{"text":"the right answer","correct":true,"why":"one line"}]},"rule":"the rule the step reveals, in one line","boundary":{"case":"a concrete case where that rule FAILS or stops being accurate","why":"why"},"transfer":{"q":"a NEW situation (different surface, same rule) to answer days later","options":[{"text":str},{"text":str,"correct":true}],"why":"one line"}} (for mechanisms, causes, formal and quantitative steps; omit for taxonomies, chronologies and skills. Every "rule" MUST have a "boundary": no compression without the case it fails on. 2 to 4 options, exactly one correct, wrong options are real misconceptions, not jokes.),
    "basis":"source-text|standard|derived|empirical",
    "figures":["fig-1-2", ... ids of the PDF's own figures/tables this step explains],
    "extra":[{"what":"exactly what was added from outside the PDF","source":{"title":str,"authors":str,"year":n,"doi":"or empty","url":"or empty"}}],
@@ -727,6 +729,8 @@ export function qualityGate(A, sections = [], figures = []) {
   planDioramas(A, sections).forEach(p => { if (p.have < p.need) issues.push({ step: null, section: p.subsection, kind: 'dioramas', detail: `[${p.subsection}] needs ${p.need} diorama(s), has ${p.have}` }); });
   // 9. the visual grammar (js/dio/domains.js): abstract structures carry their primitive; primitive demos are valid
   issues.push(...grammarIssues(A));
+  // 10. the Revelation Engine's truth constraint (js/room/reveal.js): a revealed rule ships with its boundary case
+  chain.forEach(st => revealIssues(st).forEach(d => add(st, 'reveal', d)));
   const stats = { steps: chain.length, copied: issues.filter(i => i.kind === 'copied').length, figures: chain.reduce((a, st) => a + figureSlots(st).filter(x => x.fig).length, 0), slots: chain.reduce((a, st) => a + figureSlots(st).length, 0) };
   return { ok: !issues.some(i => i.kind !== 'dioramas' && i.kind !== 'grammar'), issues, fixed, stats };
 }

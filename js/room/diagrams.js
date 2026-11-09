@@ -4,6 +4,7 @@ import { el, compile, fmt, clamp, uid, mod, MATHNAMES, svgMath, mathHTML, mathTe
 import { validateFigure, isPrimitive } from './figspec.js';
 import { renderPrimitive } from '../dio/prims/index.js';
 import { isCodeCall } from './prose.js';
+import { glyphFor, drawGlyph } from './glyphs.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
 export function SVGDEMO(spec,host,fail){
@@ -213,7 +214,7 @@ export function densityOf(f) {
   if (d === 'poisson') { const l = P.lambda; const pm = k => k < 0 ? 0 : Math.exp(k * Math.log(l) - l - lgamma(k + 1)); let hi = Math.ceil(l + 4 * Math.sqrt(l) + 3); return { cont: false, lo: 0, hi, f: pm, sample: () => { let k = 0, p = 1; const L = Math.exp(-l); do { k++; p *= Math.random(); } while (p > L); return k - 1; } }; }
   return { cont: true, lo: -1, hi: 1, f: () => 0 };
 }
-export function renderFigure(spec, host, { small = false, figStore = null } = {}) {
+export function renderFigure(spec, host, { small = false, figStore = null, terms = null } = {}) {
   const NS = 'http://www.w3.org/2000/svg', V = validateFigure(spec), f = V.fig;
   const box = el('figure', { class: 'fig' + (small ? ' small' : '') + (f && f.kind ? ' fig-' + f.kind : '') }); host.append(box);
   if (!V.ok && !(f && f.kind === 'pdf')) { box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + V.errors.join('; ') })); return () => {}; }
@@ -253,6 +254,11 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
     L.forEach((l, i) => txt(x, y + (i - (L.length - 1) / 2) * lh, l, a, parent)); return L.length; };
   const defs = mk('defs'); defs.innerHTML = `<marker id="fa${uid()}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="${FC.soft}"/></marker>`; const arrowId = defs.firstChild.id;
   const layer = mk('g'); target = layer; const clear = () => { layer.innerHTML = ''; marks.length = 0; };
+  // a picture of what a label names (glyphs.js), drawn only when its keyword is in the label (or the spec names one);
+  // f.icons === false turns them off for the whole figure. Its box is recorded so a legend never covers it.
+  const calmG = prefersCalm(), T = Array.isArray(terms) ? terms : [], symOf = t => mathText(String(t.term || '')).replace(/\s+/g, ''),
+    meaningOf = l => { const k = mathText(String(l || '')).replace(/\s+/g, ''); const t = k && k.length <= 6 && T.find(t => symOf(t) === k); return t ? { text: t.meaning, icon: t.icon } : null; };   /* a symbol label ("m") is pictured as what it means ("mass of the bob") */
+  const glyph = (label, x, y, size, icon, color) => { if (f.icons === false) return null; const tm = meaningOf(label); const id = glyphFor(tm ? tm.text : label, icon || (tm && tm.icon)); if (!id) return null; marks.push([x - size / 2, y - size / 2, x + size / 2, y + size / 2]); return drawGlyph(layer, id, x, y, size, color || FC.soft, { animate: !calmG, halo: '#fbf6ea' }); };
   // axes helper for the chart kinds
   const P0 = { l: small ? 34 : 46, r: small ? 10 : 16, t: small ? 14 : 18, b: small ? 30 : 38 };
   const axes = (xr, yr, { xlabel, ylabel, logx, cats } = {}) => {
@@ -368,7 +374,7 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
     const leaves = n => n.children.length ? n.children.reduce((a, c) => a + leaves(c), 0) : 1, depth = n => 1 + Math.max(0, ...n.children.map(depth));
     const D = depth(f.root), total = leaves(f.root), lh = (H - 30) / D;
     draw = () => { clear(); const place = (n, d, x0, x1) => { const x = (x0 + x1) / 2, y = 22 + d * lh; let acc = x0; n.children.forEach(c => { const w = (x1 - x0) * leaves(c) / leaves(n); const cx = acc + w / 2, cy = 22 + (d + 1) * lh; mk('line', { x1: x, y1: y + 10, x2: cx, y2: cy - 12, stroke: FC.soft, 'stroke-width': 1.3 }, layer); if (c.edge) txt((x + cx) / 2 + 4, (y + cy) / 2, c.edge, { 'font-size': fs - 2, fill: FC.rubric, 'font-style': 'italic' }); place(c, d + 1, acc, acc + w); acc += w; });
-        const lw = Math.min((x1 - x0) - 6, 170); mk('rect', { x: x - lw / 2, y: y - 11, width: lw, height: 22, rx: 6, fill: n.children.length ? '#fffaf0' : '#eef4f0', stroke: n.children.length ? FC.lapis : FC.verd }, layer); txt(x, y + 4, wrapText(n.label, Math.max(6, Math.floor(lw / (fs * .55))))[0], { 'text-anchor': 'middle', 'font-size': fs - 1 }); };
+        const lw = Math.min((x1 - x0) - 6, 170); mk('rect', { x: x - lw / 2, y: y - 11, width: lw, height: 22, rx: 6, fill: n.children.length ? '#fffaf0' : '#eef4f0', stroke: n.children.length ? FC.lapis : FC.verd }, layer); const gw = lw >= 96 && glyph(n.label, x - lw / 2 + 11, y, 13, n.icon) ? 9 : 0; txt(x + gw, y + 4, wrapText(n.label, Math.max(6, Math.floor((lw - 2 * gw) / (fs * .55))))[0], { 'text-anchor': 'middle', 'font-size': fs - 1 }); };
       place(f.root, 0, 4, W - 4); void total; };
   } else if (k === 'venn') {
     const n = f.sets.length, R = Math.min(H * .34, W * .2), cx = W / 2, cy = H / 2 + (n === 3 ? 10 : 0), C = n === 2 ? [[cx - R * .55, cy], [cx + R * .55, cy]] : [[cx - R * .55, cy - R * .35], [cx + R * .55, cy - R * .35], [cx, cy + R * .55]];
@@ -390,7 +396,9 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
       else if (it.shape === 'ellipse') mk('ellipse', { cx: X(it.x || 0), cy: Y(it.y || 0), rx: (it.rx || it.r || 8) * s, ry: (it.ry || it.r || 5) * s, fill: tone(it), stroke: FC.lapis }, g);
       else if (it.shape === 'line' || it.shape === 'arrow') mk('line', { x1: X(it.x || 0), y1: Y(it.y || 0), x2: X(it.x2 || 0), y2: Y(it.y2 || 0), stroke: it.tone === 'accent' ? FC.rubric : FC.soft, 'stroke-width': 1.6, 'marker-end': it.shape === 'arrow' ? `url(#${arrowId})` : null }, g);
       else if (it.shape === 'path' && it.d) { const p = mk('path', { d: it.d, fill: it.fill || 'none', stroke: FC.lapis, 'stroke-width': 1.6 / s, transform: `translate(${ox} ${oy}) scale(${s})` }, g); void p; }
-      if (it.text || it.label) { const cxp = it.shape === 'line' || it.shape === 'arrow' ? (X(it.x || 0) + X(it.x2 || 0)) / 2 : it.shape === 'rect' ? X((it.x || 0) + (it.w || 10) / 2) : X(it.x || 0), cyp = it.shape === 'line' || it.shape === 'arrow' ? (Y(it.y || 0) + Y(it.y2 || 0)) / 2 - 6 : it.shape === 'rect' ? Y((it.y || 0) + (it.h || 10) / 2) + 4 : it.shape === 'text' ? Y(it.y || 0) : Y(it.y || 0) + 4; multi(cxp, cyp, it.text || it.label, 22, { 'text-anchor': 'middle', 'font-size': fs - .5 }, g); } }); };
+      let gl0 = 0; { const lab = it.text || it.label || it.name || ''; if (it.shape === 'rect' && (it.h || 10) * s >= 46 && (it.w || 10) * s >= 46) { if (glyph(lab, X((it.x || 0) + (it.w || 10) / 2), Y(it.y || 0) + 15, 18, it.icon)) gl0 = 9; }
+        else if ((it.shape === 'circle' || it.shape === 'ellipse') && (it.r || it.ry || 5) * s >= 22) { if (glyph(lab, X(it.x || 0), Y(it.y || 0) - (lab ? 10 : 0), lab ? 16 : 22, it.icon)) gl0 = 9; } }
+      if (it.text || it.label) { const cxp = it.shape === 'line' || it.shape === 'arrow' ? (X(it.x || 0) + X(it.x2 || 0)) / 2 : it.shape === 'rect' ? X((it.x || 0) + (it.w || 10) / 2) : X(it.x || 0), cyp = it.shape === 'line' || it.shape === 'arrow' ? (Y(it.y || 0) + Y(it.y2 || 0)) / 2 - 6 : it.shape === 'rect' ? Y((it.y || 0) + (it.h || 10) / 2) + 4 : it.shape === 'text' ? Y(it.y || 0) : Y(it.y || 0) + 4; multi(cxp, cyp + gl0, it.text || it.label, 22, { 'text-anchor': 'middle', 'font-size': fs - .5 }, g); const lab = String(it.text || it.label); if (!gl0 && meaningOf(lab)) glyph(lab, cxp - Math.min(22, mathText(lab).length) * (fs - .5) * .29 - 11, cyp - 4, 14, it.icon); } }); };   /* a symbol ("m", "L") gets a picture of what it means beside it */
   } else if (k === 'codetrace') {
     const lh = 22, x0 = 34, notesX = small ? W : W * .5;
     draw = t => { clear(); const hot = t == null ? -1 : Math.floor(t / 1.4) % (f.lines.length + (f.output.length ? 1 : 0));
@@ -402,10 +410,10 @@ export function renderFigure(spec, host, { small = false, figStore = null } = {}
     animated = !!f.animate;
   } else if (k === 'table') {
     const nc = Math.max(f.columns.length, ...f.rows.map(r => r.length)), cw = (W - 12) / nc;
-    draw = () => { clear(); const row = (cells, y, head, ri) => cells.forEach((c, j) => { const hl = !head && f.highlight.some(h => +h[0] === ri && +h[1] === j); mk('rect', { x: 6 + j * cw, y: y - 15, width: cw, height: 22, fill: head ? '#efe4c8' : hl ? 'rgba(156,58,40,.18)' : ri % 2 ? '#fbf6ea' : '#fffaf0', stroke: FC.grid }, layer); txt(10 + j * cw, y, String(c).slice(0, Math.floor(cw / (fs * .55))), { 'font-weight': head ? 600 : 400, 'font-size': fs - 1 }); });
+    draw = () => { clear(); const row = (cells, y, head, ri) => cells.forEach((c, j) => { const hl = !head && f.highlight.some(h => +h[0] === ri && +h[1] === j); mk('rect', { x: 6 + j * cw, y: y - 15, width: cw, height: 22, fill: head ? '#efe4c8' : hl ? 'rgba(156,58,40,.18)' : ri % 2 ? '#fbf6ea' : '#fffaf0', stroke: FC.grid }, layer); const gi = !head && j === 0 && cw >= 80 && glyph(String(c), 16 + j * cw, y - 4, 13) ? 14 : 0; txt(10 + gi + j * cw, y, String(c).slice(0, Math.floor((cw - gi) / (fs * .55))), { 'font-weight': head ? 600 : 400, 'font-size': fs - 1 }); });
       if (f.columns.length) row(f.columns, 26, true, -1); f.rows.forEach((r, i) => row(r, 26 + (i + (f.columns.length ? 1 : 0)) * 22, false, i)); };
   } else if (k === 'contrast') {
-    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 }); const L = wrapText(side.text, Math.floor((w - 20) / (fs * (looksLikeCode(String(side.text)) ? .6 : .53))));   /* a code line is set in the wider mono face */ const cap = Math.max(1, Math.floor((H - 13 - 62) / (fs * 1.3)) + 1); if (L.length > cap) { L.length = cap; L[cap - 1] = L[cap - 1].replace(/[\s,;:.]*$/, '') + '…'; }   /* as many lines as the panel holds; a cut text ends in an ellipsis */ L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); }); };
+    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 });  const L = wrapText(side.text, Math.floor((w - 20) / (fs * (looksLikeCode(String(side.text)) ? .6 : .53))));   /* a code line is set in the wider mono face */ const cap = Math.max(1, Math.floor((H - 13 - 62) / (fs * 1.3)) + 1); if (L.length > cap) { L.length = cap; L[cap - 1] = L[cap - 1].replace(/[\s,;:.]*$/, '') + '…'; }   /* as many lines as the panel holds; a cut text ends in an ellipsis */ L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); { const free = H - 10 - (62 + L.length * fs * 1.3), id = f.icons === false ? null : glyphFor(side.text, side.icon); if (id && id !== 'cross' && id !== 'check' && free >= 46) { const sz = Math.min(54, free - 12); glyph(side.text, x + w / 2, H - 10 - free / 2, sz, side.icon, c); } } }); };   /* the card's empty lower part shows what its sentence is about */
   }
   // ---- run: a static drawing, or a loop (paused off screen, never with reduced motion unless asked)
   let raf = 0, alive = true, visible = true, t0 = performance.now(), playing = false;

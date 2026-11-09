@@ -16,11 +16,15 @@ import * as flows from './flows.js';
 import * as argument from './argument.js';
 import * as story from './story.js';
 import * as sandbox from './sandbox.js';
+import * as bayes from './bayes.js';
+import * as emergence from './emergence.js';
+import * as control from './control.js';
+import * as analogy from './analogy.js';
 import { sceneFor } from './scenes.js';
 export { sceneFor };
 
-export const MODULES = { progressive_construction: construct, state_machine: signal, transform2d: transform, distribution_lab: sampler, causal_loop: loops, competing_explanations: rivals, flow_network: flows, argument_map: argument, data_narrative: story, algorithm_sandbox: sandbox };
-const LABEL = { progressive_construction: 'construction', state_machine: 'signal journey', transform2d: 'transformation', distribution_lab: 'distribution', causal_loop: 'causal loops', competing_explanations: 'competing explanations', flow_network: 'business system', argument_map: 'argument map', data_narrative: 'data story', algorithm_sandbox: 'algorithm sandbox' };
+export const MODULES = { progressive_construction: construct, state_machine: signal, transform2d: transform, distribution_lab: sampler, causal_loop: loops, competing_explanations: rivals, flow_network: flows, argument_map: argument, data_narrative: story, algorithm_sandbox: sandbox , bayes_update: bayes, emergence, control_loop: control, analogy_map: analogy };
+const LABEL = { progressive_construction: 'construction', state_machine: 'signal journey', transform2d: 'transformation', distribution_lab: 'distribution', causal_loop: 'causal loops', competing_explanations: 'competing explanations', flow_network: 'business system', argument_map: 'argument map', data_narrative: 'data story', algorithm_sandbox: 'algorithm sandbox' , bayes_update: 'evidence & belief', emergence: 'emergence', control_loop: 'feedback control', analogy_map: 'analogy' };
 
 export function renderPrimitive(f, box, { small = false, panel = false } = {}) {
   const M = MODULES[f.kind]; if (!M) throw new Error('no primitive ' + f.kind);

@@ -644,6 +644,10 @@ export class Director {
     const riding = ((this.track && this.track.phase === 'ride') || (this.beat && this.beat.thawed)) && v.running != null;   // (once the ride has begun its instruction no longer freezes the model)
     if (riding) this.targetScale = Math.max(this.targetScale ?? 1, .6);
     // time scale: a critically damped ease (settles in ~0.4 s, no step in speed or in acceleration)
+    // a new step is read first, but not over a frozen model: after a short settle (1.6 s, the callout fully in view) the
+    // model plays on at a reading pace until the callout's time is up. A step that held everything still for its whole
+    // reading time (up to 24 s) read as the diorama having frozen.
+    if (this.beat && this.beat.kind === 'lesson' && this.cinematic && this.targetScale === 0 && (this.beat.t || 0) > 1.6) this.targetScale = .35;
     if (dt > 0) { const goal = this.targetScale ?? 1, w = 10, acc = w * w * (goal - this.timeScale) - 2 * w * this.tsV; this.tsV += acc * dt; this.timeScale += this.tsV * dt; if (this.timeScale < 0) { this.timeScale = 0; if (this.tsV < 0) this.tsV = 0; } }
     this.clock = (this.clock || 0) + dt;
     { const L = v.accentLight; if (L) { const goal = this.beat && this.cinematic ? (L.userData.goal || 0) : 0; L.intensity += (goal - L.intensity) * Math.min(1, dt * 2); } }

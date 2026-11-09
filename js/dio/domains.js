@@ -10,7 +10,7 @@
 
 export const DOMAINS = ['cs', 'maths', 'economics', 'business', 'philosophy', 'data', 'physical'];
 export const DOMAIN_NAMES = { cs: 'Programming & computation', maths: 'Mathematics', economics: 'Economics', business: 'Business', philosophy: 'Philosophy', data: 'Data & evidence', physical: 'Physical sciences' };
-export const STRUCTURES = ['construction', 'state_machine', 'transformation', 'distribution', 'causal_graph', 'competing', 'flow_network', 'argument_graph', 'taxonomy', 'data_narrative', 'algorithm', 'mechanism', 'agent_system'];
+export const STRUCTURES = ['construction', 'state_machine', 'transformation', 'distribution', 'causal_graph', 'competing', 'flow_network', 'argument_graph', 'taxonomy', 'data_narrative', 'algorithm', 'mechanism', 'agent_system', 'inference', 'emergence', 'control', 'analogy'];
 export const MEDIA = ['diorama', 'panel', 'simulation', 'figure', 'slides'];
 
 // one line per primitive (the prompts list these, so any AI picks the same kind for the same structure)
@@ -24,7 +24,12 @@ export const PRIMITIVES = {
   flow_network: { structure: 'flow_network', use: 'a business model as a system: customers, firms, suppliers, intermediaries, competitors with money and goods flowing; a unit-economics breakdown', panel: true, scene: true },
   argument_map: { structure: 'argument_graph', use: 'an argument as a navigable graph: question → claim → premises; objection → counterexample; response → revised claim; challenging a premise shows what it affects', panel: true },
   data_narrative: { structure: 'data_narrative', use: 'evidence as a sequence of chart states driven by steps, with annotations and a provenance line; "mode":"slides" for a plain dense analytic slide', panel: true },
-  algorithm_sandbox: { structure: 'algorithm', use: 'grid pathfinding (BFS, Dijkstra, greedy, A*) with movable start and goal, paintable walls, the frontier and visited set drawn', panel: true }
+  algorithm_sandbox: { structure: 'algorithm', use: 'grid pathfinding (BFS, Dijkstra, greedy, A*) with movable start and goal, paintable walls, the frontier and visited set drawn', panel: true },
+  // the Revelation Engine's primitives (docs/research/revelation-engine.md)
+  bayes_update: { structure: 'inference', use: 'competing hypotheses with prior beliefs; each piece of evidence, when revealed, reweights them by how likely it is under each (Bayes), shown as bars and as natural frequencies out of 100', panel: true },
+  emergence: { structure: 'emergence', use: 'agents on a grid following one local rule (e.g. Schelling: move if fewer than t % of neighbours are like me); run it and watch a global pattern no agent intended; compare thresholds', panel: true },
+  control_loop: { structure: 'control', use: 'a feedback controller: setpoint, measured output, error, controller gain and a delay; move the setpoint or add a disturbance and watch overshoot or oscillation appear', panel: true },
+  analogy_map: { structure: 'analogy', use: 'a source idea mapped onto a target: which parts correspond, which relations carry over, and where the likeness breaks', panel: false }
 };
 export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 
@@ -42,7 +47,11 @@ export const ROUTES = {
   data_narrative: { primitive: 'data_narrative', medium: 'figure', fallback: 'slides' },
   algorithm: { primitive: 'algorithm_sandbox', medium: 'simulation', fallback: 'figure' },
   mechanism: { primitive: 'scene', medium: 'diorama', fallback: 'figure' },
-  agent_system: { primitive: 'scene', medium: 'diorama', fallback: 'simulation' }
+  agent_system: { primitive: 'scene', medium: 'diorama', fallback: 'simulation' },
+  inference: { primitive: 'bayes_update', medium: 'simulation', fallback: 'figure' },
+  emergence: { primitive: 'emergence', medium: 'simulation', fallback: 'diorama' },
+  control: { primitive: 'control_loop', medium: 'simulation', fallback: 'figure' },
+  analogy: { primitive: 'analogy_map', medium: 'figure', fallback: 'figure' }
 };
 // the structure a domain falls back to when no structure word is found, and its most natural ones (a tie-breaker)
 const DOMAIN_STRUCT = {
@@ -74,7 +83,11 @@ const STRUCT_WORDS = {
   data_narrative: [R('\\b(per ?cent|percentage|survey|respondents|trend|rose|fell|grew|declined|from \\d{4} to \\d{4}|in \\d{4}|share of|chart|data show|compared with)'), 1.5],
   taxonomy: [R('\\b(types of|kinds of|classif\\w*|branches of|taxonomy|categor\\w*|families of|map of|divides?( roughly)? into|divided into|belongs to|beside|sits? under|a map)'), 2.5],
   mechanism: [R('\\b(mechanism|moves?|rotat\\w*|gears?|levers?|pistons?|valves?|pumps?|engine|machine|assembly|inside the|cutaway|parts? of the)'), 2],
-  agent_system: [R('\\b(agents?|traders?|players?|strategies|strategy|repeated game|prisoner|cooperat\\w*|defect\\w*|population of|tit for tat|tournament)'), 2.5]
+  agent_system: [R('\\b(agents?|traders?|players?|strategies|strategy|repeated game|prisoner|cooperat\\w*|defect\\w*|population of|tit for tat|tournament)'), 2.5],
+  inference: [R('\\b(bayes\\w*|prior|posterior|likelihood|base rate|false positive|diagnos\\w*|update (our|your|the) belief|evidence (for|against)|how likely|odds)'), 3],
+  emergence: [R('\\b(emergen\\w*|local rules?|self-organi[sz]\\w*|flock\\w*|swarm\\w*|segregation|schelling|cellular automat\\w*|game of life|collective behaviou?r|no one intended|traffic jams?)'), 3],
+  control: [R('\\b(setpoint|set point|thermostat|controller|control system|cruise control|feedback control|overshoot|oscillat\\w* around|gain|homeosta\\w*|regulat\\w* (to|around)|error signal|pid)'), 3],
+  analogy: [R('\\b(analog(y|ous|ies)|is like|just as|in the same way|compare(d)? to a|works like|think of it as|metaphor)'), 2]
 };
 const AFFINITY = { cs: { construction: 2, state_machine: 2, algorithm: 2 }, maths: { transformation: 2, distribution: 2 }, economics: { causal_graph: 2, competing: 1.5, agent_system: 1 }, business: { flow_network: 3, data_narrative: 1 }, philosophy: { argument_graph: 3, competing: 1.5, taxonomy: 1 }, data: { data_narrative: 3, distribution: 1 }, physical: { mechanism: 3, causal_graph: .5 } };
 const textOf = st => {
@@ -238,6 +251,35 @@ export function validatePrimitive(f, E) {
     f.walls = [...new Map(f.walls.filter(c => !sk.has(key(c))).map(c => [key(c), c])).values()]; f.forest = [...new Map(f.forest.filter(c => !sk.has(key(c))).map(c => [key(c), c])).values()];
     f.algorithm = ['bfs', 'dijkstra', 'greedy', 'astar'].includes(f.algorithm) ? f.algorithm : 'astar'; f.cost = num(f.cost) ? Math.max(1, Math.min(9, N(f.cost))) : 5;
     f.algorithms = arr(f.algorithms).filter(a => ['bfs', 'dijkstra', 'greedy', 'astar'].includes(a)); if (!f.algorithms.length) f.algorithms = ['bfs', 'dijkstra', 'greedy', 'astar'];
+  } else if (k === 'bayes_update') {
+    // {hypotheses:[{id,label,prior}], evidence:[{label, like:{hid: P(evidence | h)}}], question?}
+    f.hypotheses = arr(f.hypotheses).slice(0, 4).map((h, i) => ({ id: id(h.id, i, 'h'), label: str(h.label || h.id, 40), prior: num(h.prior) ? Math.max(0, N(h.prior)) : 1 }));
+    const tot = f.hypotheses.reduce((a, h) => a + h.prior, 0) || 1; f.hypotheses.forEach(h => { h.prior = h.prior / tot; });
+    const hs = f.hypotheses.map(h => h.id);
+    f.evidence = arr(f.evidence).slice(0, 6).map((e, i) => ({ id: id(e.id, i, 'e'), label: str(e.label, 90), like: Object.fromEntries(hs.map(h => [h, num(e.like && e.like[h]) ? Math.max(0, Math.min(1, N(e.like[h]))) : .5])), ...(e.note ? { note: str(e.note, 160) } : {}) }));
+    if (f.hypotheses.length < 2) E.push('bayes_update needs ≥ 2 "hypotheses" ({id,label,prior})');
+    if (!f.evidence.length) E.push('bayes_update needs "evidence" ({label, like:{hypothesisId: P(evidence | hypothesis)}})');
+    f.evidence.forEach(e => { if (hs.every(h => e.like[h] === 0)) E.push(`evidence "${e.label}" is impossible under every hypothesis`); });
+  } else if (k === 'emergence') {
+    // {model:'schelling', size, density, share, threshold, thresholds?:[..]}  (Schelling 1971: a mild preference, a strong pattern)
+    f.model = f.model === 'schelling' || !f.model ? 'schelling' : 'schelling';
+    f.size = Math.max(12, Math.min(40, Math.round(num(f.size) ? N(f.size) : 24)));
+    f.density = num(f.density) ? Math.max(.5, Math.min(.97, N(f.density))) : .88; f.share = num(f.share) ? Math.max(.2, Math.min(.8, N(f.share))) : .5;
+    f.threshold = num(f.threshold) ? Math.max(0, Math.min(.9, N(f.threshold))) : .34; f.seed = num(f.seed) ? N(f.seed) : 7;
+    f.labels = arr(f.labels).slice(0, 2).map(x => str(x, 16)); if (f.labels.length < 2) f.labels = ['triangles', 'squares'];
+  } else if (k === 'control_loop') {
+    // {plant:'heater', setpoint, start, gain, delay, disturbance?, unit?, labels?}
+    f.setpoint = num(f.setpoint) ? N(f.setpoint) : 21; f.start = num(f.start) ? N(f.start) : 15; f.gain = num(f.gain) ? Math.max(0, Math.min(5, N(f.gain))) : .8;
+    f.delay = num(f.delay) ? Math.max(0, Math.min(20, N(f.delay))) : 1; f.leak = num(f.leak) ? Math.max(0, Math.min(1, N(f.leak))) : .1; f.ambient = num(f.ambient) ? N(f.ambient) : 10;
+    f.unit = str(f.unit || '°C', 8); f.output = str(f.output || 'room temperature', 30); f.actuator = str(f.actuator || 'heater power', 30);
+  } else if (k === 'analogy_map') {
+    // {source, target, maps:[[source part, target part, relation?]], breaks:[...]}
+    f.source = str(f.source, 50); f.target = str(f.target, 50);
+    f.maps = arr(f.maps).slice(0, 7).map(m => Array.isArray(m) ? { a: str(m[0], 50), b: str(m[1], 50), rel: str(m[2] || '', 60) } : { a: str(m.a || m.source, 50), b: str(m.b || m.target, 50), rel: str(m.rel || m.relation || '', 60) }).filter(m => m.a && m.b);
+    f.breaks = arr(f.breaks).slice(0, 4).map(x => str(x, 140)).filter(Boolean);
+    if (!f.source || !f.target) E.push('analogy_map needs "source" and "target"');
+    if (f.maps.length < 2) E.push('analogy_map needs ≥ 2 "maps" ([source part, target part, relation])');
+    if (!f.breaks.length) E.push('analogy_map needs "breaks": where the likeness stops holding (an analogy without its limits teaches a misconception)');
   }
   if (f.question != null && !f.question) delete f.question;
   return E;

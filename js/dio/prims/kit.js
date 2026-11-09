@@ -2,6 +2,7 @@
 // wrapped, measured and kept inside the frame; a minimal control row (PhET: a step bar, one primary action, at most two
 // sliders); readouts; a "why" note; a frame loop that pauses off screen and never runs by itself under reduced motion.
 import { el, fmt, clamp, uid, svgMath, mathHTML } from '../../util.js';
+import { glyphFor, drawGlyph } from '../../room/glyphs.js';
 
 export const NS = 'http://www.w3.org/2000/svg';
 export const FC = { ink: '#2a1e15', soft: '#5b4532', lapis: '#2d5b8e', rubric: '#9c3a28', verd: '#3f7d6e', brass: '#8f733a', gold: '#cfa84f', violet: '#6a4a8a', bg: '#fbf6ea', card: '#fffaf0', hot: '#f3e3b8', grid: 'rgba(90,60,30,.13)', mute: 'rgba(90,60,30,.38)', fillA: 'rgba(45,91,142,.18)', fillR: 'rgba(156,58,40,.16)', fillV: 'rgba(63,125,110,.16)', fillB: 'rgba(207,168,79,.22)' };
@@ -67,12 +68,15 @@ export function makeStage(box, { W = 600, H = 320, small = false, panel = false 
   return S;
 }
 // a rounded node box with a wrapped label, centred at (x, y); tone sets the fill and stroke
-export function nodeBox(S, x, y, w, h, label, { tone = 'card', stroke = FC.lapis, sw = 1.3, fs, sub = null, rx = 8, parent, maxL = 3, cls = null, dash = null, weight = null } = {}) {
+export function nodeBox(S, x, y, w, h, label, { tone = 'card', stroke = FC.lapis, sw = 1.3, fs, sub = null, rx = 8, parent, maxL = 3, cls = null, dash = null, weight = null, icon = null } = {}) {
   const g = S.g(cls ? { class: cls } : {}, parent || S.layer); const fill = { card: FC.card, hot: FC.hot, mute: '#f1e9d8', verd: '#e8f1ec', rubric: '#f6e4dc', lapis: '#e4ebf3', brass: '#f4ead2', ink: FC.ink }[tone] || tone;
   S.mk('rect', { x: x - w / 2, y: y - h / 2, width: w, height: h, rx, fill, stroke, 'stroke-width': sw, 'stroke-dasharray': dash }, g);
   const f = fs || S.fs, subF = f * .82, pad = 6, subH = sub ? subF * 1.3 : 0, L = wrapText(label, Math.max(5, Math.floor((w - 2 * pad) / (f * .52)))), n = Math.max(1, Math.min(maxL, L.length, Math.floor((h - 4 - subH) / (f * 1.2)) || 1));
   S.lines(x, y - subH / 2, label, w - 2 * pad, { 'text-anchor': 'middle', valign: 'middle', 'font-size': f, fill: tone === 'ink' ? FC.bg : FC.ink, 'font-weight': weight }, g, n);
   if (sub) S.txt(x, y + h / 2 - 5, sub, { 'text-anchor': 'middle', 'font-size': subF, fill: FC.soft, 'font-style': 'italic', fit: w - 2 * pad }, g);
+  // a picture of what the box names (room/glyphs.js), in its top-left corner when the box has room for it and the words
+  // leave that corner free (one centred line, or a box tall enough that two lines stay clear of it)
+  if (icon !== false && !(S.f && S.f.icons === false) && w >= 84 && h >= 30) { const id = glyphFor(label, icon); const tw = Math.min(w - 2 * pad, String(label).length * f * .52); if (id && (n === 1 ? tw / 2 + 22 <= w / 2 : h >= 52)) drawGlyph(g, id, x - w / 2 + 11, y - h / 2 + 11, 13, tone === 'ink' ? FC.bg : FC.soft, { animate: !S.calm, halo: fill === FC.ink ? null : fill }); }
   return g;
 }
 // a point at fraction t along a quadratic Bézier (a, control c, b)

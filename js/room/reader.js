@@ -1,6 +1,6 @@
 // The reading scroll: a parchment overlay showing one part's logical chain. 3D showcases appear as 2D drawings
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
-import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML } from '../util.js';
+import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML, mathText } from '../util.js';
 import { SVGDEMO, SVG_TYPES, renderFigure } from './diagrams.js';
 import { closeLecterns } from '../dio/prims/index.js';
 import { prose } from './prose.js';
@@ -10,6 +10,9 @@ import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
 import { chapterPrompt, detailPrompt } from '../ai/prompts.js';
 import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo } from '../ai/pipeline.js';
 import { partKey, cached } from '../store.js';
+import { addReveals } from '../seeds-sources.js';
+import { renderReveal, openDeck, stats as revealStats, normReveal } from './reveal.js';
+import { glyphFor, glyphSVG } from './glyphs.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
@@ -58,7 +61,10 @@ export class Reader {
       el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
         el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
       el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
+      // the transfer deck (reveal.js): rules uncovered earlier, back in new situations on their day
+      this.revisitBtn = el('button', { class: 'ibtn dark tiny rv-pill', type: 'button', 'aria-label': 'Revisit: new situations for rules you uncovered', title: 'Revisit: rules you uncovered, in new situations', html: '◆<span class="rv-n"></span>', onclick: () => openDeck({ typeset, onClose: () => this.refreshRevisit() }) }),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
+    this.refreshRevisit();
     this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
     if (this._dockKey) removeEventListener('keydown', this._dockKey);   // render() runs again after an analysis or a check: one F listener, not one per render
     this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !(e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };
@@ -66,7 +72,8 @@ export class Reader {
     const body = el('div', { class: 'reader-body' }); this.body = body;
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
-    if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }   // analysed, but the chain came back empty: nothing to unfold
+    if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }
+    if (addReveals(P.analysis)) this.save();   /* an example scroll from before the Revelation Engine gets its loops (seeds-sources.js) */   // analysed, but the chain came back empty: nothing to unfold
     const chain = this.renderChain(P.analysis); body.append(this.analyseBar(true), chain, this.foldBar);
   }
   // ---------- progressive unfolding ----------
@@ -120,6 +127,8 @@ export class Reader {
     const bar = this.foldBar; bar.innerHTML = ''; bar.classList.toggle('done', k >= n);
     if (k < n) {
       const go = el('button', { class: 'unroll', type: 'button', 'aria-label': `Unfold further: fold ${k + 1} of ${n}`, onclick: () => this.unfold(1) }, [el('span', { class: 'unroll-sheet', 'aria-hidden': 'true' }), el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'Unfold further' }), el('span', { class: 'unroll-prog', text: `fold ${k} of ${n} read` })])]);
+      // the curiosity gap at the edge: the question the next fold answers, shown (not answered) on the rod
+      { const nx = this.folds[k] && this.folds[k].units.map(u => u.els).flat(), q = nx && nx.map(e => e.matches && (e.matches('.q-in, .reveal-card') ? e : e.querySelector && e.querySelector('.q-in, .rv-hook'))).find(Boolean); const t = q && (q.querySelector('.rv-hook') || q).textContent.replace(/^Q\s*/, '').replace(/^Predict, then unfold\s*/, '').trim(); if (t) go.querySelector('.unroll-label').append(el('span', { class: 'unroll-tease', text: 'Next: ' + (t.length > 110 ? t.slice(0, 108).replace(/\s+\S*$/, '') + '…' : t) })); }
       bar.append(go, el('div', { class: 'fold-dots', 'aria-hidden': 'true' }, this.folds.map((_, i) => el('i', { class: i < k ? 'on' : '' }))));
     } else bar.append(...[el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null].filter(Boolean));   /* (append(null) would print the word "null" under a one-fold scroll's bar) */
     const mi = this.el.querySelector('.reader-menu-pop'); if (mi) this.fillMenu(mi);
@@ -267,8 +276,9 @@ export class Reader {
     setTimeout(() => { if (wrap.isConnected) { this._typesetReady = true; this.typesetShown(); } }, 1000); setTimeout(() => drawArcs(wrap), 400);
     return wrap;
   }
+  refreshRevisit() { const b = this.revisitBtn; if (!b) return; revealStats().then(S => { const n = b.querySelector('.rv-n'); if (n) n.textContent = S.due ? ' ' + S.due : ''; b.classList.toggle('due', S.due > 0); b.hidden = !S.loops; }).catch(() => { }); }
   renderStep(st, wrap, A) {
-    const kind = String(st.kind || 'result').toLowerCase();
+    const kind = String(st.kind || 'result').toLowerCase(); this._curTerms = Array.isArray(st.terms) ? st.terms : [];   /* the step's symbols: a figure's "m" is drawn as what m means (glyphs.js) */
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
     art.append(el('div', { class: 'badge', text: KIND_ABBR[kind] || st.id }));
     if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: mathHTML(st.answers) })]));
@@ -291,10 +301,12 @@ export class Reader {
     if (st.figureRefs && st.figureRefs.length) art.append(el('div', { class: 'fig-refs' }, st.figureRefs.map(r => r.in ? el('span', { class: 'chip' }, [`${r.id} — shown in `, el('a', { text: r.in, tabindex: 0, onclick: () => this.jump(r.in) })]) : el('span', { class: 'chip dim', text: `${r.id} (p. ${r.page}) is a whole page: explained here instead of pasted` }))));
     if (st.extra && st.extra.length) art.append(el('div', { class: 'extras' }, st.extra.map(x => el('div', { class: 'extra' }, [el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }), el('span', { html: ' ' + esc(x.what || '') }), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))));
     if (this._numbers && this._numbers.has(st.id)) art.append(el('div', { class: 'num-warn', text: 'Not found in the PDF text of this subsection: ' + this._numbers.get(st.id).join(', ') + '. Check these numbers against the page.' }));
-    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => [el('dt', { html: mathHTML(t.term) }), el('dd', { html: prose(t.meaning) })])));
+    if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => { const g = glyphFor(t.meaning, t.icon); return [el('dt', { html: (g ? glyphSVG(g, 15) + ' ' : '') + mathHTML(t.term) }), el('dd', { html: prose(t.meaning) })]; })));
     if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
     if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
-    if (st.check && st.check.q) {
+    const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
+    if (rv) art.append(rv);
+    else if (st.check && st.check.q) {
       // the check's figure may give the answer away: it is drawn only when the answer is revealed
       const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
       art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); } } }), ans]));
@@ -313,8 +325,8 @@ export class Reader {
   }
   // one figure spec (js/room/figspec.js), drawn once the PDF's figure store is known (a "pdf" figure needs it)
   figure(spec, small = false) {
-    const host = el('div', { class: 'fig-host' + (small ? ' small' : '') });
-    this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F }); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
+    const host = el('div', { class: 'fig-host' + (small ? ' small' : '') }), terms = this._curTerms || [];
+    this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F, terms }); const cast = castStrip(spec, terms); if (cast) host.append(cast); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
     return host;
   }
   renderExample(x) {
@@ -502,6 +514,7 @@ export function normalizeChain(A) {
     ...(fig(x.statementFigure) ? { statementFigure: fig(x.statementFigure) } : {}), ...(fig(x.intuitionFigure) ? { intuitionFigure: fig(x.intuitionFigure) } : {}), ...(fig(x.misconceptionFigure) ? { misconceptionFigure: fig(x.misconceptionFigure) } : {}),
     ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}),
     // the explanatory compiler's routing (js/dio/domains.js): the AI's own choice of domain, structure and primitive
+    ...(normReveal(x.reveal) ? { reveal: normReveal(x.reveal) } : {}),
     ...(x.visual && typeof x.visual === 'object' ? { visual: Object.fromEntries(['domain', 'structure', 'primitive', 'medium', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)])) } : {}) }));
   A.chain.forEach((st, i) => { const x = src[i]; if (st.check && x && x.check && fig(x.check.figure)) st.check.figure = fig(x.check.figure); });
   if (Array.isArray(A.dioramaPlan)) A.dioramaPlan = A.dioramaPlan.filter(p => p && p.subsection != null).map(p => ({ subsection: String(p.subsection), count: Math.max(0, Math.min(3, +p.count || 0)), why: String(p.why || '') }));
@@ -542,6 +555,16 @@ export function drawArcs(wrap) {
 }
 
 function normSources(a) { return Array.isArray(a) ? a.filter(s => s && (s.title || s.doi)).slice(0, 30).map(s => ({ ...s, title: String(s.title || ''), doi: s.doi ? String(s.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : '' })) : []; }
+// Under a figure, the cast of its symbols: each of the step's terms whose symbol is written in the figure, as a chip with
+// a picture of what it stands for (glyphs.js) and its meaning cut to the first clause: "(ball) m · mass of the bob".
+// Nothing when the figure names none of them, or when it is a PDF page (that already has its own legend).
+export function castStrip(spec, terms) {
+  if (!spec || spec.kind === 'pdf' || !Array.isArray(terms) || !terms.length || spec.cast === false) return null;
+  const words = new Set(); JSON.stringify(spec, (k, v) => { if (typeof v === 'string' && !/^(kind|d|color|fill|tone|shape|id|chart|dist|icon)$/.test(k)) mathText(v).split(/[^\p{L}\p{N}_′'·]+/u).forEach(w => w && words.add(w)); return v; });
+  const sym = t => mathText(String(t.term || '')).replace(/\s+/g, '').trim();
+  const hit = terms.filter(t => { const s = sym(t); return s && s.length <= 12 && words.has(s); }).slice(0, 6); if (!hit.length) return null;
+  return el('div', { class: 'fig-cast' }, hit.map(t => { const g = glyphFor(t.meaning, t.icon); return el('span', { class: 'cast-chip', title: String(t.meaning || '') }, [g ? el('span', { class: 'cast-g', html: glyphSVG(g, 16) }) : null, el('b', { html: mathHTML(t.term) }), el('span', { class: 'cast-m', html: ' ' + prose(String(t.meaning || '').split(/[,;(]/)[0].trim()) })]); }));
+}
 export function renderSource(s) {
   const href = [s.url, s.doi ? doiUrl(s.doi) : '', s.openalex].map(u => String(u || '').trim()).find(u => /^https?:\/\//i.test(u)) || '';   // model/imported text: never a javascript: or data: link
   const mark = s.verified === true ? el('span', { class: 'vmark ok', title: 'Found in OpenAlex' + (s.cited_by != null ? ` · cited ${s.cited_by.toLocaleString()} times` : ''), text: '✓' }) : s.verified === false ? el('span', { class: 'vmark bad', title: s.checkNote || 'Not found in OpenAlex: the reference may be garbled or invented. Check before relying on it.', text: s.check === 'uncertain' ? '?' : '✗' }) : el('span', { class: 'vmark', title: 'Not checked yet', text: '·' });
