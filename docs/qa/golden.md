@@ -99,3 +99,23 @@ Tolerances (0.4 % / 0.6 %) sit about 2–30× above that floor and below what a 
 
 About 2 minutes to boot per viewport, then 40–90 s per view on SwiftShader; a full compare (22 views, two servers)
 takes roughly an hour, and is resumable at any point. Use `--only` while iterating on one area.
+
+**Load matters for the dioramas.** A view rendered while another heavy browser job runs on the same 2 vCPU can drift:
+in the round-8 compare the desktop Galton board showed 1.06 % (bead positions only) with the smoke test running
+beside it, and 0.029 % when both sides were rendered again on their own. Re-render a diorama that fails by a small
+margin with `--only=<view> --fresh` before calling it a regression.
+
+## Round 8 (main 0bd794c → r8 92d02c4)
+
+13 of 22 views within tolerance; each of the 9 others is an intended change:
+
+| view (desktop / phone) | changed | why |
+|---|---|---|
+| hub | 0.42 % / 0.22 % (pass) | scrolls placed along the eye-level tier (seed layout), centred cradles, the Blender globe stand |
+| hub-desk | 3.0 % / 7.3 % | Blender candlestick, inkstand and quill replace the procedural ones; cradles in the background |
+| hub-globe | 3.3 % / 6.5 % | Blender globe stand |
+| bookcase | 3.8 % / 4.0 % | cradles centred between the stiles, 0.29 m scrolls; Classical Mechanics in the middle of its tier, not at slot 0 |
+| dio-water | 8.0 % / 7.5 % | the base shows a spurious "Rain shadow" callout at t = 0.5 s (a cloud left past the crest by the warm-up); r8 does not |
+| dio-galton (desktop) | 1.06 % → 0.029 % | load drift (see above); within the noise floor when re-rendered |
+
+Room, readers and the other dioramas are unchanged (≤ 0.49 %).
