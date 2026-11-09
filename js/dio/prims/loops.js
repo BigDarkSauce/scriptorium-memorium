@@ -17,6 +17,16 @@ export function cycles(nodes, edges) {
 export function render(f, S) {
   const { W, H } = S, nw = S.narrow ? 104 : 126, nh = 40, my = 34;
   const P = new Map(); if (f.nodes.every(n => n.x != null)) f.nodes.forEach(n => P.set(n.id, [nw / 2 + 8 + n.x / 100 * (W - nw - 16), my + n.y / 60 * (H - 2 * my)])); else ring(f.nodes.length, W, H, nw / 2 + 12, my + 6).forEach((p, i) => P.set(f.nodes[i].id, p));
+  // Author positions are percentages of the figure, so on the narrow (phone, lectern) layout two boxes on one row could
+  // close up (prices and interest rate touched, the sign badge between them sat on both). Keep every pair at least a
+  // badge and an arrowhead apart (36 px between boxes): push each overlapping pair apart along the axis that needs less
+  // movement, inside the frame; a pair that the frame's width cannot separate is moved apart vertically instead.
+  { const sx = nw + 36, sy = nh + 36, x0 = nw / 2 + 8, x1 = W - nw / 2 - 8, y0 = my, y1 = H - my, ids = f.nodes.map(n => n.id), cl = (v, a, b) => Math.max(a, Math.min(b, v));
+    for (let it = 0; it < 80; it++) { let moved = false;
+      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = P.get(ids[i]), b = P.get(ids[j]), dx = b[0] - a[0], dy = b[1] - a[1], ox = sx - Math.abs(dx), oy = sy - Math.abs(dy); if (ox <= .5 || oy <= .5) continue;
+        const room = (x1 - x0) - Math.abs(dx) >= ox, alongX = room && ox <= oy, d = (alongX ? ox : oy) / 2 + .5, sg = (alongX ? dx : dy) >= 0 ? 1 : -1;
+        if (alongX) { a[0] = cl(a[0] - sg * d, x0, x1); b[0] = cl(b[0] + sg * d, x0, x1); } else { a[1] = cl(a[1] - sg * d, y0, y1); b[1] = cl(b[1] + sg * d, y0, y1); } moved = true; }
+      if (!moved) break; } }
   const C = cycles(f.nodes, f.edges); let nR = 0, nB = 0;
   C.forEach(c => { const named = f.loops.find(l => l.nodes.length === c.nodes.length && l.nodes.every(x => c.nodes.includes(x))); c.tag = (c.sign > 0 ? 'R' : 'B') + (c.sign > 0 ? ++nR : ++nB); c.name = named ? named.name : ''; const xs = c.nodes.map(i => P.get(i)); c.at = [xs.reduce((a, p) => a + p[0], 0) / xs.length, xs.reduce((a, p) => a + p[1], 0) / xs.length]; });
   // curves: control point to the left of the direction of travel, so A→B and B→A part
@@ -30,7 +40,13 @@ export function render(f, S) {
   C.forEach(c => { const cand = []; for (let r = 0; r <= 70; r += 10) for (let a = 0; a < 12; a++) cand.push([c.at[0] + r * Math.cos(a * Math.PI / 6), c.at[1] + r * Math.sin(a * Math.PI / 6) * .8]); c.at = spot(cand, 17, 17); });
   // each edge's sign badge sits at 0.74 of its curve; its label beside the curve's middle, on the clearer side
   f.edges.forEach(e => { const g = G.get(e); taken.push([...qpt(g.a, g.c, g.b, .74), 9, 9]); });
-  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68, .25, .75].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); }); e._lab = spot(cand, w, 7); });
+  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68, .25, .75].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); });
+    // the narrow layout (phone, lectern): a short edge between two close boxes may have no place beside it clear of the
+    // boxes and curves; then it looks further out, and a place on a box (clear: -1) ranks below one grazing a curve
+    if (S.narrow && !cand.some(c => clear(c[0], c[1], w, 7) >= 0)) { let best = null, bd = -Infinity;
+      [.5, .4, .6].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28, 38, -38, 48, -48, 60, -60].forEach(o => { const c = [p[0] - dy / L * o, p[1] + dx / L * o], d0 = clear(c[0], c[1], w, 7), d = d0 === -1 ? -1e6 : d0 - Math.abs(o) * .05; if (d > bd + .5) { bd = d; best = c; } }); });
+      taken.push([best[0], best[1], w, 7]); e._lab = best; return; }
+    e._lab = spot(cand, w, 7); });
   let sel = f.start || f.nodes[0].id, state = new Map(), tokens = [], arrivals = new Map(), log = [];
   const draw = () => {
     S.clear();

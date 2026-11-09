@@ -775,7 +775,7 @@ i { font-style: italic; }
 .rv-badge.dim { background: rgba(90,60,30,.18); color: var(--iron-soft); }
 .rv-note { font-size: 12px; color: var(--iron-soft); margin-top: 2px; }
 /* the lectern (2.5D panel) */
-.prim-lectern { display: grid; place-items: center; z-index: 30; background: rgba(12,9,6,.72); padding: 14px; }
+.prim-lectern { display: grid; place-items: center; z-index: 30; background: rgba(12,9,6,.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); padding: 14px; }   /* blurred: the reader's buttons no longer show through between the caption's words */
 .lect-wrap { width: min(980px, 100%); max-height: calc(100vh - 28px); overflow: auto; display: grid; gap: 8px; }
 .lect-head { display: flex; align-items: center; gap: 10px; color: var(--ink); }
 .lect-head b { font-family: var(--f-italic); font-size: 18px; font-weight: 400; color: var(--brass-hi); flex: 1; min-width: 0; }
