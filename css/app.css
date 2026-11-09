@@ -719,7 +719,7 @@ i { font-style: italic; }
 .prim svg.prim-svg { touch-action: none; user-select: none; -webkit-user-select: none; }
 .prim-kind { align-self: center; padding: 1px 7px; border-radius: 999px; background: rgba(42,30,21,.78); color: #f3e3b8; font: 9.5px/1.5 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 .prim-ctrls { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
-.prim-tools { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.prim-tools { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: 100%; }
 .pbtn { font: 13px/1.2 var(--f-body); color: var(--iron); background: linear-gradient(#fbf4e3, #ead9b4); border: 1px solid rgba(90,60,30,.42); border-radius: 999px; padding: 5px 12px; min-height: 30px; cursor: pointer; white-space: nowrap; }
 .pbtn:hover { border-color: var(--iron-soft); background: linear-gradient(#fffaf0, #efe0be); }
 .pbtn:disabled { opacity: .45; cursor: default; }

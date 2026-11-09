@@ -87,11 +87,12 @@ export function rng(seed) { let a = seed >>> 0 || 1; return () => { a |= 0; a = 
 export function ring(n, W, H, mx = 70, my = 44, phase = -Math.PI / 2) { const cx = W / 2, cy = H / 2, rx = W / 2 - mx, ry = H / 2 - my; return [...Array(n)].map((_, i) => [cx + rx * Math.cos(phase + i * 2 * Math.PI / n), cy + ry * Math.sin(phase + i * 2 * Math.PI / n)]); }
 // a wire from box a to box b (centres, sizes [w, h]) as a quadratic curve that bends round any obstacle box
 // ([cx, cy, w, h]) it would cross; bend0 > 0 pushes it to the left of its direction (two opposite wires part)
-export function route(a, b, sa, sb, obstacles = [], bend0 = 0) {
+export function route(a, b, sa, sb, obstacles = [], bend0 = 0, frame = null) {
   const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = dy / L, ny = -dx / L, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  const hits = (p, c, q) => { for (let i = 1; i < 24; i++) { const s = qpt(p, c, q, i / 24); if (obstacles.some(o => Math.abs(s[0] - o[0]) < o[2] / 2 + 3 && Math.abs(s[1] - o[1]) < o[3] / 2 + 3)) return true; } return false; };
-  let first = null;
-  for (const k of [0, 1, -1, 1.8, -1.8, 2.7, -2.7, 3.6, -3.6]) { const off = bend0 + k * 30, c = [m[0] + nx * off, m[1] + ny * off], p = boxExit(a, sa[0], sa[1], c, 2), q = boxExit(b, sb[0], sb[1], c, 5), r = { a: p, b: q, c }; if (!first) first = r; if (!hits(p, c, q)) return r; }
-  return first;
+  // how much of the curve runs through other boxes (or out of the frame): the least wins, the straightest on a tie
+  const hits = (p, c, q) => { let n = 0; for (let i = 1; i < 24; i++) { const s = qpt(p, c, q, i / 24); if (obstacles.some(o => Math.abs(s[0] - o[0]) < o[2] / 2 + 3 && Math.abs(s[1] - o[1]) < o[3] / 2 + 3)) n++; if (frame && (s[0] < 2 || s[1] < 2 || s[0] > frame[0] - 2 || s[1] > frame[1] - 2)) n += 2; } return n; };
+  let best = null, bn = Infinity;
+  for (const k of [0, 1, -1, 1.8, -1.8, 2.7, -2.7, 3.6, -3.6, 4.6, -4.6]) { const off = bend0 + k * 30, c = [m[0] + nx * off, m[1] + ny * off], p = boxExit(a, sa[0], sa[1], c, 2), q = boxExit(b, sb[0], sb[1], c, 5), n = hits(p, c, q); if (n < bn) { bn = n; best = { a: p, b: q, c }; } if (!n) break; }
+  return best;
 }
 export const qpath = r => `M${r.a[0].toFixed(1)} ${r.a[1].toFixed(1)}Q${r.c[0].toFixed(1)} ${r.c[1].toFixed(1)} ${r.b[0].toFixed(1)} ${r.b[1].toFixed(1)}`;

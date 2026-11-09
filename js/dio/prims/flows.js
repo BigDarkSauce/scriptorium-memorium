@@ -4,7 +4,7 @@
 // Spec: {actors:[{id,label,role,x?,y?,note?}], flows:[{from,to,kind:'money'|'goods'|'info',label,amount?}], units?:{title,price,currency,items:[{label,value}]}}
 import { FC, qpt, fmt, mathHTML } from './kit.js';
 
-const NET_H = 330, NET_HN = 380;
+const NET_H = 360, NET_HN = 390;
 const rowsOf = f => f.units ? f.units.items.length + 2 : 0;
 export const size = (f, o) => ({ W: o.narrow ? 360 : 600, H: (o.narrow ? NET_HN : NET_H) + (f.units ? 40 + 21 * rowsOf(f) : 0) });
 const COL = { money: FC.brass, goods: FC.lapis, info: FC.violet };
@@ -12,7 +12,7 @@ const COL = { money: FC.brass, goods: FC.lapis, info: FC.violet };
 // the firm, competitors below the customers, regulators below the firm
 const CELL = { supplier: [0, null], partner: [1, 0], intermediary: [1, 0], platform: [1, 0], firm: [1, 1], customer: [2, 1], competitor: [2, 2], regulator: [1, 2] };
 export function render(f, S) {
-  const { W } = S, units = f.units, H0 = S.narrow ? NET_HN : NET_H, P = new Map(), r = 21, colX = [W * .14, W * .5, W * .86], rowY = S.narrow ? [52, 196, 330] : [52, 166, 280];
+  const { W } = S, units = f.units, H0 = S.narrow ? NET_HN : NET_H, P = new Map(), r = 21, colX = [W * .14, W * .5, W * .86], rowY = S.narrow ? [52, 200, 336] : [52, 182, 308];
   if (f.actors.every(a => a.x != null)) f.actors.forEach(a => P.set(a.id, [40 + a.x / 100 * (W - 80), 40 + a.y / 60 * (H0 - 100)]));
   else {
     const groups = new Map(); f.actors.forEach(a => { const [c, rr] = CELL[a.role] || [1, 1]; const k = c + ':' + (rr == null ? 's' : rr); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); });

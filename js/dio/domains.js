@@ -211,7 +211,7 @@ export function validatePrimitive(f, E) {
     if (f.actors.length < 2 || !f.flows.length) E.push('flow_network needs ≥ 2 "actors" and ≥ 1 "flows" ({from,to,kind:"money|goods|info",label})');
   } else if (k === 'argument_map') {
     f.question = str(f.question, 160);
-    f.nodes = arr(f.nodes).slice(0, 12).map((n, i) => ({ id: id(n.id, i), type: ARG_TYPES.includes(n.type) ? n.type : 'premise', text: str(n.text || n.label, 150), ...(n.short ? { short: str(n.short, 40) } : {}) }));
+    f.nodes = arr(f.nodes).slice(0, 12).map((n, i) => ({ id: id(n.id, i), type: ARG_TYPES.includes(n.type) ? n.type : 'premise', text: str(n.text || n.label, 280), ...(n.short ? { short: str(n.short, 40) } : {}) }));
     const ids = new Set(f.nodes.map(n => n.id));
     f.links = arr(f.links || f.edges).map(l => Array.isArray(l) ? { from: l[0], to: l[1], rel: l[2] } : l).filter(l => l && ids.has(String(l.from)) && ids.has(String(l.to)) && l.from !== l.to).slice(0, 20).map(l => ({ from: String(l.from), to: String(l.to), rel: ARG_RELS.includes(l.rel) ? l.rel : 'supports' }));
     if (f.nodes.length < 3) E.push('argument_map needs ≥ 3 "nodes" ({id, type, text})');

@@ -11,7 +11,7 @@ export function render(f, S) {
   // register values after k ticks
   const valuesAt = k => { const v = Object.fromEntries(f.nodes.filter(x => x.register).map(x => [x.id, x.value])); for (let i = 0; i < k; i++) Object.assign(v, f.ticks[i].set); return v; };
   // wires as curves that bend round the other boxes; a wire with a twin in the opposite direction keeps to its left
-  const R = new Map(f.wires.map(w => [w.from + '>' + w.to, route(pos.get(w.from), pos.get(w.to), [nw, nh], [nw, nh], f.nodes.filter(x => x.id !== w.from && x.id !== w.to).map(x => [...pos.get(x.id), nw, nh]), f.wires.some(v => v.from === w.to && v.to === w.from) ? 12 : 0)]));
+  const R = new Map(f.wires.map(w => [w.from + '>' + w.to, route(pos.get(w.from), pos.get(w.to), [nw, nh], [nw, nh], f.nodes.filter(x => x.id !== w.from && x.id !== w.to).map(x => [...pos.get(x.id), nw, nh]), f.wires.some(v => v.from === w.to && v.to === w.from) ? 12 : 0, [W, H])]));
   const geo = (a, b) => R.get(a + '>' + b) || route(pos.get(a), pos.get(b), [nw, nh], [nw, nh]);
   let k = 0, t = 1, running = false, flash = 0;
   const draw = () => {
