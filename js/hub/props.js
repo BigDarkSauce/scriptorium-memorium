@@ -16,8 +16,10 @@ export const SHELF_KINDS = {
 export const SLOT = .17; // slot pitch along a tier (hub.js: per = floor((w - .2) / .17))
 // Scrolls: radius .058 m (0.116 m across: 54 mm between neighbours at the 0.17 m pitch, 38 mm between their ribbons),
 // lying in velvet cradles whose hollow (radius R + 3 mm) is centred on the scroll's axis, AXIS above the tier board
-// (the scroll's underside 14 mm above the board).
-export const SCROLL_R = .058, SCROLL_L = .5, AXIS = .072;
+// (the scroll's underside 14 mm above the board). SCROLL_L 0.29 m: knob to knob a scroll is 0.40 m long, so it lies
+// wholly on the tier board (0.43 m from the silk liner to the board's front edge); at 0.5 m the front knob, the tag
+// and the front cradles stood 15 cm out past the case's face.
+export const SCROLL_R = .058, SCROLL_L = .29, AXIS = .072;
 function m(geo, mat) { const o = new THREE.Mesh(geo, mat); o.castShadow = true; o.receiveShadow = true; return o; }
 const urnGeo = () => new THREE.LatheGeometry([[0, 0], [.045, 0], [.05, .015], [.025, .03], [.02, .045], [.055, .08], [.05, .11], [.02, .13], [.012, .15], [.02, .165], [0, .18]].map(([r, y]) => new THREE.Vector2(r, y)), 16);
 
@@ -100,7 +102,7 @@ function globeTex() {
   });
 }
 // The scroll rests: for every slot of every tier one holder, a pair of low cradles (a saddle 7 cm wide with a hollow of
-// radius R + 3 mm centred on the scroll's axis, 18 mm high at its horns), under the scroll at 0.16 m either side of its
+// radius R + 3 mm centred on the scroll's axis, 18 mm high at its horns), under the scroll at REST_DZ either side of its
 // middle, in a dark, matte walnut-brown velvet close to the tier's own tone: quiet furniture, not a row of red accents.
 // Shared geometry and material, one draw call per bookcase. Every tier carries them (setRestTiers(o, null)), so a new
 // bookcase reads as ready for scrolls on all its rows.
@@ -123,17 +125,27 @@ function scrollRests(o) {
 // show the cradles on the given tiers only (a Set of tier indices; null: every tier, the default the hub uses)
 export function setRestTiers(o, tiers) {
   const u = o.userData, im = u.rests; if (!im) return; const M = new THREE.Matrix4(); let i = 0;
-  for (let t = 0; t < u.tiers; t++) { if (tiers && !tiers.has(t)) continue; for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-.16, .16].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); } }
+  for (let t = 0; t < u.tiers; t++) { if (tiers && !tiers.has(t)) continue; for (let j = 0; j < u.slotsPerTier; j++) { const p = slotPos(o, t, j); [-REST_DZ, REST_DZ].forEach(dz => im.setMatrixAt(i++, M.makeTranslation(p.x, p.y - AXIS, p.z + dz))); } }
   im.count = i; im.visible = i > 0; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.computeBoundingBox && im.computeBoundingBox();
 }
 // (kept for callers of the old API: the user's bookcases no longer get filler books)
 export function fillBookcase() { return null; }
 // Slot position (local to the bookcase) for tier i, slot j: scrolls lie horizontally, ends facing out.
-export const slotX = (u, slot) => -u.w / 2 + .14 + slot * SLOT;
-// SLOT_Z: the scroll's middle 9.5 cm before the case's centre, so its back knob (0.305 m behind the middle) stays 7 mm
-// before the silk liner instead of passing through the back board; the front knob and tag stand out past the face, as
-// on a scroll rack.
-export const SLOT_Z = .095;
+// The slots of a tier are centred between the stiles (they started 0.14 m from the left end, so every row was shifted
+// left: on a vertical case 0.09 m of free board on the left against 0.28 m on the right).
+export const slotX = (u, slot) => (slot - (u.slotsPerTier - 1) / 2) * SLOT;
+// the slot nearest to x (bookcase frame) on a tier of u.slotsPerTier slots
+export const slotAt = (u, x) => Math.max(0, Math.min(u.slotsPerTier - 1, Math.round(x / SLOT + (u.slotsPerTier - 1) / 2)));
+// Along the scroll (local z), from its middle: the back knob reaches KNOB_TIP behind and the front knob as far before;
+// the name tag hangs from the front knob TAG_Z before the middle (odd slots 7 mm further). SLOT_Z puts the front knob's
+// tip at the tier board's front edge and the tag just before the board (2 mm clear of its gilt bead), where it hangs over
+// the edge like a shelf label, still behind the stiles' face (d/2): nothing of a lying scroll leaves its bookcase, and
+// the back knob stays 3 cm before the silk liner.
+const KNOB_TIP = SCROLL_L / 2 + SCROLL_R * .95, TAG_Z = KNOB_TIP + .006;
+const BOARD_FRONT = (SHELF_KINDS.horizontal.d - .05) / 2 - .01;
+export const SLOT_Z = BOARD_FRONT + .006 - TAG_Z;
+// the cradles: one under each end of the roll, 4 cm in from the spiral caps
+export const REST_DZ = SCROLL_L / 2 - .04;
 export function slotPos(shelfObj, tier, slot) {
   const u = shelfObj.userData, y = .13 + tier * u.tierH + AXIS, x = slotX(u, slot);
   return new THREE.Vector3(x, y, SLOT_Z);
@@ -141,13 +153,13 @@ export function slotPos(shelfObj, tier, slot) {
 // ---------- hanging scrolls ----------
 // An important scroll can hang on two chains from the underside of the board above its tier (the top tier: from the
 // case's top board), its axis across the case (along x), its front and name tag toward the room, in front of the row of
-// cradles (z = HANG.z). Across the case it spans the roll and both knobs (±HALF = 0.305 m), so it reserves every slot
-// whose cradled scroll (radius R, tag ±0.076 m) would come within 1 cm of it: |slotX − hangX| < HANG.reach (5 slots at
-// the 0.17 m pitch; a whole tier of a vertical case). hangX keeps the knobs 2 cm inside the stiles.
+// cradles (z = HANG.z). Across the case it spans the roll and both knobs (±HALF = 0.2 m), so it reserves every slot
+// whose cradled scroll (radius R, tag ±0.076 m) would come within 1 cm of it: |slotX − hangX| < HANG.reach (3 slots at
+// the 0.17 m pitch). hangX keeps the knobs 2 cm inside the stiles.
 // The drop (board underside → axis) is limited by the tier: at least HANG.min (the roll and its seal clear the board
 // above by ≥ 4 cm), at most what keeps the hanging tag's lower edge ≥ 1.2 cm above the cradles' horns (HANG.below).
 export const HALF = SCROLL_L / 2 + SCROLL_R * .95;
-export const HANG = { z: .11, reach: .40, min: .11, below: .163 };
+export const HANG = { z: .11, reach: HALF + .076 + .01, min: .11, below: .163 };
 export const METALS = {
   brass: { label: 'Brass', color: 0xc9a253, rough: .36, metal: 1 },
   iron: { label: 'Iron', color: 0x75716a, rough: .55, metal: 1 },
@@ -283,7 +295,7 @@ function spiralTex() {
 // A weighted rod rides on its lower edge (userData.rod: set rod.position.y = −h · scale.y). The title is written on it.
 export function makeSheet(w = .42, h = .6, title = '', R = SCROLL_R) {
   const geo = new THREE.PlaneGeometry(w, h, 1, 1); geo.translate(0, -h / 2, 0); geo.rotateY(-Math.PI / 2);
-  const tex = canvasTex(null, 512, 732, (g, W, H) => {
+  const tex = canvasTex(null, 512, Math.round(512 * h / w), (g, W, H) => {   /* the canvas has the sheet's own proportions: the title is never squeezed */
     g.drawImage(parchment('sheet', 512, 768).image, 0, 0, W, H); g.strokeStyle = 'rgba(143,115,58,.8)'; g.lineWidth = 3; g.strokeRect(26, 26, W - 52, H - 52);
     g.fillStyle = '#2a1e15'; g.textAlign = 'center'; g.font = '600 46px "IM Fell English SC", Georgia, serif';
     const words = String(title || '').split(/\s+/), lines = []; let cur = ''; words.forEach(wd => { const t = cur ? cur + ' ' + wd : wd; if (g.measureText(t).width > W - 110 && cur) { lines.push(cur); cur = wd; } else cur = t; }); if (cur) lines.push(cur);

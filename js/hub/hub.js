@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell } from '../gfx/roomshell.js';
-import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, SLOT, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
+import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, slotAt, SCROLL_L, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
 import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
 import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
@@ -158,7 +158,7 @@ export class Hub {
     const occ = new Map(), bad = [], O = id => occ.get(id) || occ.set(id, new Map()).get(id);
     [...this.lib.books].sort((a, b) => (!!b.hang) - (!!a.hang)).forEach(b => {
       const so = this.shelfObjs.get(b.shelf); if (!so) return; const u = so.userData, t = b.tier || 0, sl = b.slot || 0, M = O(b.shelf);
-      if (t < 0 || sl < 0 || t >= u.tiers || sl >= u.slotsPerTier) { bad.push(b); return; }
+      if (!Number.isInteger(t) || !Number.isInteger(sl) || t < 0 || sl < 0 || t >= u.tiers || sl >= u.slotsPerTier) { bad.push(b); return; }
       const ks = this.need(so, b); if (ks.some(k => M.has(k))) bad.push(b); else ks.forEach(k => M.set(k, b.id));
     });
     bad.forEach(b => {
@@ -543,7 +543,7 @@ export class Hub {
     let tg = null;
     for (const h of this.pick(e, [...this.shelfObjs.values()])) {
       const so = this.ownerOf(h.object, 'shelf'); if (!so) continue; const u = so.userData, id = u.shelfId, L = so.worldToLocal(h.point.clone());
-      const row = clamp(Math.floor((L.y - .13) / u.tierH), 0, u.tiers - 1), j = clamp(Math.round((L.x + u.w / 2 - .14) / SLOT), 0, u.slotsPerTier - 1);
+      const row = clamp(Math.floor((L.y - .13) / u.tierH), 0, u.tiers - 1), j = slotAt(u, L.x);
       let best = null; for (let k = 0; k < u.slotsPerTier; k++) if (this.canPlace(id, row, k, !!D.b.hang, D.b.id) && (best == null || Math.abs(k - j) < Math.abs(best - j))) best = k;
       tg = { caseId: id, row, slot: best != null ? best : j, free: best != null }; break;
     }
@@ -647,7 +647,7 @@ export class Hub {
     if (b.hang) { const sid = so.userData.shelfId; setChains(so, this.lib.books.filter(x => x.shelf === sid && x.hang && x !== b).flatMap(x => chainItems(so, x))); O.chainsOff = sid; }   // its chains go with it (no ends left dangling while it is out)
     // facing: the scroll's axis (local z) across the view, its front (local −x) toward the viewer, kept level
     O.face = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(O.liftTo.clone().add(outward), O.liftTo, V3(0, 1, 0))).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI / 2));
-    O.sheet = makeSheet(.42, .6, b.title); sc.add(O.sheet);
+    O.sheet = makeSheet(SCROLL_L - .02, .6, b.title);   /* the sheet is as wide as the roll it leaves */ sc.add(O.sheet);
     // the back light: behind the sheet's middle (the viewer is toward local −x), it warms the bookcase behind it into a
     // soft halo round the sheet's edges
     O.light = new THREE.PointLight(0xffd59a, 0, 2.6, 2); sc.add(O.light); O.light.position.set(.28, -.32, 0);
