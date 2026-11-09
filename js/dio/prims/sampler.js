@@ -35,7 +35,7 @@ export function render(f, S) {
     const mean = n ? xs.reduce((a, b) => a + b, 0) / n : NaN, sd = n > 1 ? Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : NaN, within = n ? xs.filter(x => Math.abs(x - mu) <= sg).length / n : NaN;
     const theory = f.dist === 'normal' ? .6827 : f.dist === 'uniform' ? 1 / Math.sqrt(3) : 1 - Math.exp(-2);
     S.read([['samples', n], ['sample mean x̄', n ? fmt(mean, 3) : '—'], ['sample sd s', n > 1 ? fmt(sd, 3) : '—'], ['within μ ± σ', n ? fmt(within * 100, 1) + ' % (theory ' + fmt(theory * 100, 1) + ' %)' : '—']]);
-    if (!n) S.txt(W / 2, (P.t + H - P.b) / 2, 'press +1 to draw a first sample', { 'text-anchor': 'middle', fill: FC.soft, 'font-style': 'italic' });
+    if (!n) S.txt(P.l + 6, P.t + 22, 'press +1 to draw a first sample', { fill: FC.soft, 'font-style': 'italic', 'font-size': S.fs - 1 });
   };
   S.slider('μ (mean)', f.muRange[0], f.muRange[1], mu, (f.muRange[1] - f.muRange[0]) / 200, v => { mu = v; draw(); }, v => fmt(v, 2));
   S.slider('σ (spread)', f.sigmaRange[0], f.sigmaRange[1], sg, (f.sigmaRange[1] - f.sigmaRange[0]) / 200, v => { sg = v; draw(); }, v => fmt(v, 2));

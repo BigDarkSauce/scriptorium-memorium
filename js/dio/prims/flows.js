@@ -4,15 +4,15 @@
 // Spec: {actors:[{id,label,role,x?,y?,note?}], flows:[{from,to,kind:'money'|'goods'|'info',label,amount?}], units?:{title,price,currency,items:[{label,value}]}}
 import { FC, qpt, fmt, mathHTML } from './kit.js';
 
-const NET_H = 300;
+const NET_H = 330, NET_HN = 380;
 const rowsOf = f => f.units ? f.units.items.length + 2 : 0;
-export const size = (f, o) => ({ W: o.narrow ? 360 : 600, H: NET_H + (f.units ? 40 + 21 * rowsOf(f) : 0) });
+export const size = (f, o) => ({ W: o.narrow ? 360 : 600, H: (o.narrow ? NET_HN : NET_H) + (f.units ? 40 + 21 * rowsOf(f) : 0) });
 const COL = { money: FC.brass, goods: FC.lapis, info: FC.violet };
 // a 3 × 3 grid of places by role: suppliers on the left, the firm in the middle, customers on the right; brokers above
 // the firm, competitors below the customers, regulators below the firm
 const CELL = { supplier: [0, null], partner: [1, 0], intermediary: [1, 0], platform: [1, 0], firm: [1, 1], customer: [2, 1], competitor: [2, 2], regulator: [1, 2] };
 export function render(f, S) {
-  const { W } = S, units = f.units, H0 = NET_H, P = new Map(), r = 21, colX = [W * .14, W * .5, W * .86], rowY = [50, 142, 234];
+  const { W } = S, units = f.units, H0 = S.narrow ? NET_HN : NET_H, P = new Map(), r = 21, colX = [W * .14, W * .5, W * .86], rowY = S.narrow ? [52, 196, 330] : [52, 166, 280];
   if (f.actors.every(a => a.x != null)) f.actors.forEach(a => P.set(a.id, [40 + a.x / 100 * (W - 80), 40 + a.y / 60 * (H0 - 100)]));
   else {
     const groups = new Map(); f.actors.forEach(a => { const [c, rr] = CELL[a.role] || [1, 1]; const k = c + ':' + (rr == null ? 's' : rr); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); });
@@ -24,7 +24,7 @@ export function render(f, S) {
   // label places: along each curve, on either side, wherever they cover no actor, no actor label, no other label
   const actorBoxes = f.actors.map(a => { const [x, y] = P.get(a.id); return [x, y + 10, (S.narrow ? 100 : 130), 2 * r + 34]; });
   const labelAt = []; f.flows.forEach((x, i) => { if (!x.label) { labelAt.push(null); return; } const g = G[i], txt = x.label + (x.amount != null ? ' · ' + fmt(x.amount) : ''), w = Math.min(130, txt.length * (S.fs - 2.5) * .54 + 14), h = 16; let best = null, bo = Infinity;
-    for (const t of [.5, .4, .6, .32, .68, .25, .75]) for (const o of [0, 12, -12]) { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, cx = p[0] - dy / L * o, cy = p[1] + dx / L * o, box = [cx - w / 2, cy - h / 2, w, h];
+    for (const t of [.5, .4, .6, .32, .68, .25, .75, .18, .82]) for (const o of [0, 12, -12, 24, -24]) { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, cx = p[0] - dy / L * o, cy = p[1] + dx / L * o, box = [cx - w / 2, cy - h / 2, w, h];
       const ov = (b, X) => Math.max(0, Math.min(b[0] + b[2], X[0] + X[2]) - Math.max(b[0], X[0])) * Math.max(0, Math.min(b[1] + b[3], X[1] + X[3]) - Math.max(b[1], X[1]));
       const cost = labelAt.filter(Boolean).reduce((s, b) => s + ov(b.box, box) * 3, 0) + actorBoxes.reduce((s, A) => s + ov([A[0] - A[2] / 2, A[1] - A[3] / 2, A[2], A[3]], box), 0) + (box[0] < 2 || box[0] + w > W - 2 || box[1] < 18 || box[1] + h > H0 - 2 ? 5000 : 0) + Math.abs(o) * .5 + Math.abs(t - .5) * 20;
       if (cost < bo) { bo = cost; best = { box, txt }; } }

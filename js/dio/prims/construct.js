@@ -15,7 +15,7 @@ export function render(f, S) {
   else if (layersOf(f) && Math.max(...layersOf(f).values()) + 1 <= (S.narrow ? 6 : 5)) {
     // left to right in data-flow order (top to bottom on a phone); parts of one layer share a column (row)
     const L = layersOf(f), n = Math.max(...L.values()) + 1, cols = [...Array(n)].map((_, i) => f.parts.filter(p => L.get(p.id) === i));
-    if (!S.narrow) { const cw = (W - 20) / n; cols.forEach((col, i) => col.forEach((p, j) => { const rh = (bottom - top) / col.length, w = Math.min(cw - 22, 150), h = Math.min(rh - 18, 56); pos.set(p.id, { x: 10 + (i + .5) * cw, y: top + (j + .5) * rh, w, h }); })); }
+    if (!S.narrow) { const cw = (W - 20) / n; cols.forEach((col, i) => col.forEach((p, j) => { const rh = (bottom - top) / col.length, w = Math.min(cw - 14, 150), h = Math.min(rh - 18, 56); pos.set(p.id, { x: 10 + (i + .5) * cw, y: top + (j + .5) * rh, w, h }); })); }
     else { const rh = (bottom - top) / n; cols.forEach((row, i) => row.forEach((p, j) => { const cw = (W - 20) / row.length, w = Math.min(cw - 16, 200), h = Math.min(rh - 16, 50); pos.set(p.id, { x: 10 + (j + .5) * cw, y: top + (i + .5) * rh, w, h }); })); }
   }
   else {
@@ -33,7 +33,7 @@ export function render(f, S) {
     f.links.forEach(l => { const ka = stageOf.get(l.from), kb = stageOf.get(l.to); if (ka > k || kb > k) return; const g = R.get(l), fresh = ka === k || kb === k; S.mk('path', { d: qpath(g), fill: 'none', stroke: fresh ? FC.rubric : FC.soft, 'stroke-width': fresh ? 1.8 : 1.3, 'marker-end': S.arrow(fresh ? FC.rubric : FC.soft), opacity: fresh ? Math.min(1, t * 1.4) : 1 }); if (l.label) S.txt(qpt(g.a, g.c, g.b, .5)[0], qpt(g.a, g.c, g.b, .5)[1] - 5, l.label, { 'text-anchor': 'middle', 'font-size': S.fs - 2, fill: FC.rubric, 'font-style': 'italic', fit: 110 }); });
     f.parts.forEach(p => { const s = stageOf.get(p.id), P = pos.get(p.id);
       if (s > k) { S.mk('rect', { x: P.x - P.w / 2, y: P.y - P.h / 2, width: P.w, height: P.h, rx: 8, fill: 'none', stroke: FC.grid, 'stroke-dasharray': '3 4' }); return; }   // its place, kept so the layout never jumps
-      const fresh = s === k && k > 0, e = fresh ? easeIO(Math.min(1, t)) : 1, g = nodeBox(S, P.x, P.y - (1 - e) * 14, P.w, P.h, p.label, { tone: fresh ? 'hot' : s === 0 && k === 0 ? 'hot' : 'card', stroke: fresh || k === 0 ? FC.rubric : FC.lapis, sw: fresh ? 2 : 1.3, sub: p.note || null, maxL: p.note ? 1 : 2 });
+      const fresh = s === k && k > 0, e = fresh ? easeIO(Math.min(1, t)) : 1, g = nodeBox(S, P.x, P.y - (1 - e) * 14, P.w, P.h, p.label, { tone: fresh ? 'hot' : s === 0 && k === 0 ? 'hot' : 'card', stroke: fresh || k === 0 ? FC.rubric : FC.lapis, sw: fresh ? 2 : 1.3, sub: p.note || null, maxL: 2 });
       g.setAttribute('opacity', e.toFixed(3));
       if (fresh || (k === 0 && s === 0)) { S.mk('circle', { cx: P.x + P.w / 2 - 2, cy: P.y - P.h / 2 + 2 - (1 - e) * 14, r: 8, fill: FC.rubric }, g); S.txt(P.x + P.w / 2 - 2, P.y - P.h / 2 + 6 - (1 - e) * 14, '+', { 'text-anchor': 'middle', fill: '#fff', 'font-size': 12, 'font-weight': 700 }, g); } });
   };

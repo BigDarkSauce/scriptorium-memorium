@@ -711,7 +711,8 @@ i { font-style: italic; }
 /* ---- domain primitives (js/dio/prims; docs/research/explanatory-compiler.md): interactive figures in ink, parchment
    and brass. A minimal control row (step bar, one primary action, ≤ 2 sliders), readouts, a "why" note, the provenance
    line; the lectern is the same primitive large on a tilted board whose nodes ride a lifted layer (2.5D). ---- */
-.fig.prim { gap: 6px; color: var(--iron); }
+.fig.prim { gap: 6px; color: var(--iron); grid-template-columns: minmax(0, 1fr); min-width: 0; max-width: 100%; }
+.fig.prim > * { min-width: 0; }
 .fig-host:has(> .prim) { max-width: 660px; }
 .prim-frame { position: relative; }
 .prim-frame.html { background: #fbf6ea; border: 1px solid var(--vellum-edge); border-radius: 6px; padding: 10px 10px 8px; }

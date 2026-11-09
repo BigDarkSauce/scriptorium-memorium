@@ -30,7 +30,7 @@ export function render(f, S) {
   C.forEach(c => { const cand = []; for (let r = 0; r <= 70; r += 10) for (let a = 0; a < 12; a++) cand.push([c.at[0] + r * Math.cos(a * Math.PI / 6), c.at[1] + r * Math.sin(a * Math.PI / 6) * .8]); c.at = spot(cand, 17, 17); });
   // each edge's sign badge sits at 0.74 of its curve; its label beside the curve's middle, on the clearer side
   f.edges.forEach(e => { const g = G.get(e); taken.push([...qpt(g.a, g.c, g.b, .74), 9, 9]); });
-  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); }); e._lab = spot(cand, w, 7); });
+  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68, .25, .75].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); }); e._lab = spot(cand, w, 7); });
   let sel = f.start || f.nodes[0].id, state = new Map(), tokens = [], arrivals = new Map(), log = [];
   const draw = () => {
     S.clear();

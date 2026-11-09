@@ -33,7 +33,7 @@ export function render(f, S) {
     [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([r, cI]) => S.txt(mx + 8 + cI * cw + cw / 2, ey - 2 + r * rh, fmt(A[r][cI], 2), { 'text-anchor': 'middle', mono: true, 'font-size': 13, fill: cI ? FC.rubric : FC.lapis, 'font-weight': 600 }));
     S.txt(mx + 8 + cw / 2, ey + rh * 2 + 2, 'î', { 'text-anchor': 'middle', 'font-size': 12, fill: FC.lapis, 'font-style': 'italic' }); S.txt(mx + 8 + cw * 1.5, ey + rh * 2 + 2, 'ĵ', { 'text-anchor': 'middle', 'font-size': 12, fill: FC.rubric, 'font-style': 'italic' });
     const ey2 = ey + (S.narrow ? 66 : 82), lw = W - ex - 10;
-    S.txt(ex, ey2, `det A = ad − bc = ${fmt(A[0][0], 2)}·${fmt(A[1][1], 2)} − ${fmt(A[0][1], 2)}·${fmt(A[1][0], 2)}`, { 'font-size': S.fs - .5, fit: lw });
+    S.txt(ex, ey2, `det A = a·d − b·c = ${fmt(A[0][0], 2)}·${fmt(A[1][1], 2)} − ${fmt(A[0][1], 2)}·${fmt(A[1][0], 2)}`, { 'font-size': S.fs - .5, fit: lw });
     S.txt(ex, ey2 + 20, `= ${fmt(det, 3)}`, { 'font-size': S.fs + 1, fill: det >= 0 ? FC.brass : FC.rubric, 'font-weight': 600 });
     S.lines(ex, ey2 + 30, Math.abs(det) < 1e-3 ? 'The plane is squashed onto a line: the area is 0 and A has no inverse.' : det < 0 ? `Every area is scaled by |det A| = ${fmt(-det, 3)}, and the orientation flips (ĵ is now clockwise of î).` : `Every area is scaled by det A = ${fmt(det, 3)}; the orientation is kept.`, lw, { 'font-size': S.fs - 1, fill: FC.soft }, S.layer, 3);
     if (!S.narrow) S.txt(ex, H - 14, t < 1 ? `t = ${fmt(t, 2)}: A(t) = (1 − t)I + tA` : 'drag the tips of î and ĵ', { 'font-size': S.fs - 2, fill: FC.soft, 'font-style': 'italic', fit: lw });
