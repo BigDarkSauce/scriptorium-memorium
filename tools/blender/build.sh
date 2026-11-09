@@ -9,5 +9,5 @@ mkdir -p "$ROOT/assets/kit"
 for f in "$IN"/*.raw.glb; do
   n=$(basename "$f" .raw.glb)
   "$GT" optimize "$f" "$ROOT/assets/kit/$n.glb" --compress meshopt --texture-compress webp --texture-size 1024 --simplify false --instance false --join false --palette false --flatten false
-  printf '%s\t%s bytes\n' "$n" "$(wc -c < "$ROOT/assets/kit/$n.glb")"
+  python3 "$ROOT/tools/blender/glb2json.py" "$ROOT/assets/kit/$n.glb" "$ROOT/assets/kit/$n.gltf.json"   # the artifact host serves .json, not .glb
 done

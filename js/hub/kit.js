@@ -33,7 +33,7 @@ function getLoader() { if (!loader) { loader = new GLTFLoader(); loader.setMesho
 export function loadKit(name) {
   let e = cache.get(name); if (e) return e.promise;
   e = { scene: null, error: null }; cache.set(name, e);
-  e.promise = getLoader().loadAsync(new URL(name + '.glb', BASE).href).then(gltf => { e.scene = prepare(gltf.scene, name); return e.scene; })
+  e.promise = getLoader().loadAsync(new URL(name + '.gltf.json', BASE).href).then(gltf => { e.scene = prepare(gltf.scene, name); return e.scene; })
     .catch(err => { e.error = String(err && err.message || err); console.warn('kit: ' + name + ' not loaded, using the procedural version (' + e.error + ')'); return null; });
   return e.promise;
 }
