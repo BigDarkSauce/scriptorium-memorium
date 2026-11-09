@@ -254,3 +254,9 @@ leaving the hub frees nothing the next hub would refetch and the GPU counts stay
 network is slow, `kitAdd()` returns false and the builder makes the procedural piece with the same footprint, so the
 layout never depends on the download. Reproduce: `bpy` venv → `python tools/blender/props.py -- <out>` →
 `tools/blender/build.sh <out>`.
+
+**Before/after (golden tool, `--compare` main 0bd794c → r8-c, 22 views):** only the two views that show the props
+changed: `hub-desk` 2.57 % (desktop) / 6.87 % (phone) of pixels, `hub-globe` 2.45 % / 6.06 %. The hall overview
+changed 0.17 % / 0.22 % (props seen small from the entrance, under the 0.4 % tolerance), and every room, reader and
+diorama view is unchanged (0.000–0.019 %, the noise floor). Smoke 14/14 (leaks: geometries +0, textures +0 over three
+cycles), polish --quick 5/5.
