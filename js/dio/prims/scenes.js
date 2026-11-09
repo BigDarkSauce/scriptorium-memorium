@@ -55,10 +55,13 @@ function loopScene(f) {
     { title: 'Around the loop', question: 'Does a change come back to where it started?', text: 'Follow the glowing signals around the ring.', focus: ids.get(f.nodes[Math.min(1, f.nodes.length - 1)].id), shot: 'wide', run: 6, explain: 'A loop with an even number of − signs reinforces the change; an odd number balances it.', opens: 'Which of these loops dominates?' }];
   return S;
 }
+// the parts of one stage share a muted manuscript tone (rubric, lapis, verdigris, brass, violet), so the blocks stand
+// off the parchment board and the stages read apart (one cream tone for every block washed out against the board)
+const STAGE_TONES = ['#a8543e', '#3f6d9a', '#4d8473', '#a5853f', '#6e5390', '#8a6a4a'];
 function buildScene(f) {
   const S = base(f.title || 'Built up part by part', f.question || f.caption), stageOf = new Map(); f.stages.forEach((s, i) => s.adds.forEach(id => { if (!stageOf.has(id)) stageOf.set(id, i); }));
   const order = f.parts.slice().sort((a, b) => stageOf.get(a.id) - stageOf.get(b.id)), at = snakeXZ(order.length, order.length > 4 ? 3 : 2), ids = new Map(order.map((p, i) => [p.id, slug(p.label, i)])), P = new Map(order.map((p, i) => [p.id, at[i]]));
-  order.forEach(p => { const [x, z] = P.get(p.id); S.bodies.push({ id: ids.get(p.id), name: p.label, label: p.label, role: 'actor', describe: (f.stages[stageOf.get(p.id)] || {}).why || p.label, shape: { kind: 'box', w: 2.6, h: .6, d: 1.6, round: .08 }, material: { preset: 'ceramic', color: '#e7d6ae' }, position: [x, .42, z] });  });
+  order.forEach(p => { const [x, z] = P.get(p.id); S.bodies.push({ id: ids.get(p.id), name: p.label, label: p.label, role: 'actor', describe: (f.stages[stageOf.get(p.id)] || {}).why || p.label, shape: { kind: 'box', w: 2.6, h: .6, d: 1.6, round: .08 }, material: { preset: 'ceramic', color: STAGE_TONES[stageOf.get(p.id) % STAGE_TONES.length] }, position: [x, .42, z] });  });
   const rides = []; f.links.forEach((l, i) => { const a = P.get(l.from), b = P.get(l.to); if (!a || !b) return; const pts = arc(a, b, .6); S.bodies.push({ id: 'link' + i, name: 'link', role: 'decor', shape: { kind: 'tube', points: pts, r: .05 }, material: { preset: 'brass' } }, { id: 'lt' + i, name: 'value', role: 'decor', shape: { kind: 'sphere', r: .13 }, material: { preset: 'emissive', color: '#ffd98a', emissive: '#cfa84f' }, position: pts[0] }); rides.push({ id: 'lt' + i, pts, on: Math.max(stageOf.get(l.from), stageOf.get(l.to)) }); });
   S.params = [{ key: 'stage', label: 'stage', min: 0, max: f.stages.length - 1, value: 0, step: 1 }];
   const vis = Object.fromEntries(order.map(p => [ids.get(p.id), stageOf.get(p.id)])), links = Object.fromEntries(f.links.map((l, i) => ['link' + i, Math.max(stageOf.get(l.from) ?? 0, stageOf.get(l.to) ?? 0)]));
