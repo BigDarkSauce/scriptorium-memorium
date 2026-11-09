@@ -170,7 +170,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 @keyframes tick { 0% { opacity: 0; translate: 0 -6px; } 100% { opacity: 1; translate: 0 0; } }
 .edit-bar { position: absolute; left: 50%; bottom: calc(var(--gut) + 64px + env(safe-area-inset-bottom,0px)); transform: translateX(-50%); padding: 10px 12px; display: grid; gap: 8px; max-width: calc(100vw - 32px); }
 .edit-name b { font-family: var(--f-italic); font-weight: 400; font-size: 16px; color: var(--brass); }
-@media (max-width: 760px) { .dio-panel { width: calc(100vw - 32px); max-height: calc(50% - 78px); } .dio-reads { width: 200px; } .dio-reads .evlog { display: none; } .side-panel { width: calc(100vw - 32px); } .hub-actions .btn { padding: 6px 10px; font-size: 13px; } }
+@media (max-width: 760px) { .dio-panel { width: calc(100vw - 32px - 58px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)); max-height: calc(50% - 78px); }   /* clear of the sound and graphics buttons on the right */ .dio-reads { width: 200px; } .dio-reads .evlog { display: none; } .side-panel { width: calc(100vw - 32px); } .hub-actions .btn { padding: 6px 10px; font-size: 13px; } }
 
 /* ---------- reading scroll (parchment) ---------- */
 .reader { position: absolute; right: max(16px, env(safe-area-inset-right,0px)); top: calc(76px + env(safe-area-inset-top,0px)); bottom: calc(16px + env(safe-area-inset-bottom,0px)); width: min(720px, calc(100vw - 32px)); display: flex; flex-direction: column; filter: drop-shadow(0 24px 40px rgba(0,0,0,.65)); transform: translateY(24px) scaleY(.06); transform-origin: 50% 0; opacity: 0; transition: transform .9s var(--ease), opacity .4s; }
@@ -901,3 +901,4 @@ button.rv-opt:hover { background: #fff; border-color: #b98a45; }
 .ev-kind { display: inline-block; font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; padding: 0 5px; border-radius: 4px; border: 1px solid currentColor; vertical-align: 1px; color: #6b5a45; }
 .ev-kind.ek-effect, .ev-kind.ek-method, .ev-kind.ek-visual { color: var(--verdigris); } .ev-kind.ek-inspiration { color: #8f733a; border-style: dashed; }
 .dio-sources .ev-kind { color: #ffd98a; }
+@media (max-width: 760px) { .dio-panel .tab { padding: 6px 6px; font-size: 10.5px; letter-spacing: 0; } .dio-panel .tabs { gap: 1px; } }
