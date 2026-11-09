@@ -23,7 +23,7 @@
 //   run skips views already rendered for that side, so a killed job loses at most the view in progress.
 // DETERMINISM (all done by this tool; the app is not changed): Math.random is a seeded generator, re-seeded per view;
 //   the app's frame loop is replaced by a fixed-step loop (dt = 1/60 s, adaptive resolution off, pinned quality and
-//   pixel ratio); a diorama is held (dt = 0) until it is framed, then stepped a fixed number of steps; every view is
+//   pixel ratio); a diorama or a book room (its pedestal models run simulations) is held (dt = 0) until it is framed, then stepped a fixed number of steps; every view is
 //   given a fixed camera; capture freezes the loop, steps a fixed number of settle frames by hand and screenshots the
 //   last one with CSS animations, transitions, toasts and the caret disabled. Fresh browser context per viewport
 //   (empty IndexedDB: the seed library, whose ids come from the seeded generator).
@@ -140,7 +140,7 @@ G.open = async (v) => {
   const say = m => { if (G.debug) console.log(v.id + ': ' + m + ' (frame ' + G.n + ')'); };
   say('open');
   if (v.kind === 'hub') { await W.openHub(); await G.settle(); }
-  else if (v.kind === 'room' || v.kind === 'reader') { const b = W.lib.books.find(x => x.title === v.book); await W.openRoom(b.id); await G.settle(); }
+  else if (v.kind === 'room' || v.kind === 'reader') { const b = W.lib.books.find(x => x.title === v.book); G.hold = true; await W.openRoom(b.id); await G.settle(); }   /* held: the pedestals' card models run their own simulations */
   else if (v.kind === 'dio') { let spec = v.spec; if (v.flag != null) { const { FLAGSHIPS } = await import(new URL('js/seeds-scenes.js', location.href).href); spec = FLAGSHIPS[v.flag]; }
     G.hold = true; await W.openDiorama(JSON.parse(JSON.stringify(spec)), { skipIntro: true, autoTransition: false }); await G.settle(); }
   // let the opening view finish its own moves (fixed steps of the loop), then take the loop over
@@ -192,7 +192,7 @@ async function renderSide(side) {
             if (DEBUG) console.log('    opened, capturing ' + ((Date.now() - T0) / 1000).toFixed(0) + ' s');
             const empty = await page.evaluate(() => G.capture());
             const p = sidePath(side, it); mkdirSync(dirname(p), { recursive: true });
-            const buf = await page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 180000 });
+            const buf = await page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 600000 });
             writeFileSync(p, recompress(buf)); await page.evaluate(() => { __golden.frozen = false; });
             info.emptyFigures = empty; ok = true;
           } catch (e) { err = e.message.split('\n')[0]; console.log(`  ${it.id}: ${err} (attempt ${attempt + 1})`); }

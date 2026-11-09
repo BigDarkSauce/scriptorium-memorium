@@ -81,10 +81,19 @@ not an anti-aliasing pixel. A view passes when the share of changed pixels is wi
 hall, room and reader views, 0.6 % for dioramas). The report also gives the mean and largest absolute channel
 difference.
 
-Noise floor, measured with `--noise` on the same commit (SwiftShader, 2 vCPU): NOISE_SUMMARY
+Noise floor, measured with `--noise` on the same commit (main 0bd794c, SwiftShader, 2 vCPU, 22 views):
 
-Tolerances sit well above that, and well below what a real look change produces (the Blender props on the desk:
-see the before/after in the commit notes).
+| views | changed pixels between two runs | mean / max abs. channel difference |
+|---|---|---|
+| hub, hub-desk, hub-globe, bookcase, room, reader (both viewports) | **0.000 %** | ≤ 0.59 / ≤ 11 (sub-threshold dither) |
+| dio-pendulum, dio-galton, dio-osmosis (desktop) | 0.013 %, 0.032 %, 0.013 % | ≤ 0.03 / ≤ 216 (a few particle pixels) |
+| dio-water (desktop) | 0.188 % (rain and spray particles) | 0.24 / 232 |
+| dioramas (phone) | ≤ 0.0004 % | ≤ 0.08 / ≤ 36 |
+
+(A first measurement showed 0.36 % on the desktop room: its pedestal models ran their simulations while the room
+opened. Rooms are now held like dioramas, which brought it to 0.000 %.)
+
+Tolerances (0.4 % / 0.6 %) sit about 2–30× above that floor and below what a real look change produces.
 
 ## Cost
 
