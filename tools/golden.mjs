@@ -128,12 +128,11 @@ G.settle = async () => { for (let k = 0; k < 600 && (W.switching || W.gfx.grade.
 G.cam = (p, t) => { const m = W.mode; m.controls.enableDamping = false; m.camera.position.set(...p); m.controls.target.set(...t); m.camera.lookAt(m.controls.target); m.controls.update(); };
 // hub camera poses, from the room's real layout (furniture and bookcases are placed from the room size)
 G.hubCam = which => {
-  const H = W.mode, V = (x, y, z) => ({ x, y, z });
-  const near = (o, back, up, side = 0, lookUp = 0) => { o.updateMatrixWorld(true); const e = o.matrixWorld.elements, n = [e[8], e[9], e[10]], r = [e[0], e[1], e[2]], c = [e[12], e[13], e[14]];
-    return [[c[0] + n[0] * back + r[0] * side, c[1] + up, c[2] + n[2] * back + r[2] * side], [c[0], c[1] + lookUp, c[2]]]; };
-  if (which === 'desk') { const d = H.desk; const [p, t] = near(d, 1.25, 1.45, -.55, .85); return G.cam(p, t); }
-  if (which === 'globe') { const g = H.furn.children.find(o => o.name === 'globe' && o.visible); const [p, t] = near(g, 1.6, 1.35, .4, .8); return G.cam(p, t); }
-  if (which === 'bookcase') { const s = W.lib.shelves.find(x => x.name === 'Physics') || W.lib.shelves[0], o = H.shelfObjs.get(s.id); const [p, t] = near(o, 1.9, 1.35, 0, 1.15); return G.cam(p, t); }
+  const H = W.mode, L = (o, x, y, z) => { o.updateMatrixWorld(true); return o.localToWorld(H.camera.position.clone().set(x, y, z)).toArray(); };
+  const at = (o, p, t) => G.cam(L(o, ...p), L(o, ...t));   /* camera and target in the object's own frame */
+  if (which === 'desk') return at(H.desk, [.22, 1.2, .88], [.5, .86, -.03]);
+  if (which === 'globe') { const g = H.furn.children.find(o => o.name === 'globe' && o.visible); return at(g, [1.35, 1.45, 1.55], [0, .62, 0]); }
+  if (which === 'bookcase') { const s = W.lib.shelves.find(x => x.name === 'Physics') || W.lib.shelves[0]; return at(H.shelfObjs.get(s.id), [0, 1.35, 1.9], [0, 1.15, 0]); }
   H.frameHero(); H.controls.enableDamping = false; H.controls.update();
 };
 G.open = async (v) => {
