@@ -149,10 +149,28 @@ export function inkMaterial(U, after = .0) {
         if(a<.01) discard; gl_FragColor=vec4(c,a); }`
   });
 }
+// Contour lines of a land surface (a topographic drawing): where each triangle crosses a level y = k·step, one segment.
+// A landscape has too many triangles for edge lines and none of them are creases, so without these its drawing was a
+// blank sheet. step: a number (metres) or true (a tenth of the surface's height range, at least 4 cm).
+export function contourGeometry(g, step) {
+  const P = g.attributes.position, I = g.index, n = I ? I.count : P.count; if (n < 3) return null;
+  g.computeBoundingBox(); const b = g.boundingBox, H = b.max.y - b.min.y; if (H < 1e-3) return null;
+  const dz = typeof step === 'number' ? step : Math.max(.04, H / 10), out = [], A = new THREE.Vector3(), B = new THREE.Vector3(), Cc = new THREE.Vector3();
+  const cut = (p, q, y) => { const t = (y - p.y) / (q.y - p.y); return [p.x + (q.x - p.x) * t, y + .004, p.z + (q.z - p.z) * t]; };
+  for (let i = 0; i + 2 < n; i += 3) {
+    A.fromBufferAttribute(P, I ? I.getX(i) : i); B.fromBufferAttribute(P, I ? I.getX(i + 1) : i + 1); Cc.fromBufferAttribute(P, I ? I.getX(i + 2) : i + 2);
+    const lo = Math.min(A.y, B.y, Cc.y), hi = Math.max(A.y, B.y, Cc.y); if (hi - lo < 1e-6) continue;
+    for (let k = Math.ceil(lo / dz); k * dz < hi; k++) { const y = k * dz; if (y <= lo) continue;   /* absolute levels: the pieces of one landscape share them */ const pts = [];
+      for (const [p, q] of [[A, B], [B, Cc], [Cc, A]]) if ((p.y - y) * (q.y - y) < 0) pts.push(cut(p, q, y)); if (pts.length === 2) out.push(...pts[0], ...pts[1]); }
+    if (out.length > 360000) break;
+  }
+  if (!out.length) return null; const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); return eg;
+}
 // Attach ink edges to every mesh under root (skips huge/organic meshes to stay clean).
 export function addInk(root, U) {
   const mat = inkMaterial(U); const added = [];
   root.traverse(o => {
+    if (o.isMesh && o.userData.contour && !o.userData.isInk && o.geometry && o.geometry.attributes.position) { const cg = contourGeometry(o.geometry, o.userData.contour); if (cg) { const ls = new THREE.LineSegments(cg, mat); ls.userData.isInk = true; ls.raycast = () => {}; ls.renderOrder = 2; added.push([o, ls]); } }
     if (!o.isMesh || o.userData.noInk || o.userData.isInk) return;
     const g = o.geometry; if (!g || !g.attributes.position) return;
     const n = g.attributes.position.count; if (n > 60000) return;
@@ -228,7 +246,7 @@ export const TECHNIQUES = {
 // Drives one materialisation. setProgress(t) is pure (0..1): scroll-able, replayable, recordable.
 export class Materializer {
   constructor({ scene, camera, world, U, technique = 'card', endKey, center, radius, onBuild, env }) {
-    this.env = env; this.bg0 = scene.background; this.fog0 = scene.fog; this.paperBg = new THREE.Color('#ddd5c4');
+    this.env = env; this.bg0 = scene.background; this.fog0 = scene.fog; this.paperBg = new THREE.Color('#efe9dc');   /* the scroll drawings' paper, so the drawing flown in from the scroll and the live one are one sheet */
     this.scene = scene; this.camera = camera; this.world = world; this.U = U; this.T = TECHNIQUES[technique] || TECHNIQUES.card; this.name = technique;
     this.c = center.clone(); this.R = radius; this.endKey = endKey; this.onBuild = onBuild;
     this.flatKey = this.T.flat(this.c, this.R); this.T.field(this.c, this.R, U);
@@ -268,7 +286,7 @@ export class Materializer {
     const U = this.U, T = this.T, R = this.R;
     // camera: hold the drawing, then dolly-zoom + swing into the end key
     const kCam = eInCont(span(t, .1, .82));
-    poseAt(this.flatKey, this.endKey, kCam, this.pose); applyPose(this.camera, this.pose, R * 1.6);
+    poseAt(this.flatKey, this.endKey, kCam, this.pose); applyPose(this.camera, this.pose, this.nearR ? this.nearR + (R * 1.6 - this.nearR) * kCam : R * 1.6);   /* a long lens on a small subject needs a tight near/far, or the paper hides its own ink lines (depth precision) */
     // build-in (card): parts drop with a soft bounce in order of height
     if (T.build && this.buildIn) {
       const n = this.parts.length;

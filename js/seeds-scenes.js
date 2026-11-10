@@ -337,7 +337,7 @@ api.readout('price where the curves cross',()=>f2(EQ.p));
 api.readout('share of the possible gains',()=>EQ.gain>0?Math.round(100*gains()/EQ.gain)+' % (max gain '+EQ.gain+')':'—');
 api.readout('best bid / best ask',()=>(bid?f2(bid.p):'—')+' / '+(ask?f2(ask.p):'—'));
 api.readout('budget rule',()=>api.param('rule')>.5?'on (no trade at a loss)':'off');
-api.plot('trade price',()=>all.length?all[all.length-1].p:NaN);
+api.plot('trade price ($)',()=>all.length?all[all.length-1].p:NaN);
 // late-afternoon sky: the landscape dome shows only haze below the horizon, so a painted gradient replaces it behind the square
 { const dome=api.scene.children.find(o=>o.material&&o.material.uniforms&&o.material.uniforms.turbidity); if(dome) api.onFrame(()=>{ dome.visible=false; });   // every frame: the materialiser restores the background objects when it finishes
   const n=64, d=new Uint8Array(n*4), a=new T.Color('#f0dcb4'), b=new T.Color('#9cbbe0'), c=new T.Color(); for(let i=0;i<n;i++){ c.copy(a).lerp(b,Math.pow(i/(n-1),.7)); d[i*4]=c.r*255; d[i*4+1]=c.g*255; d[i*4+2]=c.b*255; d[i*4+3]=255; }
@@ -446,7 +446,7 @@ api.readout('mean bin',()=>(landed?f2(mean()):'—')+' (theory N·p = '+f2(N*api
 api.readout('spread of the bins (sd)',()=>(landed>1?f2(spread()):'—')+' (theory √(Np(1−p)) = '+f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))))+')');
 api.readout('standard error of the mean',()=>landed?f2(Math.sqrt(N*api.param('p')*(1-api.param('p'))/landed)):'—');
 api.readout('share in bin '+'N·p',()=>(landed?(100*counts[mode()]/landed).toFixed(1):'—')+' % (binomial '+(100*pmf(mode(),api.param('p'))).toFixed(1)+' %, normal '+(100/(Math.sqrt(2*Math.PI*N*api.param('p')*(1-api.param('p')))||1)).toFixed(1)+' %)');
-api.plot('beads in the centre bin',()=>counts[mode()]);
+api.plot('beads in the centre bin (count)',()=>counts[mode()]);
 api.camera({target:[.3,3.25,0],r:12.6,ph:1.47,th:.12});`,
   lessons: [
     { title: 'Ride one bead', question: 'Where will one bead land?', text: 'You ride the copper bead down the board. At every peg it bounces left or right, like a coin flip. Watch where it ends up.', focus: 'ball', shot: 'pov', pov: 'Copper bead', until: 'event:copper bead lands', run: 40, explain: 'Its path was a string of 10 independent left/right choices, so each particular path has probability (1/2)^10 = 1/1024. The bin number counts only the right-bounces, and many different paths share a bin: C(10,k) of them end in bin k. One path leads to bin 0, 10 to bin 1, and 252 to bin 5. Where one bead lands is unpredictable. Where most beads land is not.', opens: 'What shape do many beads make?' },

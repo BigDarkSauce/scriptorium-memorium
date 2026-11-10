@@ -170,7 +170,7 @@ DIO.pendulum={params:{L:[.5,4,2,'m','string length'],g:[1,25,9.81,'m/s²','gravi
   D.label('θ',at(v=>v.set(piv.x+1.05*Math.sin(th/2),piv.y-1.05*Math.cos(th/2),0)),true);D.label('pivot',at(v=>v.copy(piv).setY(piv.y+.5)),PV);
   D.label('small-angle model',at(v=>v.set(piv.x+Lv*Math.sin(gth),piv.y-Lv*Math.cos(gth)-.6,-.32)),GH);
   D.label('angle scale',at(v=>v.set(-1.25,piv.y-.15,-.42)),PR);
-  D.seriesName='θ(t) in degrees';ev('bob released from rest at θ₀ = '+fx(p.theta0,1)+'°',bobW(V3(0,0,0)),{sound:'whoosh'});
+  D.seriesName='angle θ(t) (°)';ev('bob released from rest at θ₀ = '+fx(p.theta0,1)+'°',bobW(V3(0,0,0)),{sound:'whoosh'});
   return{orbit,
    step(h){// RK4 on (θ, ω) without temporary arrays
     const f=(a,b)=>-k*Math.sin(a)-c*b;
@@ -239,7 +239,7 @@ DIO.spring={params:{k:[1,60,12,'N/m','spring constant'],m:[.2,5,1,'kg','mass'],c
   const mp=v=>v.set(ex(x),YB+sz*.5,0);
   SPR.mass=()=>mp(V3(0,0,0));SPR.sz=sz;
   D.label('mass · m',at(v=>mp(v).setY(YB+sz+.35)),CA);D.label('spring · k',at(v=>v.set((wallX+ex(x))/2,TY+.75,0)),coil);D.label('metre scale · x = 0',at(v=>v.set(0,2.4,.58)),SC);
-  D.seriesName='x(t) in metres';
+  D.seriesName='position x(t) (m)';
   return{orbit,
    step(h){const a=(-p.k*x-p.c*v)/p.m;v+=a*h;x+=v*h;const P=V3(0,0,0);
     if(lv!==0&&Math.sign(v)!==Math.sign(lv)){turns.push(D.t);if(turns.length>2)Tm=turns.at(-1)-turns.at(-3);if(turns.length>6)turns.shift();ev('turning point x = '+fx(x,3)+' m: v = 0, all energy potential (½kx² = '+fx(.5*p.k*x*x,3)+' J)',mp(P),{sound:'boing'});
@@ -294,7 +294,7 @@ DIO.projectile={params:{v0:[2,60,20,'m/s','launch speed'],angle:[5,85,45,'°','l
   PRJ.ball=()=>wp(V3(0,0,0));PRJ.vel=()=>V3(vx,vy,0);PRJ.v0=p.v0;PRJ.g=p.g;PRJ.a=a;PRJ.X0=X0;PRJ.span=Rr*sc;PRJ.H=Hm*sc;PRJ.Y0=Y0;
   D.label('ball',at(v=>wp(v).setY(v.y+.4)),BL);D.label('v',at(v=>{wp(v);const s=Math.hypot(vx,vy)||1;return v.set(v.x+vx/s*1.1,v.y+vy/s*1.1,0)}),true);{const ip=ideal[60].clone().setY(ideal[60].y+.3);D.label('no-drag parabola',()=>ip,idealLine)}
   D.label('cannon',at(v=>v.set(X0-.3,1.5,0)),CN);D.label('flag at the no-drag range R',at(v=>v.set(X0+Rr*sc,1.7,-.6)),FL);
-  D.seriesName='height y(t) in metres';
+  D.seriesName='height y(t) (m)';
   return{orbit,
    step(h){if(state===1){const pvy=vy,px=x,py=y;vx+=-p.drag*vx*h;vy+=(-p.g-p.drag*vy)*h;x+=vx*h;y+=vy*h;tf+=h;
      if(!apex&&pvy>0&&vy<=0){apex=true;ev('apex: vᵧ = 0 at t = '+fx(tf,2)+' s, height '+fx(y,2)+' m (no-drag H = '+fx(Hm,2)+' m); vₓ = '+fx(vx,2)+' m/s carries on',wp(tmp),{sound:'tick'})}
@@ -347,7 +347,7 @@ DIO.orbit={params:{GM:[2,40,12,'u³/s²','gravitational parameter'],r0:[1.5,5,3,
   if(E0>=0)ev('energy ε ≥ 0: unbound, the planet escapes',V3(x,Y,z));
   ORB.planet=()=>V3(x,Y,z);ORB.Y=Y;ORB.a=aS;ORB.e=ecc;
   D.label('star · M',at(v=>v.set(0,Y+.95,0)),SG);D.label('planet · m',at(v=>v.set(x,Y+.38,z)),PG);D.label('r',at(v=>v.set(x*.5,Y+.15,z*.5)),true);D.label('equal-area wedges',at(v=>{const w=wedges[(wi+NW-1)%NW];return w.n?v.set(x*.6,Y+.1,z*.6):null}),WG);
-  D.seriesName='distance r(t)';
+  D.seriesName='distance r(t) (model units)';
   const addRim=(x0,z0,x1,z1)=>{const W_=wedges[wi];if(W_.n>=NP)return;const a=W_.m.geometry.attributes.position.array,o=W_.n*9;a[o]=0;a[o+1]=Y;a[o+2]=0;a[o+3]=x0;a[o+4]=Y;a[o+5]=z0;a[o+6]=x1;a[o+7]=Y;a[o+8]=z1;W_.n++;W_.area+=Math.abs(x0*z1-x1*z0)/2;W_.m.geometry.setDrawRange(0,W_.n*3);W_.m.geometry.attributes.position.needsUpdate=true};
   return{orbit,
    step(h){const r=Math.hypot(x,z),ac=-p.GM/(r*r*r);vx+=ac*x*h;vz+=ac*z*h;x+=vx*h;z+=vz*h;const dr=x*vx+z*vz;
@@ -398,7 +398,7 @@ DIO.collision={params:{m1:[.2,10,2,'kg','mass 1'],m2:[.2,10,1,'kg','mass 2'],v1:
   let x1=-3,x2=2.5,v1=p.v1,v2=p.v2,done=false,wait=0,hits=0,K=K0;
   COL.mid=()=>V3((x1+x2)/2,TOP+.4,0);COL.cm=()=>V3((p.m1*x1+p.m2*x2)/M,TOP+1.75,0);COL.x=()=>[x1,x2];
   D.label('cart 1 · m₁',at(v=>v.set(x1,TOP+s1*.5+.75,0)),c1);D.label('cart 2 · m₂',at(v=>v.set(x2,TOP+s2*.5+.75,0)),c2);D.label('centre of mass',at(v=>v.set((p.m1*x1+p.m2*x2)/M,TOP+2.1,0)),CM);D.label('photogates',at(v=>v.set(1.6,TOP+1.35,0)),PG);
-  D.seriesName='total momentum p (stays flat)';
+  D.seriesName='total momentum p (kg·m/s), stays flat';
   return{orbit,
    step(h){if(done){wait+=h;if(wait>1.5){x1=-3;x2=2.5;v1=p.v1;v2=p.v2;done=false;wait=0}return}x1+=v1*h;x2+=v2*h;
     if(x2-x1<(s1+s2)/2&&v1-v2>0){const u1=v1,u2=v2;v1=(p.m1*u1+p.m2*u2+p.m2*p.e*(u2-u1))/M;v2=(p.m1*u1+p.m2*u2+p.m1*p.e*(u1-u2))/M;hits++;K=.5*p.m1*v1*v1+.5*p.m2*v2*v2;
@@ -443,7 +443,7 @@ DIO.incline={params:{angle:[5,60,30,'°','incline angle'],mu:[0,1,.2,'','frictio
   const pos=v_=>v_.set(x0,hgt,0).addScaledVector(dir,s+.6).addScaledVector(nrm,.32),tmp=V3(0,0,0);
   INC.block=()=>pos(V3(0,0,0));INC.dir=dir;INC.x0=x0;INC.hgt=hgt;INC.base=base;
   D.label('block · m',at(v=>pos(v).add(V3Y7)),BK);D.label('mg',at(v=>pos(v).setY(v.y-1.5)),true);D.label('N',at(v=>pos(v).addScaledVector(nrm,1.6)),true);D.label('f',at(v=>pos(v).addScaledVector(dir,-1.3)),true);D.label('θ',at(v=>v.set(x0+base-1.25,.3,1.1)),true);D.label('angle gauge',at(v=>v.set(x0+base-.6,1.6,1.08)),AG);
-  D.seriesName='speed v(t) along slope';
+  D.seriesName='speed v(t) along the slope (m/s)';
   return{orbit,
    step(h){if(!slides){t+=h;if(!started&&t>2){started=true;ev('still at rest after 2 s: static friction supplies f = mg sin θ = '+fx(p.m*p.g*Math.sin(a),2)+' N (it could give up to μN = '+fx(p.mu*p.m*p.g*Math.cos(a),2)+' N)',pos(tmp),{sound:'wood',color:0x88c0ff})}return}if(!started){started=true;ev('block released at the top: a = g(sin θ − μ cos θ) = '+fx(acc,2)+' m/s²',pos(tmp),{sound:'wood'})}
     if(s<Ls){v+=acc*h;s+=v*h;t+=h;if(s>=Ls){t-=(s-Ls)/Math.max(v,1e-6);s=Ls;v=Math.sqrt(2*acc*Ls);ev('reaches the bottom after '+fx(t,2)+' s at v = '+fx(v,2)+' m/s (√(2aL) = '+fx(Math.sqrt(2*acc*Ls),2)+' m/s, √(2L/a) = '+fx(Math.sqrt(2*Ls/acc),2)+' s)',pos(tmp),{color:0x88c0ff,sound:'thud'})}}
@@ -494,7 +494,7 @@ DIO.wave={params:{A:[.1,1.2,.6,'m','amplitude'],lambda:[1,10,5,'m','wavelength']
   const m4=new T.Matrix4(),XM=30;
   WAV.bead=()=>V3(xs[XM],Y+yAt(xs[XM],D.t),0);WAV.Y=Y;WAV.crest=()=>V3(crestX(),Y+p.A+.35,0);
   D.label(st?'node (never moves)':'crest',at(v=>st?(nodes[1]!=null?v.set(nodes[1],Y-.55,0):null):v.set(crestX(),Y+p.A+.65,0)),CR);D.label('tracked bead',at(v=>v.set(xs[XM],Y+yAt(xs[XM],D.t)+.4,0)),TB);D.label('rope',at(v=>v.set(3.2,Y+.15,0)),RP);D.label('λ',at(v=>v.set(-5+lam/2,Y-2*p.A-.75,0)),true);
-  D.seriesName='displacement of tracked bead y(t)';
+  D.seriesName='displacement y(t) of the tracked bead (m)';
   return{orbit,
    step(h){const c=Math.floor(D.t*p.f+1e-9);if(c>cycles){cycles=c;if(c<=12)ev('period '+c+' complete: T = 1/f = '+fx(1/p.f,3)+' s; the red bead is back where it started',V3(xs[XM],Y+yAt(xs[XM],D.t),0),{sound:'tick'});
      if(c===1&&!st&&!crossed){crossed=true;ev('in one period T = '+fx(1/p.f,2)+' s the crest moved one wavelength λ = '+fx(lam,2)+' m: v = fλ = '+fx(p.f*lam,2)+' m/s',WAV.crest(),{color:0x88c0ff,sound:'whoosh'})}
@@ -547,7 +547,7 @@ DIO.gas={params:{N:[10,160,70,'','molecules'],T:[.2,4,1,'','temperature (k=m=1)'
   const mp=(i,v)=>v.set(C[0]+P[i*3],Y0+P[i*3+1],P[i*3+2]);
   GAS.mol=()=>mp(0,V3(0,0,0));GAS.Y0=Y0;GAS.XL=XL;GAS.XR=XR;GAS.gauge=V3(XL+1,Y0+BY+1.4,.1);
   D.label('molecule · m',at(v=>mp(0,v).setY(v.y+.3)),TM);D.label('glass vessel (pressure = impulse / area / time)',at(v=>v.set(XL+.4,Y0+BY+.35,BZ)),VS);D.label('pressure gauge',at(v=>v.set(XL+1,Y0+BY+2.05,0)),GA);D.label('piston',at(v=>v.set(XR+.06,Y0+BY*.6,BZ*.6)),PS);D.label('burner',at(v=>v.set(XC+.5,.6,0)),BU);
-  D.seriesName='speed histogram · red: Maxwell–Boltzmann';
+  D.seriesName='speeds (histogram) · red: Maxwell–Boltzmann';
   return{orbit,
    live(k){if(k==='T'){const f=Math.sqrt(p.T/temp);for(let i=0;i<N*3;i++)Vv[i]*=f;temp=p.T;imp=0;win=0;Pm=NaN;fresh=true;ev('heated/cooled: every velocity scaled by √(T′/T) = '+fx(f,3),V3(XC,Y0,0),{sound:'fizz'});return true}return false},
    step(h){for(let i=0;i<N;i++)for(let d=0;d<3;d++){const j=i*3+d;let q=P[j]+Vv[j]*h;if(q>B[d]){q=2*B[d]-q;Vv[j]=-Vv[j];imp+=2*Math.abs(Vv[j]);if(i===0&&d===0&&hitsT<2){hitsT++;ev('tracked molecule strikes the piston: it hands the wall Δp = 2mvₓ = '+fx(2*Math.abs(Vv[j]),2),mp(0,tmp),{sound:'tick'})}}else if(q<-B[d]){q=-2*B[d]-q;Vv[j]=-Vv[j];imp+=2*Math.abs(Vv[j]);if(i===0&&hitsT<2&&d===0){hitsT++;ev('tracked molecule strikes the end wall: it hands the wall Δp = 2mvₓ = '+fx(2*Math.abs(Vv[j]),2),mp(0,tmp),{sound:'tick'})}}P[j]=q}
@@ -594,7 +594,7 @@ DIO.surface={params:{gravity:[1,20,9.81,'m/s²','gravity'],friction:[0,3,.6,'1/s
   const height=(x,y)=>Y0+(F(x,y)-lo)*sc;
   SUR.ball=()=>V3(bx,height(bx,by)+.2,by);SUR.Y0=Y0;
   D.label('ball',at(v=>v.set(bx,height(bx,by)+.55,by)),BL);D.label('−∇f',at(v=>gA.visible?v.copy(gA.position).setY(gA.position.y+.25):null),true);D.label('surface · z = '+ex,at(v=>v.set(-R_,Y0+2.9,-R_)),RM);
-  ev('ball placed — click the surface to drop it elsewhere',V3(bx,height(bx,by)+.2,by));D.seriesName='height f(ball) — falls toward a minimum';
+  ev('ball placed — click the surface to drop it elsewhere',V3(bx,height(bx,by)+.2,by));D.seriesName='height f(ball) (model units), falling toward a minimum';
   return{orbit,
    click(rc){const hit=rc.intersectObject(surf)[0];if(hit){bx=hit.point.x;by=hit.point.z;vx=vy=0;rest=false;still=0;tr.userData.count=0;ev('ball dropped at ('+fx(bx,2)+', '+fx(by,2)+')',hit.point,{sound:'clack'})}},
    step(h){if(rest)return;grad(bx,by,G);const gx=G[0],gy=G[1],s=sc,den=1+s*s*(gx*gx+gy*gy);vx+=(-p.gravity*s*gx/den-p.friction*vx)*h;vy+=(-p.gravity*s*gy/den-p.friction*vy)*h;bx+=vx*h;by+=vy*h;
@@ -1108,7 +1108,7 @@ DIO.doublependulum={params:{m1:[.5,5,2,'kg','upper mass'],m2:[.5,5,1,'kg','lower
   const bobs=(y,v)=>v.set(piv.x+p.L1*sc*Math.sin(y[0])+p.L2*sc*Math.sin(y[1]),piv.y-p.L1*sc*Math.cos(y[0])-p.L2*sc*Math.cos(y[1]),0);
   DPN.m2=()=>bobs(s,V3(0,0,0));DPN.piv=piv;
   D.label('m₁ · upper bob',at(v=>v.set(piv.x+p.L1*sc*Math.sin(s[0]),piv.y-p.L1*sc*Math.cos(s[0])+r1+.3,0)),A.B1);D.label('m₂ · lower bob',at(v=>bobs(s,v).setY(v.y+r2+.3)),A.B2);D.label('twin (offset ε)',at(v=>bobs(u,v).setY(v.y-r2-.35)),B.B2);
-  ev('two pendulums released: identical except Δθ₂ = '+p.eps+' rad',bobs(s,V3(0,0,0)),{sound:'whoosh'});D.seriesName='separation |Δθ₂| (log scale)';
+  ev('two pendulums released: identical except Δθ₂ = '+p.eps+' rad',bobs(s,V3(0,0,0)),{sound:'whoosh'});D.seriesName='separation |Δθ₂| (°, log scale)';
   return{orbit,
    step(h){rk(s,h);rk(u,h);const dv=sep();if(!diverged&&dv>10*d2r){diverged=true;ev('chaos: after '+fx(D.t,1)+' s the twins differ by more than 10° (they started '+p.eps+' rad apart: sensitive dependence on initial conditions)',bobs(s,tmp),{sound:'zap',color:0xff9a7a})}
     const fl=Math.floor((s[1]+Math.PI)/(2*Math.PI));if(fl!==lastFlip){flips++;lastFlip=fl;ev('lower arm flips over the top (flip '+flips+' at t = '+fx(D.t,1)+' s)',bobs(s,tmp),{color:0x88c0ff,sound:'whoosh'})}
@@ -1190,7 +1190,7 @@ DIO.reaction={params:{NA:[10,120,60,'','molecules A'],NB:[10,120,60,'','molecule
   RXN.trk=()=>mp(tr,V3(0,0,0));RXN.Y0=Y0;
   D.label('tracked molecule',at(v=>mp(tr,v).setY(v.y+.4)),TRK);D.label('reaction cell',at(v=>v.set(-BX+.3,Y0+BY+.3,BZ)),CELL);
   D.label('A',at(v=>{for(let i=0;i<n;i++)if(K[i]===0&&i!==tr)return mp(i,v).setY(v.y+.25);return null}),true);D.label('B',at(v=>{for(let i=0;i<n;i++)if(K[i]===1)return mp(i,v).setY(v.y+.25);return null}),true);D.label('C = AB',at(v=>{for(let i=0;i<n;i++)if(K[i]===2&&i!==tr)return mp(i,v).setY(v.y+.3);return null}),true);
-  D.seriesName='number of C molecules';const tmp=V3(0,0,0);
+  D.seriesName='number of C molecules (count)';const tmp=V3(0,0,0);
   return{orbit,
    step(h){for(let i=0;i<n;i++)for(let d=0;d<3;d++){const j=i*3+d;let q=P[j]+Vv[j]*h;if(q>B_[d]){q=2*B_[d]-q;Vv[j]=-Vv[j]}else if(q<-B_[d]){q=-2*B_[d]-q;Vv[j]=-Vv[j]}P[j]=q}
     flashT-=h;
@@ -1255,7 +1255,7 @@ DIO.efield={params:{q1:[-5,5,3,'','charge q₁'],q2:[-5,5,-3,'','charge q₂'],d
   {const F=part('Leyden jar (foreground)'),q=inDisc(groundAt(orbit,-.84,-.82),6.1);F.position.copy(q);const j=new T.Mesh(new T.CylinderGeometry(.34,.34,.9,32),thinGlass({absorb:.05,transmit:true}));j.position.y=.45;F.add(j);const foil=cyl(.345,.5,makeMaterial('steel'),32);foil.position.y=.26;F.add(foil);const cap=cyl(.36,.06,walnut,32);cap.position.y=.93;F.add(cap);const rod=cyl(.02,.6,brass,8);rod.position.y=1.2;F.add(rod);const kn=ball(.08,brass);kn.position.y=1.52;F.add(kn)}
   const tp=V3(0,0,0);EFD.tc=()=>V3(P[0],P[1],P[2]);EFD.Y=Y;EFD.Q=Q;
   D.label('q₁',at(v=>v.copy(Q[0][1]).setY(Y+.55)),true);D.label('q₂',at(v=>v.copy(Q[1][1]).setY(Y+.55)),true);D.label('test charge · q, m',at(v=>gone?null:v.set(P[0],P[1]+.32,P[2])),TC);D.label('field lines',at(v=>lines.length?v.copy(lines[0][Math.floor(lines[0].length*.5)]).setY(lines[0][Math.floor(lines[0].length*.5)].y+.2):null),FLG);
-  ev('test charge released from rest beside q₁; force F = qE'+(gam>0?', drag −γmv (in oil)':', energy ½mv² + qV conserved'),V3(...P),{sound:'zap'});D.seriesName='potential V at test charge';
+  ev('test charge released from rest beside q₁; force F = qE'+(gam>0?', drag −γmv (in oil)':', energy ½mv² + qV conserved'),V3(...P),{sound:'zap'});D.seriesName='potential V at the test charge (model units)';
   return{orbit,
    step(h){if(gone){wait+=h;if(wait>1.2){P=P0.slice();Vv=V0.slice();gone=false;wait=0;tr.userData.count=0;acc();Einit=Etot();if(!again){again=true;ev('test charge released again from the same point',tp.set(P[0],P[1],P[2]),{sound:'zap'})}}return}
     if(gam>0){acc();for(let d=0;d<3;d++){Vv[d]=(Vv[d]+A[d]*h)/(1+gam*h);P[d]+=Vv[d]*h}} // in oil: implicit drag, the charge creeps along E
@@ -1374,7 +1374,7 @@ DIO.lens={params:{f:[-4,6,2.5,'','focal length (negative: diverging)'],do:[.5,6,
   LNS.ph=()=>ph.position.clone();LNS.obj=()=>V3(-dObj,Y+p.ho,0);LNS.img=()=>isFinite(di)?V3(di,Y+hi,0):V3(6,Y,0);LNS.Y=Y;
   D.label('object (candle)',at(v=>v.set(-dObj,Y+p.ho+.35,0)),CN);D.label('image',at(v=>isFinite(di)&&Math.abs(di)<7?v.set(di,Y+hi+(hi<0?-.35:.35),0):null),IM);D.label(fl>0?'converging lens':'diverging lens',at(v=>v.set(0,Y+1.75,0)),LG);D.label('screen',at(v=>SCR.visible?v.set(di,Y+1.35,-.6):null),SCR);D.label('light ray (photon)',at(v=>v.copy(ph.position).setY(ph.position.y+.22)),PH);
   D.label('F',at(v=>v.set(-fl,RB+.45,.32)),true);D.label('F′',at(v=>v.set(fl,RB+.45,.32)),true);
-  D.seriesName='image distance dᵢ';solve();ev('1/f = 1/d_o + 1/d_i  with f = '+fx(fl,2),V3(0,Y,0),{sound:'glass'});
+  D.seriesName='image distance dᵢ (model units)';solve();ev('1/f = 1/d_o + 1/d_i  with f = '+fx(fl,2),V3(0,Y,0),{sound:'glass'});
   return{orbit,
    step(h){if(p.sweep>.5){dObj=3.4+2.9*Math.sin(D.t*.35);solve()}
     ut+=h/2.2;if(ut>=1){ut-=1;const r=classify();if(!arrived||(isFinite(di)&&Math.abs(di-lastDi)>Math.max(.05,Math.abs(lastDi)*.05))){arrived=true;lastDi=di;

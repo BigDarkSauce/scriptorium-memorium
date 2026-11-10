@@ -180,14 +180,14 @@ export function buildTerrain(field, spec = {}) {
     rock: () => aaaMaterial('crag', { color: spec.rock || '#4f4a42', color2: spec.rockHigh || '#8a8173', yRange: [.2, hiY], snowY: 0, tile: 1.6, depth: .06, moss: .85, silhouette: false })
   };
   const g = new THREE.Group(); g.name = 'terrain';
-  const add = (idx, mat, name) => { if (!idx.length) return null; const m = new THREE.Mesh(geo(idx), mat); m.name = name; m.receiveShadow = true; m.castShadow = name === 'rock'; m.userData.noInk = true; g.add(m); return m; };
+  const add = (idx, mat, name) => { if (!idx.length) return null; const m = new THREE.Mesh(geo(idx), mat); m.name = name; m.receiveShadow = true; m.castShadow = name === 'rock'; m.userData.noInk = true; m.userData.contour = .25; g.add(m); return m; };
   add(groups.meadow, field.mats.meadow(), 'meadow'); add(groups.rock, field.mats.rock(), 'rock');
   return g;
 }
 // the rock of one owned peak as its own mesh (shape kind "peak"); world coordinates minus (ox, oz)
 export function buildPeak(field, id, ox = 0, oz = 0) {
   const idx = field.own && field.own[id]; if (!idx || !idx.length) return null;
-  const m = new THREE.Mesh(field.geo(idx), field.mats.rock()); m.position.set(-ox, 0, -oz); m.castShadow = true; m.receiveShadow = true; m.userData.inkAngle = 60; m.userData.noInk = true; m.name = 'ridge rock';
+  const m = new THREE.Mesh(field.geo(idx), field.mats.rock()); m.position.set(-ox, 0, -oz); m.castShadow = true; m.receiveShadow = true; m.userData.inkAngle = 60; m.userData.noInk = true; m.userData.contour = .25; m.name = 'ridge rock';
   return m;
 }
 // GLSL: sample the field texture at a world xz (uField, uFieldM = (minX, minZ, 1/dx, 1/dz), uFieldN = grid size)

@@ -16,6 +16,7 @@ import { FLAGSHIPS } from './seeds-scenes.js';
 import { sceneFp, sceneKey, isSeedCopy } from './seeds-version.js';
 import { SEED_LESSON_TITLES } from './seeds-history.js';
 import { groundChain } from './seeds-sources.js';
+import { applyAxes } from './seeds-axes.js';
 import { DOMAIN_BOOK, DOMAIN_BOOK_VERSION } from './seeds-domains.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
@@ -201,6 +202,8 @@ class App {
     // step section/answers/opens, demo purpose, lesson question/opens/shot/pov (threadFromSeeds; user-made books are never touched)
     // v4: the explanatory paragraphs and the figures of every teaching box (seeds-figures.js), where the learner has not edited
     if (b && b.example && (r.threadV || 0) < 4) { try { this.threadFromSeeds(b, r); } catch (e) { console.warn(e); } r.threadV = 4; store.set('room:' + id, r); }
+    // v5: axis titles with their units, once per axis, on the example graphs (seeds-axes.js)
+    if (b && b.example && (r.threadV || 0) < 5) { try { r.parts.forEach(p => { if (p.analysis) applyAxes(p.analysis); }); } catch (e) { console.warn(e); } r.threadV = 5; store.set('room:' + id, r); }
     return r;
   }
   // Bring the built-in scenes of an example room up to date. A copy of a flagship scene (matched by type + title) that is

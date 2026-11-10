@@ -526,10 +526,15 @@ export class BookRoom {
     const st = this.stations.get(p.id), bay = st && (st.bays[bi] || st.bays[0]);
     if (!st || !bay || !bay.spec) { toast(p.analysis ? 'No 3D showcase in this scroll yet' : 'Analyse the scroll first'); this.openPart(p); return; }
     if (this.reader) this.reader.close();
-    const c = bay.group.getWorldPosition(V3()).add(V3(0, PED_TOP + .085, 0)), n = st.slot.n;
-    const pos = c.clone().addScaledVector(n, 1.1).add(V3(0, .45, 0));
+    // aim at the model itself (its bounding box, not the card under it), at a distance that fits it in view; the unfold
+    // then follows the model as it grows ×2.4 and lifts, so it stays centred all the way into the dive
+    const n = st.slot.n, mi = bay.mini; mi.updateWorldMatrix(true, true); const bb = new THREE.Box3().setFromObject(mi), org = mi.getWorldPosition(V3());
+    const c0 = bb.isEmpty() ? bay.group.getWorldPosition(V3()).add(V3(0, PED_TOP + .2, 0)) : bb.getCenter(V3()), r0 = bb.isEmpty() ? .25 : Math.max(.12, bb.getSize(V3()).length() * .5);
+    const c1 = org.clone().add(c0.clone().sub(org).multiplyScalar(2.4)).add(V3(0, .25, 0)), r1 = r0 * 2.4, th = Math.tan(this.camera.fov * Math.PI / 360);
+    const pose = (c, r, k) => c.clone().addScaledVector(n, r / th * k).add(V3(0, r * .35, 0));   /* in front of the model, a little above, looking slightly down */
+    const p0 = pose(c0, r0, 1.5), p1 = pose(c1, r1, 1.25);
     this.app.sfx && this.app.sfx.play('wood', { pitch: 1.4, gain: .6 });
-    this.flyTo(pos, c, 1.2, () => { this.unfold = { st, bay, k: 0, c, n }; });
+    this.flyTo(p0, c0, 1.2, () => { this.unfold = { st, bay, k: 0, c: c1, n, c0, c1, p0, p1 }; });
   }
   // ---------- frame ----------
   update(dt, t) {
@@ -547,7 +552,7 @@ export class BookRoom {
       const U = this.unfold; U.k += dt / 1.6; const e = easeInOutQuint(Math.min(1, U.k));
       const mi = U.bay.mini; mi.scale.setScalar(1 + e * 1.4); mi.position.y = mi.userData.y0 + e * .25; mi.rotation.y += dt * 1.2 * e;
       if (U.bay.ds) { U.bay.ds.U.uFrontR.value = 1e5; }
-      this.camera.position.lerp(U.c.clone().addScaledVector(U.n, .7).add(V3(0, .3, 0)), dt * 1.5); this.camera.lookAt(U.c);
+      { const m = e, aim = U.c0.clone().lerp(U.c1, m); this.camera.position.lerpVectors(U.p0, U.p1, m); this.camera.lookAt(aim); this.controls.target.copy(aim); }
       this.gfx.grade.uniforms.uFade.value = clamp((U.k - .55) * 2.2, 0, 1);
       if (U.k >= 1 && !U.done) { U.done = true; const sp = U.bay.spec; this.app.openDiorama(sp.d, { buildIn: true, autoTransition: true, title: sp.d.title || sp.st.title, subtitle: U.st.part.title + ' · ' + sp.st.id, context: `${sp.st.title}: ${sp.st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.book.id } }); }
     }

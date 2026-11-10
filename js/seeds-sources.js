@@ -3,6 +3,7 @@
 // The teaching fields (terms, intuition, misconception, check) follow docs/PEDAGOGY.md; their figures and the steps'
 // explanatory paragraphs are in seeds-figures.js.
 import { figureChain } from './seeds-figures.js';
+import { applyAxes } from './seeds-axes.js';
 const W = (id, doi, authors, year, title, venue, note, cited) => ({ title, authors, year, doi, venue, note, url: doi ? 'https://doi.org/' + doi : 'https://openalex.org/' + id, openalex: 'https://openalex.org/' + id, verified: true, check: 'exact', cited_by: cited });
 export const REF = {
   nelson: W('W2043069373', '10.1119/1.14703', 'Nelson R A; Olsson M G', 1986, 'The pendulum—Rich physics from a simple system', 'American Journal of Physics', '', 205),
@@ -129,5 +130,5 @@ export function groundChain(A) {
   if (g) for (const st of A.chain || []) { const x = g[st.id]; if (x) Object.assign(st, JSON.parse(JSON.stringify(x))); }
   const rv = RV[A.title]; if (rv) for (const st of A.chain || []) if (rv[st.id] && !st.reveal) st.reveal = JSON.parse(JSON.stringify(rv[st.id]));
   if (PART_REFS[A.title]) A.references = PART_REFS[A.title].map(k => ({ ...REF[k] }));
-  return figureChain(A);
+  const out = figureChain(A); applyAxes(out); return out;
 }

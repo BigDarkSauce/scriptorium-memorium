@@ -346,8 +346,12 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
     let cats, series;
     if (k === 'hist') { let bins = f.bins; if (!bins.length) { const v = f.values, lo = Math.min(...v), hi = Math.max(...v), nb = Math.max(4, Math.min(20, Math.ceil(Math.log2(v.length) + 1))), w = (hi - lo) / nb || 1; bins = [...Array(nb)].map((_, i) => ({ from: lo + i * w, to: lo + (i + 1) * w, count: v.filter(x => x >= lo + i * w && (x < lo + (i + 1) * w || i === nb - 1 && x <= hi)).length })); } cats = bins.map(b => fmt(b.from, 3)); series = [{ name: f.ylabel || 'count', values: bins.map(b => b.count) }]; }
     else { cats = f.categories; series = f.series; }
+    // one unit per axis: categories that all carry the same unit ("10°", "20°" … or "E_a = 20 kJ/mol", "50 kJ/mol" …)
+    // lose it, and it moves into the axis title once; a bare-unit y title ("N") gets the quantity's name from the series
+    let xT = f.xlabel, yT = f.ylabel; { const F = factorCats(cats); if (F) { cats = F.cats; if (!xT) xT = F.title; else if (F.unit && !String(xT).includes(F.unit)) xT += ' (' + F.unit + ')'; } }
+    if (yT && /^\(?[^\s()]{1,9}\)?$/.test(String(yT).trim()) && series.length === 1 && series[0].name && !/^(series|value|values|count|y)$/i.test(series[0].name)) yT = series[0].name + ' (' + String(yT).replace(/[()]/g, '') + ')';
     const max = Math.max(1e-9, ...series.flatMap(s => s.values)), min = Math.min(0, ...series.flatMap(s => s.values));
-    draw = () => { clear(); const { X, Y } = axes([0, cats.length], [min, max * 1.12], { cats: true, xlabel: f.xlabel, ylabel: f.ylabel }); const gw = (X(1) - X(0)), bw = k === 'hist' ? gw : gw * .78 / series.length;
+    draw = () => { clear(); const { X, Y } = axes([0, cats.length], [min, max * 1.12], { cats: true, xlabel: xT, ylabel: yT }); const gw = (X(1) - X(0)), bw = k === 'hist' ? gw : gw * .78 / series.length;
       cats.forEach((cname, i) => { series.forEach((s, j) => { const v = s.values[i] ?? 0, x0 = k === 'hist' ? X(i) : X(i) + gw * .11 + j * bw; mk('rect', { x: x0, y: Y(Math.max(0, v)), width: Math.max(1, bw - (k === 'hist' ? 1 : 2)), height: Math.abs(Y(v) - Y(0)), fill: f.highlight && f.highlight.includes(i) ? FC.rubric : SERIES[j % 5], 'fill-opacity': .82 }, layer); if (k === 'bars' && cats.length <= 12 && !small) txt(x0 + bw / 2, Y(Math.max(0, v)) - 3, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 2.5, fill: FC.soft }); }); if (k === 'bars' || i % Math.ceil(cats.length / 10) === 0) txt(k === 'hist' ? X(i) : X(i + .5), H - P0.b + 13, cname, { 'text-anchor': k === 'hist' ? 'middle' : 'middle', 'font-size': fs - 2, fill: FC.soft }); });
       if (series.length > 1) legend(series.map((s, j) => ({ n: s.name, c: SERIES[j % 5] }))); };
   } else if (k === 'scatter') {
@@ -365,7 +369,7 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
       f.groups.forEach((g, i) => { const cx = X(i + .5), w = Math.min(60, gw * .5); mk('line', { x1: cx, x2: cx, y1: Y(g.min), y2: Y(g.max), stroke: FC.soft }, layer); [g.min, g.max].forEach(v => mk('line', { x1: cx - w / 4, x2: cx + w / 4, y1: Y(v), y2: Y(v), stroke: FC.soft }, layer)); mk('rect', { x: cx - w / 2, y: Y(g.q3), width: w, height: Y(g.q1) - Y(g.q3), fill: FC.fillA, stroke: FC.lapis }, layer); mk('line', { x1: cx - w / 2, x2: cx + w / 2, y1: Y(g.median), y2: Y(g.median), stroke: FC.ink, 'stroke-width': 2.4 }, layer); (g.outliers || []).forEach(o => mk('circle', { cx, cy: Y(o), r: 2.6, fill: 'none', stroke: FC.rubric }, layer)); txt(cx, H - P0.b + 13, g.label, { 'text-anchor': 'middle', 'font-size': fs - 2, fill: FC.soft }); }); };
   } else if (k === 'numberline') {
     const y0 = H * .55, X = v => 30 + (v - f.min) / (f.max - f.min) * (W - 60), step = f.step || niceStep(f.max - f.min);
-    draw = t => { clear(); mk('line', { x1: 20, x2: W - 20, y1: y0, y2: y0, stroke: FC.ink, 'stroke-width': 1.4, 'marker-end': `url(#${arrowId})` }, layer);
+    draw = t => { clear(); mk('line', { x1: 20, x2: W - 20, y1: y0, y2: y0, stroke: FC.ink, 'stroke-width': 1.4, 'marker-end': `url(#${arrowId})` }, layer); if (f.xlabel) txt(W - 20, 16, f.xlabel, { 'text-anchor': 'end', 'font-style': unitish(f.xlabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' });   /* the quantity and its unit, once */
       for (let v = Math.ceil(f.min / step) * step; v <= f.max + 1e-9; v += step) { mk('line', { x1: X(v), x2: X(v), y1: y0 - 5, y2: y0 + 5, stroke: FC.ink }, layer); txt(X(v), y0 + 19, fmt(v, 3), { 'text-anchor': 'middle', 'font-size': fs - 1, 'font-family': 'IBM Plex Mono, monospace' }); }
       f.intervals.forEach((iv, i) => { const yy = y0 - 18 - i * 16, c = SERIES[i % 5]; mk('line', { x1: X(iv.from), x2: X(iv.to), y1: yy, y2: yy, stroke: c, 'stroke-width': 5, 'stroke-linecap': 'butt', opacity: .8 }, layer); [[iv.from, iv.closedL], [iv.to, iv.closedR]].forEach(([v, cl]) => mk('circle', { cx: X(v), cy: yy, r: 4.5, fill: cl ? c : FC.bg, stroke: c, 'stroke-width': 2 }, layer)); if (iv.label) txt((X(iv.from) + X(iv.to)) / 2, yy - 8, iv.label, { 'text-anchor': 'middle', fill: c, 'font-size': fs - 1 }); });
       f.points.forEach(p => { mk('circle', { cx: X(p.x), cy: y0, r: 5, fill: p.open ? FC.bg : FC.rubric, stroke: FC.rubric, 'stroke-width': 2 }, layer); if (p.label) txt(X(p.x), y0 + 36, p.label, { 'text-anchor': 'middle', fill: FC.rubric, 'font-size': fs - 1 }); });
@@ -432,5 +436,16 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
 }
 // a label is code when it holds R / Python syntax or a code call (mean(x), read.csv(…)); maths calls such as sin(θ),
 // e_s(T) or K(sin 45°) stay typeset maths (the rule is js/room/prose.js isCodeCall, shared with the scroll's prose)
+// categories sharing one unit: ["10°", "20°"] → {cats: ["10", "20"], unit: "°", title: "(°)"}; ["E_a = 20 kJ/mol",
+// "50 kJ/mol"] → {cats: ["20", "50"], unit: "kJ/mol", title: "E_a (kJ/mol)"}; anything else → null (words are left alone)
+export function factorCats(cats) {
+  if (!Array.isArray(cats) || cats.length < 2) return null;
+  const P = cats.map(c => String(c).trim().match(/^(?:([^=]{1,14}?)\s*=\s*)?([−-]?\d[\d.,]*(?:\s*[×x]\s*10[⁻-]?[\d⁰¹²³⁴⁵⁶⁷⁸⁹]+)?)\s*([^\d\s].{0,11})?$/));
+  if (P.some(m => !m)) return null; const units = P.map(m => (m[3] || '').trim()).filter(Boolean), names = P.map(m => (m[1] || '').trim()).filter(Boolean);
+  if (!units.length && !names.length) return null; if (new Set(units).size > 1 || new Set(names).size > 1) return null;
+  if (units.length && units.length < P.length && !(units.length === 1 && P[P.length - 1][3])) return null;   /* a unit on every label, or only on the last */
+  const unit = units[0] || '', name = names[0] || ''; if (unit && !unitish(unit) && !/^[°%‰′″]$/.test(unit)) return null;
+  return { cats: P.map(m => m[2]), unit, title: (name + (unit ? ' (' + unit + ')' : '')).trim() };
+}
 export const looksLikeCode = s => /<-|\b\w+\$\w|^\[1\]|\bna\.rm\b|==|::/.test(s) || [...String(s).matchAll(/([A-Za-z_][\w.]*)\(([^)]*)\)/g)].some(m => isCodeCall(m[1], m[2]));
 function mathCap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
