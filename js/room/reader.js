@@ -409,7 +409,7 @@ export class Reader {
           el('button', { class: 'btn primary small', text: 'Build this diorama with AI', onclick: async ev => { ev.target.disabled = true; try { await authorDemo(this.ctx(), st, d, { onStatus: t => { st2.textContent = t; } }); this.save(); this.room.refreshStation(this.part); demos.replaceChild(this.renderDemo(d, st, i, demos), card.closest('.demo-wrap') || card); } catch (e) { ev.target.disabled = false; st2.textContent = errCopy(e); } } }), st2]));
         return;
       }
-      const img = el('img', { class: 'sketch', alt: 'Drawing of ' + (d.title || d.type) });
+      const img = el('img', { class: 'sketch', alt: 'Drawing of ' + (d.title || d.type) }); img.dataset.h = stage ? 420 : 500; if (stage && stage.focusText) img.dataset.focus = stage.focusText;   /* the live diorama opens on the same framing (engine.js fitSketchKey) */
       const go = el('button', { class: 'btn primary small', text: 'Transition ▸', onclick: () => this.openDiorama(d, st, img) });
       card.append(el('div', { class: 'sketch-frame' }, [img, el('div', { class: 'sketch-loading', text: 'drawing…' })]),
         el('figcaption', {}, [el('div', {}, [el('div', { class: 'kicker', text: stage ? `stage of the diorama shown in ${stage.first} · numbered parts are this step's bodies` : (d.technique || d.style || 'card') + ' · ' + (d.type === 'scene' ? 'authored scene' : d.type) }), el('b', { mathLabel: d.title || d.type })]), el('div', { class: 'row' }, [
@@ -461,7 +461,7 @@ export class Reader {
   openDiorama(d, st, img) {
     if (!img || !img.src) { this.app.openDiorama(d, { title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id }, autoTransition: true }); return; }
     const r = img.getBoundingClientRect();
-    this.app.openDiorama(d, { fromRect: r, fromImg: img.src, title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id } });
+    this.app.openDiorama(d, { fromRect: r, fromImg: img.src, sketchH: +img.dataset.h || 500, sketchFocus: img.dataset.focus || '', title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id } });
   }
   addShowcase(st, demos) {
     const ta = el('textarea', { class: 'field', rows: 3, placeholder: 'Describe what the diorama should show (bodies, variables, events), or leave empty to let AI choose.' });

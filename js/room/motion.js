@@ -175,6 +175,7 @@ const MAKERS = {
       C.mk('rect', { x, y: Y(v), width: w, height: by + bh - Y(v), fill: col(on ? c : 'mute'), opacity: on ? .85 : .45, rx: .4 });
       if (p.vl) C.text(x + w / 2, Y(v) - 1.2, fmtN(v, p.dp || 0) + (p.unit || ''), { fs: 3, c: 'ink', mono: true });
       if (p.labels && p.labels[i] != null) C.text(x + w / 2, by + bh + 3.8, p.labels[i], { fs: 3, c: 'soft' }); });
+    if (p.yl) C.text(bx, by - 2.5, p.yl, { fs: 3.1, a: 'start', c: 'soft', it: true }); if (p.xl) C.text(bx + bw, by + bh + (p.labels ? 8 : 4.5), p.xl, { fs: 3.1, a: 'end', c: 'soft', it: true });   /* axis titles: quantity (unit), once */
     if (p.lvl != null) { const y = Y(p.lvl); C.mk('rect', { x: bx, y: p.below ? by : y, width: bw, height: p.below ? y - by : by + bh - y, fill: MC.water, opacity: p.water === false ? 0 : .22 }); C.mk('line', { x1: bx - 1, x2: bx + bw + 1, y1: y, y2: y, stroke: col(p.lc || 'brass'), 'stroke-width': .8 }); if (p.lvlLab) C.text(bx + bw + 1.5, y + 1.2, p.lvlLab.replace('{v}', fmtN(p.lvl, p.dp || 0)), { fs: 3.3, a: 'start', c: p.lc || 'brass' }); }
   },
   // num: a counter. {x, y, v (keyframable), dp, pre, suf, fs, c, a, b}

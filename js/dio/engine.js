@@ -62,8 +62,15 @@ export class DioramaView {
   // ---------------- stages ----------------
   start() {
     const ds = this.ds, technique = this.spec.technique || this.spec.style || (isSceneSpec(this.spec) ? 'card' : 'card');
-    this.inkMat = addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, ds.radius * .0045); addOutlines(ds.extras, ds.U, ds.radius * .0045);
-    this.mat = new Materializer({ scene: this.scene, camera: this.camera, world: ds.world, U: ds.U, technique, endKey: ds.overviewKey(), center: ds.center, radius: ds.radius, env: ds.env });
+    // the drawing the transition starts from is the scroll's drawing: same subject, same framing (fitSketchKey), same
+    // scenery left out (it is drawn in as the model materialises); a stage plate's own focus frames its bodies the same way
+    let mc = ds.center, mr = ds.radius, subj = null;
+    if (!this.opts.skipIntro) { try {
+      if (this.opts.sketchFocus) { const f = matchActors(ds.actors, this.opts.sketchFocus), bx = new THREE.Box3(); f.forEach(a => { if (a.obj) bx.expandByObject(a.obj); else { const q = a.getPos && a.getPos(); if (q) bx.expandByPoint(q); } }); if (!bx.isEmpty()) { mc = bx.getCenter(V3()); mr = clamp(bx.getSize(V3()).length() * .62, ds.radius * .22, ds.radius); } }
+      else subj = sketchSubject(ds); } catch (e) { subj = null; } }
+    { const inkR = subj ? Math.max(.5, subj.box.getSize(V3()).length() * .5) : ds.radius * .9; this.inkMat = addInk(ds.world, ds.U); addInk(ds.extras, ds.U); addOutlines(ds.world, ds.U, inkR * .005); addOutlines(ds.extras, ds.U, inkR * .005); }   /* outlines as thick as in the scroll's drawing */
+    this.mat = new Materializer({ scene: this.scene, camera: this.camera, world: ds.world, U: ds.U, technique, endKey: ds.overviewKey(), center: mc, radius: mr, env: ds.env });
+    if (subj) { const K = fitSketchKey(subj.box, this.mat.flatKey, 800, this.opts.sketchH || 500); this.mat.flatKey = { target: K.target, dir: K.dir, fov: K.fov, frameH: K.frameH }; this.mat.nearR = Math.max(.3, subj.box.getSize(V3()).length() * .6); const extra = []; ds.scene.traverse(o => { if ((o.isPoints || o.userData.decorBase) && o.visible) extra.push(o); }); this._sketchHide = [...subj.hide.filter(o => o.visible), ...extra]; this._sketchHide.forEach(o => { o.visible = false; }); }
     this.mat.buildIn = !!this.opts.buildIn;
     if (this.opts.skipIntro) { this.mat.finish(); this.removeInk(); this.syncControls(); this.stage = 'explore'; this.showExplore(true); return; }
     this.mat.setProgress(0); this.stage = 'sketch'; ds.playing = false;
@@ -74,7 +81,8 @@ export class DioramaView {
     const r = this.opts.fromRect, img = el('img', { class: 'fly-img', src: this.opts.fromImg, alt: '' });
     Object.assign(img.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
     document.body.append(img);
-    requestAnimationFrame(() => { img.classList.add('go'); Object.assign(img.style, { left: '0px', top: '0px', width: innerWidth + 'px', height: innerHeight + 'px' }); });
+    const ar = r.width / Math.max(1, r.height), H = innerHeight, Wd = H * ar;   /* the drawing grows to the window's height in its own proportions, onto the live drawing that has the same framing */
+    requestAnimationFrame(() => { img.classList.add('go'); Object.assign(img.style, { left: ((innerWidth - Wd) / 2) + 'px', top: '0px', width: Wd + 'px', height: H + 'px' }); });
     setTimeout(() => { img.classList.add('fade'); setTimeout(() => img.remove(), 900); if (this.opts.autoTransition !== false) setTimeout(() => this.transition(), 700); }, 1100);
   }
   showSketchCoach() {
@@ -89,6 +97,7 @@ export class DioramaView {
     this.tm = 0; this.tmDur = duration; this.ds.playing = true; this.ds.speed = .6;
   }
   endMaterialize() {
+    if (this._sketchHide) { this._sketchHide.forEach(o => { o.visible = true; }); this._sketchHide = null; }
     this.mat.finish(); this.removeInk(); this.ds.speed = 1; this.syncControls(); this.ds.computeBounds();
     this.stage = 'tour'; this.tourI = -1; this.next();
   }
@@ -163,7 +172,8 @@ export class DioramaView {
   renderLessons() {
     const L = this.lessons(), box = this.lessonBox; box.innerHTML = '';
     L.forEach((l, i) => {
-      if (i > this.lessonI) return;
+      // later steps are listed too (number and title, dimmed), so the way ahead never disappears; any can be played
+      if (i > this.lessonI) { box.append(el('div', { class: 'lesson upcoming in' }, [el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: String(i + 1) }), el('b', { html: mathHTML(l.title || 'Step ' + (i + 1)) }), el('button', { class: 'btn ghost small lesson-skip', text: 'Play', title: 'Play this later step now', disabled: this.running != null, onclick: () => this.runLesson(i) })])])); return; }
       const done = i < this.lessonI, card = el('div', { class: 'lesson' + (done ? ' done' : ' current') }, [
         el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: done ? '✓' : String(i + 1) }), el('b', { html: mathHTML(l.title || 'Step ' + (i + 1)) })]),
         l.question ? el('div', { class: 'lesson-q', html: '<b>Q</b> ' + mathHTML(l.question) }) : null,
@@ -175,7 +185,7 @@ export class DioramaView {
         // says afterwards whether the model did what the reader expected (js/room/reveal.js, the same loop as in scrolls)
         this.lessonPredict(l, i, done),
         !done ? el('div', { class: 'lesson-run' }, [el('button', { class: 'btn primary small', text: this.running === i ? 'Running…' : this.needsPredict(l, i) ? 'Predict, then play' : 'Play this step', disabled: this.needsPredict(l, i) && this.running !== i, onclick: () => this.runLesson(i) }), el('div', { class: 'lesson-bar' }, [el('i')])]) : el('button', { class: 'btn ghost small', text: 'Replay', onclick: () => this.runLesson(i, true) })]);
-      box.append(card); if (!done) requestAnimationFrame(() => card.classList.add('in'));
+      box.append(card); if (!done) { card.classList.add('in'); if (this.running == null) requestAnimationFrame(() => { if (card.isConnected && card.scrollIntoView) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }); }   /* shown at once (a card that waited for a frame could stay invisible), and brought into view */
     });
     if (this.lessonI >= L.length) box.append(el('div', { class: 'lesson-all', text: 'All instructions complete. Change any variable or object and explore freely.' }));
     // the comprehension check of the demo's didactic plan: can the learner now explain it? (weighed above "was it attractive")
@@ -209,7 +219,7 @@ export class DioramaView {
     const mode = ['global', 'object', 'component', 'mechanism', 'frame'].includes(l.cameraMode) ? l.cameraMode : null; this.dir.mode = this.dir.cinematic ? mode : null;
     const povA = l.pov ? this.ds.actors.find(a => a.name === l.pov || a.name.toLowerCase().includes(String(l.pov).toLowerCase())) : l.track === 'actor' || (mode === 'frame' && !cue.track && !cue.zoom) ? host : null;
     if (this.pov && this.pov.auto) this.exitPOV(false, true);
-    if (this.dir.cinematic) { if (!this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; } this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
+    if (this.dir.cinematic) { if (innerWidth < 760 && !this.panel.classList.contains('folded')) { this.panel.classList.add('folded'); this._autoFold = true; this.fold.textContent = '›'; }   /* the steps stay on screen while a step plays (only a phone, where they would cover the scene, folds them) */ this.readFocus = ((l.title || '') + ' ' + (l.text || '') + ' ' + (l.explain || '')).toLowerCase(); this.readPanel.classList.add('compact'); }
     if (this.dir.cinematic) this.dir.push({ kind: 'lesson', shot: cue.zoom ? 'zoom' : cue.track ? 'track' : l.shot || (povA ? 'pov' : { global: 'wide', object: 'medium', component: 'push', mechanism: 'medium' }[mode]), zoom: cue.zoom, track: cue.track, caption: !host && !povA && !cue.zoom && !cue.track, question: l.question, povLook: l.povLook, title: l.title || 'Step ' + (i + 1), text: l.text || '', anchor: host ? () => this.ops.noAnchor() ? null : host.getPos() : null, focus: host && host.obj, host: povA || host, names: this.namesIn(l.text, host), flows: fk ? flows[fk] : null, extra: (l.chain || []).map(c => this.actorByName(c && (c.a || c))).filter(a => a && a !== host) });   // extra: the chain's links are framed with the subject
     else if (fa) this.flyTo(fa.getPos() || this.ds.center, 6);
     if (cue.isolate) this.cues.setIsolate(cue.isolate);
@@ -219,7 +229,7 @@ export class DioramaView {
     this.ds.playing = true; this.syncTimeUI();
     const until = String(l.until || ''); this.running = i; this.runT = 0; this.runDur = +l.run || (until ? 30 : 6); this.runUntil = until.startsWith('event:') ? until.slice(6).toLowerCase() : null; this.runReplay = !!replay;
     const bar = this.lessonBox.querySelectorAll('.lesson')[i]; this.runBar = bar && bar.querySelector('.lesson-bar i');
-    const b = bar && bar.querySelector('.lesson-run .btn'); if (b) { b.textContent = 'Running…'; b.disabled = true; }
+    const b = bar && bar.querySelector('.lesson-run .btn'); if (b) { b.textContent = 'Running…'; b.disabled = true; } this.lessonBox.querySelectorAll('.lesson-skip').forEach(x => { x.disabled = true; });
   }
   completeLesson() {
     const i = this.running; this.running = null; this.awaitIdle = false; this.dir.clearCaption(); if (this.pov && this.pov.auto) this.exitPOV(false, true);
@@ -227,9 +237,10 @@ export class DioramaView {
     const l = this.lessons()[i]; const fa = this.lessonActor;
     const cue = this.stepCue || {}; this.stepCue = null; this.cues.endStep(); this.ops.endStep(); this.dir.mode = null; const back = !!(cue.zoom && cue.zoom.back && this.dir.zoomBack()), keepZ = !!(cue.zoom && !back && l && l.explain && this.dir.cinematic && this.dir.zoom); if (cue.zoom && !back && !keepZ) this.dir.endZoomHud();   // keepZ: the explanation is read at the zoom's view, still following its subject (a molecule flies off: a static medium would frame empty space)   // zoom back: the generalising pull-out
     if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', noShot: back || keepZ, onEnd: keepZ ? () => { this.dir.endZoomHud(); unfold(); } : unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
+    if (this._autoFold) { this.panel.classList.remove('folded'); this._autoFold = false; this.fold.textContent = '‹'; }   /* the next step is offered at once, whatever the camera is still saying */
     if (!(l && l.explain && this.dir.cinematic)) unfold();
-    else { clearTimeout(this._unfoldT); this._unfoldT = setTimeout(() => { if (this.running == null && this.panel && this.panel.isConnected) unfold(); }, 14000); }   /* model events queued behind the explanation must not keep the steps folded away */
-    if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
+    else { clearTimeout(this._unfoldT); this._unfoldT = setTimeout(() => { if (this.running == null && this.panel && this.panel.isConnected) unfold(); }, 14000); }
+    if (!this.runReplay && i >= this.lessonI) { this.lessonI = i + 1; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
     this.renderLessons();
   }
   renderParams() {
@@ -659,7 +670,7 @@ export class DioramaView {
   update(dt, t) {
     const ds = this.ds;
     if (this._needRebuild) { this._needRebuild = false; this.rebuild(); this.refreshPins(); }
-    if (this.stage === 'materialize') { this.tm += dt; const k = Math.min(1, this.tm / this.tmDur); this.mat.setProgress(k); if (k >= 1) this.endMaterialize(); }
+    if (this.stage === 'materialize') { this.tm += dt; const k = Math.min(1, this.tm / this.tmDur); this.mat.setProgress(k); if (this._sketchHide && k > .18) { this._sketchHide.forEach(o => { o.visible = true; }); this._sketchHide = null; } if (k >= 1) this.endMaterialize(); }   /* the scenery the drawing left out is drawn in as the model begins to build */
     if (this.fly) { const f = this.fly; f.k = Math.min(1, f.k + dt / f.dur); const e = easeInOutQuint(f.k); this.controls.target.lerpVectors(f.from.t, f.to.t, e); this.camera.position.lerpVectors(f.from.p, f.to.p, e); this.camera.position.y += Math.sin(Math.PI * e) * f.lift; this.camera.lookAt(this.controls.target); if (f.k >= 1) { this.fly = null; this.controls.enabled = this.stage !== 'materialize' && this.stage !== 'sketch'; } }
     else if (this.pov) this.updatePOV(dt);
     else if (this.controls.enabled) this.controls.update();
@@ -717,15 +728,27 @@ export class DioramaView {
       if (om < 400) g = clamp((om - 30) / 60, 0, .55); const sz = this.pov ? Math.max(.05, this.pov.size) : 0; if (sz && lin > 3 * sz && lin < sz * 200) g = Math.max(g, clamp((lin / (3 * sz) - 1) * .25, 0, .55)); }
     this.cues.vigGoal = g; this._cq.copy(c.quaternion); this._cp.copy(c.position);
   }
+  // the readout graph: a real chart, not a squiggle. Axes with the value range on the left (the quantity and its unit
+  // are the caption above, the plot's own name), model time along the bottom ("−8 s … now"); a histogram shows its bin
+  // range and its tallest count. Drawn at the canvas's on-screen size, so text is never stretched.
   drawSpark() {
-    const c = this.spark, g = c.getContext('2d'), ds = this.ds; g.clearRect(0, 0, c.width, c.height);
+    const c = this.spark, ds = this.ds, dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.max(120, c.clientWidth || 300), ch = Math.max(50, c.clientHeight || 78);
+    if (c.width !== Math.round(cw * dpr) || c.height !== Math.round(ch * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
     const cap = ds.seriesName || ''; if (cap !== this._sparkCapT) { this._sparkCapT = cap; this.sparkCap.innerHTML = mathHTML(cap, 'label'); this.sparkCap.hidden = !cap; }
+    const L = 38, R = 6, T = 6, B = 16, pw = cw - L - R, ph = ch - T - B, num = v => { const a = Math.abs(v); return a >= 1e4 || (a < 1e-2 && a > 0) ? v.toExponential(1) : String(+v.toPrecision(3)); };
+    g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = 'rgba(244,239,230,.62)'; g.strokeStyle = 'rgba(244,239,230,.35)'; g.lineWidth = 1;
+    const frame = (lo, hi, xl, xr) => { g.beginPath(); g.moveTo(L, T); g.lineTo(L, T + ph); g.lineTo(L + pw, T + ph); g.stroke(); g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(num(hi), L - 4, T + 3); g.fillText(num(lo), L - 4, T + ph - 2);
+      g.strokeStyle = 'rgba(244,239,230,.12)'; g.beginPath(); g.moveTo(L, T); g.lineTo(L + pw, T); g.stroke(); g.textBaseline = 'alphabetic'; g.textAlign = 'left'; g.fillText(xl, L, ch - 3); g.textAlign = 'right'; g.fillText(xr, L + pw, ch - 3); };
     const H = ds.sim && ds.sim.hist ? ds.sim.hist() : null;
-    if (H) { const mx = Math.max(...H, 1); H.forEach((v, i) => { const bw = c.width / H.length; g.fillStyle = 'rgba(255,217,138,.6)'; g.fillRect(i * bw + 1, c.height - v / mx * (c.height - 8), bw - 2, v / mx * (c.height - 8)); }); return; }
+    if (H) { const mx = Math.max(...H, 1), bw = pw / H.length; frame(0, mx, 'bin 0', 'bin ' + (H.length - 1)); g.fillStyle = 'rgba(255,217,138,.6)'; H.forEach((v, i) => g.fillRect(L + i * bw + .5, T + ph - v / mx * ph, Math.max(1, bw - 1), v / mx * ph)); g.fillStyle = 'rgba(244,239,230,.5)'; g.textAlign = 'center'; g.fillText('count per bin', L + pw / 2, ch - 3); return; }
     const d = ds.series; if (d.length < 2) return; let lo = Math.min(...d), hi = Math.max(...d);
     if (ds.sim && ds.sim.seriesRange) { try { const r = ds.sim.seriesRange(lo, hi); if (r && isFinite(r[0]) && isFinite(r[1]) && r[1] > r[0]) [lo, hi] = r; } catch (e) { } }
     if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
-    g.strokeStyle = '#ffd98a'; g.lineWidth = 2.5; g.beginPath(); d.forEach((y, i) => { const x = i / 299 * c.width, yy = c.height - 8 - (y - lo) / (hi - lo) * (c.height - 16); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
+    const tt = ds.seriesT && ds.seriesT.length === d.length ? ds.seriesT : null, span = tt ? tt[tt.length - 1] - tt[0] : 0;
+    frame(lo, hi, tt && span > 0 ? '−' + num(span) + ' s' : 'earlier', 'now');
+    if (lo < 0 && hi > 0) { const y0 = T + ph - (0 - lo) / (hi - lo) * ph; g.strokeStyle = 'rgba(244,239,230,.22)'; g.beginPath(); g.moveTo(L, y0); g.lineTo(L + pw, y0); g.stroke(); }
+    g.strokeStyle = '#ffd98a'; g.lineWidth = 2; g.beginPath(); d.forEach((y, i) => { const x = L + (tt && span > 0 ? (tt[i] - tt[0]) / span : i / (d.length - 1)) * pw, yy = T + ph - (y - lo) / (hi - lo) * ph; i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
   }
   dispose() {
     if (this.pov) this.exitPOV(true);
@@ -789,6 +812,25 @@ function sketchSubject(ds) {
   lines.forEach(L => { if (grow.containsBox(L.b)) { if (L.o.isLine) box.union(L.b); } else hide.push(L.o); });
   return { box, hide };
 }
+// The overview drawing's camera: the subject box seen along the technique's drawing direction and lens, centred in the
+// frame above the card's 44 px title strip and filling it without a cut (measured through the real perspective, then
+// re-aimed and dollied). The live diorama opens on this same key (DioramaView.start), so the drawing in the scroll and
+// the drawing the transition starts from are one picture. Returns {target, dir, fov, frameH, dist, near, far, up0}.
+export function fitSketchKey(b, fk, w, h) {
+  const dir = fk.dir.clone().normalize(), up0 = Math.abs(dir.y) > .95 ? V3(0, 0, -1) : V3(0, 1, 0), right = up0.clone().cross(dir).normalize(), up = dir.clone().cross(right).normalize();
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9; const corners = [];
+  for (let k = 0; k < 8; k++) { const p = V3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z); corners.push(p); const x = p.dot(right), y = p.dot(up), z = p.dot(dir); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  const hu = h - 44, FILL = .86, useH = Math.max(y1 - y0, (x1 - x0) * hu / w, .05) / FILL, fullH = useH * h / hu, th = Math.tan(fk.fov * Math.PI / 360);
+  let D = fullH / 2 / th; const aim = right.clone().multiplyScalar((x0 + x1) / 2).addScaledVector(up, (y0 + y1) / 2 - fullH * 22 / h).addScaledVector(dir, (z0 + z1) / 2), depth = Math.max(z1 - z0, .1);
+  const cam = new THREE.PerspectiveCamera(fk.fov, w / h, .01, 1e4); cam.up.copy(up0);
+  const yLo = -1 + 2 * 44 / h + .08, yHi = .82, xLo = -.86, xHi = .86;   /* margins inside the card's frame lines */
+  for (let it = 0; it < 5; it++) { cam.position.copy(aim).addScaledVector(dir, D); cam.lookAt(aim); cam.near = Math.max(.01, D - depth * 2); cam.far = D + depth * 2 + 1; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    let nx0 = 1e9, nx1 = -1e9, ny0 = 1e9, ny1 = -1e9; corners.forEach(c => { const q = c.clone().project(cam); nx0 = Math.min(nx0, q.x); nx1 = Math.max(nx1, q.x); ny0 = Math.min(ny0, q.y); ny1 = Math.max(ny1, q.y); });
+    const sc = Math.max((nx1 - nx0) / (xHi - xLo), (ny1 - ny0) / (yHi - yLo)), half = D * th;
+    aim.addScaledVector(right, ((nx0 + nx1) / 2 - (xLo + xHi) / 2) * half * cam.aspect).addScaledVector(up, ((ny0 + ny1) / 2 - (yLo + yHi) / 2) * half);
+    D *= Math.min(1.6, Math.max(.6, sc)); }
+  return { target: aim, dir, fov: fk.fov, frameH: 2 * D * th, dist: D, near: Math.max(.01, D - depth * 2), far: D + depth * 2 + 1, up0 };
+}
 export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
   if (sketchCache.has(key)) return sketchCache.get(key);
@@ -820,14 +862,7 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
     const S = subj;
     if (S) {
       S.hide.forEach(o => { o.visible = false; }); ((ds.env && ds.env.bgObjects) || []).forEach(o => { o.visible = false; });
-      const fk = m.flatKey, dir = fk.dir.clone().normalize(), up0 = Math.abs(dir.y) > .95 ? V3(0, 0, -1) : V3(0, 1, 0), right = up0.clone().cross(dir).normalize(), up = dir.clone().cross(right).normalize();
-      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9; const b = S.box;
-      for (let k = 0; k < 8; k++) { const p = V3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z), x = p.dot(right), y = p.dot(up), z = p.dot(dir); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-      // the title strip covers the bottom 44 px: the subject is fitted to, and centred in, the area above it
-      const hu = h - 44, FILL = .76, useH = Math.max(y1 - y0, (x1 - x0) * hu / w, .05) / FILL, fullH = useH * h / hu, th = Math.tan(fk.fov * Math.PI / 360), dist = fullH / 2 / th;
-      const tgt = right.clone().multiplyScalar((x0 + x1) / 2).addScaledVector(up, (y0 + y1) / 2 - fullH * 22 / h).addScaledVector(dir, (z0 + z1) / 2);
-      cam.fov = fk.fov; cam.up.copy(up0); cam.position.copy(tgt).addScaledVector(dir, dist); cam.lookAt(tgt);
-      const depth = Math.max(z1 - z0, .1); cam.near = Math.max(.01, dist - depth * 2); cam.far = dist + depth * 2 + 1; cam.updateProjectionMatrix();
+      const K = fitSketchKey(S.box, m.flatKey, w, h); cam.fov = K.fov; cam.up.copy(K.up0); cam.position.copy(K.target).addScaledVector(K.dir, K.dist); cam.lookAt(K.target); cam.near = K.near; cam.far = K.far; cam.updateProjectionMatrix();
     }
   }
   const rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 }); const r = gfx.renderer;

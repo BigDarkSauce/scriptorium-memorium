@@ -45,7 +45,7 @@ export class DioramaScene {
   }
   // ---------- building ----------
   build() {
-    this.world.clear(); this.extras.clear(); this.actors = []; this.symbols = []; this.series = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
+    this.world.clear(); this.extras.clear(); this.actors = []; this.symbols = []; this.series = []; this.seriesT = []; this.t = 0; this.hooks = { step: [], frame: [], reads: [], series: null, click: null }; this.behaviors = [];
     const spec = this.spec;
     if (isSceneSpec(spec)) this.buildScene(); else this.buildModel();
     (spec.additions || []).forEach(b => { try { const o = buildBody(b, this.bodyCtx()); o.userData.added = true; this.extras.add(o); if (b.role === 'actor') this.addActor(o.userData.label, () => this.centerOf(o), o, b.describe); } catch (e) { console.warn(e); } });
@@ -176,7 +176,7 @@ export class DioramaScene {
     this.events.push(ev); if (this.events.length > 200) this.events.shift();
     this.listeners.event.forEach(f => f(ev));
   }
-  push(v) { this.series.push(v); if (this.series.length > 300) this.series.shift(); }
+  push(v) { this.series.push(v); (this.seriesT || (this.seriesT = [])).push(this.t); if (this.series.length > 300) { this.series.shift(); this.seriesT.shift(); } while (this.seriesT.length > this.series.length) this.seriesT.shift(); }   /* each sample keeps its model time, so the graph's time axis is labelled */
   step(dt) {
     const h = dt * this.speed;
     if (this.playing && h > 0) {
