@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — smoke test (node + playwright, headless Chromium).
+// Scriptorium Memorialium — smoke test (node + playwright, headless Chromium).
 //
 // RUN
 //   1. Serve the app:            ./serve.sh            (or: python3 -m http.server 8000 in the project folder)

@@ -1,6 +1,6 @@
 # Prompt pack
 
-These are the exact prompts Scriptorium Memorium sends to Claude (generated from `js/ai/prompts.js` by `node prompts/build.mjs`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
+These are the exact prompts Scriptorium Memorialium sends to Claude (generated from `js/ai/prompts.js` by `node prompts/build.mjs`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
 
 Order of work (the full recipe, with checklists, is in `../docs/PROTOCOL.md` → "Recipe for any AI"):
 1. `01-split-book.md`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).

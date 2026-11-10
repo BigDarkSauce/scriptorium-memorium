@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — golden-image regression (node + playwright, headless Chromium, software WebGL).
+// Scriptorium Memorialium — golden-image regression (node + playwright, headless Chromium, software WebGL).
 // Renders a fixed, deterministic set of views and compares them with stored baselines (or with a second server) using
 // a perceptual per-pixel difference (pixelmatch: YIQ colour distance + anti-aliasing detection). Writes an HTML report
 // with the two images side by side and a diff image per view. See docs/qa/golden.md.

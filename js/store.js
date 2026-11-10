@@ -2,7 +2,7 @@
 // Falls back to memory when IndexedDB is unavailable (private windows, previews, blocked storage), when opening it
 // hangs, and for values that could not be written (quota exceeded): this session keeps working, and the viewer is told
 // once that changes will not survive a reload.
-const DB = 'scriptorium-memorium', OS = 'kv';
+const DB = 'scriptorium-memorium', OS = 'kv';   // (the database keeps the project's first name: renaming it would orphan every saved library)
 let dbp = null, warned = false; const mem = new Map();
 export const status = { persistent: null, error: null };
 function warn(msg) { status.error = msg; if (warned) return; warned = true; try { import('./util.js').then(u => u.toast(msg, 6000)); } catch (e) { } console.warn(msg); }
@@ -37,27 +37,47 @@ async function tx(mode, fn) {
     } catch (e) { if (quota(e)) warn('Storage is full: new changes are kept only until this page is closed.'); res(undefined); }
   });
 }
+// Save slots: each private scriptorium is its own set of keys. The first ("main") keeps the unprefixed keys every
+// library before slots used; the others live under "slot:<id>/". Global keys (the slot list itself) bypass the prefix.
+let P = '';
+export let slot = 'main';
+export function useSlot(id) { flushSaves(); slot = id || 'main'; P = slot === 'main' ? '' : 'slot:' + slot + '/'; mem.clear(); }
+const K = k => P + k;
+export async function getGlobal(key) { const d = await db(); if (!d) return mem.get('§' + key); return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); } catch (e) { res(undefined); } }); }
+export async function setGlobal(key, val) { mem.set('§' + key, val); return tx('readwrite', s => s.put(val, key)); }
+// delete a whole slot's keys (never the main slot's)
+export async function dropSlot(id) { if (!id || id === 'main') return; const pre = 'slot:' + id + '/', d = await db(); if (!d) return; const all = await new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).getAllKeys(); r.onsuccess = () => res(r.result); r.onerror = () => res([]); } catch (e) { res([]); } }); for (const k of all) if (String(k).startsWith(pre)) await tx('readwrite', s => s.delete(k)); }
 // values written in this session win (they are the newest, and they survive a failed write)
-export async function get(key) {
+export async function get(key) { return getRaw(K(key)); }
+async function getRaw(key) {
   if (mem.has(key)) return mem.get(key);
   const d = await db(); if (!d) return undefined;
   return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); } catch (e) { res(undefined); } });
 }
-export async function set(key, val) { mem.set(key, val); return tx('readwrite', s => s.put(val, key)); }
-export async function del(key) { mem.delete(key); deleted.add(key); return tx('readwrite', s => s.delete(key)); }
+export async function set(key, val) { key = K(key); mem.set(key, val); return tx('readwrite', s => s.put(val, key)); }
+export async function del(key) { key = K(key); mem.delete(key); deleted.add(key); return tx('readwrite', s => s.delete(key)); }
 const deleted = new Set();
 export async function keys(prefix = '') {
+  const raw = await keysRaw(P + prefix); return raw.map(k => String(k).slice(P.length));
+}
+async function keysRaw(prefix) {
   const d = await db(); const local = [...mem.keys()].filter(k => String(k).startsWith(prefix));
   if (!d) return local;
   return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).getAllKeys(); r.onsuccess = () => res([...new Set([...r.result.filter(k => String(k).startsWith(prefix) && !deleted.has(k)), ...local])]); r.onerror = () => res(local); } catch (e) { res(local); } });
 }
 // Debounced savers keyed by name
 const timers = {}, pending = new Map();
-export function saveLater(key, getVal, ms = 500) { clearTimeout(timers[key]); pending.set(key, getVal); timers[key] = setTimeout(() => flushOne(key), ms); }
-function flushOne(key) { clearTimeout(timers[key]); delete timers[key]; const f = pending.get(key); pending.delete(key); if (!f) return; try { set(key, structuredCloneSafe(f())); } catch (e) { console.warn('save', key, e); } }
+export function saveLater(key, getVal, ms = 500) { key = K(key); clearTimeout(timers[key]); pending.set(key, getVal); timers[key] = setTimeout(() => flushOne(key), ms); lastChange = Date.now(); }
+function flushOne(key) { clearTimeout(timers[key]); delete timers[key]; const f = pending.get(key); pending.delete(key); if (!f) return; try { const v = structuredCloneSafe(f()); mem.set(key, v); tx('readwrite', s => s.put(v, key)).then(() => { savedAt = Date.now(); }); } catch (e) { console.warn('save', key, e); } }
+let lastChange = 0, savedAt = 0;
+export const saveState = () => ({ pending: pending.size, lastChange, savedAt });
 // the page is going away (tab closed, switched away on a phone): write what is still waiting instead of losing it
 export function flushSaves() { [...pending.keys()].forEach(flushOne); }
-if (typeof addEventListener === 'function') { addEventListener('pagehide', flushSaves); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaves(); }); }
+// autosave: whatever is still waiting is written every 2 s as well (a crash or a frozen tab loses at most that), and the
+// browser is asked to keep this site's storage rather than evict it under pressure
+if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { if (pending.size) flushSaves(); }, 2000);   // in the page only (a test importing this module must still exit)
+try { if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => { }); } catch (e) { }
+if (typeof addEventListener === 'function') { addEventListener('pagehide', flushSaves); addEventListener('beforeunload', flushSaves); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaves(); }); }
 export function structuredCloneSafe(v) { try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } }
 export function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
 export function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }

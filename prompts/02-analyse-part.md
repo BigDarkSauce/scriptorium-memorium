@@ -163,6 +163,7 @@ GROUNDING. Tools that search the scholarly record may be available (search_liter
 - Measured values (constants, fluxes, prices, rates) must come from a source and say which. Data in a diagram cites its source in the demo's "source" field.
 - Where sources disagree, say so in "note" and give the range.
 When no tool is available, cite only works you are certain exist and leave "doi" empty unless you are sure of it.
+DESIGN REFERENCES. Tools may show how the best explainers, documentaries and games present this idea (search_videos, video_transcript, search_games, search_newsletter, search_films). Use them, when available, before designing a diorama, a motion figure or the order of a hard derivation (1–3 searches): borrow the MECHANIC (the view, the order of reveals, the interaction, the analogy), never the words or images, and never treat them as sources of facts (facts come from the scholarly tools). Name a reference you drew on in the step's "note" as "design after <title>, <url>".
 
 EXAMPLE (shape only — your content comes from the PART TEXT; ids, numbers and figures here are illustrative):
 {"title":"Motion in one dimension","summary":"Position, velocity and constant acceleration of a cart on a straight track.","question":"How do we describe where a moving object is and how fast that changes?",

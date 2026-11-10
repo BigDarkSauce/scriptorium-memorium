@@ -10,7 +10,7 @@
 // really exist. Afterwards, every cited reference is checked against OpenAlex and marked verified / not found.
 // Outside claude.ai (or with no connector), prompts still ask for sources and they are shown as "unverified".
 let MCP = null, SERVERS = new Set(), ready;
-const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'], SciSpace: ['search'], 'Hugging Face': ['hf_fs'], 'Clinical Trials': ['search_trials'] };
+const DECLARED = { OpenAlex: ['search_works', 'resolve_references'], Consensus: ['search'], PubMed: ['search_articles', 'get_article_metadata'], SciSpace: ['search'], 'Hugging Face': ['hf_fs'], 'Clinical Trials': ['search_trials'], Firecrawl: ['firecrawl_scrape'] };
 
 export function initEvidence() {
   ready = (async () => {
@@ -89,6 +89,35 @@ export async function searchTrials(condition, intervention) {
     return { title: s.title || s.brief_title || s.briefTitle || id, year: +String(s.start_date || s.startDate || '').slice(0, 4) || null, authors: s.sponsor || '', venue: 'ClinicalTrials.gov ' + (s.status || s.overall_status || ''), url: id ? 'https://clinicaltrials.gov/study/' + id : '', abstract: cut(s.brief_summary || s.summary || [[].concat(s.phase || []).join('/'), s.conditions && [].concat(s.conditions).join(', '), s.interventions && 'intervention: ' + [].concat(s.interventions).join(', '), s.enrollment && 'n = ' + s.enrollment].filter(Boolean).join(' · '), 400), source: 'ClinicalTrials.gov' }; });
 }
 
+// ---- how the best explainers show it: videos (lectures, animations, documentaries, game playthroughs), games,
+// newsletters and films, through the viewer's Firecrawl connector and its catalogued providers (youtube-com,
+// store-steampowered-com, substack-com, letterboxd-com). Used for the DESIGN of a diorama, motion figure or explanation
+// (what mechanic, what view, what order), never as a source of facts; Reddit and Pinterest are left out: both refuse
+// automated access, and the honest route to them is their own API through a connector of their own.
+async function alex(provider, capability, options) {
+  const p = await call('Firecrawl', 'firecrawl_scrape', { objective: 'Find how good explainers, documentaries and games show a concept, to design a clearer explanation', alexandria: { provider, capability, options } });
+  const o = typeof p === 'string' ? JSON.parse(p) : p, L = o && ((o.data && o.data.alexandria) || o.alexandria), a = Array.isArray(L) ? L[0] : L;
+  if (!a || a.error) throw new Error((a && a.error && a.error.message) || 'no result'); return a.data || {};
+}
+export async function searchVideos(query, kind = '') {
+  const d = await alex('youtube-com', 'videos/search_videos', { query: cut(query + (kind === 'playthrough' ? ' playthrough' : kind === 'documentary' ? ' documentary' : ''), 160) });
+  return (d.videos || []).slice(0, 8).map(v => ({ title: v.title, channel: v.channel_name, length: v.length_text, views: v.view_count_text, url: v.url, video_id: v.video_id, about: cut(v.description_snippet, 160) }));
+}
+export async function videoTranscript(video_id) { const d = await alex('youtube-com', 'videos/video_transcript', { video_id, language: 'en' }); return { title: d.title, url: d.url, text: cut(d.full_text, 7000) }; }
+export async function searchGames(term) { const d = await alex('store-steampowered-com', 'games/search_games', { term: cut(term, 100) }); return (d.items || []).slice(0, 6).map(g => ({ name: g.name, appid: g.appid, url: g.store_url, metascore: g.metascore })); }
+export async function searchNewsletter(publication, query) { const d = await alex('substack-com', 'newsletters/search', { publication, query: cut(query, 120) }); return (d.posts || []).slice(0, 6).map(p => ({ title: p.title, url: p.canonical_url || p.url || '', date: String(p.published_at || '').slice(0, 10), preview: cut(p.preview_text || p.description, 220) })); }
+export async function searchFilms(query) { const d = await alex('letterboxd-com', 'films/search_films', { query: cut(query, 100) }); return (d.results || []).slice(0, 8).map(f => ({ title: f.name, year: f.year, url: f.url, directors: (f.directors || []).map(x => x.name).join(', ') })); }
+export function inspirationTools() {
+  if (!SERVERS.has('Firecrawl')) return [];
+  return [
+    { name: 'search_videos', description: 'Search YouTube for how the best explainers, lecturers and documentaries SHOW this idea, or (kind "playthrough") how a game makes a player feel it. Returns titles, channels, lengths and URLs. For design ideas only, never as a source of facts.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, kind: { type: 'string', enum: ['', 'documentary', 'playthrough'] } }, required: ['query'] }, execute: i => searchVideos(i.query, i.kind) },
+    { name: 'video_transcript', description: 'The English transcript of one YouTube video (by video_id from search_videos), to see the order in which a good explanation reveals things.', inputSchema: { type: 'object', properties: { video_id: { type: 'string' } }, required: ['video_id'] }, execute: i => videoTranscript(i.video_id) },
+    { name: 'search_games', description: 'Search the Steam store for games whose mechanics teach this idea (orbits, circuits, chemistry, economics…). Returns names and store URLs.', inputSchema: { type: 'object', properties: { term: { type: 'string' } }, required: ['term'] }, execute: i => searchGames(i.term) },
+    { name: 'search_newsletter', description: 'Search one Substack newsletter (its publication name, e.g. "construction-physics") for essays explaining this idea.', inputSchema: { type: 'object', properties: { publication: { type: 'string' }, query: { type: 'string' } }, required: ['publication', 'query'] }, execute: i => searchNewsletter(i.publication, i.query) },
+    { name: 'search_films', description: 'Search Letterboxd for documentaries or films about this idea (title, year, director).', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchFilms(i.query) },
+  ];
+}
+export const INSPIRATION_RULES = `DESIGN REFERENCES. Tools may show how the best explainers, documentaries and games present this idea (search_videos, video_transcript, search_games, search_newsletter, search_films). Use them, when available, before designing a diorama, a motion figure or the order of a hard derivation (1–3 searches): borrow the MECHANIC (the view, the order of reveals, the interaction, the analogy), never the words or images, and never treat them as sources of facts (facts come from the scholarly tools). Name a reference you drew on in the step's "note" as "design after <title>, <url>".`;
 // ---- tools handed to Claude while it writes (sample `tools`) ----
 export function evidenceTools() {
   const T = [];
@@ -97,6 +126,7 @@ export function evidenceTools() {
   if (SERVERS.has('PubMed')) T.push({ name: 'search_biomedical', description: 'Search PubMed (medicine, physiology, molecular and cell biology, pharmacology only). Returns articles with DOIs and abstracts.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchPubMed(i.query) });
   if (SERVERS.has('SciSpace')) T.push({ name: 'search_any_discipline', description: 'Search SciSpace (280M papers in every discipline). Best for the humanities and social sciences (history, philosophy, law, literature, linguistics, education, art) and as a second source anywhere. Write a full question.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, execute: i => searchSciSpace(i.query) });
   if (SERVERS.has('Hugging Face')) T.push({ name: 'search_computing', description: 'Search arXiv-linked papers (scope "papers") or library documentation (scope "docs") on Hugging Face: computer science, AI/ML, statistics software, programming, computer graphics.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['papers', 'docs'] } }, required: ['query'] }, execute: i => searchComputing(i.query, i.scope) });
+  T.push(...inspirationTools());
   if (SERVERS.has('Clinical Trials')) T.push({ name: 'search_clinical_trials', description: 'Search ClinicalTrials.gov registered trials by condition (and optional intervention). Medicine and pharmacology only.', inputSchema: { type: 'object', properties: { condition: { type: 'string' }, intervention: { type: 'string' } }, required: ['condition'] }, execute: i => searchTrials(i.condition, i.intervention) });
   return T;
 }

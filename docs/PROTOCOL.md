@@ -1,6 +1,6 @@
 # Protocol: how any AI can build Scriptorium rooms
 
-Scriptorium Memorium never depends on one AI. Every piece of AI work is a **prompt in, JSON out** exchange with fixed formats.
+Scriptorium Memorialium never depends on one AI. Every piece of AI work is a **prompt in, JSON out** exchange with fixed formats.
 
 - Inside claude.ai the page sends the prompt to the viewer's own Claude (the artifact's `sample` capability) and reads the JSON.
 - Anywhere else, or for another account, the app shows the prompt. You run it in any AI with your PDF and paste the JSON back. Every AI dialog in the app has this fallback.

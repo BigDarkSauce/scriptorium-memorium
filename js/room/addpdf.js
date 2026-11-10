@@ -45,6 +45,39 @@ function place(app, hub, b, P) {
 const hubOf = app => app.mode && app.mode.constructor && app.mode.constructor.name === 'Hub' ? app.mode : (app.mode && typeof app.mode.listShelves === 'function' ? app.mode : null);
 
 // ---- the dialog
+// the place on a bookcase (the add-PDF dialog's step 2, also used for duplicated and fetched scrolls): sets S.place
+function placeUI(app, hub, S, shelfId) {
+  const list = shelvesOf(app, hub);
+  if (!list.length) return [el('p', { text: 'There is no bookcase yet: the scroll goes on a new one.' })];
+  if (!S.place) { const s0 = list.find(s => s.caseId === shelfId) || list[0]; const r0 = s0.rows.find(r => r.slots.some(x => x.free)) || s0.rows[0]; const x0 = r0 && r0.slots.find(x => x.free); S.place = { caseId: s0.caseId, row: r0 ? r0.row : 0, slot: x0 ? x0.slot : 0, hang: false }; }
+  const sel = el('select', { class: 'field', 'aria-label': 'Bookcase' }, list.map(s => el('option', { value: s.caseId, text: `${s.title} (${s.kind || ''}, ${s.rows.reduce((a, r) => a + r.slots.filter(x => x.free).length, 0)} free)`, selected: s.caseId === S.place.caseId })));
+  const grid = el('div', { class: 'ap-grid', role: 'grid', 'aria-label': 'Rows and places' }), info = el('div', { class: 'dim small ap-info' });
+  const hang = el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.place.hang, onchange: e => { S.place.hang = e.target.checked; show(); } }), ' Hang it on the front of the bookcase (marks it important)']);
+  const show = () => {
+    const s = list.find(x => x.caseId === S.place.caseId) || list[0]; grid.innerHTML = '';
+    // one line per row: its label, then its places in a strip that scrolls sideways when the row is longer than the
+    // dialog (never wrapped onto an unlabelled second line); each place shows its number
+    const strips = [];
+    s.rows.forEach(r => { const strip = el('div', { class: 'ap-slots' }, r.slots.map(x => { const on = S.place.row === r.row && S.place.slot === x.slot; const b = el('button', { type: 'button', role: 'gridcell', class: 'ap-slot' + (x.free ? '' : ' taken') + (on ? ' on' : ''), title: x.free ? `Row ${r.label}, place ${x.slot + 1}` : 'Taken', 'aria-label': `Row ${r.label}, place ${x.slot + 1}${x.free ? '' : ', taken'}`, 'aria-selected': String(on), disabled: !x.free, 'data-row': r.row, 'data-slot': x.slot, text: String(x.slot + 1) }); b.onclick = () => { S.place = { ...S.place, row: r.row, slot: x.slot }; const k = strip.scrollLeft; show(); const ns = grid.querySelectorAll('.ap-slots')[s.rows.indexOf(r)]; if (ns) ns.scrollLeft = k; }; return b; }));
+      strips.push(strip); grid.append(el('div', { class: 'ap-row', role: 'row' }, [el('span', { class: 'ap-rl', text: 'Row ' + r.label }), strip])); });
+    // the chosen place is scrolled into its strip's view
+    requestAnimationFrame(() => strips.forEach(st => { const on = st.querySelector('.ap-slot.on'); if (on && (on.offsetLeft < st.scrollLeft || on.offsetLeft + on.offsetWidth > st.scrollLeft + st.clientWidth)) st.scrollLeft = on.offsetLeft - st.clientWidth / 2 + on.offsetWidth / 2; }));
+    const res = preview(hub, S.place); info.textContent = `Row ${(s.rows.find(r => r.row === S.place.row) || {}).label || ''}, place ${S.place.slot + 1}` + (res && res.free === false ? ' — taken, the nearest free place will be used' : '') + (S.place.hang ? ', hanging' : '') + (res && res.ok ? ' · marked by the glowing ghost scroll above' : '');
+  };
+  sel.onchange = () => { const s = list.find(x => x.caseId === sel.value); const r = s.rows.find(rr => rr.slots.some(x => x.free)) || s.rows[0]; const x = r && r.slots.find(y => y.free); S.place = { caseId: s.caseId, row: r ? r.row : 0, slot: x ? x.slot : 0, hang: S.place.hang }; show(); };
+  sel.id = 'ap-case';
+  show(); return [el('div', { class: 'ap-pick' }, [el('label', { class: 'ap-lab', for: 'ap-case', text: 'Bookcase' }), sel]), el('div', { class: 'ap-pick-head' }, [el('span', { class: 'ap-lab', text: 'Row and place' }), info]), grid, hang];
+}
+// a scroll arriving from elsewhere (a duplicate, or one fetched from the shared shelf): its bookcase and place are chosen
+// here; onChoose receives place(b), which puts the new book record there (hub.placeScroll), and writes its room itself
+export function choosePlace(app, { title = 'Where should it go?', verb = 'Put it there', hint = '', onChoose } = {}) {
+  const hub = hubOf(app), S = { place: null }, veil = el('div', { class: 'modal-veil addpdf-veil' });
+  const box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
+  const close = () => { veil.remove(); preview(hub, null); };
+  box.append(el('h3', { text: title }), hint ? el('p', { class: 'dim small', text: hint }) : null, ...placeUI(app, hub, S, null),
+    el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: close }), el('button', { class: 'btn primary', text: verb, onclick: async () => { const P = S.place; close(); await onChoose({ place: b => P ? place(app, hub, b, P) : (app.saveLib(), { ok: true }) }); } })]));
+  veil.append(box); document.body.append(veil); veil.onclick = e => { if (e.target === veil) close(); };
+}
 export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null } = {}) {
   const S = { file: null, split: null, title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true, deep: false };
   const veil = el('div', { class: 'modal-veil addpdf-veil' }), box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a PDF scroll' });
@@ -97,28 +130,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
     }
   }
   // 2 · the place on a bookcase
-  function stepPlace() {
-    const list = shelvesOf(app, hub);
-    if (!list.length) { body.append(el('p', { text: 'There is no bookcase yet: the scroll goes on a new one.' })); nav('Next'); return; }
-    if (!S.place) { const s0 = list.find(s => s.caseId === shelfId) || list[0]; const r0 = s0.rows.find(r => r.slots.some(x => x.free)) || s0.rows[0]; const x0 = r0 && r0.slots.find(x => x.free); S.place = { caseId: s0.caseId, row: r0 ? r0.row : 0, slot: x0 ? x0.slot : 0, hang: false }; }
-    const sel = el('select', { class: 'field', 'aria-label': 'Bookcase' }, list.map(s => el('option', { value: s.caseId, text: `${s.title} (${s.kind || ''}, ${s.rows.reduce((a, r) => a + r.slots.filter(x => x.free).length, 0)} free)`, selected: s.caseId === S.place.caseId })));
-    const grid = el('div', { class: 'ap-grid', role: 'grid', 'aria-label': 'Rows and places' }), info = el('div', { class: 'dim small ap-info' });
-    const hang = el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.place.hang, onchange: e => { S.place.hang = e.target.checked; show(); } }), ' Hang it on the front of the bookcase (marks it important)']);
-    const show = () => {
-      const s = list.find(x => x.caseId === S.place.caseId) || list[0]; grid.innerHTML = '';
-      // one line per row: its label, then its places in a strip that scrolls sideways when the row is longer than the
-      // dialog (never wrapped onto an unlabelled second line); each place shows its number
-      const strips = [];
-      s.rows.forEach(r => { const strip = el('div', { class: 'ap-slots' }, r.slots.map(x => { const on = S.place.row === r.row && S.place.slot === x.slot; const b = el('button', { type: 'button', role: 'gridcell', class: 'ap-slot' + (x.free ? '' : ' taken') + (on ? ' on' : ''), title: x.free ? `Row ${r.label}, place ${x.slot + 1}` : 'Taken', 'aria-label': `Row ${r.label}, place ${x.slot + 1}${x.free ? '' : ', taken'}`, 'aria-selected': String(on), disabled: !x.free, 'data-row': r.row, 'data-slot': x.slot, text: String(x.slot + 1) }); b.onclick = () => { S.place = { ...S.place, row: r.row, slot: x.slot }; const k = strip.scrollLeft; show(); const ns = grid.querySelectorAll('.ap-slots')[s.rows.indexOf(r)]; if (ns) ns.scrollLeft = k; }; return b; }));
-        strips.push(strip); grid.append(el('div', { class: 'ap-row', role: 'row' }, [el('span', { class: 'ap-rl', text: 'Row ' + r.label }), strip])); });
-      // the chosen place is scrolled into its strip's view
-      requestAnimationFrame(() => strips.forEach(st => { const on = st.querySelector('.ap-slot.on'); if (on && (on.offsetLeft < st.scrollLeft || on.offsetLeft + on.offsetWidth > st.scrollLeft + st.clientWidth)) st.scrollLeft = on.offsetLeft - st.clientWidth / 2 + on.offsetWidth / 2; }));
-      const res = preview(hub, S.place); info.textContent = `Row ${(s.rows.find(r => r.row === S.place.row) || {}).label || ''}, place ${S.place.slot + 1}` + (res && res.free === false ? ' — taken, the nearest free place will be used' : '') + (S.place.hang ? ', hanging' : '') + (res && res.ok ? ' · marked by the glowing ghost scroll above' : '');
-    };
-    sel.onchange = () => { const s = list.find(x => x.caseId === sel.value); const r = s.rows.find(rr => rr.slots.some(x => x.free)) || s.rows[0]; const x = r && r.slots.find(y => y.free); S.place = { caseId: s.caseId, row: r ? r.row : 0, slot: x ? x.slot : 0, hang: S.place.hang }; show(); };
-    sel.id = 'ap-case';
-    body.append(el('div', { class: 'ap-pick' }, [el('label', { class: 'ap-lab', for: 'ap-case', text: 'Bookcase' }), sel]), el('div', { class: 'ap-pick-head' }, [el('span', { class: 'ap-lab', text: 'Row and place' }), info]), grid, hang); show(); nav('Next');
-  }
+  function stepPlace() { body.append(...placeUI(app, hub, S, shelfId)); nav('Next'); }
   // 3 · the pages: from–to, or chapters of the outline
   function stepPages() {
     const sp = S.split, from = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.from, 'aria-label': 'From page' }), to = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.to, 'aria-label': 'To page' });

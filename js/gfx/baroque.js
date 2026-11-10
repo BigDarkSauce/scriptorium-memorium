@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ceilingTex } from './ceilings.js';
-import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
+import { canvasTex, marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
 import { surface } from './surfaces.js';
 import { AAA } from './aaa.js';
 
@@ -811,13 +811,24 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   if (door) {
     const W = walls[1], M = WM(W), D = (mat, geo, x, y, z) => A.add(mat, geo, M.clone().multiply(Mx(x, y, z)));
     const wn = bmat('walnut'), wd = bmat('walnut-dark'), gf = bmat('gilt-fine'), lw = doorW / 2 - .01;
+    // the two leaves are real hinged objects (not in the atlas) so the door can swing open: each leaf's parts are merged
+    // per material under a pivot on its hinge (at the jamb); info.door.set(k) opens both by k ∈ [0, 1] (0 shut, 1 at
+    // 100°, into the room). Behind them, in the opening, a passage of warm light (the other place) instead of plaster.
+    const dg = new THREE.Group(); dg.matrixAutoUpdate = false; dg.matrix.copy(M); dg.name = 'door'; g.add(dg); const leaves = [];
     [-1, 1].forEach(sd => {
-      const cx = sd * doorW / 4; D(wn, new THREE.BoxGeometry(lw, doorH, .07), cx, doorH / 2, .035);
+      const cx = sd * doorW / 4, hx = sd * doorW / 2, parts = new Map(), P = (mat, geo, x, y, z) => { geo.translate(x - hx, y, z); (parts.get(mat) || parts.set(mat, []).get(mat)).push(geo); };
+      P(wn, new THREE.BoxGeometry(lw, doorH, .07), cx, doorH / 2, .035);
       // fielded panels: the sunk walnut panel (front 30 mm before the leaf), its gilt frame 4 mm prouder; the frame's
       // rails stop at the stiles (no two boxes overlap, so no faces share a plane)
-      [[.2, .26], [.56, .3], [.84, .12]].forEach(([fy, fh]) => { const ph = doorH * fh, py = doorH * fy, fw = lw - .12; D(wd, new THREE.BoxGeometry(lw - .16, ph, .03), cx, py, .085); [-1, 1].forEach(q => { D(gf, new THREE.BoxGeometry(fw - .018, .018, .034), cx, py + q * (ph / 2 + .01), .087); D(gf, new THREE.BoxGeometry(.018, ph + .038, .034), cx + q * fw / 2, py, .087); }); });
-      D(gilt, new THREE.SphereGeometry(.035, 12, 10), sd * .1, doorH * .48, .11); D(gilt, new THREE.BoxGeometry(.05, .16, .02), sd * .1, doorH * .48, .075);
+      [[.2, .26], [.56, .3], [.84, .12]].forEach(([fy, fh]) => { const ph = doorH * fh, py = doorH * fy, fw = lw - .12; P(wd, new THREE.BoxGeometry(lw - .16, ph, .03), cx, py, .085); [-1, 1].forEach(q => { P(gf, new THREE.BoxGeometry(fw - .018, .018, .034), cx, py + q * (ph / 2 + .01), .087); P(gf, new THREE.BoxGeometry(.018, ph + .038, .034), cx + q * fw / 2, py, .087); }); });
+      P(gilt, new THREE.SphereGeometry(.035, 12, 10).toNonIndexed(), sd * .1, doorH * .48, .11); P(gilt, new THREE.BoxGeometry(.05, .16, .02).toNonIndexed(), sd * .1, doorH * .48, .075);
+      const piv = new THREE.Group(); piv.position.set(hx, 0, 0); dg.add(piv);
+      parts.forEach((G, mat) => { const geo = mergeGeometries(G.map(x => x.index ? x.toNonIndexed() : x), false); const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; piv.add(m); });
+      leaves.push({ piv, sd });
     });
+    { const t = canvasTex('door-beyond', 128, 256, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#fff6e2'); gr.addColorStop(.55, '#ffe2a8'); gr.addColorStop(1, '#c99a5a'); c.fillStyle = gr; c.fillRect(0, 0, w, h); const r = c.createRadialGradient(w / 2, h * .45, 4, w / 2, h * .45, w * .9); r.addColorStop(0, 'rgba(255,255,255,.9)'); r.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = r; c.fillRect(0, 0, w, h); });
+      const bm = new THREE.Mesh(new THREE.PlaneGeometry(doorW - .02, doorH - .01), new THREE.MeshBasicMaterial({ map: t, toneMapped: false })); bm.position.set(0, doorH / 2, .003); bm.name = 'door-beyond'; dg.add(bm); }
+    info.door.leaves = leaves; info.door.set = k => { const a = Math.max(0, Math.min(1, k)) * 1.75; leaves.forEach(L => { L.piv.rotation.y = L.sd * a; }); info.door.open = k; };
     D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), -doorW / 2 - .11, (doorH + .22) / 2, .06); D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), doorW / 2 + .11, (doorH + .22) / 2, .06);
     D(stucco, new THREE.BoxGeometry(doorW + .44, .22, .12), 0, doorH + .11, .06);
     // the gilt bead round the opening stands 4 mm into it (its inner faces never share the stucco jambs' plane)

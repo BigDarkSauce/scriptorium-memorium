@@ -8,7 +8,7 @@
 import { revealIssues } from '../room/reveal.js';
 import { motionIssues } from '../room/motion.js';
 import { hookIssues } from '../room/hooks.js';
-import { EVIDENCE_RULES } from './evidence.js';
+import { EVIDENCE_RULES, INSPIRATION_RULES } from './evidence.js';
 import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY, isPrimitive } from '../room/figspec.js';
 import { classifyStep, ROUTES, DOMAINS, STRUCTURES, PRIMITIVES, PRIMITIVE_KINDS } from '../dio/domains.js';
 export { EVIDENCE_RULES };
@@ -441,6 +441,7 @@ ${LESSON_FORMAT}
 ${EXPLAINER_RULES}
 ${TEACHING_RULES}
 ${EVIDENCE_RULES}
+${INSPIRATION_RULES}
 
 ${SHAPE_EXAMPLE}
 
@@ -935,5 +936,6 @@ ${LESSON_FORMAT}
 ${EXPLAINER_RULES}
 ${TEACHING_RULES}
 ${EVIDENCE_RULES}
+${INSPIRATION_RULES}
 Return ONLY JSON: ${CHAIN_FORMAT}`;
 }

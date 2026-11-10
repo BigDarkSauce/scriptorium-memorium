@@ -1,4 +1,4 @@
-// Scriptorium Memorium — boot, mode switching (library hub ↔ book room ↔ diorama), persistence, import/export.
+// Scriptorium Memorialium — boot, mode switching (library hub ↔ book room ↔ diorama), persistence, import/export.
 import { Gfx } from './gfx/renderer.js';
 import { detectQuality, scansReady } from './gfx/aaa.js';
 import { BAKE } from './gfx/textures.js';
@@ -25,6 +25,10 @@ import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
 import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
+import { TitleScreen } from './title.js';
+import { openGetScroll, openVisibility, republishLater } from './share.js';
+import { choosePlace } from './room/addpdf.js';
+import * as THREE from 'three';
 
 // boot and switch phases on the performance timeline (DevTools, tools/: performance.getEntriesByType('mark'))
 const mark = n => { try { performance.mark(n); } catch (e) { } };
@@ -77,25 +81,134 @@ class App {
   async boot() {
     try { performance.mark('sm:boot'); } catch (e) { }
     const kit = preloadKit();   // the hub's hand-made props load under the veil (at most 6 s; else procedural ones)
-    this.lib = await store.get(LIB_KEY);
-    if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
-    if (!this.lib || !Array.isArray(this.lib.shelves)) { this.lib = this.seedLibrary(); await store.set(LIB_KEY, this.lib); for (const [id, room] of this.seedRooms) await store.set('room:' + id, room); }
-    await this.migrateV2();
-    this.sweepDeleted();
-    await this.ensureDomainBook(); mark('sm:lib');
+    // the save slot played last (store.js: each private scriptorium is its own set of keys)
+    this.slots = await this.loadSlots(); store.useSlot(this.slotId = (await store.getGlobal('lastSlot')) || this.slots[0].id);
+    if (!this.slots.some(x => x.id === this.slotId)) store.useSlot(this.slotId = this.slots[0].id);
+    await this.loadLibrary(); mark('sm:lib');
     await kit; this.kit = kitStatus(); mark('sm:kit');
     // the place in the address (route.js): a link or a reload reopens that room (and scroll); otherwise the hub
     addEventListener('popstate', () => this.onRoute());
     const r = parseHash(location.hash), book = r.room ? this.lib.books.find(b => b.id === r.room) : null;
     this.loop();   // drawing runs under the veil: the switch below draws (and counts) its settling frames
     this._routing = true;   // the first place replaces the address instead of adding a history entry
-    try { await (book ? this.openRoom(book.id, { openPart: r.scroll || undefined }) : this.openHub()); } finally { this._routing = false; }
+    // a link or a reload into a room goes straight there; otherwise the title screen (automated test browsers skip it
+    // unless the address asks for it with ?title=1)
+    const q = location.search, title = /[?&]title=1/.test(q) || (!r.room && !navigator.webdriver && !/[?&]title=0/.test(q));
+    try { await (title ? this.openTitle() : book ? this.openRoom(book.id, { openPart: r.scroll || undefined }) : this.openHub()); } finally { this._routing = false; }
     if (r.room && !book) toast('That room is not in this library any more: here is the hall');
     offerResume(this);   // an analysis interrupted by a reload is offered again (corner chip)
     // the veil ("lighting the lamps…") lifts only now: the place has its final reflections, compiled programs and a few
     // drawn frames behind it (_switch), so it never shows a provisional look first
     document.body.classList.add('ready'); mark('sm:ready');
   }
+  // ---------- the library of the current slot: read, seeded when new, migrated ----------
+  async loadLibrary({ empty = false } = {}) {
+    this.lib = await store.get(LIB_KEY);
+    if (this.lib && (!Array.isArray(this.lib.books) || !this.lib.hub)) this.lib = null;   // damaged or foreign data: start from the seed library
+    if (!this.lib || !Array.isArray(this.lib.shelves)) {
+      this.lib = this.seedLibrary();
+      if (empty) { this.lib.books = []; this.lib.dismissedSeeds = [DOMAIN_BOOK.title]; this.lib.lastRoom = null; }   /* a blank scriptorium: the bookcases, no books */
+      else for (const [id, room] of this.seedRooms) await store.set('room:' + id, room);
+      await store.set(LIB_KEY, this.lib);
+    }
+    await this.migrateV2();
+    this.sweepDeleted();
+    await this.ensureDomainBook();
+  }
+  // ---------- save slots: private scriptoria, each its own library (store.js useSlot) ----------
+  async loadSlots() {
+    let S = await store.getGlobal('slots');
+    if (!Array.isArray(S) || !S.length) { S = [{ id: 'main', name: 'My scriptorium', created: Date.now(), played: Date.now() }]; await store.setGlobal('slots', S); }
+    return S;
+  }
+  slotMeta(patch) { const m = this.slots.find(x => x.id === this.slotId); if (!m) return; Object.assign(m, patch); clearTimeout(this._slotT); this._slotT = setTimeout(() => store.setGlobal('slots', this.slots), 400); }
+  async switchSlot(id) { if (id === this.slotId) return; store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id); await this.loadLibrary(); }
+  async createSlot(name, examples = true) {
+    const id = 's' + uid().replace(/[^a-z0-9]/gi, '').slice(0, 10), m = { id, name: String(name || 'A new scriptorium').slice(0, 60), created: Date.now(), played: Date.now() };
+    this.slots.push(m); await store.setGlobal('slots', this.slots); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id);
+    await this.loadLibrary({ empty: !examples }); this.saveLib();
+    this._arrive = { from: 'title' }; return this.openHub();
+  }
+  async renameSlot(id, name) { const m = this.slots.find(x => x.id === id); if (m) { m.name = String(name).slice(0, 60); await store.setGlobal('slots', this.slots); } }
+  async deleteSlot(id) { if (id === 'main' || id === this.slotId) return false; await store.dropSlot(id); this.slots = this.slots.filter(x => x.id !== id); await store.setGlobal('slots', this.slots); return true; }
+  // the title screen; "Continue" returns to the place the slot was left in, by a camera move into it
+  openTitle() { this.route({}); sfx.ambience('library'); return this.switchMode(() => new TitleScreen(this)); }
+  async continueSlot(id) {
+    await this.switchSlot(id); this.slotMeta({ played: Date.now() }); const L = this.lib.lastPlace, book = L && L.book && this.lib.books.find(b => b.id === L.book);
+    this._arrive = L && L.cam && !L.part ? { pose: L.cam } : { from: 'title' };
+    return book ? this.openRoom(book.id, { openPart: L.part || undefined }) : this.openHub();
+  }
+  // ---------- camera choreography owned by the app: runs after the place's own update, before drawing ----------
+  // keys: [{ p, a, dur, at(k) }] poses (position, look-at point) reached one after another; resolves at the end
+  cineRun(M, keys) {
+    return new Promise(res => {
+      const cam = M.camera, f = new THREE.Vector3(); cam.getWorldDirection(f);
+      const start = { p: cam.position.clone(), a: M.controls && M.controls.target && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
+      if (M.controls) M.controls.enabled = false;
+      this.cine = { M, keys: keys.map(k => ({ ...k, p: new THREE.Vector3(...[].concat(k.p.toArray ? k.p.toArray() : k.p)), a: new THREE.Vector3(...[].concat(k.a.toArray ? k.a.toArray() : k.a)) })), i: 0, t: 0, from: start, res };
+    });
+  }
+  stepCine(dt) {
+    const C = this.cine; if (!C) return; if (C.M !== this.mode || C.M.disposed) { this.cine = null; C.res(); return; }
+    const K = C.keys[C.i]; C.t += dt; const k = Math.min(1, C.t / K.dur), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, cam = C.M.camera;
+    cam.position.lerpVectors(C.from.p, K.p, e); const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); cam.lookAt(a); if (K.at) K.at(k);
+    if (k >= 1) { C.from = { p: K.p.clone(), a: K.a.clone() }; C.i++; C.t = 0;
+      if (C.i >= C.keys.length) { this.cine = null; const M = C.M; if (M.controls) { M.controls.target.copy(a); M.controls.enabled = !(M.nav && M.nav.mode === 'walk') && !M.anim; M.controls.update(); } if (M.nav && M.nav.syncFromCamera) M.nav.syncFromCamera(); C.res(); } }
+  }
+  // arriving in a place: through its door (the leaves stand open and close behind you), from the title screen (a slow
+  // descent into the view), or at a remembered pose (Continue)
+  arrive(M, how) {
+    if (!M || !M.camera) return; const cam = M.camera, f = new THREE.Vector3(); cam.getWorldDirection(f);
+    const goal = how.pose ? { p: new THREE.Vector3(...how.pose.p), a: new THREE.Vector3(...how.pose.a) } : { p: cam.position.clone(), a: M.controls && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
+    const D = M.doorInfo, pick = M.doorPick;
+    if (how.door && D && D.set && pick) {
+      const c = pick.position, inn = new THREE.Vector3(0, 0, -1), p0 = new THREE.Vector3(c.x, 1.62, c.z + .25), a0 = p0.clone().addScaledVector(inn, 4).setY(1.5);
+      cam.position.copy(p0); cam.lookAt(a0); D.set(1);
+      let shut = false; this.cineRun(M, [{ p: goal.p, a: goal.a, dur: 2.6, at: k => { if (k > .3) { const q = Math.min(1, (k - .3) / .45); D.set(1 - (q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2)); if (q >= 1 && !shut) { shut = true; sfx.play('thud', { gain: .35 }); } } } }]);
+      return;
+    }
+    const back = goal.p.clone().sub(goal.a).setY(0).normalize(); if (!isFinite(back.x)) back.set(0, 0, 1);
+    const p0 = goal.p.clone().addScaledVector(back, how.pose ? 2.2 : 3).add(new THREE.Vector3(0, how.pose ? .9 : 1.6, 0));
+    cam.position.copy(p0); cam.lookAt(goal.a);
+    this.cineRun(M, [{ p: goal.p, a: goal.a, dur: how.pose ? 2.8 : 3.4 }]);
+  }
+  // the door: the camera walks up to it, the leaves swing open, the camera passes through into the light, and the next
+  // place is entered through its own door (arrive) — never a cut from where you stood
+  async walkThroughDoor(go) {
+    const M = this.mode; if (!M || this.cine || this.switching) return; const D = M.doorInfo, pick = M.doorPick;
+    if (!D || !D.set || !pick) return go();
+    const c = pick.position, out = new THREE.Vector3(0, 0, 1);
+    await this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z - 2.4), a: new THREE.Vector3(c.x, 1.45, c.z), dur: 1.25 }]);
+    sfx.play('whoosh', { gain: .25 });
+    await new Promise(res => { const t0 = performance.now(); const step = () => { if (M.disposed) return res(); const k = Math.min(1, (performance.now() - t0) / 950); D.set(1 - Math.pow(1 - k, 3)); if (k < 1) requestAnimationFrame(step); else res(); }; step(); });   /* by the clock: a slow frame never stretches the swing */
+    this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z + .7), a: new THREE.Vector3(c.x, 1.6, c.z + 4).addScaledVector(out, 0), dur: 1.05 }]);
+    await sleep(500); this._arrive = { door: true }; return go();
+  }
+  // where you are, kept as you move (Continue returns there): the place, the scroll open in it, the camera
+  rememberPlace() {
+    const M = this.mode; if (!M || this.switching || this.cine || !(M instanceof Hub || M instanceof BookRoom) || !M.camera) return;
+    const cam = M.camera, f = new THREE.Vector3(); cam.getWorldDirection(f); const a = cam.position.clone().addScaledVector(f, 2.5), r = v => Math.round(v * 100) / 100;
+    const L = { kind: M instanceof Hub ? 'hub' : 'room', book: M instanceof BookRoom ? M.book.id : null, part: M instanceof BookRoom && M.reader && M.reader.part ? M.reader.part.id : null, cam: { p: cam.position.toArray().map(r), a: a.toArray().map(r) } };
+    const sig = JSON.stringify(L); if (sig === this._placeSig) return; this._placeSig = sig; this.lib.lastPlace = { ...L, at: Date.now() }; this.saveLib();
+    const b = L.book && this.lib.books.find(x => x.id === L.book); this.slotMeta({ played: Date.now(), place: b ? `In the room of “${b.title}”` : 'In the library hall' });
+  }
+  // ---------- copies of a scroll: a duplicate of one of yours, or one fetched from the shared shelf ----------
+  async duplicateBook(bookId) {
+    const b = this.lib.books.find(x => x.id === bookId); if (!b) return; const room = await this.loadRoom(bookId);
+    return this.addBookCopy({ title: b.title + ' (copy)', color: b.color, icon: b.icon, room: JSON.parse(JSON.stringify(room)), heading: `Where should the copy of “${b.title}” go?`, verb: 'Duplicate it there', pdfFrom: b.hasPdf ? b.id : null });
+  }
+  addBookCopy({ title, color, icon, room, heading, verb, pdfFrom = null, from = null }) {
+    choosePlace(this, { title: heading, verb, onChoose: async ({ place }) => {
+      const nb = { id: 'bk-' + uid(), title, shelf: null, tier: 0, slot: 0, color: color || '#8a2a1e', icon: icon || '', hasPdf: false, ...(from ? { from } : {}) };
+      const ids = {}; (room.parts || []).forEach(p => { ids[p.id] = 'p-' + uid(); p.id = ids[p.id]; }); (room.parts || []).forEach(p => { if (p.subOf) p.subOf = ids[p.subOf] || null; });   /* new ids, sub-scrolls still under their parents */
+      await store.set('room:' + nb.id, room);
+      if (pdfFrom) { const pdf = await store.get('pdf:' + pdfFrom); if (pdf) { await store.set('pdf:' + nb.id, pdf); nb.hasPdf = true; } }
+      this.lib.books.push(nb); const r = place(nb); if (!nb.shelf) { const s = this.firstShelf(), at = this.seedSpot(s) || { tier: 0, slot: 0 }; Object.assign(nb, { shelf: s.id, tier: at.tier, slot: at.slot }); }
+      this.saveLib(); toast(`“${title}” is on ${(this.lib.shelves.find(s => s.id === nb.shelf) || {}).name || 'its bookcase'}`); return r;
+    } });
+  }
+  getScroll() { return openGetScroll(this); }
+  bookVisibility(bookId) { const b = this.lib.books.find(x => x.id === bookId); if (b) return openVisibility(this, b); }
   // ---------- the address of the place on screen (route.js) ----------
   // A new place adds a history entry; one reached by Back / Forward, or the first at boot, replaces it instead.
   route(r) {
@@ -171,7 +284,7 @@ class App {
   // a library whose bookcases were all removed still gets a place for imported books
   firstShelf() { if (!this.lib.shelves.length) { const R = this.lib.hub; this.lib.shelves.push({ id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .28, z: 0, rot: Math.PI / 2, color: '#8a2a1e' }); } return this.lib.shelves[0]; }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
-  saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); }
+  saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); republishLater(this, this.lib.books.find(b => b.id === id)); }
   async loadRoom(id) {
     const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 5.5 }, parts: [] };
     // example rooms saved before grounding existed get their verified sources and teaching fields once
@@ -291,7 +404,7 @@ class App {
       const old = this.mode;
       if (old) { try { old.dispose(); } catch (e) { console.warn(e); } this.mode = null; }
       try { this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; this.gfx.renderer.toneMappingExposure = .9; this.gfx.bloom.strength = .32; this.gfx.renderer.shadowMap.autoUpdate = true; this.gfx.renderer.shadowMap.needsUpdate = true; } catch (e) { console.warn(e); }   /* a reset that throws never skips opening the next mode */
-      mark('sm:sw-start'); try { this.mode = await make(); } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
+      this.cine = null; mark('sm:sw-start'); try { this.mode = await make(); if (this._arrive) { const a = this._arrive; this._arrive = null; try { this.arrive(this.mode, a); } catch (e) { console.warn(e); } } } catch (e) { console.error(e); toast('Could not open: ' + e.message); try { this.mode = new Hub(this); } catch (e2) { console.error(e2); } }
       // the old scene's GPU resources go once the new one has drawn (programs both use stay compiled)
       if (old) this.retire(() => old.disposeGPU ? old.disposeGPU() : disposeTree(old.scene, this.mode && this.mode.scene));
       // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
@@ -353,6 +466,8 @@ class App {
     this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
     if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
     this.loopDt = 0;   // (an update driven by hand, outside this loop, steps by its own dt only)
+    if (this.cine) this.stepCine(dt);   /* the app's camera moves (doors, arrivals) after the place's own update */
+    this._placeT = (this._placeT || 0) + dt; if (this._placeT > 1.5) { this._placeT = 0; this.rememberPlace(); }
     // nothing to see under a closed veil (_switch); the old place's GPU resources wait for the new one's first drawn frames
     // a frame budget per place (docs/ARCHITECTURE.md, "Frame budget"): a still hall or room, or a room under an open
     // scroll, is drawn at a lower rate (the state still updates every frame); any input brings the full rate back at once
@@ -527,7 +642,7 @@ class App {
     throw new Error('Unrecognised JSON');
   }
   promptPack(book) {
-    return `# Scriptorium Memorium — prompt pack
+    return `# Scriptorium Memorialium — prompt pack
 Use these prompts with any AI that can read your PDF. Paste each JSON answer back into the app (open a scroll → "Paste JSON from another AI", or Import JSON for a whole room).
 
 ## 1. Split the book into parts

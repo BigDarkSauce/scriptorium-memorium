@@ -1,4 +1,4 @@
-# Scriptorium Memorium - hand-made hero props, authored as a script (Blender 5.2 LTS, bpy from PyPI, headless).
+# Scriptorium Memorialium - hand-made hero props, authored as a script (Blender 5.2 LTS, bpy from PyPI, headless).
 #
 #   python3 -m venv ~/.venvs/bpy && ~/.venvs/bpy/bin/pip install bpy==5.2.3      (Python 3.13; ~1 GB installed)
 #   ~/.venvs/bpy/bin/python tools/blender/props.py -- <out-dir> [names...]          (default: every prop)

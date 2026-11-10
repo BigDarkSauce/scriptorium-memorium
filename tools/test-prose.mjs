@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — unit tests for the scroll's prose splitter (js/room/prose.js): TeX spans are found before code
+// Scriptorium Memorialium — unit tests for the scroll's prose splitter (js/room/prose.js): TeX spans are found before code
 // tokens, so a TeX dollar is never taken for R's $ operator and a call inside TeX (O(\theta^5)) never becomes code.
 // RUN: node tools/test-prose.mjs        (no browser needed; exit code 1 when a case fails)
 // Each case: input → the parts in a compact notation: {TeX} for a TeX span, `code` for code, plain text as it is.

@@ -1,4 +1,4 @@
-# Opens Scriptorium Memorium in the default browser as soon as the local server answers.
+# Opens Scriptorium Memorialium in the default browser as soon as the local server answers.
 # Started in the background by "Launch Scriptorium.bat" just before the server itself; probes the address for up to
 # -Seconds (default 10). Any HTTP answer, even an error status, means the server is up.
 param([string]$Url = 'http://localhost:8000/', [int]$Seconds = 10)

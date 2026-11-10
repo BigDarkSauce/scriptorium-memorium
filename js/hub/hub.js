@@ -1,5 +1,7 @@
 // The library hub: a cozy, resizable room where bookcases are placed, moved, rotated and named,
 // PDFs are added as folded scrolls, and opening a scroll unfolds it in a shaft of light and carries you into its room.
+import { MapView } from '../mapview.js';
+import { autoTags } from '../share.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeRoomShell, doorPick, doorHit } from '../gfx/roomshell.js';
@@ -80,7 +82,7 @@ export class Hub {
     const gone = [];   // the old shell and furniture are freed once the rebuilt room has drawn
     if (this.shell) { this.scene.remove(this.shell); gone.push(this.shell); }
     this.shell = shell; this.scene.add(shell); shell.userData.dims = { w: R.w, d: R.d, h: R.h };
-    this.doorPick = doorPick(this.scene, shell, this.doorPick);
+    this.doorPick = doorPick(this.scene, shell, this.doorPick); this.doorInfo = shell && shell.userData.baroque && shell.userData.baroque.door;
     if (!this.furn) { this.furn = new THREE.Group(); this.scene.add(this.furn); }
     if (!this.decor) { this.decor = new THREE.Group(); this.scene.add(this.decor); }
     if (!fast || !this.furn.children.length) { gone.push(...this.furn.children); this.furn.clear(); this.buildFurniture(); }
@@ -257,11 +259,14 @@ export class Hub {
   // ---------- UI ----------
   buildUI() {
     const u = this.ui;
-    u.append(el('div', { class: 'brand' }, [el('div', { class: 'brand-title', text: 'Scriptorium Memorium' }), el('div', { class: 'brand-sub', text: 'your library' })]));
+    u.append(el('button', { class: 'brand brand-btn', type: 'button', title: 'Back to the title screen (your scriptoria)', onclick: () => this.app.openTitle() }, [el('div', { class: 'brand-title', text: 'Scriptorium Memorialium' }), el('div', { class: 'brand-sub', text: (this.app.slots && (this.app.slots.find(x => x.id === this.app.slotId) || {}).name) || 'your library' })]));
     this.buildBtn = el('button', { class: 'btn', text: 'Arrange library', onclick: () => this.toggleBuild() });
     const add = el('button', { class: 'btn primary', text: '+ Add PDF scroll', onclick: () => this.pickPDF() });
+    const get = el('button', { class: 'btn', text: 'Get scroll', title: 'Scrolls other readers have made visible: search them by tag and keep a copy', onclick: () => this.app.getScroll() });
     const more = el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog() });
-    u.append(el('div', { class: 'hub-actions glass' }, [add, this.buildBtn, more]));
+    u.append(el('div', { class: 'hub-actions glass' }, [add, get, this.buildBtn, more]));
+    // the map of the hall: bookcases, their names, how many scrolls and about what (mapview.js)
+    this.map = new MapView(u, { camera: this.camera, provider: () => this.mapPlan(), onPick: it => { const so = this.shelfObjs.get(it.id); if (!so) return; const p = so.getWorldPosition(V3()); p.y = 1.5; const n = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())); this.frameAt(p, n); } });
     this.hint = el('div', { class: 'hint glass', text: HINTS.look() }); u.append(this.hint);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
@@ -511,7 +516,7 @@ export class Hub {
   doorAt(e) { if (e.target !== this.gfx.canvas || !this.doorPick) return false; this.pick(e, []); return doorHit(this.ray, this.doorPick, [...this.shelfObjs.values(), ...(this.furn ? this.furn.children : [])]); }
   enterDoor() {
     const L = this.lastRoom(); if (!L) { toast('Open a scroll on a bookcase to enter its room: this door then leads back to it'); return false; }
-    this.tip.hidden = true; this.app.openRoom(L.book.id, { openPart: L.part || undefined }); return true;
+    this.tip.hidden = true; this.app.walkThroughDoor(() => this.app.openRoom(L.book.id, { openPart: L.part || undefined })); return true;
   }
   // the book under the pointer: its scroll, or one of the cradles of the place it takes (its holder)
   bookAt(e) {
@@ -612,9 +617,22 @@ export class Hub {
       m.append(el('label', { class: 'ctrl' }, [el('span', {}, ['Chain length (drop)', out]), inp]), el('div', { class: 'menu-note', text: `${cm(L.min)}–${cm(L.max)} on this row: the scroll stays clear of the shelf above and the cradles below` }));
     }
     m.append(item('Move to…', () => { this.closeMenu(); this.openMove(b.id); }));
+    m.append(item('Duplicate…', () => { this.closeMenu(); this.app.duplicateBook(b.id); }));
+    m.append(item(b.visibility === 'public' ? '◉ Visible to everyone…' : '○ Private · make visible…', () => { this.closeMenu(); this.app.bookVisibility(b.id); }));
     m.append(el('div', { class: 'menu-sep', role: 'separator' }), item('Delete scroll…', () => this.deleteScroll(b.id), ' danger'));
   }
   closeMenu() { if (this.menu) { this.menu.remove(); this.menu = null; } }
+  // the plan for the map: each bookcase as its footprint, with its name, its number of scrolls and their subjects
+  mapPlan() {
+    const R = this.lib.hub, items = [], box = new THREE.Box3(), q = new THREE.Quaternion();
+    for (const sh of this.lib.shelves) { const so = this.shelfObjs.get(sh.id); if (!so) continue;
+      if (!so.userData._mapWD) { const r = so.rotation.y; so.rotation.y = 0; so.updateMatrixWorld(true); box.setFromObject(so); so.rotation.y = r; so.updateMatrixWorld(true); so.userData._mapWD = [box.max.x - box.min.x, box.max.z - box.min.z]; }
+      const p = so.getWorldPosition(V3()), books = this.lib.books.filter(b => b.shelf === sh.id), subj = {}; books.forEach(b => autoTags(b, { parts: [] }).forEach(t => { subj[t] = (subj[t] || 0) + 1; }));
+      const top = Object.entries(subj).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]);
+      so.getWorldQuaternion(q); const rot = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+      items.push({ id: sh.id, kind: 'case', x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: +so.userData._mapWD[0].toFixed(2), d: +Math.max(.3, so.userData._mapWD[1]).toFixed(2), rot: +rot.toFixed(3), label: sh.name, sub: `${books.length} scroll${books.length === 1 ? '' : 's'}${top.length ? ' · ' + top.join(', ') : ''}` }); }
+    return { title: 'The library hall', w: R.w, d: R.d, door: this.doorPick ? { x: 0, z: R.d / 2 } : null, items };
+  }
   // "Move to…": bookcase, then a grid of rows × places (taken places disabled); the ghost and the camera preview the
   // chosen place while the dialog (bottom of the screen, no dark veil) stays open
   openMove(bookId) {
@@ -769,6 +787,7 @@ export class Hub {
   // frame budget (main.js loop): the hall at rest, untouched for 5 s, is drawn at 30 frames a second
   renderFps(idleMs) { return this.opening || this.camTween || this.dragging || this.sdrag || this._arriving || idleMs < 5000 ? 60 : 30; }
   update(dt) {
+    if (this.map) this.map.update(dt);
     if ((this.probeDirty || this.probe.stale()) && !this.dragging && !this.opening && !this.sdrag && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
@@ -785,6 +804,7 @@ export class Hub {
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { this._arriving = true; o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });
   }
   dispose() {
+    if (this.map) { this.map.dispose(); this.map = null; }
     if (this.disposed) return; this.disposed = true; document.body.classList.remove('cine');
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);

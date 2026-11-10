@@ -131,6 +131,7 @@ GROUNDING. Tools that search the scholarly record may be available (search_liter
 - Measured values (constants, fluxes, prices, rates) must come from a source and say which. Data in a diagram cites its source in the demo's "source" field.
 - Where sources disagree, say so in "note" and give the range.
 When no tool is available, cite only works you are certain exist and leave "doi" empty unless you are sure of it.
+DESIGN REFERENCES. Tools may show how the best explainers, documentaries and games present this idea (search_videos, video_transcript, search_games, search_newsletter, search_films). Use them, when available, before designing a diorama, a motion figure or the order of a hard derivation (1–3 searches): borrow the MECHANIC (the view, the order of reveals, the interaction, the analogy), never the words or images, and never treat them as sources of facts (facts come from the scholarly tools). Name a reference you drew on in the step's "note" as "design after <title>, <url>".
 Return ONLY JSON: {"title":str,"summary":"one sentence","hook":HOOK (the scroll's opening, shown BEFORE its question),"question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","section":"the id of the ONE subsection this step covers, e.g. 1.2","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
    "hook":HOOK (only on 1–3 turning-point steps),"answers":"the question this step settles","opens":"the question it raises next (the next step's answers, word for word)",

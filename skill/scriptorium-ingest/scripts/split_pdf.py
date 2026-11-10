@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Split a PDF into study parts with page ranges, for Scriptorium Memorium.
+"""Split a PDF into study parts with page ranges, for Scriptorium Memorialium.
 
 Order of methods (book-to-skill's heuristics, plus page ranges, which book-to-skill does not keep):
   1. the PDF's own outline (bookmarks)            -> exact start pages

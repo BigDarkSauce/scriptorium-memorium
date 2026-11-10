@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — check a chain JSON offline, before pasting it into the app (no dependencies, node ≥ 18).
+// Scriptorium Memorialium — check a chain JSON offline, before pasting it into the app (no dependencies, node ≥ 18).
 //
 // RUN
 //   node tools/verify-chain.mjs chain.json [sections.json] [--json] [--loose]

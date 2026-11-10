@@ -3,6 +3,7 @@
 // a part with several 3D demos gets one wide plinth with a bay per demo, in chain order, each bay bordered by brass
 // inlay and labelled with its number and title; clicking a model (or its bay) unfolds it and carries you inside.
 // The room grows when more scrolls need hanging.
+import { MapView } from '../mapview.js';
 import { CEILINGS, ceilingTheme } from '../gfx/ceilings.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -164,6 +165,8 @@ export class BookRoom {
     this.layout(); this.buildShell(); this.buildStations();
     this.frameStart();
     this.gfx.setView(this.scene, this.camera);
+    // the map of the room: the chapter scrolls in reading order, the dioramas on their pedestals (mapview.js)
+    this.map = new MapView(this.ui, { camera: this.camera, provider: () => this.mapPlan(), onPick: it => { const st = this.stations.get(it.id); if (!st) return; const n = st.slot.n, c = st.sheet.getWorldPosition(V3()); this.flyTo(c.clone().addScaledVector(n, 2.6).setY(1.62), c.clone().setY(1.3), 1.2); } });
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const D = this.data.dims, c = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; return { minX: -D.w / 2 + c, maxX: D.w / 2 - c, minZ: -D.d / 2 + c, maxZ: D.d / 2 - c, h: D.h }; },
       obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => st0(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
@@ -176,6 +179,12 @@ export class BookRoom {
     if (opts.openPart) { const p = this.data.parts.find(x => x.id === opts.openPart); if (p) setTimeout(() => { if (!this.disposed) this.openPart(p, true); }, 200); }
   }
   save() { this.app.saveRoom(this.book.id, this.data); }
+  mapPlan() {
+    const D = this.data.dims, items = [];
+    this.orderedParts().forEach((p, i) => { const st = this.stations.get(p.id); if (!st) return; const c = st.group.getWorldPosition(V3()), n = st.slot.n;
+      items.push({ id: p.id, kind: 'station', n: i + 1, x: +(c.x + n.x * .5).toFixed(2), z: +(c.z + n.z * .5).toFixed(2), w: p.subOf ? .9 : 1.15, d: .5, rot: +Math.atan2(n.x, n.z).toFixed(3), label: p.title || 'Scroll', sub: p.analysis ? ((p.analysis.chain || []).length + ' steps') : 'not analysed yet', pins: st.bays.filter(b => b.spec).map(b => String(b.spec.d.title || b.spec.st.title || b.spec.d.type || 'Diorama')) }); });
+    return { title: 'The room of “' + this.book.title + '”', w: D.w, d: D.d, door: this.doorPick ? { x: 0, z: D.d / 2 } : null, items };
+  }
   // free removed objects once the rebuilt room has drawn, keeping what is still on screen (shared materials, cached textures)
   trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); }
   // GPU resources (main.js calls this after the next place has rendered): the room, plus each pedestal model's own
@@ -274,7 +283,7 @@ export class BookRoom {
     try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', ceiling: this.ceiling(), avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
-    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); if (!fast) this.probeDirty = true; return true;
+    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); this.doorInfo = sh.userData.baroque && sh.userData.baroque.door; if (!fast) this.probeDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   // the painted domes follow the subject (js/gfx/ceilings.js): the reader's choice, else the bookcase, else the titles
@@ -510,7 +519,7 @@ export class BookRoom {
   doorAt() { return doorHit(this.ray, this.doorPick, [...this.stations.values()].flatMap(s => [s.sheet, s.ped]).filter(Boolean)); }
   pointerUp(e) {
     if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 5 || this.anim) return; this.down = null;
-    const o = this.pick(e); if (!o) { if (this.doorAt() && !this.reader) this.app.openHub({ fromRoom: this.book.id }); return; } const p = this.data.parts.find(x => x.id === o.station);
+    const o = this.pick(e); if (!o) { if (this.doorAt() && !this.reader) this.app.walkThroughDoor(() => this.app.openHub({ fromRoom: this.book.id })); return; } const p = this.data.parts.find(x => x.id === o.station);
     if (o.kind === 'pedestal') this.enterPedestal(p, o.bay); else this.openPart(p);
   }
   flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, k: 0, dur, then }; this.controls.enabled = false; }
@@ -546,6 +555,7 @@ export class BookRoom {
   // for 5 s, 30; moving, unfolding or flying, every frame
   renderFps(idleMs) { if (this.anim || this.unfold) return 60; if (this.reader) return 20; return idleMs < 5000 ? 60 : 30; }
   update(dt, t) {
+    if (this.map) this.map.update(dt);
     { const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false; this._shF = (this._shF || 0) + 1; if (this.anim || this.unfold || this._shF % (this.reader ? 8 : 3) === 0) sm.needsUpdate = true; }   /* the room's shadows: only the turning card models move them, slowly */
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
@@ -567,6 +577,7 @@ export class BookRoom {
     }
   }
   dispose() {
+    if (this.map) { this.map.dispose(); this.map = null; }
     if (this.disposed) return; this.disposed = true;
     if (this.app.ingest && this.app.ingest.closePDF && !bookBusy(this.book.id)) this.app.ingest.closePDF(this.book.id);   // its parsed PDF (pdf.js worker memory); a running analysis keeps it
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);

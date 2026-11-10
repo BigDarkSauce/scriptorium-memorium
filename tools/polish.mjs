@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — polish gate (node + playwright, headless Chromium). Catches the visual leftovers a smoke test
+// Scriptorium Memorialium — polish gate (node + playwright, headless Chromium). Catches the visual leftovers a smoke test
 // does not: labels on top of each other, a guide label far from its arrow, clipped text, raw notation, italic units,
 // chart legends over data, elements off screen, and washed-out or over-saturated views.
 //

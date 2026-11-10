@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title Scriptorium Memorium
-if not exist "%~dp0Scriptorium Memorium.lnk" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\make-shortcuts.ps1" >nul 2>&1
+title Scriptorium Memorialium
+if not exist "%~dp0Scriptorium Memorialium.lnk" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\make-shortcuts.ps1" >nul 2>&1
 set PORT=8000
 set "URL=http://localhost:%PORT%/"
 
@@ -12,7 +12,7 @@ set "SERVER=powershell"
 python -c "import http.server" >nul 2>&1 && set "SERVER=python"
 if "%SERVER%"=="powershell" py -3 -c "import http.server" >nul 2>&1 && set "SERVER=py"
 
-echo Scriptorium Memorium  -  %URL%   (server: %SERVER%)
+echo Scriptorium Memorialium  -  %URL%   (server: %SERVER%)
 echo Keep this window open while you use the app. Close it to stop.
 echo.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — the PDF-to-scroll pipeline, tested without a live Claude (node + playwright, headless Chromium).
+// Scriptorium Memorialium — the PDF-to-scroll pipeline, tested without a live Claude (node + playwright, headless Chromium).
 //
 // RUN   node tools/test-ingest.mjs [url]            default url http://localhost:8810/ (serve the app first: ./serve.sh)
 //       TEST_PDF=/path/file.pdf     the PDF to add (default: the BYU22S01 infographics if TEST_PDF is unset and it is

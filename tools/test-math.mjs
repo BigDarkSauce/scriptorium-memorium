@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scriptorium Memorium — unit tests for the maths typesetter in js/util.js (mathHTML / mathRuns / mathText).
+// Scriptorium Memorialium — unit tests for the maths typesetter in js/util.js (mathHTML / mathRuns / mathText).
 // RUN: node tools/test-math.mjs        (no browser needed; exit code 1 when a case fails)
 //
 // Each case gives the input text and the expected result in a compact "flat" notation of the HTML output:

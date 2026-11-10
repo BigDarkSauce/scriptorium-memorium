@@ -1,4 +1,4 @@
-// Scriptorium Memorium — shared utilities (no dependencies)
+// Scriptorium Memorialium — shared utilities (no dependencies)
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

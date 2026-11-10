@@ -272,3 +272,39 @@ and every frame while something flies or unfolds; the hall's only while somethin
   same axis. Figures' text is set at 12–13.5 px (axis ticks, legends, titles) and the small interface text one step
   larger; subscripts use lining figures (an old-style 0 read as a ring).
 - Deepest dive and the sub-scroll request: docs/PEDAGOGY.md.
+
+## Round 14: title screen, scriptoria, doors, maps, shared scrolls
+
+- **Title screen (`js/title.js`).** A `TitleScreen` mode. On the left, a live `DioramaScene` for each 3D diorama in the
+  current scriptorium (up to 12, the last room first; the built-in models when there are none), shot by a slow camera
+  move (orbit, push-in, crane, circle) for `SHOT` = 9.5 s, then a 0.45 s dip through the grade fade to the next. The
+  subject is shifted left with `camera.setViewOffset`, not by moving the scene. On the right: Continue, New scriptorium,
+  Load scriptorium, Get a scroll. It is shown on boot unless the address names a room, `?title=0`, or the page runs
+  under a test driver (`navigator.webdriver`; `?title=1` forces it).
+- **Scriptoria (slots, `js/store.js`).** `store.useSlot(id)` prefixes every key with `slot:<id>/`; the first slot,
+  `main`, keeps the old unprefixed keys, so existing libraries become it unchanged. `slots` and `lastSlot` are global.
+  The IndexedDB name stays `scriptorium-memorium` on purpose: renaming it would orphan every saved library.
+- **Autosave.** Writes are debounced (`saveLater`), flushed every 2 s, and flushed on `pagehide`, `visibilitychange` and
+  `beforeunload`; `navigator.storage.persist()` is requested. `App.rememberPlace()` stores where you stand
+  (`lib.lastPlace`: hall or room, open scroll, camera) every 1.5 s, which Continue returns to.
+- **Camera moves (`App.cineRun`, `stepCine`, `arrive`).** Eased camera keyframes run after the mode's own update.
+  Arrival kinds: `{from:'title'}` descends into the hall, `{pose}` returns to the stored camera, `{door:true}` starts at
+  the threshold with the door open and closes it behind you.
+- **Doors (`js/gfx/baroque.js`).** The leaves are real hinged groups (one merged mesh per material under a pivot at each
+  jamb), with a warm light plane beyond. `info.door.set(k)` swings them (k 0..1). `App.walkThroughDoor(go)` walks up,
+  opens the leaves by the clock (950 ms, so a slow frame never stretches it), steps through and calls `go()`.
+- **Maps (`js/mapview.js`).** `MapView` (button, or M) draws an SVG plan from a provider the place supplies (`mapPlan()`
+  in the hall and in a room), asked again every second and redrawn only when its JSON changes. The hall lists bookcases
+  with their scroll counts and subjects; a room lists its scrolls in order with the dioramas on their pedestals. A
+  click flies the camera there.
+- **Shared scrolls (`js/share.js`).** Through the artifact's `db` capability: `pub/<uid>` holds a reader's visible
+  scrolls (title, tags, sizes) and `pub/<uid>/books/<id>/chunks/<k>` the room in 180 000-character chunks (documents are
+  capped at 256 KiB). Rules: everyone with view access reads `pub`; each reader writes only their own `pub/<uid>`
+  (Contributor level or higher). The PDF is never shared. "Get scroll" lists every visible scroll with tag search; a
+  pick, like Duplicate, goes through `choosePlace` (`js/room/addpdf.js`) to a bookcase of your choice, with new ids
+  (sub-scrolls kept under their parents). A visible scroll is republished 8 s after its room changes.
+- **Design references (`js/ai/evidence.js`).** With the Firecrawl connector, the writer gets `search_videos` (YouTube:
+  lectures, documentaries, game playthroughs), `video_transcript`, `search_games` (Steam), `search_newsletter`
+  (Substack) and `search_films` (Letterboxd), run as catalogued providers through `firecrawl_scrape`. They inform the
+  design of a diorama or the order of reveals, never the facts. Reddit and Pinterest are not wired: both refuse
+  automated access, and the honest route to them is their official API through a connector of their own.

@@ -1,4 +1,4 @@
-# Scriptorium Memorium
+# Scriptorium Memorialium
 
 A walkable 3D library for studying anything. Each PDF becomes a **room**. Its chapters hang as **scrolls** along the walls, each rebuilt as one rigorous logical chain. Beside each scroll stands a **pedestal** carrying a small card model. Step into it and the idea plays out as a living 3D **diorama** of bodies, events and processes.
 
@@ -16,8 +16,8 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 
 ## Run it
 
-- **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
-- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
+- **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorialium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
+- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
 - **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening `index.html` directly:
 
 ```bash
