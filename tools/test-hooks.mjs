@@ -39,4 +39,17 @@ const F = fallbackHook({ chain: [{ id: 'S1', statement: 'short' }, { id: 'S2', k
 ok(F && F.technique === 'partial' && F.resolvedIn === 'S3' && F.parts.some(p => p.hide === '$\\pi = cRT$'), 'fallback veils the conclusion’s formula');
 const F2 = fallbackHook({ chain: [{ id: 'S1', statement: 'a' }, { id: 'S2', statement: 'b' }, { id: 'S3', kind: 'result', statement: 'Trade prices in a double auction converge towards the price where demand meets supply.' }] });
 ok(F2 && F2.parts.some(p => p.hide && /towards/.test(p.hide)), 'fallback veils the second half of a sentence without maths');
+// the deepest dive's gate (js/ai/prompts.js): a hand-waving step, a formula without its use, a derivation line without its
+// reason and a chain without foundations are all sent back for repair; a step that meets every rule passes
+{ const { qualityGate, chapterPrompt, DEEPEST_DIVE } = await import('../js/ai/prompts.js');
+  const good = { id: 'S1', section: '1', kind: 'result', title: 'Period', statement: 'The period of a small swing is T = 2π√(L/g).', recap: 'We have the equation of motion; now we solve it.', math: 'T=2\\pi\\sqrt{L/g}', derivation: [{ expr: 'a', why: 'divide both sides by m: allowed because m is not zero' }], use: { answers: 'How long one swing takes', symbols: 'L length (m), g gravity (m/s²)', holds: 'small swings', example: 'L = 1 m gives T = 2.0 s', check: 'units: √(m / (m/s²)) = s' }, groundwork: [{ idea: 'square root', plain: 'the number that times itself gives the original', why: 'T has √', build: ['2 × 2 = 4, so √4 = 2'], example: '√9 = 3' }], explain: [{ text: 'A small swing takes the same time whatever its size.' }] };
+  const bad = { ...good, id: 'S2', statement: 'Clearly the period follows.', use: null, derivation: [{ expr: 'b' }], recap: '', groundwork: [] };
+  const G = qualityGate({ deep: true, chain: [good, bad] }, [], []), deep = G.issues.filter(i => i.kind === 'deep');
+  ok(!deep.some(i => i.step === 'S1'), 'deep gate: a step that meets every rule passes (' + deep.filter(i => i.step === 'S1').map(i => i.detail).join('; ') + ')');
+  ['clearly', 'use', 'why', 'recap'].forEach(w => ok(deep.some(i => i.step === 'S2' && i.detail.includes(w)), 'deep gate: flags ' + w));
+  ok(qualityGate({ deep: true, chain: [bad] }, [], []).issues.some(i => i.kind === 'deep' && /groundwork/.test(i.detail)), 'deep gate: a chain without foundations is flagged');
+  ok(!qualityGate({ chain: [bad] }, [], []).issues.some(i => i.kind === 'deep'), 'deep gate: off unless the scroll is a deepest dive');
+  const P1 = chapterPrompt({ book: 'b', chapter: 'c', text: 'x', deep: true }), P0 = chapterPrompt({ book: 'b', chapter: 'c', text: 'x' });
+  ok(P1.includes('DEEPEST DIVE') && !P0.includes('DEEPEST DIVE (this overrides'), 'the deepest dive goes into the prompt only when chosen');
+  ok(/groundwork/.test(DEEPEST_DIVE) && /never assume|Never assume/i.test(DEEPEST_DIVE), 'the deepest dive asks for foundations and assumes nothing'); }
 console.log(`test-hooks: ${pass} passed, ${fail} failed`); if (fail) process.exit(1);

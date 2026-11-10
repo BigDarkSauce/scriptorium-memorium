@@ -259,6 +259,17 @@ ${PRIMITIVE_FIELDS}`;
 export const HOOK_SPEC = `HOOK (a curiosity opening: it makes the reader WANT the answer before the scroll gives it). {"technique":"partial|anomaly|impossible|predict|consequence","text":"…","resolvedIn":"the id of the step that settles it","payoff":"one sentence said at that step that closes the gap, with its numbers"}:
  partial = the scroll's key result with its decisive piece veiled: add "parts":["lead-in ",{"hide":"the veiled piece"},"."] · anomaly = a real observation the reader's current idea cannot explain (with its numbers) · impossible = something true that sounds as if it cannot be · predict = a question the reader commits to before reading on: add "options":[{"text","correct":true|false,"why"}] (2–4, exactly one correct, the wrong ones the real misconceptions; the answer is NOT given in the hook) · consequence = an effect shown in full with its cause held back.
  Choose the technique that fits the content (a surprising invariance → anomaly; a paradox → impossible; a quantitative outcome people misjudge → predict; a striking effect → consequence; a result whose form is the point → partial). Every hook is TRUE, checkable, and paid: "resolvedIn" names a step that really explains it. Besides the scroll's opening, give "hook" to 1–3 turning-point steps (where the explanation changes direction), each settled at or after its own step. A 3D diorama may carry "hook" with "lesson":"the title of the lesson that settles it" instead of "resolvedIn".`;
+// Deepest dive (an option on any breakdown): the reader has no background, forgets, and gets lost. The part is taken
+// apart down to the principles its claims rest on and rebuilt from them (docs/PEDAGOGY.md, "Deepest dive").
+export const DEEPEST_DIVE = `DEEPEST DIVE (this overrides any brevity above). Write for a reader who has NO background in the subject, forgets what was said a few steps ago, and gets lost easily. Your job is to dismantle the part down to the foundations its claims stand on, then rebuild everything from those foundations so the reader understands what each idea is, why it is true, how it is obtained and what it is for. Never assume implicit understanding.
+1. DISMANTLE FIRST. For every claim, assertion, assumption, formula, formalism and notation in the part, ask: what must the reader already know for this to make sense? Every prerequisite the reader may lack (a unit, an algebra move, a function, a physical or logical principle, a notation) goes into the step's "groundwork", in the order needed, BEFORE the step uses it; and its own prerequisites in turn, down to everyday experience or school arithmetic. Each groundwork item: {"idea":"its name","plain":"what it is, in everyday words","why":"why this step needs it","build":["its own derivation or reasoning from more basic facts, one move per line, each line saying which rule it uses"],"example":"a tiny concrete example with real numbers and units"}.
+2. INVENT IT. Before a formula or result, pose the problem it solves so plainly that the reader could almost invent it: what would one try first, why that fails, what the fix is.
+3. NO SKIPPED MOVES. Every "derivation" line makes ONE move and its "why" names the rule used and why it is allowed ("divide both sides by m: allowed because m is not zero"). No "clearly", "obviously", "it follows", "simply", "trivially", "it is easy to see", "recall that": show it instead.
+4. EVERY FORMULA gets "use": {"answers":"the question it answers","symbols":"each symbol with its meaning and unit","holds":"when it is valid and when it breaks","example":"one worked number example, with units","check":"a sanity check: units, a limiting case, or a size estimate"}.
+5. ASSUMPTIONS are stated where they are made, with why they are made and what changes without them.
+6. "recap": one or two sentences at the start of every step: where we are in the argument and what we have so far, so a reader who lost the thread can rejoin.
+7. RE-DEFINE: a symbol or term that reappears after three or more steps is defined again in that step's "terms" (the reader forgets).
+8. KEEP THE MAIN LINE READABLE: the step's own paragraphs carry the argument; the foundations live in "groundwork" (shown folded beside the step).`;
 export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","hook":HOOK (the scroll's opening, shown BEFORE its question),"question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","section":"the id of the ONE subsection this step covers, e.g. 1.2","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
    "hook":HOOK (only on 1–3 turning-point steps),"answers":"the question this step settles","opens":"the question it raises next (the next step's answers, word for word)",
@@ -385,7 +396,7 @@ export function figureList(figures, attached = []) {
 }
 
 // The analysis prompt: one call per part. sections = partSections(...).sections, figures = figure metadata.
-export function chapterPrompt({ book, chapter, text, depth = 'complete', n, images = 0, sections = null, figures = null, attached = [], pageImages = 0, budget = 170000 }) {
+export function chapterPrompt({ book, chapter, text, depth = 'complete', deep = false, n, images = 0, sections = null, figures = null, attached = [], pageImages = 0, budget = 170000 }) {
   const S = sections && sections.length ? sections : null, F = figures && figures.length ? figures : null;
   const min = S ? S.length : 0;
   const N = Math.max(n || 0, min), steps = depth === 'exact' ? BREAKDOWN.exact(N) + (min > (n || 0) ? ` (raised to ${min}: one per subsection is the minimum)` : '') : depth === 'essential' ? BREAKDOWN.essential : BREAKDOWN.complete;
@@ -399,7 +410,7 @@ export function chapterPrompt({ book, chapter, text, depth = 'complete', n, imag
 BOOK: ${book}
 PART: ${chapter}
 ${pageImages ? `Attached: ${pageImages} page image(s) of this part (its text layer is thin; read the pages).\n` : images ? `Attached: ${images} image(s): the PDF's own figures marked [image k attached] below.\n` : ''}
-BREAKDOWN: ${steps}.
+BREAKDOWN: ${steps}${deep ? ' + DEEPEST DIVE (below): the step count above is for the main steps; the foundations go inside them as "groundwork"' : ''}.
 SUBSECTIONS OF THIS PART (cover every one; the ids in brackets go into "section" and "coverage")${sheet ? '. This part is ONE SHEET of an infographic/handout: each subsection is a panel or card of the page; the text of a panel is its labels and call-outs in reading order, so rebuild them into explained steps' : ''}:
 ${S ? listed : `(not provided) Before writing, list the part's subsections yourself and use these ids: ${SUBSECTION_IDS}`}
 
@@ -434,7 +445,7 @@ ${EVIDENCE_RULES}
 ${SHAPE_EXAMPLE}
 
 ${SELF_CHECK}
-
+${deep ? '\n' + DEEPEST_DIVE + '\n' : ''}
 Return ONLY JSON, no prose before or after, in this shape:
 ${HOOK_SPEC}
 ${CHAIN_FORMAT}
@@ -656,7 +667,7 @@ ${CODE_RULES}
 ${FIGURE_SPEC}
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
-${LESSON_FORMAT}
+${LESSON_FORMAT}${A.deep ? '\n' + DEEPEST_DIVE : ''}
 Return ONLY JSON: {"steps":[ step objects exactly as in the chain format below, with "section" ], "coverage":[{"subsection":id,"steps":["G1",…]}]}
 Step format: ${CHAIN_FORMAT.slice(CHAIN_FORMAT.indexOf('"chain":[') + 9, CHAIN_FORMAT.indexOf('"coverage"')).trim().replace(/,$/, '').replace(/\]$/, '').replace('{"id":"S1"', '{"id":"G1"').replace('"from":["S#",...]', '"from":["S#" or "G#",...]')}
 TEXT OF THE GAP SUBSECTIONS ONLY:
@@ -746,6 +757,13 @@ export function qualityGate(A, sections = [], figures = []) {
   // 10. the Revelation Engine's truth constraint (js/room/reveal.js): a revealed rule ships with its boundary case
   chain.forEach(st => revealIssues(st).forEach(d => add(st, 'reveal', d)));
   chain.forEach(st => stepFigures(st).forEach(f => { const k = f && (f.kind || f.type); if (!['plot', 'bars', 'hist', 'scatter', 'boxplot'].includes(k)) return; const bare = t => !t || /^\(?[^\s()]{1,9}\)?$/.test(String(t).trim()); if ((k !== 'bars' && k !== 'boxplot' && bare(f.xlabel)) || (k !== 'hist' && bare(f.ylabel))) add(st, 'axes', `a ${k} figure needs axis titles "quantity (unit)"`); }));   /* every axis names its quantity and unit once */
+  // 12. deepest dive: nothing skipped, every formula with its use, the foundations present (DEEPEST_DIVE)
+  if (A.deep) { const BAN = /\b(clearly|obviously|it follows that|simply|trivially|it is easy to see|recall that)\b/i;
+    chain.forEach(st => { const txt = [st.statement, ...(st.explain || []).map(p => p && p.text)].join(' '); const m = BAN.exec(txt); if (m) add(st, 'deep', `says "${m[0].toLowerCase()}": show the move instead`);
+      if ((st.math || (st.derivation || []).length) && !(st.use && st.use.answers && st.use.example)) add(st, 'deep', 'a formula needs "use" (what it answers, its symbols, when it holds, a worked number, a check)');
+      if ((st.derivation || []).some(d => typeof d === 'string' || !d.why)) add(st, 'deep', 'every derivation line needs its "why"');
+      if (!st.recap) add(st, 'deep', 'needs a "recap" (where we are)'); });
+    if (!chain.some(st => (st.groundwork || []).length)) issues.push({ step: null, section: null, kind: 'deep', detail: 'no step carries "groundwork": the foundations are missing' }); }
   // 11. revelation hooks: a hook is a promise the scroll keeps (js/room/hooks.js)
   if (!A.hook) issues.push({ step: null, section: null, kind: 'hook', detail: 'the scroll has no opening "hook" (a curiosity technique shown before its question)' });
   else hookIssues(A.hook, chain).forEach(d => issues.push({ step: null, section: null, kind: 'hook', detail: d }));
@@ -756,7 +774,7 @@ export function qualityGate(A, sections = [], figures = []) {
 }
 // Which steps a repair call must rewrite (copied, duplicate, longQuote, unexplained, codeUnexplained); figure-only gaps go
 // to figuresPrompt; missing subsections to followUpPrompt; dioramas to the diorama stage.
-export const REWRITE_KINDS = ['copied', 'duplicate', 'longQuote', 'unexplained', 'codeUnexplained'];
+export const REWRITE_KINDS = ['copied', 'duplicate', 'longQuote', 'unexplained', 'codeUnexplained', 'deep'];
 export function repairPrompt({ book, chapter, A, issues, sections }) {
   const ids = [...new Set(issues.filter(i => REWRITE_KINDS.includes(i.kind) && i.step).map(i => i.step))];
   const steps = (A.chain || []).filter(st => ids.includes(st.id));
@@ -774,7 +792,7 @@ HOW: explain in your own words, never paste (at most ${COPY_WORDS} words quoted,
 ${HARD_RULES}
 ${EXPLAIN_RULES}
 ${CODE_RULES}
-${FIGURE_SPEC}
+${FIGURE_SPEC}${A.deep ? '\n' + DEEPEST_DIVE : ''}
 Return ONLY JSON: {"steps":[ the rewritten steps, same ids, in the chain format ]}
 Step format: ${CHAIN_FORMAT.slice(CHAIN_FORMAT.indexOf('"chain":[') + 9, CHAIN_FORMAT.indexOf('"coverage"')).trim().replace(/,$/, '').replace(/\]$/, '')}
 SOURCE TEXT OF THEIR SUBSECTIONS:
@@ -901,7 +919,7 @@ ${outline ? 'OUTLINE/TEXT SAMPLE:\n' + outline.slice(0, 60000) : ''}
 Return ONLY JSON: {"parts":[{"title":str,"num":"1","startPage":n,"endPage":n,"summary":"one sentence","subsections":[{"id":"1.1","num":"1.1","title":str,"level":2,"startPage":n,"endPage":n}]}]}`;
 }
 
-export function detailPrompt({ step, chain, request }) {
+export function detailPrompt({ step, chain, request, deep = false }) {
   return `Expand one step of a study chain into its own detailed sub-chain (a sub-scroll), in the same format.
 PARENT STEP: ${JSON.stringify(step)}
 WHOLE CHAIN (for context): ${JSON.stringify((chain || []).map(s => ({ id: s.id, title: s.title })))}
@@ -910,7 +928,7 @@ The sub-chain's first step answers the parent's "answers" question; its last ste
 ${HARD_RULES}
 ${EXPLAIN_RULES}
 ${CODE_RULES}
-${FIGURE_SPEC}
+${FIGURE_SPEC}${deep ? '\n' + DEEPEST_DIVE : ''}
 ${BUILTIN_TYPES}
 ${DIAGRAM_TYPES}
 ${LESSON_FORMAT}

@@ -56,12 +56,12 @@ export async function writeChain(ctx, P, M, o) {
   if (thinText && imageLimit() && M.blob) { images = await ctx.app.ingest.pageImages(M.blob, P.startPage || 1, P.endPage || 1, imageLimit()); pageImgs = images.length; }
   else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
   const meta = ctx.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
-  const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
+  const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', deep: !!o.deep, n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
   o.onStatus && o.onStatus('Claude is reading and planning. Long parts can take a minute or two.');
   const A = await ask(prompt, { ...o, images, writing: 'Writing the chain' }, 'Analyse "' + P.title + '" in any AI');
   if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
   if (A._truncated && A.chain.length > 1) A.chain.pop();
-  const N = normalizeChain(A); delete N._truncated; N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n;
+  const N = normalizeChain(A); delete N._truncated; N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n; if (o.deep) N.deep = true;
   return N;
 }
 // stage 2: coverage against the subsections; targeted follow-ups write what is missing (≤ 100k characters each)
@@ -319,7 +319,7 @@ export async function runJob(app, job, { signal, onProgress = () => {} } = {}) {
       if (P.job && P.job.stage === 'done' && P.analysis) { onProgress({ index: i, part: P, stage: 'done', status: 'already analysed' }); continue; }
       job.current = P.id; await saveJob(app, job);
       const n = job.level === 'exact' ? (job.alloc && job.alloc[P.id]) || job.n : null;
-      await analysePart(ctx, P, { level: job.level, n, signal, onStage: s => onProgress({ index: i, part: P, stage: s }), onStatus: t => onProgress({ index: i, part: P, status: t }) });
+      await analysePart(ctx, P, { level: job.level, deep: !!job.deep, n, signal, onStage: s => onProgress({ index: i, part: P, stage: s }), onStatus: t => onProgress({ index: i, part: P, status: t }) });
       onProgress({ index: i, part: P, stage: 'done' });
     }
     job.status = 'done'; job.current = null; await saveJob(app, job);

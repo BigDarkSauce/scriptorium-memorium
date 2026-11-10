@@ -92,7 +92,7 @@ export class Reader {
   //  .5 for a long text); a fold never ends between a step's head and its first unit, and a new step starts a new fold
   //  once the current one is well filled.
   computeFolds(wrap) {
-    const GLUE = /^(sources|bodies|q-out|num-warn|fig-refs|extras)$/, HEAD = /^(badge|hook-card|q-in|meta|from|stmt|quote-ref|src-quote)$/;
+    const GLUE = /^(sources|bodies|q-out|num-warn|fig-refs|extras)$/, HEAD = /^(badge|hook-card|q-in|recap|groundwork|meta|from|stmt|quote-ref|src-quote)$/;
     const weigh = e => 1 + (e.querySelector('.fig-host, .pdf-figs figure, .sketch-card, .svg-slot, .src-table-wrap, .code-step') || /fig-host|pdf-figs|src-table-wrap|code-step/.test(e.className) ? 1 : 0) + ((e.textContent || '').length > 700 ? .5 : 0);
     const units = []; let pre = [];
     for (const c of [...wrap.children]) {
@@ -283,6 +283,16 @@ export class Reader {
     setTimeout(() => { if (wrap.isConnected) { this._typesetReady = true; this.typesetShown(); } }, 1000); setTimeout(() => drawArcs(wrap), 400);
     return wrap;
   }
+  // the deepest dive's foundations, folded beside the step (expandable, like Nicky Case's Nutshell): their names show,
+  // each opens to the plain meaning, why the step needs it, its own derivation and an example
+  groundwork(G) {
+    const d = el('details', { class: 'groundwork' }, [el('summary', {}, [el('span', { class: 'gw-k', text: `Foundations first · ${G.length}` }), el('span', { class: 'gw-list', html: G.map(g => mathHTML(g.idea)).join(' · ') })])]);
+    G.forEach((g, i) => d.append(el('details', { class: 'gw-item' }, [el('summary', { html: `<span class="gw-n">${i + 1}</span> ` + mathHTML(g.idea) }),
+      g.plain ? el('p', { html: prose(g.plain) }) : null, g.why ? el('p', { class: 'gw-why', html: '<b>Why it is needed here.</b> ' + prose(g.why) }) : null,
+      g.build.length ? el('ol', { class: 'gw-build' }, g.build.map(b => el('li', { html: prose(b) }))) : null,
+      g.example ? el('p', { class: 'gw-ex', html: '<b>Example.</b> ' + prose(g.example) }) : null])));
+    d.addEventListener('toggle', () => { if (d.open) typeset(d); }, true); return d;
+  }
   hookKey(where) { return (this.part && this.part.id || 'part') + ':' + where; }
   hookCtx(A, at, where) { const T = new Map((A.chain || []).map(s => [s.id, s.id + ' ' + (s.title || '')])); return { key: this.hookKey(at), where, jump: id => this.jump(id), stepLabel: id => T.get(id) || id }; }
   stepHook(A, st) { const h = st.hook || seedHook(A && A.title, st.id); return h && normHook(h) ? h : null; }
@@ -299,6 +309,8 @@ export class Reader {
     art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: mathHTML(st.title) }),
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
       st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
+    if (st.recap) art.append(el('p', { class: 'recap', html: '<b>Where we are.</b> ' + prose(st.recap) }));
+    if (st.groundwork && st.groundwork.length) art.append(this.groundwork(st.groundwork));   /* the foundations, before the step uses them */
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => this.jump(id) })); }); art.append(f); }
     if (st.statement) art.append(el('p', { class: 'stmt', html: prose(st.statement) }));
     if (st.statementFigure) art.append(this.figure(st.statementFigure));
@@ -308,6 +320,7 @@ export class Reader {
     (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: prose(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); });
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
+    if (st.use) art.append(el('div', { class: 'f-use' }, [el('b', { class: 'f-use-k', text: 'What this formula is for' }), el('dl', {}, [['answers', 'It answers'], ['symbols', 'Its symbols'], ['holds', 'When it holds'], ['example', 'A worked number'], ['check', 'A sanity check']].filter(([k]) => st.use[k]).flatMap(([k, t]) => [el('dt', { text: t }), el('dd', { html: prose(st.use[k]) })]))]));
     if (st.code && Array.isArray(st.code.lines) && st.code.lines.length) art.append(renderCode(st.code));
     (st.examples || []).forEach(x => art.append(this.renderExample(x)));
     if (st.table && st.table.rows && st.table.rows.length) art.append(renderTable(st.table));
@@ -334,7 +347,7 @@ export class Reader {
     (st.demos || []).forEach((d, i) => demos.append(this.renderDemo(d, st, i, demos)));
     demos.append(el('div', { class: 'step-tools' }, [
       el('button', { class: 'linkbtn', text: '+ showcase', onclick: () => this.addShowcase(st, demos) }),
-      el('button', { class: 'linkbtn', text: 'More detail → sub-scroll', onclick: () => this.moreDetail(st, A) }),
+      el('button', { class: 'linkbtn', text: 'More detail… → sub-scroll', title: 'Say what and where you need more detail; nothing is written until you do', onclick: () => this.moreDetail(st, A) }),
       evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null]));
     art.append(demos);
     if (st.opens) art.append(el('div', { class: 'q-out', title: 'The question this step opens (the next step settles it)' }, [el('span', { class: 'q-mark', text: '→' }), el('span', { html: mathHTML(st.opens) })]));
@@ -486,15 +499,36 @@ export class Reader {
         authorDemo(this.ctx(), st, d, { onStatus: t => { slot.textContent = t; } }).catch(() => { if (d.type === 'scene' && !Array.isArray(d.bodies)) Object.assign(d, fallbackDemo(st, d)); }).then(() => { slot.replaceWith(this.renderDemo(d, st, st.demos.length - 1, demos)); this.save(); this.room.refreshStation(this.part); }); } })])])]);
     document.body.append(box);
   }
-  async moreDetail(st, A) {
-    const t = toast('Writing a sub-scroll for ' + st.id + '…', 6000);
+  // "More detail": nothing is written until the reader says what and where (the step's parts are listed to point at)
+  moreDetail(st, A) {
+    const short = t => { t = String(t || '').replace(/\$[^$]*\$/g, '…').replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 68).replace(/\s+\S*$/, '') + '…' : t; };
+    const places = [['the whole step', 'whole'], st.statement && ['the statement: ' + short(st.statement), 'statement'], ...(st.explain || []).map((p, i) => p && p.text && [`paragraph ${i + 1}: ${short(p.text)}`, 'explain' + i]),
+      st.math && ['the formula', 'math'], ...(st.derivation || []).map((d, i) => [`derivation line ${['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'][i] || i + 1}${d && d.why ? ': ' + short(d.why) : ''}`, 'deriv' + i]),
+      ...(st.terms || []).map(t => [`the term ${short(t.term)}`, 'term:' + t.term]), ...(st.examples || []).map((x, i) => [`example ${i + 1}${x.title ? ': ' + short(x.title) : ''}`, 'example' + i]),
+      st.code && ['the code', 'code'], st.intuition && ['“Picture it”', 'intuition'], st.misconception && ['“Common mistake”', 'misconception'], st.check && ['the check question', 'check']].filter(Boolean);
+    const ta = el('textarea', { class: 'field', rows: 4, placeholder: 'What should be explained in more detail? e.g. "why sin θ ≈ θ for small angles, with numbers", "the move from line ii to iii", "what a radian is"' });
+    const list = el('div', { class: 'md-places' }, places.map(([t, v], k) => el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', value: v, checked: false, onchange: e => { if (v === 'whole' && e.target.checked) list.querySelectorAll('input').forEach((c, j) => { if (j) c.checked = false; }); else if (e.target.checked) list.querySelector('input').checked = false; } }), ' ', el('span', { html: mathHTML(t) })])));
+    const deep = el('input', { type: 'checkbox' }), go = el('button', { class: 'btn primary', text: 'Write the sub-scroll', disabled: true });
+    const sync = () => { go.disabled = !ta.value.trim() && !list.querySelector('input:checked'); }; ta.oninput = sync; list.addEventListener('change', sync);
+    const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass md-modal' }, [el('h3', { html: 'More detail on ' + esc(st.id) + ' · ' + mathHTML(st.title) }),
+      el('label', { text: 'What do you want explained?' }), ta, el('label', { text: 'Where (pick any; none means the request alone decides)' }), list,
+      el('label', { class: 'ap-check' }, [deep, ' ', el('span', {}, [el('b', { text: 'Deepest dive' }), ': assume no background, take it apart down to its foundations and rebuild every move'])]),
+      el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: () => box.remove() }), go])])]);
+    go.onclick = () => { const where = [...list.querySelectorAll('input:checked')].map(c => places.find(p => p[1] === c.value)[0]); box.remove(); this.writeDetail(st, A, { what: ta.value.trim(), where, deep: deep.checked }); };
+    document.body.append(box); ta.focus();
+  }
+  async writeDetail(st, A, R) {
+    const request = [R.what ? 'THE READER ASKS: ' + R.what : 'THE READER ASKS for more detail on the parts named below.', R.where.length && !R.where.includes('the whole step') ? 'ON THESE PARTS OF THE STEP (expand only these; the rest of the step is understood): ' + R.where.join(' | ') : 'ON the whole step.'].join('\n');
+    toast('Writing a sub-scroll for ' + st.id + '…', 6000);
     try {
-      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain }), { tools: evidenceTools(), manualTitle: 'Expand this step in any AI' });
+      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain, request, deep: R.deep }), { tools: evidenceTools(), manualTitle: 'Expand this step in any AI' });
       if (!sub || !Array.isArray(sub.chain)) throw { code: 'invalid_json' };
-      const part = { id: 'p-' + uid(), title: sub.title || (st.title + ' in detail'), subOf: this.part.id, fromStep: st.id, analysis: normalizeChain(sub) };
+      if (R.deep) sub.deep = true;
+      const part = { id: 'p-' + uid(), title: sub.title || (st.title + ' in detail'), subOf: this.part.id, fromStep: st.id, request: R, analysis: normalizeChain(sub) };
       this.room.addPart(part, this.part); toast('Sub-scroll hung beside this one');
     } catch (e) { toast(errCopy(e)); }
   }
+
 }
 // Provenance of what a demo shows (docs/PROTOCOL.md, "Demo provenance"): data and points come from the PDF unless the
 // demo carries "extra" (or a "source" marked outside:true). "ref" (or pages, or a source naming the PDF) says where.
@@ -539,6 +573,10 @@ export function normalizeChain(A) {
     ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}),
     // the explanatory compiler's routing (js/dio/domains.js): the AI's own choice of domain, structure and primitive
     ...(normReveal(x.reveal) ? { reveal: normReveal(x.reveal) } : {}), ...(normHook(x.hook) ? { hook: normHook(x.hook) } : {}),
+    // the deepest dive's fields (js/ai/prompts.js DEEPEST_DIVE): where we are, the foundations, what a formula is for
+    ...(x.recap ? { recap: String(x.recap).slice(0, 600) } : {}),
+    ...(Array.isArray(x.groundwork) && x.groundwork.length ? { groundwork: x.groundwork.filter(g => g && g.idea).slice(0, 12).map(g => ({ idea: String(g.idea), plain: String(g.plain || ''), why: String(g.why || ''), build: (Array.isArray(g.build) ? g.build : g.build ? [g.build] : []).map(String).slice(0, 16), example: String(g.example || '') })) } : {}),
+    ...(x.use && typeof x.use === 'object' && x.use.answers ? { use: Object.fromEntries(['answers', 'symbols', 'holds', 'example', 'check'].filter(k => x.use[k]).map(k => [k, String(x.use[k])])) } : {}),
     ...Object.fromEntries(['intuitionMotion', 'misconceptionMotion'].filter(k => x[k] && typeof x[k] === 'object' && !motionIssues(x[k]).length).map(k => [k, x[k]])),   /* an animation that does not check out is dropped, never half drawn */
     ...(x.visual && typeof x.visual === 'object' ? { visual: Object.fromEntries(['domain', 'structure', 'primitive', 'medium', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)])) } : {}) }));
   A.chain.forEach((st, i) => { const x = src[i]; if (st.check && x && x.check && fig(x.check.figure)) st.check.figure = fig(x.check.figure); });

@@ -3,6 +3,7 @@
 // a part with several 3D demos gets one wide plinth with a bay per demo, in chain order, each bay bordered by brass
 // inlay and labelled with its number and title; clicking a model (or its bay) unfolds it and carries you inside.
 // The room grows when more scrolls need hanging.
+import { CEILINGS, ceilingTheme } from '../gfx/ceilings.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Navigator } from '../nav.js';
@@ -270,12 +271,14 @@ export class BookRoom {
     // Metten-like walnut-and-gilt wall bookcases; every hanging scroll gets an open, panelled niche in its bay
     // (a size the shell cannot be built at keeps the current one)
     const D = this.data.dims; let sh;
-    try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
+    try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', ceiling: this.ceiling(), avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
     this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); if (!fast) this.probeDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
+  // the painted domes follow the subject (js/gfx/ceilings.js): the reader's choice, else the bookcase, else the titles
+  ceiling() { const sh = this.app.lib && this.app.lib.shelves.find(x => x.id === this.book.shelf); return ceilingTheme(this.data.ceiling, sh ? sh.name : '', [this.book.title, ...(this.data.parts || []).slice(0, 12).map(p => p.title)].join(' ')); }
   buildStations() {
     const old = []; this.stations.forEach(s => { s.group.removeFromParent(); old.push(s.group); s.bays.forEach(b => { if (b.ds) old.push(b.ds.scene); }); }); this.stations.clear(); if (old.length) this.trash(old);
     if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ niches: this.placed.map(x => x.slot.p) }); // no-op when unchanged
@@ -475,6 +478,8 @@ export class BookRoom {
     const P = this.panel; P.hidden = !P.hidden; if (P.hidden) return; P.innerHTML = ''; const D = this.data.dims;
     P.append(el('h3', { text: 'This room' }));
     [['w', 'Width', 8, 80], ['d', 'Depth', 8, 80], ['h', 'Height', 3.2, 9]].forEach(([k, label, a, b]) => { const out = el('b', { text: D[k].toFixed(1) + ' m' }), inp = el('input', { type: 'range', min: a, max: b, step: .1, value: D[k] }); inp.oninput = () => { out.textContent = (+inp.value).toFixed(1) + ' m'; D[k] = +inp.value; this.liveResize(); }; inp.onchange = () => { D[k] = +inp.value; clearTimeout(this._rzT); this._rzT = null; this.layout(); this.buildShell(); this.buildStations(); this.save(); }; P.append(el('label', { class: 'ctrl' }, [el('span', {}, [label, out]), inp])); });
+    { const sel = el('select', { class: 'field small', 'aria-label': 'Ceiling' }, [el('option', { value: 'auto', text: 'From the subject (' + CEILINGS[this.ceiling()] + ')', selected: !this.data.ceiling || this.data.ceiling === 'auto' }), ...Object.entries(CEILINGS).map(([k, t]) => el('option', { value: k, text: t, selected: this.data.ceiling === k }))]);
+      sel.onchange = () => { this.data.ceiling = sel.value; this.save(); this.buildShell(); }; P.append(el('label', { class: 'ctrl' }, [el('span', { text: 'Ceiling' }), sel])); }
     const parts = this.orderedParts(), done = parts.filter(p => p.analysis).length;
     P.append(el('h4', { text: `Scrolls · ${done} of ${parts.length} analysed` }));
     const list = el('ol', { class: 'part-list' }); parts.forEach(p => list.append(el('li', { class: (p.analysis ? 'done ' : '') + (p.subOf ? 'sub' : ''), onclick: () => this.openPart(p) }, [el('span', { text: p.title }), p.startPage ? el('small', { text: ` ${p.startPage}–${p.endPage}` }) : null]))); P.append(list);

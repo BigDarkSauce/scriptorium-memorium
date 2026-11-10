@@ -102,3 +102,21 @@ The built-in models carry their own plans (`js/dio/plans.js`; `node tools/verify
 - Sweller J (1988). Cognitive load during problem solving: Effects on learning. *Cognitive Science*. https://doi.org/10.1016/0364-0213(88)90023-7
 
 The example library's subject references (Trenberth et al. 2007; Oki & Kanae 2006; Jasechko et al. 2013; Roe 2005; Galton 1889; Le Cam 1986; Smith 1962; Gode & Sunder 1993; van 't Hoff 1887; Preston et al. 1992; Nelson & Olsson 1986; Shinbrot et al. 1992; Goldstein 1975; CODATA 2018; Lighthill 1958; Hewitt & Hewitt 1979; Arrhenius 1889; Laidler 1984; Williams 2025) are listed with DOIs in `js/seeds-sources.js`.
+
+## Deepest dive (round 13)
+
+An option on any breakdown (Complete, Essential or Exact) for a reader with no background who forgets and gets lost.
+The part is dismantled down to the principles its claims rest on and rebuilt from them (`DEEPEST_DIVE` in
+`js/ai/prompts.js`). Each step gains a **recap** (where we are), **groundwork** (every prerequisite the reader may lack,
+in the order needed, each with its plain meaning, why the step needs it, its own derivation and an example; shown folded
+beside the step, after Nicky Case's expandable "Nutshell" explanations), and for every formula a **use** block (the
+question it answers, its symbols with units, when it holds, a worked number and a sanity check). Derivations move one
+justified step at a time; "clearly", "obviously", "it follows", "simply" are refused by the gate and sent back for
+repair. A formula is posed as a problem first, so the reader could almost invent it (3Blue1Brown's framing). The step
+count of an Exact breakdown counts the main steps; the foundations live inside them. The evidence: worked examples help
+novices most (meta-analysis g = 0.48, Barbieri et al. 2023), and instructional explanations integrated with the
+learner's own self-explanation help where self-explanation alone falls short (Renkl 2002).
+
+"More detail → sub-scroll" no longer writes anything by itself: it asks what the reader wants explained and where
+(any of the step's statement, paragraphs, formula, derivation lines, terms, examples, code and boxes), with an optional
+deepest dive, and only then writes the sub-scroll.

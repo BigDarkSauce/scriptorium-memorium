@@ -3,6 +3,7 @@
 // Everything is procedural: canvas textures + generated geometry, merged per material to keep draw calls low.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { ceilingTex } from './ceilings.js';
 import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
 import { surface } from './surfaces.js';
 import { AAA } from './aaa.js';
@@ -107,6 +108,7 @@ export function bmat(name) {
     case 'fluted': m = surface(P({ color: 0xf1e9d8, normalMap: fluteNormal(), normalScale: V2(1, 1), roughness: .42, clearcoat: .35, clearcoatRoughness: .3 }), { macro: [1.2, .05, .1] }); m.normalMap.repeat.set(3, 1); break;
     default: m = S({ color: 0xcccccc });
   }
+  if (name.startsWith('ceil-')) { const [, th, k] = name.split('-'), t = ceilingTex(th, +k || 1); if (t) m = S({ map: t, roughness: .95, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: th === 'celestial' ? .3 : .16, side: THREE.DoubleSide }); }   /* the book rooms' subject ceilings (ceilings.js) */
   if (name.startsWith('fresco')) { const t = frescoTex(+name.slice(6) || 1); m = S({ map: t, roughness: .95, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: .16, side: THREE.DoubleSide }); }
   m.userData.bmat = name; m.userData.shared = true; MATS.set(name, m); return m;   // shared: util.disposeTree leaves it (and its textures) alone
 }
@@ -620,7 +622,7 @@ function buildWallCases(ctx, { skip = [], niches = [], fast = false } = {}) {
 const NEXT = { back: 'right', front: 'left', left: 'back', right: 'front' }, PREV = { back: 'left', front: 'right', left: 'front', right: 'back' };
 function oddCount(len, bay) { const x = len / bay; let n = Math.max(1, Math.round(x)); if (n % 2 === 0) n = Math.abs(len / (n - 1) - bay) < Math.abs(len / (n + 1) - bay) && n > 1 ? n - 1 : n + 1; return n; }
 
-export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', door = true, palette = 'rose', floor = 'diagonal', gallery = 'auto', atlantes = 'auto', doorColumns = true, bay = 3.2, avoid = null, chandeliers = true, frescoSeed = 1, cases = false, caseSkip = [], niches = [], fast = false } = {}) {
+export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', door = true, palette = 'rose', floor = 'diagonal', gallery = 'auto', atlantes = 'auto', doorColumns = true, bay = 3.2, avoid = null, chandeliers = true, frescoSeed = 1, ceiling = 'fresco', cases = false, caseSkip = [], niches = [], fast = false } = {}) {
   const g = new THREE.Group(); g.name = 'room-shell';
   const A = new Acc(), FX = new Acc(), flames = [];
   const scag = bmat('scag-' + palette), gilt = bmat('gilt'), stucco = bmat('stucco'), wallM = bmat('wall'), dadoM = bmat(palette === 'teal' ? 'scag-dark' : 'scag-red');
@@ -780,7 +782,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     for (let k = 0; k < R; k++) for (let j = 0; j < S; j++) { const a = k * (S + 1) + j, b = a + S + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
     if (geo.attributes.normal.getY(0) > 0) { for (let q = 0; q < idx.length; q += 3) { const t = idx[q]; idx[q] = idx[q + 1]; idx[q + 1] = t; } geo.setIndex(idx); geo.computeVertexNormals(); }
-    A.add(bmat('fresco' + (((frescoSeed + i) % 3) + 1)), geo);
+    A.add(bmat(ceiling && ceiling !== 'fresco' ? 'ceil-' + ceiling + '-' + ((frescoSeed + i) % 2 + 1) : 'fresco' + (((frescoSeed + i) % 3) + 1)), geo);
     // gilt rim + stucco frame + gilt panel frame round the cell
     const rimG = new THREE.TorusGeometry(1, .045, 8, 72); rimG.rotateX(Math.PI / 2);
     A.add(gilt, rimG, Mx(D.x, h - .01, D.z, 0, 0, 0, D.a, 1, D.b));

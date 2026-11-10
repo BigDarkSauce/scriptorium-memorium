@@ -107,8 +107,21 @@ export class DioramaView {
   endMaterialize() {
     if (this._sketchHide) { this._sketchHide.forEach(o => { o.visible = true; }); this._sketchHide = null; }
     this.mat.finish(); this.removeInk(); this.ds.speed = 1; this.syncControls(); this.ds.computeBounds();
-    this.stage = 'tour'; this.tourI = -1; this.next();
+    const from = this.hookFrom(); this.stage = 'tour'; this.tourI = -1; this.next(); if (from) this.flyHook(from);
   }
+  // the opening hook does not vanish with the drawing: it flies from the caption to its place above the steps and waits
+  // there, a floating copy, through the tour; when the panel comes in, the copy merges into the real card
+  hookFrom() { const h = this._hookEl; if (!h || !h.isConnected || this.hookLesson() < 0) return null; const r = h.getBoundingClientRect(); return r.width ? r : null; }
+  flyHook(from) {
+    const P = this.panel, h = this._hookEl; if (!h) return;
+    const hid = P.hidden, vis = P.style.visibility, tr = P.style.transition; P.style.transition = 'none'; P.style.visibility = 'hidden'; P.hidden = false; P.classList.add('in');
+    this.renderLessons(); this.lessonBox.scrollTop = 0; const to = h.getBoundingClientRect();
+    P.classList.remove('in'); P.hidden = hid; P.style.visibility = vis; void P.offsetWidth; P.style.transition = tr;
+    if (!to.width) return;
+    const fly = h.cloneNode(true); fly.classList.add('hk-fly'); Object.assign(fly.style, { left: from.left + 'px', top: from.top + 'px', width: from.width + 'px' }); document.body.append(fly); this._hookFly = fly;
+    void fly.offsetWidth; setTimeout(() => { fly.classList.add('go'); Object.assign(fly.style, { left: to.left + 'px', top: to.top + 'px', width: to.width + 'px' }); }, 40);   /* (a timer, not frames: a busy first frame of the real scene must not hold it) */
+  }
+  landHook() { const f = this._hookFly; if (!f) return; this._hookFly = null; setTimeout(() => { f.classList.add('land'); setTimeout(() => f.remove(), 520); }, 650); }   /* after the panel's own entrance (.6 s) */
   removeInk() { const rm = []; this.scene.traverse(o => { if (o.userData.isInk && !o.isLight) rm.push(o); });   /* lights stay: removing one recompiles every program */ rm.forEach(o => o.removeFromParent()); if (rm.length) this.app.retire(() => disposeTree(rm, this.disposed ? null : this.scene)); }   // edge lines and hull shells (the hulls share their mesh's geometry, which stays)
   // rebuild the model; the old bodies' geometries and materials are freed once the new ones have rendered
   rebuild() { const old = [...this.ds.world.children, ...this.ds.extras.children]; this.ds.build(); this.app.retire(() => disposeTree(old, this.disposed ? null : this.scene)); }
@@ -162,7 +175,7 @@ export class DioramaView {
   // ---------- explore: foldable left panel with step-by-step instructions ----------
   showExplore(immediate) {
     this.panel.hidden = false; requestAnimationFrame(() => this.panel.classList.add('in'));
-    this.renderLessons(); this.renderParams(); this.renderObjects();
+    this.renderLessons(); this.landHook(); this.renderParams(); this.renderObjects();
     this.ds.symbols && this.ds.symbols.forEach(s => { const p = el('div', { class: 'pin sym in', mathLabel: s.text }); p._sym = s; this.labels.append(p); });
     if (immediate) this.ds.actors.forEach(a => this.ensurePin(a, false));
     this.ds.playing = true; this.syncTimeUI(); this._wideFix = 2;   // the opening view is re-framed into the free frame once the panels are laid out
@@ -769,6 +782,7 @@ export class DioramaView {
     g.strokeStyle = '#ffd98a'; g.lineWidth = 2; g.beginPath(); d.forEach((y, i) => { const x = L + (tt && span > 0 ? (tt[i] - tt[0]) / span : i / (d.length - 1)) * pw, yy = T + ph - (y - lo) / (hi - lo) * ph; i ? g.lineTo(x, yy) : g.moveTo(x, yy); }); g.stroke();
   }
   dispose() {
+    if (this._hookFly) { this._hookFly.remove(); this._hookFly = null; }
     if (this.pov) this.exitPOV(true);
     if (this.disposed) return;
     if (this.dir) this.dir.dispose(); if (this.cues) this.cues.dispose(); if (this.ops) this.ops.dispose(); if (this.inset) this.inset.dispose(); this.gfx.canvas.removeEventListener('wheel', this.onWheel); removeEventListener('keydown', this.onKey);

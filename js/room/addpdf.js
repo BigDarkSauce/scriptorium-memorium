@@ -46,7 +46,7 @@ const hubOf = app => app.mode && app.mode.constructor && app.mode.constructor.na
 
 // ---- the dialog
 export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null } = {}) {
-  const S = { file: null, split: null, title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true };
+  const S = { file: null, split: null, title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true, deep: false };
   const veil = el('div', { class: 'modal-veil addpdf-veil' }), box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a PDF scroll' });
   veil.append(box); document.body.append(veil);
   const close = () => { preview(hub, null); veil.remove(); removeEventListener('keydown', onKey); };
@@ -151,6 +151,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
       mk('complete', 'Complete chain', 'Every definition, rule, worked example, table, figure, code block and panel item gets its own explained step. Length from the content; never coarser than the PDF.'),
       mk('essential', 'Essential chain', 'The spine: at least one explained step per subsection, keeping everything later steps build on.'),
       el('div', { class: 'ap-level' + (S.level === 'exact' ? ' on' : ''), onclick: e => { if (S.level !== 'exact' && e.target.tagName !== 'INPUT') { S.level = 'exact'; render(); } } }, [radio('exact'), el('label', { class: 'ap-lt', for: 'aplevel-exact', text: 'Exact number of steps' }), el('span', { class: 'ap-ld' }, [N, ` for the whole range (at least ${minN}: one per subsection).`]), alloc]),
+      el('label', { class: 'ap-check ap-deep' }, [el('input', { type: 'checkbox', checked: S.deep, onchange: e => { S.deep = e.target.checked; render(); } }), el('span', {}, [el('b', { text: 'Deepest dive' }), ' (with any of the three): written for a reader with no background who forgets and gets lost. Every claim, assumption, formula and symbol is taken apart down to the principles it rests on and rebuilt from them, step by step, saying why, how and what for. Longer and slower to write.'])]),
       el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.dioramas, onchange: e => { S.dioramas = e.target.checked; } }), ' Build the dioramas each part needs (one per dynamic or spatial idea, more for complex parts)']),
       el('p', { class: 'dim small', text: aiAvailable() ? `Your Claude writes each part${evidenceAvailable() ? ', with your research connectors for sources and extra examples' : ''}; a quality check rewrites any step that pastes the PDF or does not explain, and every paragraph gets a figure.` : 'Claude is not reachable from this view: each part\'s prompt is shown for you to run in any AI and paste back; figures and dioramas are then completed here.' }));
     showAlloc(); nav('Next');
@@ -161,7 +162,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
     const parts = chosenParts(), sh = shelvesOf(app, hub).find(s => s.caseId === (S.place && S.place.caseId));
     body.append(el('div', { class: 'ap-review' }, [
       el('div', {}, [el('b', { text: S.title }), el('span', { class: 'dim', text: ` · ${S.file.name}` })]),
-      el('div', { class: 'dim small', text: `${sh ? sh.title + ', row ' + ((sh.rows.find(r => r.row === S.place.row) || {}).label || '') + ', place ' + (S.place.slot + 1) + (S.place.hang ? ', hanging' : '') : 'a new bookcase'} · pages ${S.from}–${S.to} · ${parts.length} part${parts.length === 1 ? '' : 's'} · ${S.level === 'exact' ? 'exactly ' + S.n + ' steps' : S.level + ' chain'}${S.dioramas ? ' · dioramas' : ''}` })]));
+      el('div', { class: 'dim small', text: `${sh ? sh.title + ', row ' + ((sh.rows.find(r => r.row === S.place.row) || {}).label || '') + ', place ' + (S.place.slot + 1) + (S.place.hang ? ', hanging' : '') : 'a new bookcase'} · pages ${S.from}–${S.to} · ${parts.length} part${parts.length === 1 ? '' : 's'} · ${S.level === 'exact' ? 'exactly ' + S.n + ' steps' : S.level + ' chain'}${S.deep ? ' · deepest dive' : ''}${S.dioramas ? ' · dioramas' : ''}` })]));
     foot.append(btn('Back', () => go(at - 1)), btn('Add without analysing', () => create(false)), btn('Add and analyse', () => create(true), 'primary'));
     async function create(analyse) {
       foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
@@ -175,7 +176,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
       app.saveLib(); toast(`"${b.title}" placed on ${shelf.name}`);
       if (app.sfx) app.sfx.play('unroll', { gain: .45 });
       if (!analyse) { close(); return; }
-      const job = { bookId: id, title: b.title, parts: P.map(p => p.id), level: S.level, n: S.level === 'exact' ? S.n : null, alloc: S.level === 'exact' ? allocateSteps(P, S.n) : null, dioramas: S.dioramas, status: 'pending', range: { from: S.from, to: S.to } };
+      const job = { bookId: id, title: b.title, parts: P.map(p => p.id), level: S.level, n: S.level === 'exact' ? S.n : null, alloc: S.level === 'exact' ? allocateSteps(P, S.n) : null, deep: !!S.deep, dioramas: S.dioramas, status: 'pending', range: { from: S.from, to: S.to } };
       await saveJob(app, job); close(); showProgress(app, job);
     }
   }

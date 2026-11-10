@@ -259,3 +259,16 @@ the hall or a room at rest and untouched for 5 s is drawn at 30 frames a second,
 anything moving (the camera, a tween, an unfold, a drag) at the full rate; the state still updates every frame and any
 input restores the full rate at once. The room's shadow map is redrawn every third frame (every eighth under a scroll)
 and every frame while something flies or unfolds; the hall's only while something moves.
+
+## Round 13
+
+- Painted ceilings by subject (`js/gfx/ceilings.js`): the book room's domes carry an orrery (physics), a cartographer's
+  sky (earth science), compass-and-straightedge constructions (mathematics), a molecular lattice (chemistry), a Galton
+  board and its bell (statistics, markets) or phyllotaxis and leaves (biology); chosen from the bookcase name, else the
+  book and part titles, else the hall's allegorical sky; the room's settings panel overrides it (`data.ceiling`).
+- The diorama's opening hook flies from the caption to its place above the steps when the drawing has turned real,
+  waits there through the tour as a floating copy and merges into the panel's card as the panel comes in.
+- Full-window reading: one centred column of text, with figure rows, showcases and tables breaking out wider on the
+  same axis. Figures' text is set at 12–13.5 px (axis ticks, legends, titles) and the small interface text one step
+  larger; subscripts use lining figures (an old-style 0 read as a ring).
+- Deepest dive and the sub-scroll request: docs/PEDAGOGY.md.
