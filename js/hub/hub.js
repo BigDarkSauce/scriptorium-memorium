@@ -766,6 +766,8 @@ export class Hub {
     this.probe.begin(this.scene, { pos: V3(0, 1.75, R.d * .08), box: new THREE.Box3(V3(-R.w / 2, 0, -R.d / 2), V3(R.w / 2, R.h, R.d / 2)), hide: [this.ghost], fakeGI: L ? L.children.filter(x => x.userData.fakeGI) : [], giScale: .12 });
     this.shadowsDirty = true;
   }
+  // frame budget (main.js loop): the hall at rest, untouched for 5 s, is drawn at 30 frames a second
+  renderFps(idleMs) { return this.opening || this.camTween || this.dragging || this.sdrag || this._arriving || idleMs < 5000 ? 60 : 30; }
   update(dt) {
     if ((this.probeDirty || this.probe.stale()) && !this.dragging && !this.opening && !this.sdrag && !this.probe.busy) this.captureProbe();
     this.probe.step();

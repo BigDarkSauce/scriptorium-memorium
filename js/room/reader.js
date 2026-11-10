@@ -11,6 +11,8 @@ import { chapterPrompt, detailPrompt } from '../ai/prompts.js';
 import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo } from '../ai/pipeline.js';
 import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
+import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
+import { seedHook } from '../seeds-hooks.js';
 import { renderReveal, openDeck, stats as revealStats, normReveal } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
@@ -90,7 +92,7 @@ export class Reader {
   //  .5 for a long text); a fold never ends between a step's head and its first unit, and a new step starts a new fold
   //  once the current one is well filled.
   computeFolds(wrap) {
-    const GLUE = /^(sources|bodies|q-out|num-warn|fig-refs|extras)$/, HEAD = /^(badge|q-in|meta|from|stmt|quote-ref|src-quote)$/;
+    const GLUE = /^(sources|bodies|q-out|num-warn|fig-refs|extras)$/, HEAD = /^(badge|hook-card|q-in|meta|from|stmt|quote-ref|src-quote)$/;
     const weigh = e => 1 + (e.querySelector('.fig-host, .pdf-figs figure, .sketch-card, .svg-slot, .src-table-wrap, .code-step') || /fig-host|pdf-figs|src-table-wrap|code-step/.test(e.className) ? 1 : 0) + ((e.textContent || '').length > 700 ? .5 : 0);
     const units = []; let pre = [];
     for (const c of [...wrap.children]) {
@@ -130,7 +132,7 @@ export class Reader {
     if (k < n) {
       const go = el('button', { class: 'unroll', type: 'button', 'aria-label': `Unfold further: fold ${k + 1} of ${n}`, onclick: () => this.unfold(1) }, [el('span', { class: 'unroll-sheet', 'aria-hidden': 'true' }), el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'Unfold further' }), el('span', { class: 'unroll-prog', text: `fold ${k} of ${n} read` })])]);
       // the curiosity gap at the edge: the question the next fold answers, shown (not answered) on the rod
-      { const nx = this.folds.slice(k).flatMap(f => f.units.map(u => u.els).flat()), q = nx && nx.map(e => e.matches && (e.matches('.q-in, .reveal-card') ? e : e.querySelector && e.querySelector('.q-in, .rv-hook'))).find(Boolean); const t = q && (q.querySelector('.rv-hook') || q).textContent.replace(/^Q\s*/, '').replace(/^Predict, then unfold\s*/, '').trim(); if (t) go.querySelector('.unroll-label').append(el('span', { class: 'unroll-tease', text: 'Next: ' + (t.length > 110 ? t.slice(0, 108).replace(/\s+\S*$/, '') + '…' : t) })); }
+      { const nx = this.folds.slice(k).flatMap(f => f.units.map(u => u.els).flat()), q = nx && nx.map(e => e.matches && (e.matches('.hook-card, .q-in, .reveal-card') ? e : e.querySelector && e.querySelector('.hook-card, .q-in, .rv-hook'))).find(Boolean); const tq = q && (q.querySelector('.hk-text, .rv-hook') || (q.classList.contains('hook-card') ? null : q)), t = tq && tq.textContent.replace(/^Q\s*/, '').replace(/^Predict, then unfold\s*/, '').trim(); if (t) go.querySelector('.unroll-label').append(el('span', { class: 'unroll-tease', text: 'Next: ' + (t.length > 110 ? t.slice(0, 108).replace(/\s+\S*$/, '') + '…' : t) })); }
       bar.append(go, el('div', { class: 'fold-dots', 'aria-hidden': 'true' }, this.folds.map((_, i) => el('i', { class: i < k ? 'on' : '' }))));
     } else bar.append(...[el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null].filter(Boolean));   /* (append(null) would print the word "null" under a one-fold scroll's bar) */
     const mi = this.el.querySelector('.reader-menu-pop'); if (mi) this.fillMenu(mi);
@@ -266,10 +268,13 @@ export class Reader {
   renderChain(A) {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
-    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: mathHTML(A.title || this.part.title) }), A.summary ? el('p', { html: mathHTML(A.summary) }) : null, A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + mathHTML(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: mathHTML(A.title || this.part.title) }), A.summary ? el('p', { html: mathHTML(A.summary) }) : null, this.openHook(A), A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + mathHTML(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
     wrap.append(this.evidenceBar(A)); const cov = this.renderCoverage(A); if (cov) wrap.append(cov); const qual = this.renderQuality(A); if (qual) wrap.append(qual); this.seen3D = new Map(); this._shownPdf = new Map();
     this._breaks = new Set(A.coverageReport ? A.coverageReport.threadBreaks || [] : []); this._numbers = new Map(((A.coverageReport && A.coverageReport.numbers && A.coverageReport.numbers.unmatched) || []).map(u => [u.step, u.values]));
     this._secTitle = new Map(((A.coverageReport && A.coverageReport.sections) || []).map(x => [x.id, x.title]));
+    // hooks (js/room/hooks.js): the opening one and the steps' own, each paid at the step that settles it
+    this._payoffs = new Map(); { const add = (h, where, key) => { const n = normHook(h); if (n && n.resolvedIn) { const L = this._payoffs.get(n.resolvedIn) || []; L.push({ h: n, where, key }); this._payoffs.set(n.resolvedIn, L); } };
+      if (this._openHook) add(this._openHook, 'open', this.hookKey('open')); (A.chain || []).forEach(st => { const h = this.stepHook(A, st); if (h) add(h, 'step', this.hookKey(st.id)); }); }
     (A.chain || []).forEach(st => wrap.append(this.renderStep(st, wrap, A)));
     if (A.references && A.references.length) wrap.append(el('section', { class: 'refs' }, [el('h3', { text: 'References' }), el('ol', {}, A.references.map(r => el('li', {}, [renderSource(r)])))]));
     this._wrap = wrap; this.setupFolds(wrap);
@@ -278,11 +283,18 @@ export class Reader {
     setTimeout(() => { if (wrap.isConnected) { this._typesetReady = true; this.typesetShown(); } }, 1000); setTimeout(() => drawArcs(wrap), 400);
     return wrap;
   }
+  hookKey(where) { return (this.part && this.part.id || 'part') + ':' + where; }
+  hookCtx(A, at, where) { const T = new Map((A.chain || []).map(s => [s.id, s.id + ' ' + (s.title || '')])); return { key: this.hookKey(at), where, jump: id => this.jump(id), stepLabel: id => T.get(id) || id }; }
+  stepHook(A, st) { const h = st.hook || seedHook(A && A.title, st.id); return h && normHook(h) ? h : null; }
+  // the scroll's opening, BEFORE its question: the AI's hook, the example library's, or a partial revelation of the
+  // scroll's own conclusion (true by construction)
+  openHook(A) { const h = (A.hook && normHook(A.hook) ? A.hook : null) || seedHook(A.title, 'open') || fallbackHook(A); this._openHook = h; return h ? renderHook(h, this.hookCtx(A, 'open', 'open')) : null; }
   refreshRevisit() { const b = this.revisitBtn; if (!b) return; revealStats().then(S => { const n = b.querySelector('.rv-n'); if (n) n.textContent = S.due ? ' ' + S.due : ''; b.classList.toggle('due', S.due > 0); b.hidden = !S.loops; }).catch(() => { }); }
   renderStep(st, wrap, A) {
     const kind = String(st.kind || 'result').toLowerCase(); this._curTerms = [...(Array.isArray(st.terms) ? st.terms : []), ...(st.bodies || []).map(b => { const m = String(b).match(/^(.*?)\s*·\s*(.+?)\s+(\S{1,4})$/); return m ? { term: m[3], meaning: m[1] + ' · ' + m[2] } : null; }).filter(Boolean)];   /* "bob · mass m" names the symbol m too */   /* the step's symbols: a figure's "m" is drawn as what m means (glyphs.js) */
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
     art.append(el('div', { class: 'badge', text: KIND_ABBR[kind] || st.id }));
+    { const h = this.stepHook(A, st), hc = h && renderHook(h, this.hookCtx(A, st.id, 'step')); if (hc) art.append(hc); }   /* a turning point's hook comes before its question */
     if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: mathHTML(st.answers) })]));
     art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: mathHTML(st.title) }),
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
@@ -306,6 +318,7 @@ export class Reader {
     if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => { const g = glyphFor(t.meaning, t.icon); return [el('dt', { html: (g ? glyphSVG(g, 15) + ' ' : '') + mathHTML(t.term) }), el('dd', { html: prose(t.meaning) })]; })));
     // the teaching boxes: the paragraph, its animation (the event or process it describes, played out; js/room/motion.js),
     // then its static figure as the summary to keep
+    ((this._payoffs && this._payoffs.get(st.id)) || []).forEach(P => { const e = renderPayoff(P.h, { key: P.key, where: P.where }); if (e) art.append(e); });   /* the hooks this step settles, paid here */
     if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), this.motion(A, st, 'intuition'), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
     if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), this.motion(A, st, 'misconception'), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
     const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
@@ -459,9 +472,9 @@ export class Reader {
     } catch (e) { res.innerHTML = ''; res.append(el('div', { class: 'err', text: evidenceErr(e, 'OpenAlex') })); }
   }
   openDiorama(d, st, img) {
-    if (!img || !img.src) { this.app.openDiorama(d, { title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id }, autoTransition: true }); return; }
+    if (!img || !img.src) { this.app.openDiorama(d, { title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, misconception: st.misconception || '', onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id }, autoTransition: true }); return; }
     const r = img.getBoundingClientRect();
-    this.app.openDiorama(d, { fromRect: r, fromImg: img.src, sketchH: +img.dataset.h || 500, sketchFocus: img.dataset.focus || '', title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id } });
+    this.app.openDiorama(d, { fromRect: r, fromImg: img.src, sketchH: +img.dataset.h || 500, sketchFocus: img.dataset.focus || '', title: d.title || st.title, subtitle: this.part.title + ' · ' + st.id + ' ' + st.title, context: `${st.title}: ${st.statement || ''}`, misconception: st.misconception || '', onSave: () => this.save(), returnTo: { room: this.room.book.id, part: this.part.id } });
   }
   addShowcase(st, demos) {
     const ta = el('textarea', { class: 'field', rows: 3, placeholder: 'Describe what the diorama should show (bodies, variables, events), or leave empty to let AI choose.' });
@@ -525,13 +538,14 @@ export function normalizeChain(A) {
     ...(fig(x.statementFigure) ? { statementFigure: fig(x.statementFigure) } : {}), ...(fig(x.intuitionFigure) ? { intuitionFigure: fig(x.intuitionFigure) } : {}), ...(fig(x.misconceptionFigure) ? { misconceptionFigure: fig(x.misconceptionFigure) } : {}),
     ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}),
     // the explanatory compiler's routing (js/dio/domains.js): the AI's own choice of domain, structure and primitive
-    ...(normReveal(x.reveal) ? { reveal: normReveal(x.reveal) } : {}),
+    ...(normReveal(x.reveal) ? { reveal: normReveal(x.reveal) } : {}), ...(normHook(x.hook) ? { hook: normHook(x.hook) } : {}),
     ...Object.fromEntries(['intuitionMotion', 'misconceptionMotion'].filter(k => x[k] && typeof x[k] === 'object' && !motionIssues(x[k]).length).map(k => [k, x[k]])),   /* an animation that does not check out is dropped, never half drawn */
     ...(x.visual && typeof x.visual === 'object' ? { visual: Object.fromEntries(['domain', 'structure', 'primitive', 'medium', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)])) } : {}) }));
   A.chain.forEach((st, i) => { const x = src[i]; if (st.check && x && x.check && fig(x.check.figure)) st.check.figure = fig(x.check.figure); });
   if (Array.isArray(A.dioramaPlan)) A.dioramaPlan = A.dioramaPlan.filter(p => p && p.subsection != null).map(p => ({ subsection: String(p.subsection), count: Math.max(0, Math.min(3, +p.count || 0)), why: String(p.why || '') }));
   A.references = normSources(A.references);
   if (A.question) A.question = String(A.question);
+  if (A.hook) { const h = normHook(A.hook); if (h) A.hook = h; else delete A.hook; }
   if (!Array.isArray(A.coverage)) A.coverage = []; else A.coverage = A.coverage.filter(c => c && c.subsection != null).map(c => ({ subsection: String(c.subsection), steps: strs(c.steps) }));
   if (!Array.isArray(A.figuresSkipped)) delete A.figuresSkipped;
   return A;

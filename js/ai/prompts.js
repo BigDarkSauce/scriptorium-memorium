@@ -7,6 +7,7 @@
 
 import { revealIssues } from '../room/reveal.js';
 import { motionIssues } from '../room/motion.js';
+import { hookIssues } from '../room/hooks.js';
 import { EVIDENCE_RULES } from './evidence.js';
 import { FIGURE_KINDS, FIGURE_USES, validateFigure, figureSlots, TEXT_HEAVY, isPrimitive } from '../room/figspec.js';
 import { classifyStep, ROUTES, DOMAINS, STRUCTURES, PRIMITIVES, PRIMITIVE_KINDS } from '../dio/domains.js';
@@ -77,7 +78,7 @@ CODE API (spec.code is the body of function(api), no imports/DOM/network):
  api.body(id) -> Object3D of a body; api.bodies(); api.param(key); api.set(key,value); api.p (live values)
  api.onStep((h,t)=>{}) physics substep h≈1/480 s (integrate here: semi-implicit Euler or RK4); api.onFrame((dt,t)=>{}) once per frame (move meshes here)
  api.event(text, Vector3|null, {id:"turning"}) logs + flashes; lessons can wait for it with "until":"event:turning"
- api.readout(name, ()=>number|string); api.plot(name, ()=>number) live sparkline; api.label(text, ()=>Vector3, describe) adds a significant body for the tour
+ api.readout(name, ()=>number|string) (a number's unit goes in the name, "speed (m/s)", or after the value in a string, "2.4 m/s"; never a bare number for a dimensioned quantity); api.plot(name, ()=>number) live chart whose name is its y-axis title, "quantity (unit)" ("bob height (m)"); api.label(text, ()=>Vector3, describe) adds a significant body for the tour
  api.spawn(bodySpec, parent?) -> Object3D at runtime; api.remove(obj); api.shape(shapeSpec, materialSpec) -> Object3D (not added); api.material(spec)
  api.onClick(raycaster=>{}); api.camera({target:[x,y,z], r:distance, ph:polar, th:azimuth}); api.time(); api.THREE (three.js r170); api.V3(x,y,z); api.noise(x,y,z); api.rand(); api.fmt(n); api.clamp; api.lerp
  api.trail(maxPoints, hex) -> line with .add(vec3) (add it to api.world); api.world (Group)
@@ -251,12 +252,16 @@ DOMAINS: ${DOMAINS.join(', ')}. STRUCTURES → primitive (medium): ${STRUCTURES.
 export const FIGURE_SPEC = `FIGURE (a JSON drawing the app renders; every figure has "kind" and "caption" (what to see, ≤ 25 words); optional "animate":true for a short loop (or, on a plot, {"param":"a","from":0.1,"to":1,"period":4}); data from the PDF gives "ref", data from outside gives "extra":[{what,source}]). Kinds:
 ${FIGURE_KINDS.map(k => ` ${k}: ${FIGURE_USES[k]}`).join('\n')}
 Fields: flow{nodes:[{id,label,note?}],edges:[{from,to,label?}],dir:"LR|TB"} · plot{x:[a,b],y:[a,b]?,curves:[{expr,label}],points:[[x,y,"label"?]],vlines:[{x,label}],hlines:[{y,label}],shade:{expr?,from,to,label},xlabel,ylabel} (expr in x and the animate param; sin cos exp log sqrt abs pow min max) · distribution{dist:"normal|t|chisq|binomial|poisson|uniform|exponential",params:{mean,sd | df | size,prob | lambda | min,max | rate},shade:{from?,to?,label},marks:[{x,label}],xlabel} · bars{categories:[…],series:[{name,values:[…]}],highlight:[i],xlabel,ylabel} or bars{table:{columns,rows}} (a table turned into a chart) · hist{values:[…] | bins:[{from,to,count}],xlabel} · scatter{points:[[x,y,"label"?]],fit:"ols"|{slope,intercept},residuals:bool,logx:bool,xlabel,ylabel} · boxplot{groups:[{label,values:[…]} | {label,min,q1,median,q3,max,outliers:[…]}],ylabel} · numberline{min,max,step?,points:[{x,label,open?}],intervals:[{from,to,label,closedL,closedR}]} · tree{root:{label,children:[{label,edge,children}]}} · venn{sets:["A","B"],regions:{"A":str,"B":str,"AB":str},shade:["AB"],universe?} · timeline{events:[{t,label}]} · sketch{w:100,h:60,items:[{shape:"rect|circle|ellipse|line|arrow|text|path",x,y,w,h,r,x2,y2,d,text,tone:"accent|muted|ok|warn"}]} · codetrace{lang,lines:[{code,note,state:{var:value}}],output:[…]} · table{columns,rows,highlight:[[r,c]]} · contrast{wrong:{title,text},right:{title,text}} · pdf{id:"fig-…"} (the PDF's own figure; at most once in the whole chain).
-AXES: every plot, bars, hist, scatter, boxplot, distribution and numberline names each axis as "quantity (unit)" once (xlabel, ylabel: "release angle θ (°)", "restoring force (N)"; a pure number says so: "(ratio)", "(count)", "(share)"); categories and points carry bare numbers ("10", "20", not "10°", "20°"); a bare unit ("N") is not a title.
+AXES: every plot, bars, hist, scatter, boxplot, distribution and numberline (and every primitive with an axis: data_narrative "ylabel", distribution_lab "xlabel"/"unit", control_loop "unit"; every diorama param's "unit", readout and live chart) names each axis as "quantity (unit)" once (xlabel, ylabel: "release angle θ (°)", "restoring force (N)"; a pure number says so: "(ratio)", "(count)", "(share)"); categories and points carry bare numbers ("10", "20", not "10°", "20°"); a bare unit ("N") is not a title.
 ${PRIMITIVE_FIELDS}`;
 
-export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
+// Revelation techniques, the curiosity family (js/room/hooks.js; docs/research/revelation-techniques.md)
+export const HOOK_SPEC = `HOOK (a curiosity opening: it makes the reader WANT the answer before the scroll gives it). {"technique":"partial|anomaly|impossible|predict|consequence","text":"…","resolvedIn":"the id of the step that settles it","payoff":"one sentence said at that step that closes the gap, with its numbers"}:
+ partial = the scroll's key result with its decisive piece veiled: add "parts":["lead-in ",{"hide":"the veiled piece"},"."] · anomaly = a real observation the reader's current idea cannot explain (with its numbers) · impossible = something true that sounds as if it cannot be · predict = a question the reader commits to before reading on: add "options":[{"text","correct":true|false,"why"}] (2–4, exactly one correct, the wrong ones the real misconceptions; the answer is NOT given in the hook) · consequence = an effect shown in full with its cause held back.
+ Choose the technique that fits the content (a surprising invariance → anomaly; a paradox → impossible; a quantitative outcome people misjudge → predict; a striking effect → consequence; a result whose form is the point → partial). Every hook is TRUE, checkable, and paid: "resolvedIn" names a step that really explains it. Besides the scroll's opening, give "hook" to 1–3 turning-point steps (where the explanation changes direction), each settled at or after its own step. A 3D diorama may carry "hook" with "lesson":"the title of the lesson that settles it" instead of "resolvedIn".`;
+export const CHAIN_FORMAT = `{"title":str,"summary":"one sentence","hook":HOOK (the scroll's opening, shown BEFORE its question),"question":"the question the whole part answers","sourceNote":"coverage/limits or empty",
  "chain":[{"id":"S1","section":"the id of the ONE subsection this step covers, e.g. 1.2","kind":"definition|axiom|postulate|lemma|theorem|derivation|formula|result|example|remark","title":str,
-   "answers":"the question this step settles","opens":"the question it raises next (the next step's answers, word for word)",
+   "hook":HOOK (only on 1–3 turning-point steps),"answers":"the question this step settles","opens":"the question it raises next (the next step's answers, word for word)",
    "ref":"where it is in the PDF: Eq. (1.3), Example 1.2, Table 1.1, p. 4","pages":[n],
    "statement":"the claim of this step in one or two sentences, in your own words, with $inline LaTeX$","math":"display LaTeX or empty","derivation":[{"expr":"LaTeX","why":"short reason"}],
    "explain":[{"text":"one paragraph (≤ 90 words) that explains, in your own words, how and why","figure":FIGURE}] (2–4 paragraphs; every paragraph of 60 words or more carries a "figure"),
@@ -431,6 +436,7 @@ ${SHAPE_EXAMPLE}
 ${SELF_CHECK}
 
 Return ONLY JSON, no prose before or after, in this shape:
+${HOOK_SPEC}
 ${CHAIN_FORMAT}
 Escape LaTeX backslashes in JSON strings (\\\\frac).
 PART TEXT (subsections marked "=== [id] title (pages) ==="):
@@ -740,9 +746,13 @@ export function qualityGate(A, sections = [], figures = []) {
   // 10. the Revelation Engine's truth constraint (js/room/reveal.js): a revealed rule ships with its boundary case
   chain.forEach(st => revealIssues(st).forEach(d => add(st, 'reveal', d)));
   chain.forEach(st => stepFigures(st).forEach(f => { const k = f && (f.kind || f.type); if (!['plot', 'bars', 'hist', 'scatter', 'boxplot'].includes(k)) return; const bare = t => !t || /^\(?[^\s()]{1,9}\)?$/.test(String(t).trim()); if ((k !== 'bars' && k !== 'boxplot' && bare(f.xlabel)) || (k !== 'hist' && bare(f.ylabel))) add(st, 'axes', `a ${k} figure needs axis titles "quantity (unit)"`); }));   /* every axis names its quantity and unit once */
+  // 11. revelation hooks: a hook is a promise the scroll keeps (js/room/hooks.js)
+  if (!A.hook) issues.push({ step: null, section: null, kind: 'hook', detail: 'the scroll has no opening "hook" (a curiosity technique shown before its question)' });
+  else hookIssues(A.hook, chain).forEach(d => issues.push({ step: null, section: null, kind: 'hook', detail: d }));
+  chain.forEach(st => { if (st.hook) hookIssues(st.hook, chain, st.id).forEach(d => add(st, 'hook', d)); });
   chain.forEach(st => ['intuitionMotion', 'misconceptionMotion'].forEach(k => { if (st[k]) motionIssues(st[k]).slice(0, 2).forEach(d => add(st, 'motion', k + ': ' + d)); }));
   const stats = { steps: chain.length, copied: issues.filter(i => i.kind === 'copied').length, figures: chain.reduce((a, st) => a + figureSlots(st).filter(x => x.fig).length, 0), slots: chain.reduce((a, st) => a + figureSlots(st).length, 0) };
-  return { ok: !issues.some(i => i.kind !== 'dioramas' && i.kind !== 'grammar'), issues, fixed, stats };
+  return { ok: !issues.some(i => i.kind !== 'dioramas' && i.kind !== 'grammar' && i.kind !== 'hook'), issues, fixed, stats };
 }
 // Which steps a repair call must rewrite (copied, duplicate, longQuote, unexplained, codeUnexplained); figure-only gaps go
 // to figuresPrompt; missing subsections to followUpPrompt; dioramas to the diorama stage.
@@ -866,6 +876,8 @@ ${req.plan ? 'DIDACTIC PLAN (written first; follow it): ' + JSON.stringify(req.p
 Ground the physics and any numbers (constants, rates, sizes, prices) in the literature: when search tools are available, look up the governing law and realistic parameter values first; put what you used in a top-level "sources" array (title, authors, year, doi, note) and never invent a DOI. Values that are not in the study step are additions from outside the book: list them in a top-level "extra" array ({what, source}).
 ${SCENE_SPEC}
 ${EXPLAINER_RULES}
+OPENING HOOK: give the scene a "hook" ({"technique","text","lesson":"title of the lesson that settles it","payoff"}; see HOOK) shown over the drawing before it turns real, and "experiments":[{"set":{param:value},"watch":"readout name","why":"what this run can show that the others cannot"}] (2–5) for the guided laboratory.
+${HOOK_SPEC}
 IF THE IDEA IS NOT SPATIAL (an argument, rival explanations, a business model, a feedback loop, a transformation, a distribution, a data series, a search, a build-up, a state machine): a 3D scene would be decoration. Return instead {"type":"figure","title":str,"purpose":str,"figure":PRIMITIVE} with the primitive of its structure:
 ${PRIMITIVE_FIELDS}
 Return ONLY the JSON scene spec (or that figure).`;

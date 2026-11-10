@@ -234,3 +234,28 @@ own (`intuitionMotion`, `misconceptionMotion`, written by the AI with the scroll
 example library's (`js/seeds-motion.js`). A contrast plays the mistaken world beside the real one. Controls: play,
 scrub, replay, ♪ (sonification), GIF (`js/room/gif.js`), and "3D ▸" when the step has a diorama. Rationale and sources:
 docs/research/motion-figures.md.
+
+## Revelation techniques and the laboratory (round 12)
+
+`js/room/hooks.js` is a library of ways to reveal knowledge (not transitions or effects), in six families; the curiosity
+family is rendered in full: partial revelation, anomaly, apparent impossibility, prediction invitation and unexplained
+consequence. A hook is `{technique, text, parts?, options?, resolvedIn, payoff}`; every scroll opens with one before its
+question (the AI's `A.hook`, `js/seeds-hooks.js`, or a partial revelation of its own conclusion), turning-point steps
+may carry their own, and the step named by `resolvedIn` shows the payoff. Dioramas open with one over the drawing
+(`spec.hook`, else `DIO_HOOKS` by title or type) that is paid with the step it names (`lesson`). The gate refuses a hook
+without a payoff, settled at a missing step or before it is asked (`hookIssues`; non-blocking kind `hook`).
+
+`js/dio/lab.js` is the diorama's Lab tab: guided discovery (the guide proposes informative experiments with their
+reasons, predict / accept / skip / another) and the open laboratory (all sliders, "Record a run", the guide's next
+choice still visible), with one notebook of findings computed from the readouts. Evidence and scoring:
+`docs/research/revelation-techniques.md`. The readouts panel (bottom right) folds to its title bar (`foldReads`,
+remembered).
+
+## Frame budget (round 12)
+
+The renderer starts at a resolution its GPU tier can hold (high 1.5, medium 1.25, low 1 × device pixels; `adapt()`
+raises or lowers it from measured frame times). The main loop asks the place for a frame rate (`renderFps(idleMs)`):
+the hall or a room at rest and untouched for 5 s is drawn at 30 frames a second, a room under an open scroll at 20, and
+anything moving (the camera, a tween, an unfold, a drag) at the full rate; the state still updates every frame and any
+input restores the full rate at once. The room's shadow map is redrawn every third frame (every eighth under a scroll)
+and every frame while something flies or unfolds; the hall's only while something moves.

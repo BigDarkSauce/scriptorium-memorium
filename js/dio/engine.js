@@ -21,6 +21,9 @@ import { Cues, cloneMat } from './focus.js';
 import { Inset } from './inset.js';
 import { Ops } from './grammar.js';
 import { DIO } from './models.js';
+import { renderHook, renderPayoff, normHook } from '../room/hooks.js';
+import { dioHook } from '../seeds-hooks.js';
+import { Lab } from './lab.js';
 const PREFS_KEY = 'scriptorium.view';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
 const savePrefs = p => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { } };
@@ -85,15 +88,20 @@ export class DioramaView {
     requestAnimationFrame(() => { img.classList.add('go'); Object.assign(img.style, { left: ((innerWidth - Wd) / 2) + 'px', top: '0px', width: Wd + 'px', height: H + 'px' }); });
     setTimeout(() => { img.classList.add('fade'); setTimeout(() => img.remove(), 900); if (this.opts.autoTransition !== false) setTimeout(() => this.transition(), 700); }, 1100);
   }
+  // the diorama's opening hook (js/room/hooks.js): a curiosity card over the drawing, kept up while it turns real; it is
+  // paid when the step that settles it has played (hookLesson)
+  hook() { if (this._hook === undefined) { const h = normHook(dioHook(this.spec)); this._hook = h || null; } return this._hook; }
+  hookLesson() { const h = this.hook(); if (!h || h.lesson == null) return -1; const L = this.lessons() || []; if (typeof h.lesson === 'number') return h.lesson < L.length ? h.lesson : -1; const k = String(h.lesson).toLowerCase(); return L.findIndex(l => l && String(l.title || '').toLowerCase() === k); }
+  hookEl() { const h = this.hook(); if (!h || this.hookLesson() < 0) return null; if (!this._hookEl) { const L = this.lessons(), i = this.hookLesson(); this._hookEl = renderHook(h, { key: 'dio:' + (this.spec.title || this.spec.type), where: 'dio' }); if (this._hookEl) { this._hookEl.classList.add('hk-dio'); this._hookEl.append(el('div', { class: 'hk-where', text: 'Settled in step ' + (i + 1) + ': ' + mathText(L[i].title || '') })); } } return this._hookEl; }
   showSketchCoach() {
     this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', mathLabel: this.title })]),
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'The drawing' }), el('div', { class: 'coach-text', mathLabel: this.title }), this.hookEl()]),
       el('button', { class: 'btn primary', text: 'Transition', onclick: () => this.transition() }));
     this.coach.hidden = false;
   }
   transition(duration = 6.5) {
     if (this.stage !== 'sketch') return; this.stage = 'materialize'; this.coach.innerHTML = '';
-    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', mathLabel: this.title })]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
+    this.coach.append(el('div', { class: 'coach-main' }, [el('div', { class: 'coach-kicker', text: 'Materialising' }), el('div', { class: 'coach-text', mathLabel: this.title }), this.hookEl()]), el('button', { class: 'btn ghost', text: 'Skip', onclick: () => { this.tm = duration; } }));
     this.tm = 0; this.tmDur = duration; this.ds.playing = true; this.ds.speed = .6;
   }
   endMaterialize() {
@@ -171,6 +179,7 @@ export class DioramaView {
   }
   renderLessons() {
     const L = this.lessons(), box = this.lessonBox; box.innerHTML = '';
+    { const he = this.stage !== 'sketch' && this.stage !== 'materialize' && this.lessonI <= this.hookLesson() && this.hookEl(); if (he) box.append(he); }   /* the opening hook stays above the steps until it is paid */
     L.forEach((l, i) => {
       // later steps are listed too (number and title, dimmed), so the way ahead never disappears; any can be played
       if (i > this.lessonI) { box.append(el('div', { class: 'lesson upcoming in' }, [el('div', { class: 'lesson-head' }, [el('span', { class: 'lesson-n', text: String(i + 1) }), el('b', { html: mathHTML(l.title || 'Step ' + (i + 1)) }), el('button', { class: 'btn ghost small lesson-skip', text: 'Play', title: 'Play this later step now', disabled: this.running != null, onclick: () => this.runLesson(i) })])])); return; }
@@ -179,6 +188,7 @@ export class DioramaView {
         l.question ? el('div', { class: 'lesson-q', html: '<b>Q</b> ' + mathHTML(l.question) }) : null,
         el('div', { class: 'lesson-text', html: mathHTML(l.text || '') }),
         done && l.explain ? el('div', { class: 'lesson-explain', html: mathHTML(l.explain) }) : null,
+        done && i === this.hookLesson() ? renderPayoff(this.hook(), { where: 'open' }) : null,   /* the opening hook, paid */
         done && l.opens ? el('div', { class: 'lesson-opens', html: '→ ' + mathHTML(l.opens) }) : null,
         done && l.explainBack ? el('div', { class: 'lesson-explain', html: '<b>Say it back:</b> ' + mathHTML(l.explainBack) }) : null,
         // predict, then play (Crouch et al. 2004; Miller et al. 2013): a step that names its outcomes asks first, and
@@ -203,7 +213,7 @@ export class DioramaView {
       pick == null ? el('button', { class: 'linkbtn small', type: 'button', text: 'Just play it', onclick: () => { P.set(i, -1); this.renderLessons(); } }) : null]);
   }
   runLesson(i, replay) {
-    const l = this.lessons()[i]; if (!l) return;
+    const l = this.lessons()[i]; if (!l || (this.lab && this.lab.cur)) return;   /* one thing at a time: a laboratory run finishes first */
     this.ops.reset(); if (this.dir.cinematic && l.compare && typeof l.compare === 'object') this.ops.startCompare(l.compare, l);   // a comparison builds its second state before the step's own values are set
     if (l.reset !== false && i === this.lessonI) { /* keep state continuous */ }
     if (l.set) { for (const k in l.set) this.setParam(k, +l.set[k], true); this.renderParams(); }
@@ -259,6 +269,7 @@ export class DioramaView {
     // what the model is doing right now, under the sliders that cause it (newest first)
     this.dynBox = el('div', { class: 'dyn-box' }, [el('h4', { text: 'Dynamic changes' }), this.dynList = el('ul', { class: 'dyn-list' })]);
     box.append(this.dynBox); (this._dyn || []).forEach(d => this.dynList.append(this.dynItem(d)));
+    if (this.ds.ranges && Object.keys(this.ds.ranges).length) { if (!this.lab) this.lab = new Lab(this); this.lab.render(box); }   /* guided discovery or the open laboratory, above the sliders (lab.js) */
   }
   dynItem(d) { return el('li', { class: 'dyn-item' + (d.fresh ? ' fresh' : '') }, [el('time', { text: d.clock }), el('span', { html: mathHTML(d.text, 'label') })]); }
   pushDyn(ev) {
@@ -449,7 +460,7 @@ export class DioramaView {
     const tabs = el('div', { class: 'tabs' }), sections = { Instructions: this.lessonBox, Variables: this.paramBox, Objects: this.objBox };
     const srcs = Array.isArray(this.spec.sources) ? this.spec.sources.filter(x => x && (x.title || x.doi)) : [];
     if (srcs.length) sections.Sources = el('div', { class: 'dio-sources' }, [el('p', { class: 'dim small', text: 'The laws and values this diorama is built on:' }), el('ol', {}, srcs.map(x => el('li', {}, [renderSource(x)])))]);
-    Object.keys(sections).forEach((n, i) => { const b = el('button', { class: 'tab', role: 'tab', 'aria-selected': i === 0 ? 'true' : 'false', text: n === 'Instructions' ? 'Steps' : n, 'data-t': n, title: n, onclick: () => { this.tab = n; b.classList.remove('ping'); tabs.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', 'false')); b.setAttribute('aria-selected', 'true'); Object.values(sections).forEach(s => s.hidden = true); sections[n].hidden = false; } }); tabs.append(b); if (i) sections[n].hidden = true; });
+    Object.keys(sections).forEach((n, i) => { const b = el('button', { class: 'tab', role: 'tab', 'aria-selected': i === 0 ? 'true' : 'false', text: n === 'Instructions' ? 'Steps' : n === 'Variables' ? 'Lab' : n, 'data-t': n, title: n, onclick: () => { this.tab = n; b.classList.remove('ping'); tabs.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', 'false')); b.setAttribute('aria-selected', 'true'); Object.values(sections).forEach(s => s.hidden = true); sections[n].hidden = false; } }); tabs.append(b); if (i) sections[n].hidden = true; });
     this.fold = el('button', { class: 'ibtn fold', title: 'Fold the panel', 'aria-label': 'Fold panel', text: '‹', onclick: () => { this.panel.classList.toggle('folded'); this.fold.textContent = this.panel.classList.contains('folded') ? '›' : '‹'; } });
     this.panel = el('aside', { class: 'dio-panel glass', hidden: true }, [el('div', { class: 'panel-head' }, [tabs, this.fold]), el('div', { class: 'panel-body' }, Object.values(sections))]);
     u.append(this.panel);
@@ -465,11 +476,16 @@ export class DioramaView {
     this.reads = el('div', { class: 'reads' }); this.spark = el('canvas', { class: 'spark', width: 440, height: 110 }); this.sparkCap = el('div', { class: 'spark-cap' }); this.evlog = el('ul', { class: 'evlog' });   // the chart's caption is HTML, so it wraps instead of being cut at the canvas edge
     // readouts stay small by default (six values) so they don't cover the model; one click shows all of them
     this.readMore = el('button', { class: 'reads-more', onclick: () => { this.prefs.readsAll = !this.prefs.readsAll; savePrefs(this.prefs); this._rt = 0; } });
-    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.reads, this.readMore, this.sparkCap, this.spark, this.evlog]); u.append(this.readPanel);
+    // the readouts fold to a small tab (bottom right) so the model can have the whole frame; the choice is remembered
+    this.readFold = el('button', { class: 'ibtn reads-fold', title: 'Fold the readouts', 'aria-label': 'Fold readouts', 'aria-expanded': 'true', onclick: () => this.foldReads(!this.readPanel.classList.contains('folded')) });
+    this.readHead = el('div', { class: 'reads-head' }, [el('span', { class: 'reads-title', text: 'Readouts' }), this.readFold]);
+    this.readPanel = el('div', { class: 'dio-reads glass' }, [this.readHead, this.reads, this.readMore, this.sparkCap, this.spark, this.evlog]); u.append(this.readPanel); this.foldReads(!!this.prefs.readsFolded, true);
     this.ticker = el('div', { class: 'ticker' }); u.append(this.ticker);
     this.editBar = el('div', { class: 'edit-bar glass', hidden: true }); u.append(this.editBar);
     this.syncTimeUI();
   }
+  foldReads(on, quiet) { const P = this.readPanel; P.classList.toggle('folded', on); this.readFold.innerHTML = on ? '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+    this.readFold.title = on ? 'Show the readouts' : 'Fold the readouts'; this.readFold.setAttribute('aria-expanded', String(!on)); this._pr = 0; if (!quiet) { this.prefs.readsFolded = on; savePrefs(this.prefs); this._rt = 0; } }
   // actors whose names appear in a sentence (for links and framing)
   namesIn(text, except) { const t = String(text || '').toLowerCase(); return this.ds.actors.filter(a => a !== except && a.name && a.name.length > 2 && t.includes(a.name.toLowerCase().split(' · ')[0])); }
   setPref(k, v) { this.prefs[k] = v; savePrefs(this.prefs); if (k === 'motion' && this.calmBtn) { this.calmBtn.setAttribute('aria-pressed', String(v === 'reduced')); return; } this.ui && this.ui.querySelectorAll(`[data-pref="${k}"]`).forEach(b => b.setAttribute('aria-pressed', String(!!v))); if (this.dir) { if (k === 'cinematic') { this.dir.cinematic = v; if (!v) { this.dir.clear(); this.dir.endShots(); this.cues.reset(); this.ops.reset(); } } if (k === 'guides') this.dir.guides = v; if (k === 'pace') this.dir.pace = v; } }
@@ -675,6 +691,7 @@ export class DioramaView {
     else if (this.pov) this.updatePOV(dt);
     else if (this.controls.enabled) this.controls.update();
     this.cues.preStep(); this.ops.preStep(); const opk = this.ops.simRate(); ds.step(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale * opk); this.ops.stepB(this.stage === 'sketch' ? 0 : dt * this.dir.timeScale * opk); this.ops.update(dt);   // an exploded view or a lineup freezes the simulation (opk = 0)
+    if (this.lab && this.stage === 'explore') this.lab.tick();
     if (this.awaitIdle) { this.awaitT = (this.awaitT || 0) + dt; if ((this.dir.idle() && !this.dir.busy()) || this.awaitT > 15) { this.awaitIdle = false; this.runT = this.runDur; } }
     if (this.running != null) { if (!this.awaitIdle) this.runT += dt * ds.speed * this.dir.timeScale * opk; if (this.runBar) this.runBar.style.width = Math.min(100, this.runT / this.runDur * 100) + '%'; if (this.runT >= this.runDur) { this._busyT = this.dir.busy() || this.ops.busy() ? (this._busyT || 0) + dt : 0; if (this._busyT === 0 || this._busyT > 12) { this._busyT = 0; this.completeLesson(); } } }   // a zoom, ride or bracket still on its way finishes first (at most 12 s more)
     this.flashes = this.flashes.filter(f => { f.a += dt; f.s.scale.setScalar(.3 + f.a * 2.4); f.s.material.opacity = Math.max(0, 1 - f.a / 1.1); if (f.a > 1.1) { f.s.removeFromParent(); f.s.material.dispose(); return false; } return true; });
@@ -732,6 +749,7 @@ export class DioramaView {
   // are the caption above, the plot's own name), model time along the bottom ("−8 s … now"); a histogram shows its bin
   // range and its tallest count. Drawn at the canvas's on-screen size, so text is never stretched.
   drawSpark() {
+    if (this.readPanel.classList.contains('folded')) return;   /* folded: nothing to draw */
     const c = this.spark, ds = this.ds, dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.max(120, c.clientWidth || 300), ch = Math.max(50, c.clientHeight || 78);
     if (c.width !== Math.round(cw * dpr) || c.height !== Math.round(ch * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
     const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);

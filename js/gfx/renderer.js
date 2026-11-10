@@ -61,7 +61,7 @@ export class Gfx {
     c.addPass(this.renderPass);
     // AAA: procedural surfaces + quality level (see js/gfx/aaa.js). Both composer buffers carry a depth texture, so
     // the atmosphere pass (height fog + god rays, linear HDR, before bloom and AgX) can reconstruct world positions.
-    initAAA(r); { const d = detectQuality(r); this.gpu = d.gpu; setAAAQuality(d.quality); }
+    initAAA(r); { const d = detectQuality(r); this.gpu = d.gpu; setAAAQuality(d.quality); this.dpr = Math.min(this.maxDpr, { high: 1.5, medium: 1.25, low: 1 }[d.quality] || 1.25); r.setPixelRatio(this.dpr); }   /* integrated and software GPUs start at a resolution they can hold; adapt() raises it when frames are fast */
     [c.renderTarget1, c.renderTarget2].forEach(t => { t.depthTexture = new THREE.DepthTexture(2, 2); t.depthTexture.type = THREE.UnsignedIntType; });
     this.atmos = new AtmospherePass(); this.atmos.enabled = false; this.atmos.configure(AAA.Q); c.addPass(this.atmos);
     this.outline = new OutlinePass(new THREE.Vector2(2, 2), this.renderPass.scene, this.renderPass.camera);

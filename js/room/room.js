@@ -537,7 +537,11 @@ export class BookRoom {
     this.flyTo(p0, c0, 1.2, () => { this.unfold = { st, bay, k: 0, c: c1, n, c0, c1, p0, p1 }; });
   }
   // ---------- frame ----------
+  // frame budget (main.js loop): under an open scroll the room is a backdrop (20 frames a second); at rest and untouched
+  // for 5 s, 30; moving, unfolding or flying, every frame
+  renderFps(idleMs) { if (this.anim || this.unfold) return 60; if (this.reader) return 20; return idleMs < 5000 ? 60 : 30; }
   update(dt, t) {
+    { const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false; this._shF = (this._shF || 0) + 1; if (this.anim || this.unfold || this._shF % (this.reader ? 8 : 3) === 0) sm.needsUpdate = true; }   /* the room's shadows: only the turning card models move them, slowly */
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
@@ -563,6 +567,6 @@ export class BookRoom {
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
-    this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.releaseFigures(); this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.gfx.renderer.shadowMap.autoUpdate = true; this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.releaseFigures(); this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }

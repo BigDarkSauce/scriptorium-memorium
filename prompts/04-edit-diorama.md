@@ -57,7 +57,7 @@ CODE API (spec.code is the body of function(api), no imports/DOM/network):
  api.body(id) -> Object3D of a body; api.bodies(); api.param(key); api.set(key,value); api.p (live values)
  api.onStep((h,t)=>{}) physics substep h≈1/480 s (integrate here: semi-implicit Euler or RK4); api.onFrame((dt,t)=>{}) once per frame (move meshes here)
  api.event(text, Vector3|null, {id:"turning"}) logs + flashes; lessons can wait for it with "until":"event:turning"
- api.readout(name, ()=>number|string); api.plot(name, ()=>number) live sparkline; api.label(text, ()=>Vector3, describe) adds a significant body for the tour
+ api.readout(name, ()=>number|string) (a number's unit goes in the name, "speed (m/s)", or after the value in a string, "2.4 m/s"; never a bare number for a dimensioned quantity); api.plot(name, ()=>number) live chart whose name is its y-axis title, "quantity (unit)" ("bob height (m)"); api.label(text, ()=>Vector3, describe) adds a significant body for the tour
  api.spawn(bodySpec, parent?) -> Object3D at runtime; api.remove(obj); api.shape(shapeSpec, materialSpec) -> Object3D (not added); api.material(spec)
  api.onClick(raycaster=>{}); api.camera({target:[x,y,z], r:distance, ph:polar, th:azimuth}); api.time(); api.THREE (three.js r170); api.V3(x,y,z); api.noise(x,y,z); api.rand(); api.fmt(n); api.clamp; api.lerp
  api.trail(maxPoints, hex) -> line with .add(vec3) (add it to api.world); api.world (Group)
