@@ -1085,3 +1085,6 @@ body:has(.title-ui) .sound-btn, body:has(.title-ui) .gfx-btn { z-index: 6; }
 .gs-spine { width: 10px; height: 44px; border-radius: 3px; } .gs-main { display: grid; gap: 3px; } .gs-main b { font-size: 16px; color: var(--ink); font-weight: 500; }
 .gs-itags { display: flex; gap: 4px; flex-wrap: wrap; } .gs-itags i { font: normal 11px var(--f-mono); padding: 1px 7px; border-radius: 10px; background: rgba(255,217,138,.1); color: var(--brass); }
 .gs-go { font: 12px var(--f-mono); color: var(--brass-hi); }
+/* the map steps aside while a scroll is open (the sheet docks over that edge) and during camera moves, like the graphics button */
+body:has(.reader:not([hidden])) .map-btn, body:has(.reader:not([hidden])) .map-card { display: none; }
+body.cine .map-btn, body.cine .map-card { opacity: 0 !important; pointer-events: none !important; }
