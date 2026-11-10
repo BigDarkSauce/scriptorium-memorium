@@ -902,3 +902,30 @@ button.rv-opt:hover { background: #fff; border-color: #b98a45; }
 .ev-kind.ek-effect, .ev-kind.ek-method, .ev-kind.ek-visual { color: var(--verdigris); } .ev-kind.ek-inspiration { color: #8f733a; border-style: dashed; }
 .dio-sources .ev-kind { color: #ffd98a; }
 @media (max-width: 760px) { .dio-panel .tab { padding: 6px 6px; font-size: 10.5px; letter-spacing: 0; } .dio-panel .tabs { gap: 1px; } }
+
+/* motion figures (js/room/motion.js): the teaching box's process, played out */
+.mo-host { margin: 2px 0 2px; }
+.motion { margin: 0; background: #fbf6ea; border: 1px solid rgba(143,115,58,.42); border-radius: 10px; padding: 7px 8px 5px; }
+.mo-stages { display: flex; gap: 8px; flex-wrap: wrap; }
+.mo-stage { flex: 1 1 180px; min-width: 0; border-radius: 7px; }
+.mo-stage.wrong { background: rgba(156,58,40,.055); box-shadow: inset 0 0 0 1px rgba(156,58,40,.32); }
+.mo-stage.right { background: rgba(63,125,110,.065); box-shadow: inset 0 0 0 1px rgba(63,125,110,.38); }
+.mo-title { font: 600 12.5px/1.2 var(--f-body); padding: 5px 9px 0; }
+.mo-stage.wrong .mo-title { color: var(--rubric); } .mo-stage.right .mo-title { color: var(--verdigris); }
+.mo-svg { display: block; width: 100%; height: auto; }
+.mo-cap { min-height: 1.45em; margin: 0; padding: 5px 3px 1px; font: italic 14px/1.45 var(--f-italic); color: var(--iron); }
+.mo-cap.in { animation: moCap .45s var(--ease); }
+@keyframes moCap { from { opacity: 0; transform: translateY(3px); } }
+.mo-bar { display: flex; align-items: center; gap: 6px; padding-top: 3px; }
+.mo-btn { flex: none; min-width: 26px; height: 24px; padding: 0 6px; border-radius: 12px; border: 1px solid var(--vellum-edge); background: rgba(236,223,195,.55); color: var(--iron); font: 11px var(--f-mono); cursor: pointer; }
+.mo-btn:hover { background: var(--vellum); } .mo-btn:disabled { opacity: .6; cursor: progress; }
+.mo-track { position: relative; flex: 1; min-width: 60px; display: flex; align-items: center; }
+.mo-scrub { width: 100%; margin: 0; accent-color: #8f733a; height: 16px; }
+.mo-ticks { position: absolute; left: 7px; right: 7px; top: -1px; height: 4px; pointer-events: none; }
+.mo-ticks i { position: absolute; top: 0; width: 2px; height: 4px; margin-left: -1px; background: rgba(143,115,58,.7); border-radius: 1px; }
+@media (max-width: 400px) { .mo-stage { flex-basis: 100%; } .mo-cap { font-size: 13px; } }
+.cut-name { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top,0px)); transform: translateX(-50%); padding: 3px 11px; border-radius: 999px; background: rgba(18,14,10,.72); border: 1px solid rgba(255,217,138,.3); color: var(--ink-2); font: 11.5px var(--f-mono); white-space: nowrap; opacity: 0; pointer-events: none; }
+.cut-name b { color: var(--brass); font-weight: 500; }
+.cut-name.in { animation: cutName 3.2s var(--ease) forwards; }
+@keyframes cutName { 0% { opacity: 0; transform: translate(-50%, -4px); } 12%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cut-name.in { animation: none; opacity: 1; } }

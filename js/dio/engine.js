@@ -228,6 +228,7 @@ export class DioramaView {
     const cue = this.stepCue || {}; this.stepCue = null; this.cues.endStep(); this.ops.endStep(); this.dir.mode = null; const back = !!(cue.zoom && cue.zoom.back && this.dir.zoomBack()), keepZ = !!(cue.zoom && !back && l && l.explain && this.dir.cinematic && this.dir.zoom); if (cue.zoom && !back && !keepZ) this.dir.endZoomHud();   // keepZ: the explanation is read at the zoom's view, still following its subject (a molecule flies off: a static medium would frame empty space)   // zoom back: the generalising pull-out
     if (l && l.explain && this.dir.cinematic) { const F = (DIO[this.spec.type] && DIO[this.spec.type].flows) || this.spec.flows || {}, et = l.explain.toLowerCase(), k = Object.keys(F).find(q => et.includes(q)); this.dir.push({ kind: 'explain', noShot: back || keepZ, onEnd: keepZ ? () => { this.dir.endZoomHud(); unfold(); } : unfold, opens: l.opens, caption: !fa, title: 'Why', text: l.explain, anchor: fa ? () => fa.getPos() : null, focus: fa && fa.obj, host: fa, names: this.namesIn(l.explain, fa), flows: k ? F[k] : null }); }
     if (!(l && l.explain && this.dir.cinematic)) unfold();
+    else { clearTimeout(this._unfoldT); this._unfoldT = setTimeout(() => { if (this.running == null && this.panel && this.panel.isConnected) unfold(); }, 14000); }   /* model events queued behind the explanation must not keep the steps folded away */
     if (!this.runReplay && i === this.lessonI) { this.lessonI++; toast('Step complete'); if (this.opts.onProgress) this.opts.onProgress(this.lessonI); }
     this.renderLessons();
   }

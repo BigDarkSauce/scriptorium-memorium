@@ -29,8 +29,8 @@ const easeOut = x => { x = clamp(x, 0, 1); return 1 - Math.pow(1 - x, 3); };
 const short = a => String(a && a.name || a || '').split(' · ')[0];
 
 const CSS = `
-.ops{position:absolute;inset:0;pointer-events:none;z-index:2}
-.ops-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ops{position:absolute;inset:0;pointer-events:none!important;z-index:2}
+.ops-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
 .ops-svg .ops-lead{stroke:rgba(255,217,138,.75);stroke-width:1.2;fill:none}
 .ops-badge{position:absolute;left:0;top:0;min-width:22px;height:22px;margin:-11px 0 0 -11px;padding:0 6px;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:5px;font:600 12px var(--f-mono,monospace);color:#1d140b;background:rgba(255,217,138,.86);box-shadow:0 0 0 2px rgba(20,17,14,.65),0 2px 8px rgba(0,0,0,.55);white-space:nowrap;transition:opacity .3s}
 .ops-badge span{font-weight:500}

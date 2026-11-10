@@ -13,6 +13,8 @@ import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderReveal, openDeck, stats as revealStats, normReveal } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
+import { renderMotion, hasMotion, motionIssues } from './motion.js';
+import { seedMotion } from '../seeds-motion.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
@@ -302,8 +304,10 @@ export class Reader {
     if (st.extra && st.extra.length) art.append(el('div', { class: 'extras' }, st.extra.map(x => el('div', { class: 'extra' }, [el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }), el('span', { html: ' ' + esc(x.what || '') }), x.source ? el('span', { class: 'extra-src' }, [' — ', renderSource(x.source)]) : el('span', { class: 'err', text: ' — no source given' })]))));
     if (this._numbers && this._numbers.has(st.id)) art.append(el('div', { class: 'num-warn', text: 'Not found in the PDF text of this subsection: ' + this._numbers.get(st.id).join(', ') + '. Check these numbers against the page.' }));
     if (st.terms && st.terms.length) art.append(el('dl', { class: 'terms' }, st.terms.flatMap(t => { const g = glyphFor(t.meaning, t.icon); return [el('dt', { html: (g ? glyphSVG(g, 15) + ' ' : '') + mathHTML(t.term) }), el('dd', { html: prose(t.meaning) })]; })));
-    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
-    if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
+    // the teaching boxes: the paragraph, its animation (the event or process it describes, played out; js/room/motion.js),
+    // then its static figure as the summary to keep
+    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), this.motion(A, st, 'intuition'), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
+    if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), this.motion(A, st, 'misconception'), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
     const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
     if (rv) art.append(rv);
     else if (st.check && st.check.q) {
@@ -324,6 +328,13 @@ export class Reader {
     return art;
   }
   // one figure spec (js/room/figspec.js), drawn once the PDF's figure store is known (a "pdf" figure needs it)
+  // a teaching box's animation: the step's own (written with the scroll, st.intuitionMotion / st.misconceptionMotion), or
+  // the example library's (js/seeds-motion.js) while the paragraph is still the seed's
+  motion(A, st, slot) {
+    const spec = st[slot + 'Motion'] || seedMotion(A && A.title, st.id, slot, st[slot]); if (!hasMotion(spec)) return null;
+    const host = el('div', { class: 'mo-host' }), d = (st.demos || []).find(x => x && (Array.isArray(x.bodies) || DIO[x.type]));   /* a portal: the same process, stepped into in 3D */
+    try { renderMotion(spec, host, { text: st[slot], label: slot === 'intuition' ? 'Picture it' : 'Common mistake', actions: d ? [{ label: '3D ▸', title: 'Step into this step’s diorama', on: () => this.openDiorama(d, st, null) }] : [] }); } catch (e) { console.warn('motion', e); return null; } return host;
+  }
   figure(spec, small = false) {
     const host = el('div', { class: 'fig-host' + (small ? ' small' : '') }), terms = this._curTerms || [];
     this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F, terms }); const cast = castStrip(spec, terms); if (cast) host.append(cast); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
@@ -515,6 +526,7 @@ export function normalizeChain(A) {
     ...(Array.isArray(x.figureRefs) ? { figureRefs: x.figureRefs } : {}), ...(x.repaired ? { repaired: x.repaired } : {}),
     // the explanatory compiler's routing (js/dio/domains.js): the AI's own choice of domain, structure and primitive
     ...(normReveal(x.reveal) ? { reveal: normReveal(x.reveal) } : {}),
+    ...Object.fromEntries(['intuitionMotion', 'misconceptionMotion'].filter(k => x[k] && typeof x[k] === 'object' && !motionIssues(x[k]).length).map(k => [k, x[k]])),   /* an animation that does not check out is dropped, never half drawn */
     ...(x.visual && typeof x.visual === 'object' ? { visual: Object.fromEntries(['domain', 'structure', 'primitive', 'medium', 'why'].filter(k => x.visual[k]).map(k => [k, String(x.visual[k]).slice(0, 200)])) } : {}) }));
   A.chain.forEach((st, i) => { const x = src[i]; if (st.check && x && x.check && fig(x.check.figure)) st.check.figure = fig(x.check.figure); });
   if (Array.isArray(A.dioramaPlan)) A.dioramaPlan = A.dioramaPlan.filter(p => p && p.subsection != null).map(p => ({ subsection: String(p.subsection), count: Math.max(0, Math.min(3, +p.count || 0)), why: String(p.why || '') }));

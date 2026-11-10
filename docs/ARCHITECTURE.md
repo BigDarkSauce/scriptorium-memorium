@@ -223,3 +223,14 @@ truth constraint (no rule without its boundary). Dioramas: `engine.js lessonPred
 play). Pictures of what labels refer to: `js/room/glyphs.js` (figures, the cast strip under each figure, terms).
 New primitives: `bayes_update`, `emergence`, `control_loop`, `analogy_map` (`js/dio/prims/`). Rationale and sources:
 `docs/research/revelation-engine.md`. Tests: `node tools/test-reveal.mjs`.
+
+
+## Motion figures
+
+`js/room/motion.js` plays a declarative animation (shapes, keyframes and makers such as `pend`, `gas`, `proj`, `curve`,
+`bars`, `galton`, `lin`) from one clock u ∈ [0, 1], so every frame can be scrubbed and the same spec always gives the
+same picture. The reader (`Reader.motion`) puts one under each "Picture it" and "Common mistake" paragraph: the step's
+own (`intuitionMotion`, `misconceptionMotion`, written by the AI with the scroll and checked by `motionIssues`), or the
+example library's (`js/seeds-motion.js`). A contrast plays the mistaken world beside the real one. Controls: play,
+scrub, replay, ♪ (sonification), GIF (`js/room/gif.js`), and "3D ▸" when the step has a diorama. Rationale and sources:
+docs/research/motion-figures.md.
