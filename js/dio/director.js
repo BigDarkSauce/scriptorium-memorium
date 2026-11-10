@@ -237,7 +237,7 @@ export class Director {
     if (!this.guides) return;
     const N = { wide: ['wide shot', 'the whole system at once'], medium: ['medium shot', 'one object and its neighbours'], push: ['push in', 'towards the part that matters'], close: ['close-up', 'the event itself'], track: ['tracking shot', 'riding along with it'], pov: ['point of view', 'seen from the moving body'], zoom: ['zoom across scales', 'down to what causes it'] }[kind]; if (!N) return;
     const c = this.cutEl || (this.cutEl = el('div', { class: 'cut-name' })); if (!c.isConnected) this.layer.append(c);
-    c.innerHTML = `<b>${N[0]}</b> · ${N[1]}`; c.classList.remove('in'); void c.offsetWidth; c.classList.add('in'); void b;
+    c.innerHTML = `<b>${N[0]}</b> · ${N[1]}`; c.style.left = Math.round(this.freeFrame(innerWidth)[0] + 6) + 'px';   /* at the top left of the free frame: beside the steps, under the title */ c.classList.remove('in'); void c.offsetWidth; c.classList.add('in'); void b;
   }
   chip(html, ms) { this.hud(); const c = this.chipEl; clearTimeout(this._chipT); if (!html) { c.hidden = true; return; } c.innerHTML = html; c.hidden = false; c.classList.remove('out'); if (ms) this._chipT = setTimeout(() => c.classList.add('out'), ms); }
   restoreLens() { const L = this._lens; if (!L) return; const c = this.v.camera; const d = c.position.distanceTo(this.v.controls.target); c.near = Math.min(L.near, Math.max(1e-4, d * .05)); c.far = L.far; c.updateProjectionMatrix(); this.v.controls.minDistance = Math.min(L.minD, d * .98); this._minD0 = L.minD; this._near0 = L.near; this._lens = null; }   // never clamp the orbit radius while the camera is still close in (no snap); the old minimum returns at the next cut

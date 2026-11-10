@@ -823,7 +823,7 @@ export function fitSketchKey(b, fk, w, h) {
   const hu = h - 44, FILL = .86, useH = Math.max(y1 - y0, (x1 - x0) * hu / w, .05) / FILL, fullH = useH * h / hu, th = Math.tan(fk.fov * Math.PI / 360);
   let D = fullH / 2 / th; const aim = right.clone().multiplyScalar((x0 + x1) / 2).addScaledVector(up, (y0 + y1) / 2 - fullH * 22 / h).addScaledVector(dir, (z0 + z1) / 2), depth = Math.max(z1 - z0, .1);
   const cam = new THREE.PerspectiveCamera(fk.fov, w / h, .01, 1e4); cam.up.copy(up0);
-  const yLo = -1 + 2 * 44 / h + .07, yHi = .9, xLo = -.9, xHi = .9;
+  const yLo = -1 + 2 * 44 / h + .08, yHi = .82, xLo = -.86, xHi = .86;   /* margins inside the card's frame lines */
   for (let it = 0; it < 5; it++) { cam.position.copy(aim).addScaledVector(dir, D); cam.lookAt(aim); cam.near = Math.max(.01, D - depth * 2); cam.far = D + depth * 2 + 1; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     let nx0 = 1e9, nx1 = -1e9, ny0 = 1e9, ny1 = -1e9; corners.forEach(c => { const q = c.clone().project(cam); nx0 = Math.min(nx0, q.x); nx1 = Math.max(nx1, q.x); ny0 = Math.min(ny0, q.y); ny1 = Math.max(ny1, q.y); });
     const sc = Math.max((nx1 - nx0) / (xHi - xLo), (ny1 - ny0) / (yHi - yLo)), half = D * th;

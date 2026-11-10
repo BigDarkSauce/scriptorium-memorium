@@ -1408,7 +1408,7 @@ DIO.pendulum.lessons=[
  {title:'Time one swing',question:'How long does one swing take?',focus:'bob',set:{L:2,g:9.81,theta0:8,damping:0},until:'event:period measured',run:12,
   chain:[{a:'pivot',note:'holds the top fixed'},{a:'string · L',note:'keeps the bob on an arc'},{a:'bob · m',note:'gravity pulls it back down'}],chainPace:1.1,
   text:'Pull the bob only 8° aside and let it go. The pivot holds the string, and the string keeps the bob on its arc. Watch it swing there and back; the period is the time for one full there-and-back.',
-  explain:'One full swing took 2.84 s. Near the bottom, the part of gravity that pulls the bob along its arc grows in step with how far it is from the bottom, just as a spring pulls harder the more it is stretched. That makes the period 2π√(L/g) = 2π√(2 m ÷ 9.81 m/s²) = 2.84 s, and it does not depend on how far you pulled it, as long as the swing is small.',
+  explain:'One full swing took 2.84 s. Near the bottom, the part of gravity that pulls the bob along its arc grows in step with how far it is from the bottom, just as a spring pulls harder the more it is stretched. That makes the period 2π√(L/g) = 2.84 s for L = 2 m and g = 9.81 m/s², and it does not depend on how far you pulled it, as long as the swing is small.',
   opens:'Does a wide swing take longer?'},
  {title:'A wide swing',question:'Does a wide swing take longer?',focus:'bob',set:{theta0:8},run:16,cameraMode:'object',
   compare:{mode:'side',a:{label:'released at 8°',read:'T measured'},b:{set:{theta0:150},label:'released at 150°',read:'T measured'}},
