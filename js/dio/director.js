@@ -121,6 +121,7 @@ export class Director {
     let p = b.anchor && b.anchor(); if (!p && b.kind !== 'lesson') return;
     const R = v.ds.orb ? v.ds.orb.r : 10;
     let kind = b.shot || (b.kind === 'event' ? 'close' : b.kind === 'explain' ? 'medium' : p ? (this.last && this.last.moving ? 'medium' : 'push') : 'wide');
+    if (b.kind === 'lesson' && !b.poseOnly) this.nameCut(kind, b);
     if (kind === 'zoom') { if (b.zoom && b.zoom.to && this.startZoom(b)) return; kind = p ? 'medium' : 'wide'; }
     if (kind === 'track') { if (b.track && this.startTrack(b)) return; kind = p ? 'medium' : 'wide'; }
     if (kind === 'pov') { const a = b.host || (b.names || [])[0]; if (a && v.setPOV) { this.startBracket(a, b); return; } kind = 'close'; }
@@ -229,6 +230,14 @@ export class Director {
     this.chipEl = el('div', { class: 'dir-chip', hidden: true }); this.layer.append(this.chipEl);
     this.edge = el('div', { class: 'dir-edge', hidden: true, html: '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 12h13M12 6l7 6-7 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' }); this.layer.append(this.edge);
     this._a = V3(); this._b = V3(); this._f = V3();
+  }
+  // the grammar of the cut, named as it happens (with Guides on): which view the step opens on and why, the way a film
+  // grammar names its shots, so the reader learns what each kind of view is for (docs/research/revelation-engine.md)
+  nameCut(kind, b) {
+    if (!this.guides) return;
+    const N = { wide: ['wide shot', 'the whole system at once'], medium: ['medium shot', 'one object and its neighbours'], push: ['push in', 'towards the part that matters'], close: ['close-up', 'the event itself'], track: ['tracking shot', 'riding along with it'], pov: ['point of view', 'seen from the moving body'], zoom: ['zoom across scales', 'down to what causes it'] }[kind]; if (!N) return;
+    const c = this.cutEl || (this.cutEl = el('div', { class: 'cut-name' })); if (!c.isConnected) this.layer.append(c);
+    c.innerHTML = `<b>${N[0]}</b> · ${N[1]}`; c.classList.remove('in'); void c.offsetWidth; c.classList.add('in'); void b;
   }
   chip(html, ms) { this.hud(); const c = this.chipEl; clearTimeout(this._chipT); if (!html) { c.hidden = true; return; } c.innerHTML = html; c.hidden = false; c.classList.remove('out'); if (ms) this._chipT = setTimeout(() => c.classList.add('out'), ms); }
   restoreLens() { const L = this._lens; if (!L) return; const c = this.v.camera; const d = c.position.distanceTo(this.v.controls.target); c.near = Math.min(L.near, Math.max(1e-4, d * .05)); c.far = L.far; c.updateProjectionMatrix(); this.v.controls.minDistance = Math.min(L.minD, d * .98); this._minD0 = L.minD; this._near0 = L.near; this._lens = null; }   // never clamp the orbit radius while the camera is still close in (no snap); the old minimum returns at the next cut

@@ -332,7 +332,8 @@ export class Reader {
   // the example library's (js/seeds-motion.js) while the paragraph is still the seed's
   motion(A, st, slot) {
     const spec = st[slot + 'Motion'] || seedMotion(A && A.title, st.id, slot, st[slot]); if (!hasMotion(spec)) return null;
-    const host = el('div', { class: 'mo-host' }); try { renderMotion(spec, host, { text: st[slot], label: slot === 'intuition' ? 'Picture it' : 'Common mistake' }); } catch (e) { console.warn('motion', e); return null; } return host;
+    const host = el('div', { class: 'mo-host' }), d = (st.demos || []).find(x => x && (Array.isArray(x.bodies) || DIO[x.type]));   /* a portal: the same process, stepped into in 3D */
+    try { renderMotion(spec, host, { text: st[slot], label: slot === 'intuition' ? 'Picture it' : 'Common mistake', actions: d ? [{ label: '3D ▸', title: 'Step into this step’s diorama', on: () => this.openDiorama(d, st, null) }] : [] }); } catch (e) { console.warn('motion', e); return null; } return host;
   }
   figure(spec, small = false) {
     const host = el('div', { class: 'fig-host' + (small ? ' small' : '') }), terms = this._curTerms || [];
