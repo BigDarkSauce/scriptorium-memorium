@@ -138,6 +138,7 @@ const lessons = await run(async () => {
     await W.openDiorama(spec, { skipIntro: true }); const v = W.mode; v.setPref('cinematic', cine);
     v.setPref('guides', true); v.runLesson(0); const took = S.pump(v, 90, () => v.running == null);
     if (took == null) bad.push(spec.type + (cine ? ' cinematic' : '') + ': lesson 1 never completed'); else out.push(spec.type + (cine ? '·cine ' : ' ') + took.toFixed(0) + 's');
+    { const vw = innerWidth * innerHeight, cover = [...document.querySelectorAll('#ui *')].filter(e => { const r = e.getBoundingClientRect(); return r.width * r.height > vw * .5 && getComputedStyle(e).pointerEvents !== 'none' && getComputedStyle(e).visibility !== 'hidden' && !e.closest('[hidden]'); }); if (cover.length) bad.push(spec.type + ': a full-screen layer takes the clicks after the step (' + cover.map(e => e.tagName + '.' + (e.getAttribute('class') || '')).slice(0, 2).join(', ') + ')'); }   /* the .ops layer once covered the steps and the camera */
     v.setPref('guides', false);
   }
   W.mode.setPref('cinematic', true);

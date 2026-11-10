@@ -30,7 +30,7 @@ const mark = n => { try { performance.mark(n); } catch (e) { } };
 const LIB_KEY = 'library.v3', PENDING_DEL = 'sm-pending-deletes', UNDO_MS = 9000;
 // the version of the built-in scenes this code ships: an example room stamped with another one is brought up to date
 // once (App.refreshSeedScenes)
-const SEED_STAMP = FLAGSHIPS.map(sceneFp).join('.');
+const SEED_STAMP = FLAGSHIPS.map(sceneFp).join('.') + '.L' + FLAGSHIPS.map(f => JSON.stringify(f.lessons || []).length).join('-');   /* the steps too: a scene whose steps were rewritten refreshes them */
 class App {
   constructor() {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
@@ -213,7 +213,10 @@ class App {
     for (const p of room.parts || []) for (const st of (p.analysis && p.analysis.chain) || []) for (const d of st.demos || []) {
       const key = sceneKey(d), f = cur.get(key); if (!f || !d || !Array.isArray(d.bodies)) continue;
       const fp = sceneFp(f);
-      if (sceneFp(d) === fp) { d.seedFp = fp; continue; }
+      if (sceneFp(d) === fp) {   // the scene is current; its steps may still be an older shipped version (renamed or rewritten): those are replaced while every one is a seed step
+        d.seedFp = fp; const T = new Set([...(SEED_LESSON_TITLES[key] || []), ...(f.lessons || []).map(l => l.title)]);
+        if (Array.isArray(f.lessons) && Array.isArray(d.lessons) && d.lessons.length && d.lessons.every(l => l && T.has(l.title)) && JSON.stringify(d.lessons) !== JSON.stringify(f.lessons)) { d.lessons = C(f.lessons); if (f.plan) d.plan = C(f.plan); if (f.levels) d.levels = C(f.levels); n++; }
+        continue; }
       if (!isSeedCopy(d, key)) continue;
       const titles = new Set([...(SEED_LESSON_TITLES[key] || []), ...(f.lessons || []).map(l => l.title)]);
       const ownLessons = Array.isArray(d.lessons) && d.lessons.length && !d.lessons.every(l => l && titles.has(l.title));
