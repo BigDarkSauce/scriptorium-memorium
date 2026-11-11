@@ -29,6 +29,9 @@ import { lookQ, flyPose, flightDur, easeSine } from './camfly.js';
 import { TitleScreen } from './title.js';
 import { openGetScroll, openVisibility, republishLater } from './share.js';
 import { choosePlace } from './room/addpdf.js';
+// the lens of the tunnel between two places: the place left eases to it while it runs into the light, the place entered
+// starts with it and eases to its own (nav.lensFov) on the way up the bore, so the cut between them keeps one lens
+const TUNNEL_FOV = 62;
 import * as THREE from 'three';
 
 // boot and switch phases on the performance timeline (DevTools, tools/: performance.getEntriesByType('mark'))
@@ -158,9 +161,11 @@ class App {
     // each key turns along the shortest arc (camfly.js) from where the last key ended: never from the camera as it stands
     // this frame, which the place's own walking or orbit controls may already have turned back to their old heading (that
     // was the kick to the right on the way into the tunnel). dur 'auto': as long as the way and the turn need.
-    if (!K.q0) { K.q0 = C.from.q.clone(); K.q1 = lookQ(K.p, K.a); K.p0 = C.from.p.clone(); if (K.dur === 'auto') { K.dur = flightDur(K.p0, K.q0, K.p, K.q1, .9, 2.8); K.ease = K.ease || easeSine; } }
+    // the lens eases too: to a key's own fov, or on the last key to the lens the place will draw with (nav.lensFov)
+    if (!K.q0) { K.q0 = C.from.q.clone(); K.q1 = lookQ(K.p, K.a); K.p0 = C.from.p.clone(); if (K.dur === 'auto') { K.dur = flightDur(K.p0, K.q0, K.p, K.q1, .9, 2.8); K.ease = K.ease || easeSine; }
+      K.f0 = cam.fov; K.f1 = K.fov != null ? K.fov : C.i === C.keys.length - 1 && C.M.nav && C.M.nav.lensFov ? C.M.nav.lensFov() : K.f0; }
     const k = Math.min(1, C.t / K.dur), e = K.ease ? K.ease(k) : k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
-    flyPose(cam, { p0: K.p0, p1: K.p, q0: K.q0, q1: K.q1 }, e); const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); if (K.at) K.at(k);
+    flyPose(cam, { p0: K.p0, p1: K.p, q0: K.q0, q1: K.q1 }, e); if (K.f1 !== K.f0) { cam.fov = K.f0 + (K.f1 - K.f0) * (K.fovEase ? K.fovEase(k) : e); cam.updateProjectionMatrix(); } const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); if (K.at) K.at(k);
     if (k >= 1) { C.from = { p: K.p.clone(), q: K.q1.clone(), a: K.a.clone() }; C.i++; C.t = 0;
       if (C.i >= C.keys.length) { this.cine = null; const M = C.M; if (M.controls) { M.controls.target.copy(a); M.controls.enabled = !(M.nav && M.nav.mode === 'walk') && !M.anim; M.controls.update(); } if (M.nav && M.nav.syncFromCamera) M.nav.syncFromCamera(); C.res(); } }
   }
@@ -195,10 +200,10 @@ class App {
       // held there until the veil has lifted, glides up the tunnel (the light slowing round it), through the doorway, and
       // on to the view; the leaves close behind
       const c = pick.position, T = D.tunnel, p0 = new THREE.Vector3(c.x, 1.5, c.z + 9.5), a0 = new THREE.Vector3(c.x, 1.45, c.z - 6), p1 = new THREE.Vector3(c.x, 1.6, c.z - .35), a1 = new THREE.Vector3(c.x, 1.5, c.z - 6);
-      cam.position.copy(p0); cam.lookAt(a0); D.travel = true; D.set(1); if (T) { T.setFlow(-14); T.setGlow(0); }
+      cam.position.copy(p0); cam.lookAt(a0); cam.fov = TUNNEL_FOV; cam.updateProjectionMatrix(); D.travel = true; D.set(1); if (T) { T.setFlow(-14); T.setGlow(0); }
       let shut = false; const done = () => { D.travel = false; D.set(D.open); };
       this.cineRun(M, [{ p: p0, a: a0, dur: .05, hold: () => this.switching },
-        { p: p1, a: a1, dur: 2.1, ease: k => 1 - Math.pow(1 - k, 3), at: k => { if (T) T.setFlow(-14 * Math.pow(1 - k, 2) - .6); if (k > .9 && D.travel) done(); } },
+        { p: p1, a: a1, dur: 2.1, ease: k => 1 - Math.pow(1 - k, 3), fov: M.nav && M.nav.lensFov ? M.nav.lensFov() : cam.fov, fovEase: k => k * k * (3 - 2 * k), at: k => { if (T) T.setFlow(-14 * Math.pow(1 - k, 2) - .6); if (k > .9 && D.travel) done(); } },
         { p: goal.p, a: goal.a, dur: 2.4, at: k => { if (k > .2) { const q = Math.min(1, (k - .2) / .5); D.set(1 - (q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2)); if (q >= 1 && !shut) { shut = true; sfx.play('thud', { gain: .35 }); } } } }]).then(() => { D.travel = false; if (!shut) D.set(0); });
       sfx.play('whoosh', { gain: .3, pitch: .8 });
       return;
@@ -225,7 +230,7 @@ class App {
     const leave = () => { if (gone) return; gone = true; this._arrive = { door: true }; go(); };
     sfx.play('whoosh', { gain: .45, pitch: 1.2 });
     this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.58, c.z + 1.2), a: new THREE.Vector3(c.x, 1.5, c.z + 12), dur: .9 },
-      { p: new THREE.Vector3(c.x, 1.5, c.z + 17), a: new THREE.Vector3(c.x, 1.48, c.z + 40), dur: 1.9, ease: k => k * k * k, at: k => { if (T) { T.setFlow(1.5 + 30 * k * k); T.setGlow(k * k); } if (k > .62) leave(); } }]);
+      { p: new THREE.Vector3(c.x, 1.5, c.z + 17), a: new THREE.Vector3(c.x, 1.48, c.z + 40), dur: 1.9, ease: k => k * k * k, fov: TUNNEL_FOV, fovEase: k => Math.min(1, k / .62) * Math.min(1, k / .62) * (3 - 2 * Math.min(1, k / .62)), at: k => { if (T) { T.setFlow(1.5 + 30 * k * k); T.setGlow(k * k); } if (k > .62) leave(); } }]);
     // whatever the frame rate, the switch starts by the clock too (a slow software GPU still leaves)
     setTimeout(() => { if (this.mode === M) leave(); }, 4200);
   }

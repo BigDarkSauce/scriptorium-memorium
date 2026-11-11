@@ -56,6 +56,10 @@ export class Navigator {
     }
     this.canvasCursor();
   }
+  // the lens this place draws with once nothing animates the camera: walking has its own wider view (and the scroll-
+  // wheel zoom), the overview its orbit lens. A flight that ends here eases to it (main.js stepCine) instead of the
+  // walking view snapping it on in the first free frame (the sudden zoom at the end of every arrival).
+  lensFov() { return this.mode === 'walk' ? FOV_WALK - this.zoom * 38 : this.orbitFov; }
   canvasCursor() { this.canvas.style.cursor = this.mode === 'walk' ? 'grab' : ''; }
   syncFromCamera() { const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ'); this.yaw = e.y; this.pitch = clamp(e.x, -1.35, 1.35); this.needsSync = false; }
   toggle() { this.setMode(this.mode === 'walk' ? 'orbit' : 'walk'); }
