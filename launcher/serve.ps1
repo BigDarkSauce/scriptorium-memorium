@@ -20,18 +20,31 @@ $handler = {
     if ($p -eq '/__relay/info') {
       $b = [Text.Encoding]::UTF8.GetBytes('{"name":"scriptorium-relay","version":"1.0.0"}'); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
     }
+    if ($p -eq '/__relay/freellmapi') {
+      # FreeLLMAPI on this computer: its port (its config.json; desktop app 31415, Docker or npm 3001) and its unified key
+      # (freellmapi- + 48 hex in its local database; the one the server accepts is the live one)
+      $d = Join-Path $env:APPDATA 'FreeLLMAPI'; $ports = @(); try { $ports += [int]((Get-Content (Join-Path $d 'config.json') -Raw | ConvertFrom-Json).port) } catch { }; $ports += 31415, 3001
+      $base = $null; foreach ($pt in ($ports | Where-Object { $_ } | Select-Object -Unique)) { try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:$pt/v1/models" | Out-Null; $base = "http://127.0.0.1:$pt/v1"; break } catch { if ($_.Exception.Response) { $base = "http://127.0.0.1:$pt/v1"; break } } }
+      $o = @{ found = [bool]$base }
+      if ($base) { $o.base = $base; $c = @(); foreach ($f in 'freeapi.db-wal', 'freeapi.db') { try { $t = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes((Join-Path $d $f))); $c += ([regex]::Matches($t, 'freellmapi-[0-9a-f]{48}') | ForEach-Object { $_.Value }) } catch { } }
+        foreach ($k in ($c | Select-Object -Unique)) { try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Headers @{ Authorization = "Bearer $k" } "$base/usage" | Out-Null; $o.key = $k; break } catch { } }
+        $o.keyFound = [bool]$o.key; try { $o.readyModels = @((Invoke-RestMethod -UseBasicParsing -TimeoutSec 4 -Headers @{ Authorization = "Bearer $($o.key)" } "$base/models?execution_status=ready").data).Count } catch { } }
+      $b = [Text.Encoding]::UTF8.GetBytes(($o | ConvertTo-Json -Compress)); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
+    }
     if ($p -eq '/__relay/fetch') {
       $u = [Web.HttpUtility]::ParseQueryString($req.Url.Query)['u']; $x = $null
       $ok = [Uri]::TryCreate($u, [UriKind]::Absolute, [ref]$x) -and ((($x.Host -in 'localhost', '127.0.0.1', '::1') -and $x.Scheme -match '^https?$') -or ($x.Scheme -eq 'https' -and $x.AbsolutePath -match '/(models|chat/completions)/?$'))
       if (-not $ok) { $res.StatusCode = 403; return }
       [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
       $out = [Net.HttpWebRequest]::Create($x); $out.Method = $req.HttpMethod; $out.Timeout = 600000; $out.ReadWriteTimeout = 600000; $out.AllowReadStreamBuffering = $false
-      foreach ($h in 'Authorization', 'Accept', 'HTTP-Referer', 'X-Title') { if ($req.Headers[$h]) { $out.Headers[$h] = $req.Headers[$h] } }
+      foreach ($h in 'Authorization', 'HTTP-Referer', 'X-Title') { if ($req.Headers[$h]) { $out.Headers[$h] = $req.Headers[$h] } }
+      if ($req.Headers['Accept']) { $out.Accept = $req.Headers['Accept'] }   # Accept and Content-Type are restricted headers: set through their properties
       if ($req.ContentType) { $out.ContentType = $req.ContentType }
       if ($req.HasEntityBody) { $s = $out.GetRequestStream(); $req.InputStream.CopyTo($s); $s.Close() }
       try { $r = $out.GetResponse() } catch [Net.WebException] { $r = $_.Exception.Response; if (-not $r) { $res.StatusCode = 502; return } }
       $res.StatusCode = [int]$r.StatusCode; $res.SendChunked = $true
-      foreach ($h in 'Content-Type', 'Retry-After', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset', 'ratelimit-reset') { if ($r.Headers[$h]) { $res.Headers[$h] = $r.Headers[$h] } }
+      if ($r.ContentType) { $res.ContentType = $r.ContentType }
+      foreach ($h in 'Retry-After', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset', 'ratelimit-reset') { if ($r.Headers[$h]) { $res.AddHeader($h, $r.Headers[$h]) } }
       $in = $r.GetResponseStream(); $buf = New-Object byte[] 8192
       while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) { $res.OutputStream.Write($buf, 0, $n); $res.OutputStream.Flush() }
       $r.Close(); return

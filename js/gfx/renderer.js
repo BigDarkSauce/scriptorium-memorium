@@ -19,7 +19,7 @@ THREE.ShaderChunk.opaque_fragment = THREE.ShaderChunk.opaque_fragment.replace('g
 
 // Eye adaptation, as games do it: the finished picture's mean brightness is measured on the GPU four times a second
 // (a 16 x 16 reduction, read back without a stall) and the exposure drifts toward a calm interior level. Bounded:
-// at most x1.85 brighter (dim corners of the hall, a room lit only by its spots on a weak GPU) and x0.8 darker, so it
+// at most x1.6 brighter (dim corners of the hall, a room lit only by its spots on a weak GPU) and x0.8 darker, so it
 // never pumps; slow (1.6 s) in a place, quick under a veil.
 class MeterPass extends Pass {
   constructor() {
@@ -349,7 +349,7 @@ export class Gfx {
     // the GPU's own time for the frame (EXT_disjoint_timer_query_webgl2): read a few frames later, never waited for
     const T = this._gpuT; let q = null; if (T && !T.busy) { q = T.gl.createQuery(); T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q); T.busy = true; }
     // eye adaptation (MeterPass): the place's own exposure times eyeK, which drifts toward a calm interior level
-    { const M = this.meter; if (M && M.mean != null) { const err = Math.max(-1.2, Math.min(1.2, Math.log2(.15 / Math.max(.004, M.mean)))), tau = this.eyeFast ? .25 : 1.6; this.eyeK = Math.max(.8, Math.min(1.85, this.eyeK * Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)))); M.mean *= Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)); } }   /* the estimate follows the exposure until the next reading (no overshoot from a reading 250 ms old) */
+    { const M = this.meter; if (M && M.mean != null) { const err = Math.max(-1.2, Math.min(1.2, Math.log2(.14 / Math.max(.004, M.mean)))), tau = this.eyeFast ? .25 : 1.6; this.eyeK = Math.max(.8, Math.min(1.6, this.eyeK * Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)))); M.mean *= Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)); } }   /* the estimate follows the exposure until the next reading (no overshoot from a reading 250 ms old) */
     const r0 = this.renderer, baseExp = r0.toneMappingExposure; r0.toneMappingExposure = baseExp * this.eyeK;
     try { this.composer.render(dt); } finally { r0.toneMappingExposure = baseExp; }
     if (q) { T.gl.endQuery(T.ext.TIME_ELAPSED_EXT); T.pend.push(q); T.busy = false; } if (T) this.pollGpu();

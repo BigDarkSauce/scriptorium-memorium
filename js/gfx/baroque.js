@@ -67,6 +67,10 @@ export function bmat(name) {
     const k = name.slice(5); m = marbleMat(k, { seed: 2, k: 2.4, cc: .07 }); m.userData.boxUV = .9;
   } else switch (name) {
     case 'gilt': m = giltMat(); m.userData.boxUV = 2.2; break;
+    // narrow gilt (shelf lips, stile beads, door frames: 10-16 mm): the leaf texture's burnish streaks, sized for broad
+    // gilding, ran along a strip as shiny and matte dashes that crawled as the camera moved (read as broken lines). Here
+    // the same gold, evenly burnished: no streak map, a steady roughness, no anisotropy, a calmer reflection.
+    case 'gilt-strip': { m = giltMat({ rough: .5 }); m.roughnessMap = null; m.anisotropy = 0; m.normalScale.set(.15, .15); m.envMapIntensity = .85; m.userData.boxUV = 2.2; break; }
     // gilt that carries the turned parts' cavity shade (column capitals): matte, toned hollows, burnished highs
     case 'gilt-col': m = giltMat({ vc: true }); break;
     // thin gilt mouldings (door frames, beads): the same leaf at ~4× the size, so an 18 mm strip shows one leaf over a
@@ -486,7 +490,7 @@ export const CASE_FINISHES = {
   pale: { car: 'pale', back: 'pale-dark', trim: 'pale-dark', flute: 'pale', plinth: 'pale-dark', inset: null, niche: 'pale' } };
 // One bookcase section in a wall-local frame M (wall plane z = 0, room toward +z): x0..x1, y0..y1 (cornice included), depth D.
 function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche = null, cornice = true, pitch = .36, stile = .045 } = {}) {
-  const car = bmat(F.car), back = bmat(F.back), trim = bmat(F.trim), plinth = bmat(F.plinth), W = x1 - x0, cx = (x0 + x1) / 2;
+  const car = bmat(F.car), back = bmat(F.back), trim = bmat(F.trim), strip = F.trim === 'gilt' ? bmat('gilt-strip') : trim, plinth = bmat(F.plinth), W = x1 - x0, cx = (x0 + x1) / 2;
   const B = (mat, x, y, z, a, b, c) => A.add(mat, new THREE.BoxGeometry(a, b, c), M.clone().multiply(Mx(x, y, z)));
   const cH = cornice ? .16 : 0, top = y1 - cH, st = stile;
   let yb = y0;
@@ -494,7 +498,7 @@ function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche
   if (!niche && base && top - yb > 1.9) { // closed cupboard for folios, two fielded doors per section, a ledge on top
     const yc = .8, ch = yc - yb; B(car, cx, yb + ch / 2, D / 2, W, ch, D);
     const nd = Math.max(1, Math.round(W / .5)), dw = (W - .02) / nd;
-    for (let k = 0; k < nd; k++) { const dx = x0 + .01 + dw * (k + .5); B(car, dx, yb + ch / 2, D + .008, dw - .05, ch - .1, .016); B(back, dx, yb + ch / 2, D + .017, dw - .14, ch - .22, .006); [[0, ch / 2 - .11, dw - .124, .016], [0, -ch / 2 + .11, dw - .124, .016], [-(dw - .14) / 2, 0, .016, ch - .204], [(dw - .14) / 2, 0, .016, ch - .204]].forEach(([ox, oy, a, b]) => B(trim, dx + ox, yb + ch / 2 + oy, D + .021, a, b, .008));   /* the doors' gilt frames 16 mm wide (10 mm was a pixel or less from across the hall: dashed lines while walking) */ B(trim, dx + (k % 2 ? -1 : 1) * (dw / 2 - .06), yb + ch / 2 + .05, D + .03, .014, .05, .014); }
+    for (let k = 0; k < nd; k++) { const dx = x0 + .01 + dw * (k + .5); B(car, dx, yb + ch / 2, D + .008, dw - .05, ch - .1, .016); B(back, dx, yb + ch / 2, D + .017, dw - .14, ch - .22, .006); [[0, ch / 2 - .11, dw - .124, .016], [0, -ch / 2 + .11, dw - .124, .016], [-(dw - .14) / 2, 0, .016, ch - .204], [(dw - .14) / 2, 0, .016, ch - .204]].forEach(([ox, oy, a, b]) => B(strip, dx + ox, yb + ch / 2 + oy, D + .021, a, b, .008));   /* the doors' gilt frames 16 mm wide (10 mm was a pixel or less from across the hall: dashed lines while walking) */ B(trim, dx + (k % 2 ? -1 : 1) * (dw / 2 - .06), yb + ch / 2 + .05, D + .03, .014, .05, .014); }
     B(car, cx, yc + .0175, (D + .05) / 2, W + .01, .035, D + .05); B(trim, cx, yc + .0175, D + .052, W + .01, .012, .006); yb = yc + .035;
   }
   if (niche) { // an open niche for a hanging scroll: framed panelling behind it, a shelf bridge above it when there is room
@@ -513,10 +517,10 @@ function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche
   // the back: 34 mm thick, so it covers the dado and skirting rings (26 mm proud of the wall), the pilaster bases (30 mm)
   // and their gilt edges (32 mm) with 2 mm or more to spare, and 2 mm short of the section's ends (never in a stile's plane)
   B(back, cx, (yb + top) / 2, .017, W - .004, top - yb, .034);
-  [x0 + st / 2, x1 - st / 2].forEach(x => { B(car, x, (yb + top) / 2, D / 2, st, top - yb, D); B(trim, x, (yb + top) / 2, D + .002, .014, top - yb, .005); });   /* gilt stile beads 14 mm (10 mm broke into dashes across the hall) */
+  [x0 + st / 2, x1 - st / 2].forEach(x => { B(car, x, (yb + top) / 2, D / 2, st, top - yb, D); B(strip, x, (yb + top) / 2, D + .002, .014, top - yb, .005); });   /* gilt stile beads 14 mm (10 mm broke into dashes across the hall) */
   const rows = Math.max(1, Math.round((top - yb) / pitch)), p = (top - yb) / rows;
   for (let k = 0; k < rows; k++) {
-    const yy = yb + k * p; if (k > 0) { B(car, cx, yy, (D - .01) / 2, W - 2 * st, .022, D - .01); B(trim, cx, yy - .002, D - .007, W - 2 * st, .014, .006);   /* the shelves' gilt lips 14 mm */ }
+    const yy = yb + k * p; if (k > 0) { B(car, cx, yy, (D - .01) / 2, W - 2 * st, .022, D - .01); B(strip, cx, yy - .002, D - .007, W - 2 * st, .014, .006);   /* the shelves' gilt lips 14 mm */ }
     if (books) bookRow(books, M, x0 + st, x1 - st, yy + (k > 0 ? .011 : 0), p - .055, D - .03, D - .07, r);
   }
   if (cornice) caseCornice(A, M, F, x0, x1, top, D);

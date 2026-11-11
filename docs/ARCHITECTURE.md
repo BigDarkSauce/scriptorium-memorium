@@ -472,3 +472,34 @@ Measured on the reader's laptop (AMD Radeon 610M, Direct3D 11 through ANGLE), no
 - **“Make it visible to everyone” failed** with “Cannot add property bk-…, object is not extensible”: the Artifact
   database hands documents back frozen and share.js added to the index in place. It copies first now;
   tools/test-share.mjs reproduces the old failure and passes.
+
+## Round 20: even light, unbroken lines, keys that stay, FreeLLMAPI connected, a package to share
+
+- **Too dim**: round 19's prewarm tamed the scene ('low': accent lights out) before the room's reflection probe was
+  captured, so the probe (the stand-in for baked bounce light) recorded the room without its lamps. Now the probe always
+  renders with every light (`withAllLights`, tier.js), as games bake indirect light from the full design and draw fewer
+  direct lights live. And **eye adaptation** (renderer.js `MeterPass`): a 16 × 16 reduction of the finished picture,
+  read back without a stall four times a second, drifts the exposure toward a calm interior level (mean display
+  luminance 0.14), within ×0.8 – ×1.6, over 1.6 s (0.25 s under a veil).
+- **Broken, flickering lines**: three causes. (1) The gilt leaf texture's burnish streaks, sized for broad gilding,
+  ran along 10–14 mm strips as shiny and matte dashes that crawled with the view: shelf lips, stile beads and door
+  frames now use `gilt-strip` (the same gold, evenly burnished, no streak map, no anisotropy). (2) MSAA resolves before
+  tone mapping, so a gilt edge at ~20 next to wood at ~0.05 stayed saturated: highlights are softly limited in every
+  material's output (knee 4, ceiling 8; nothing above ~4 changes on screen). (3) SMAA after tone mapping finishes the
+  edges MSAA leaves. Strips are 14 mm (were 10).
+- **Foldable minimap**: a fold button in the minimap's header (the map button brings it back; remembered).
+- **Keys that stay**: AI settings carry a time stamp and are kept in localStorage, IndexedDB and (extension 1.1) a
+  file on the computer (`~/.scriptorium/ai-settings.json`, tool `vault_set`, the extension's one writing tool);
+  `restoreSettings()` takes the newest at start.
+- **FreeLLMAPI**: the extension (`freellmapi_detect`) and the launcher's relay (`/__relay/freellmapi`) find it: the port
+  from its own config.json (desktop app 31415, Docker/npm 3001) and the unified key from its local SQLite file (any
+  `freellmapi-` + 48 hex, the one its `/v1/usage` accepts). The router then uses its **ready** models
+  (`/v1/models?execution_status=ready`, ranked by this app's table, kept 10 min) and its `auto:smart`, a little ahead
+  of the same model direct (FreeLLMAPI holds every key for it and rotates).
+- **The launcher's AI relay** (launcher/serve.py, serve.ps1 now served in parallel): `/__relay/fetch?u=` forwards
+  LLM-shaped requests (https …/models, …/chat/completions, or localhost), so the standalone page reaches FreeLLMAPI,
+  NVIDIA NIM, GitHub Models and Cloudflare too.
+- **Sharing**: `Setup Scriptorium.bat` (launcher/setup.ps1: shortcuts, the extension, FreeLLMAPI's installer from its
+  GitHub release, the key pages, open the app; every step asks), docs/SETUP-GUIDE.md, GitHub Pages and a release.
+- Tests: tools/test-bridge.mjs now 20 checks (vault, FreeLLMAPI detection with a fake install, key restore, auto-connect,
+  ready-model discovery).

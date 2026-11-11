@@ -16,6 +16,8 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 
 ## Run it
 
+**First time on Windows:** double-click `Setup Scriptorium.bat` (shortcuts, the Claude Desktop extension, FreeLLMAPI, the free keys; each step asks first). The full guide, to keep and to share: [docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md).
+
 - **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorialium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
 - **Free AI models as well (all three AI engines in the Claude app):** double-click `bridge/Scriptorium free models.mcpb` once; Claude Desktop installs it as an extension. The page inside the Claude app may not contact outside addresses itself; the extension makes its free-model requests from your computer, so “Claude + free models” and “Free models only” work there next to Claude (`docs/FREE-MODELS.md`, `bridge/README.md`).
 - **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
