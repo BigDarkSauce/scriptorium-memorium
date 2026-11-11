@@ -22,9 +22,12 @@ export function render(f, S) {
   // close up (prices and interest rate touched, the sign badge between them sat on both). Keep every pair at least a
   // badge and an arrowhead apart (36 px between boxes): push each overlapping pair apart along the axis that needs less
   // movement, inside the frame; a pair that the frame's width cannot separate is moved apart vertically instead.
-  { const sx = nw + 36, sy = nh + 36, x0 = nw / 2 + 8, x1 = W - nw / 2 - 8, y0 = my, y1 = H - my, ids = f.nodes.map(n => n.id), cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  // Two boxes joined by a labelled edge need room for the label and the sign badge side by side as well (the "central
+  // bank" label sat on its own badge between prices and interest rate): their gap is the label's width plus 34 px.
+  const gapOf = (a, b) => { const e = f.edges.find(e => e.label && ((e.from === a && e.to === b) || (e.from === b && e.to === a))); return e ? Math.max(36, Math.min(120, e.label.length * (S.fs - 2.5) * .42 + 4) + 34) : 36; };
+  { const sx0 = nw, sy = nh + 36, x0 = nw / 2 + 8, x1 = W - nw / 2 - 8, y0 = my, y1 = H - my, ids = f.nodes.map(n => n.id), cl = (v, a, b) => Math.max(a, Math.min(b, v));
     for (let it = 0; it < 80; it++) { let moved = false;
-      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = P.get(ids[i]), b = P.get(ids[j]), dx = b[0] - a[0], dy = b[1] - a[1], ox = sx - Math.abs(dx), oy = sy - Math.abs(dy); if (ox <= .5 || oy <= .5) continue;
+      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = P.get(ids[i]), b = P.get(ids[j]), sx = sx0 + gapOf(ids[i], ids[j]), dx = b[0] - a[0], dy = b[1] - a[1], ox = sx - Math.abs(dx), oy = sy - Math.abs(dy); if (ox <= .5 || oy <= .5) continue;
         const room = (x1 - x0) - Math.abs(dx) >= ox, alongX = room && ox <= oy, d = (alongX ? ox : oy) / 2 + .5, sg = (alongX ? dx : dy) >= 0 ? 1 : -1;
         if (alongX) { a[0] = cl(a[0] - sg * d, x0, x1); b[0] = cl(b[0] + sg * d, x0, x1); } else { a[1] = cl(a[1] - sg * d, y0, y1); b[1] = cl(b[1] + sg * d, y0, y1); } moved = true; }
       if (!moved) break; } }
@@ -40,20 +43,27 @@ export function render(f, S) {
   const spot = (cands, rx, ry) => { let best = cands[0], bd = -Infinity; cands.forEach(c => { const d = clear(c[0], c[1], rx, ry); if (d > bd + .5) { bd = d; best = c; } }); taken.push([best[0], best[1], rx, ry]); return best; };
   C.forEach(c => { const cand = []; for (let r = 0; r <= 70; r += 10) for (let a = 0; a < 12; a++) cand.push([c.at[0] + r * Math.cos(a * Math.PI / 6), c.at[1] + r * Math.sin(a * Math.PI / 6) * .8]); c.at = spot(cand, 17, 17); });
   // each edge's sign badge sits at 0.74 of its curve; its label beside the curve's middle, on the clearer side
-  f.edges.forEach(e => { const g = G.get(e); taken.push([...qpt(g.a, g.c, g.b, .74), 9, 9]); });
-  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68, .25, .75].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); });
+  // (slid back towards the middle when 0.74 would put it on a box: a short edge's badge sat on the label it points at)
+  const offBoxes = p => f.nodes.every(n => { const [x, y] = P.get(n.id); return Math.abs(p[0] - x) > nw / 2 + 10 || Math.abs(p[1] - y) > nh / 2 + 10; });
+  f.edges.forEach(e => { const g = G.get(e); e._bt = [.74, .68, .62, .56, .5].find(t => offBoxes(qpt(g.a, g.c, g.b, t))) || .5; taken.push([...qpt(g.a, g.c, g.b, e._bt), 9, 9]); });
+  f.edges.forEach(e => { if (!e.label) return; const g = G.get(e), w = Math.min(120, e.label.length * (S.fs - 2.5) * .52 + 6) / 2, cand = []; [.5, .4, .6, .32, .68, .25, .75].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28, 36, -36].forEach(o => cand.push([p[0] - dy / L * o, p[1] + dx / L * o])); });
     // the narrow layout (phone, lectern): a short edge between two close boxes may have no place beside it clear of the
     // boxes and curves; then it looks further out, and a place on a box (clear: -1) ranks below one grazing a curve
     if (S.narrow && !cand.some(c => clear(c[0], c[1], w, 7) >= 0)) { let best = null, bd = -Infinity;
       [.5, .4, .6].forEach(t => { const p = qpt(g.a, g.c, g.b, t), q = qpt(g.a, g.c, g.b, t + .02), dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1; [13, -13, 20, -20, 28, -28, 38, -38, 48, -48, 60, -60].forEach(o => { const c = [p[0] - dy / L * o, p[1] + dx / L * o], d0 = clear(c[0], c[1], w, 7), d = d0 === -1 ? -1e6 : d0 - Math.abs(o) * .05; if (d > bd + .5) { bd = d; best = c; } }); });
       taken.push([best[0], best[1], w, 7]); e._lab = best; return; }
-    e._lab = spot(cand, w, 7); });
+    e._lab = spot(cand, w, 9.5); });   /* 9.5: an italic label's box is ~17 px tall; at 7 it could graze a sign badge */
+  // a label may still have landed on a sign badge (no place beside a short, crowded edge was clear): then the badge
+  // moves along its own curve instead, to the first spot clear of the boxes and of every label
+  // (the italic label is narrower than the placement estimate: ~0.4 em a letter)
+  { const labW = e => Math.min(120, e.label.length * (S.fs - 2.5) * .42 + 4) / 2, hit = (p, m) => f.edges.some(o => o.label && o._lab && Math.abs(p[0] - o._lab[0]) < labW(o) + 4 + m && Math.abs(p[1] - o._lab[1]) < 16 + m);   /* text half-heights: label 7, badge glyph 9 */
+    f.edges.forEach(e => { const g = G.get(e); if (!hit(qpt(g.a, g.c, g.b, e._bt), 4)) return; for (const m of [4, 1]) { const t = [.68, .62, .56, .5, .8, .44, .86, .38, .9].find(t => offBoxes(qpt(g.a, g.c, g.b, t)) && !hit(qpt(g.a, g.c, g.b, t), m)); if (t) { e._bt = t; break; } } }); }
   let sel = f.start || f.nodes[0].id, state = new Map(), tokens = [], arrivals = new Map(), log = [];
   const draw = () => {
     S.clear();
     C.forEach(c => { const col = c.sign > 0 ? FC.verd : FC.brass; S.mk('circle', { cx: c.at[0], cy: c.at[1], r: 15, fill: '#fffaf0', stroke: col, 'stroke-width': 1.6, 'stroke-dasharray': '30 5' }); S.mk('path', { d: `M${c.at[0] + 13} ${c.at[1] - 6}l3 6l4 -5`, fill: 'none', stroke: col, 'stroke-width': 1.6 }); S.txt(c.at[0], c.at[1] + 4.5, c.tag, { 'text-anchor': 'middle', 'font-weight': 700, fill: col, 'font-size': 12.5 }); });
     f.edges.forEach(e => { const g = G.get(e), hot = tokens.some(t => t.e === e); S.mk('path', { d: `M${g.a[0]} ${g.a[1]}Q${g.c[0]} ${g.c[1]} ${g.b[0]} ${g.b[1]}`, fill: 'none', stroke: hot ? FC.ink : FC.soft, 'stroke-width': hot ? 2.2 : 1.5, 'stroke-dasharray': e.status === 'hypothesis' ? '1.5 4' : e.delay ? '7 3' : null, 'stroke-linecap': e.status === 'hypothesis' ? 'round' : null, opacity: e.status === 'weak' ? .45 : null, 'marker-end': S.arrow(hot ? FC.ink : FC.soft) }); if (e.status === 'simplified') { const m = qpt(g.a, g.c, g.b, .5); S.txt(m[0], m[1] + 4, '⚠', { 'text-anchor': 'middle', 'font-size': 12, fill: FC.brass }); }
-      const s = qpt(g.a, g.c, g.b, .74), col = e.sign > 0 ? FC.verd : FC.rubric; S.mk('circle', { cx: s[0], cy: s[1], r: 8.5, fill: col }); S.txt(s[0], s[1] + 4.5, e.sign > 0 ? '+' : '−', { 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, 'font-size': 13 });
+      const s = qpt(g.a, g.c, g.b, e._bt || .74), col = e.sign > 0 ? FC.verd : FC.rubric; S.mk('circle', { cx: s[0], cy: s[1], r: 8.5, fill: col }); S.txt(s[0], s[1] + 4.5, e.sign > 0 ? '+' : '−', { 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, 'font-size': 13 });
       if (e.delay) { const d = qpt(g.a, g.c, g.b, .45); S.txt(d[0], d[1] - 6, '‖ delay', { 'text-anchor': 'middle', 'font-size': S.fs - 3, fill: FC.soft, 'font-style': 'italic' }); }
       if (e.label) S.txt(e._lab[0], e._lab[1] + 3.5, e.label, { 'text-anchor': 'middle', 'font-size': S.fs - 2.5, fill: FC.soft, 'font-style': 'italic', fit: 120 }); });
     tokens.forEach(t => { const g = G.get(t.e), p = qpt(g.a, g.c, g.b, Math.min(1, t.u)); S.mk('circle', { cx: p[0], cy: p[1], r: 7, fill: t.dir > 0 ? FC.verd : FC.rubric, stroke: '#fff', 'stroke-width': 1.5 }); S.txt(p[0], p[1] + 3.5, t.dir > 0 ? '▲' : '▼', { 'text-anchor': 'middle', fill: '#fff', 'font-size': 8 }); });

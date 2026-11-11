@@ -271,7 +271,7 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
     mk('line', { x1: P0.l, x2: W - P0.r, y1: H - P0.b, y2: H - P0.b, stroke: FC.soft }, g); mk('line', { x1: P0.l, x2: P0.l, y1: P0.t, y2: H - P0.b, stroke: FC.soft }, g); rec = true;
     // axis titles in italics, except a unit (J, s⁻², "height (m)"): units are always upright; variables in them are
     // still italicised by the typesetter
-    if (xlabel) txt(W - P0.r, H - 4, xlabel, { 'text-anchor': 'end', 'font-style': unitish(xlabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' }, g);
+    if (xlabel) txt(W - P0.r, H - (small ? 5 : 7), xlabel, { 'text-anchor': 'end', 'font-style': unitish(xlabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' }, g);
     if (ylabel) txt(P0.l + 4, P0.t + 2, ylabel, { 'font-style': unitish(ylabel) ? null : 'italic', 'font-size': fs - .5, class: 'fig-axtitle' }, g);
     return { X, Y };
   };
