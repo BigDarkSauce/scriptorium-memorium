@@ -18,6 +18,7 @@
 //    porous albedo, smooths roughness, fills cavities as puddles (a clearcoat water film with rain ripples) and
 //    adds dew glints.
 import * as THREE from 'three';
+import { classifyGpu } from './tier.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
 // ---------------------------------------------------------------- quality ----------------------------------------
@@ -47,11 +48,10 @@ export function detectQuality(renderer) {
   let name = '';
   try { const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info'); name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); } catch (e) { }
   const n = name.toLowerCase(), dpr = window.devicePixelRatio || 1, caps = renderer.capabilities;
-  let q = 'medium';
-  if (/swiftshader|llvmpipe|softpipe|software|microsoft basic/.test(n)) q = 'low';
-  else if (/mali|adreno|powervr|apple gpu|videocore|tegra/.test(n)) q = 'low';
-  else if (/nvidia|geforce|rtx|gtx|quadro|radeon rx|radeon pro|amd radeon(?! (r[2-5]|hd|vega [38]))|apple m[1-9] (pro|max|ultra)/.test(n)) q = 'high';
-  else if (/intel|iris|uhd|hd graphics|vega [38]|apple m[1-9]/.test(n)) q = 'medium';
+  // integrated GPUs start at 'low' (an AMD Radeon 610M was taken for a discrete card by the old "amd radeon" rule and ran
+  // at 'high' at 25-60 ms a frame); renderer.js measures the GPU's own frame time and raises the level when it can
+  let q = classifyGpu(n);
+  if (/software|microsoft basic/.test(n)) q = 'low';
   if (q === 'high' && dpr > 2.2) q = 'medium';                           // 4K/5K laptop panels: pixels cost more than steps
   if (caps.maxSamples < 4 || caps.maxTextureSize < 8192) q = q === 'high' ? 'medium' : 'low';
   // adaptive-resolution history: a GPU that has hit the resolution floor before starts one level lower

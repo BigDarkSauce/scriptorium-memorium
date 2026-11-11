@@ -17,7 +17,9 @@ const ago = t => { if (!t) return ''; const s = (Date.now() - t) / 1000; return 
 async function showcase(app) {
   const out = [], L = app.lib.lastRoom, books = [...app.lib.books].sort((a, b) => (b.id === (L && L.book)) - (a.id === (L && L.book)));
   for (const b of books.slice(0, 14)) {
-    const room = await store.get('room:' + b.id); if (!room || !Array.isArray(room.parts)) continue;
+    // through loadRoom: its upgrades bring an example room's built-in scenes to their current version (the room as stored
+    // can hold a copy from an older release: the water cycle's cone mountains and sphere clouds)
+    let room = null; try { room = await app.loadRoom(b.id); } catch (e) { room = await store.get('room:' + b.id); } if (!room || !Array.isArray(room.parts)) continue;
     for (const p of room.parts) for (const s of ((p.analysis || {}).chain || [])) for (const d of (s.demos || [])) if (is3D(d) && !needsAuthoring(d) && out.length < 40) out.push({ spec: d, book: b.title, part: p.title, step: s.title });
   }
   const seen = new Set(), pick = out.filter(x => { const k = (x.spec.type || '') + '|' + (x.spec.title || ''); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -32,7 +34,7 @@ export class TitleScreen {
     this._scene = new THREE.Scene(); this._scene.background = new THREE.Color('#0c0a08'); this.gfx.setView(this._scene, this.camera);
     // the dips between dioramas go through the title's own dark, not the paper colour the rest of the app fades through
     const G = this.gfx.grade.uniforms; this._fc = G.uFadeColor.value.clone(); G.uFadeColor.value.setRGB(.047, .039, .031);
-    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); }   // one steady resolution for the whole showcase (fixedRes)
+    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); } this.gfx.fixedRes = true;   // one steady resolution for the whole showcase (fixedRes)
     this.ui = el('div', { class: 'title-ui' }); app.ui.append(this.ui); this.buildUI();
     this.onResize = () => this.frame(); addEventListener('resize', this.onResize);
     this.ready = showcase(app).then(L => { this.items = L; if (!this.disposed) this.next(true); });
@@ -112,7 +114,7 @@ export class TitleScreen {
     this.cap.innerHTML = ''; this.cap.append(el('div', { class: 'tt-ck', text: it.book + (it.part ? ' · ' + it.part : '') }), el('div', { class: 'tt-ct', html: mathHTML(it.spec.title || it.step || 'Diorama', 'label') }), el('div', { class: 'tt-cn', text: `${this.i + 1} / ${this.items.length}` }));
     setTimeout(() => this.cap.classList.add('show'), first ? 400 : 120);
   }
-  go(fn) { if (this.leaving) return; this.leaving = true; this.ui.classList.add('out'); setTimeout(() => fn(), 380); }
+  go(fn) { if (this.leaving) return; this.leaving = true; this.ui.classList.add('out'); setTimeout(() => fn(), 60); }   // the menu fades while the iris shuts (App._irisNext)
   newSlot() {
     const name = el('input', { class: 'field', value: 'My scriptorium ' + (this.app.slots.length + 1), 'aria-label': 'Name' }), ex = el('input', { type: 'checkbox', checked: true });
     this.panel.innerHTML = ''; this.panel.append(el('div', { class: 'tt-card glass' }, [el('h3', { text: 'A new scriptorium' }), el('p', { class: 'dim small', text: 'Private to you: kept in this browser, with its own bookcases, scrolls and dioramas. Your other scriptoria stay as they are.' }),
@@ -129,7 +131,7 @@ export class TitleScreen {
     draw(); this.panel.innerHTML = ''; this.panel.append(el('div', { class: 'tt-card glass' }, [el('h3', { text: 'Your scriptoria' }), list, el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Close', onclick: () => { this.panel.innerHTML = ''; } })])]));
   }
   dispose() {
-    this.disposed = true; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.resetAdapt();
+    this.disposed = true; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.fixedRes = false; this.gfx.resetAdapt();
     // the app's own fade colour comes back once the next place has faded in (changing it under a closed veil would flash)
     const A = this.app, G = this.gfx.grade.uniforms, fc = this._fc, back = () => { if (A.mode instanceof TitleScreen) return; if (!A.switching && G.uFade.value < .01) G.uFadeColor.value.copy(fc); else requestAnimationFrame(back); }; requestAnimationFrame(back);
     if (this.ds) { const d = this.ds; this.ds = null; try { d.dispose(); } catch (e) { disposeTree(d.scene); } }
