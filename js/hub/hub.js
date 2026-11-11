@@ -4,6 +4,7 @@ import { MapView } from '../mapview.js';
 import { lookQ, flyPose, flightDur, easeSine } from '../camfly.js';
 import { iconFor, iconSVG, ICONS, ICON_NAMES, rememberIcon } from '../icons.js';
 import { openSymbolPicker } from '../symbols.js';
+const OPEN_PACE = 1.3;   // the scroll opening's speed (stepOpening)
 import { autoTags } from '../share.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -700,6 +701,7 @@ export class Hub {
   // back toward the case by more than 6 mm). The flight and the unroll follow as before.
   openScroll(sc) {
     const b = this.lib.books.find(x => x.id === sc.userData.bookId); if (!b) return;
+    if (this.app.prefetchRoom) this.app.prefetchRoom(b.id);   // the room's data is read while the scroll flies (the switch then finds it read)
     this.closeMenu(); this.closeMove(); this.dropGhost(); this.camTween = null; if (this.sdrag) this.endScrollDrag(false);
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null); this.gfx.canvas.style.cursor = '';
     if (this.hover) { this.hover.userData.paper.emissiveIntensity = 0; this.hover = null; }
@@ -774,7 +776,7 @@ export class Hub {
   stepOpening(dt) {
     const O = this.opening; if (O.cancel) { this.stepCancel(dt); return; }
     const T_FLY = O.tFly, T_UN = O.tUn, D_UN = 1.5, T_DIVE = T_UN + D_UN + .3, D_DIVE = 1.05;
-    O.t += dt; const t = O.t, c = this.camera, sc = O.sc, S = O.sheet.userData;
+    O.t += dt * OPEN_PACE; const t = O.t, c = this.camera, sc = O.sc, S = O.sheet.userData;   /* the whole choreography at 1.3x (it took 5.1 s before the room began to build: long for the hall's most frequent act) */
     // the flight: position along a straight line; the view direction turns by an angle-uniform slerp under a quintic
     // in-out (peak 1.875 × the mean rate: an 85° turn peaks at ~71°/s), its aim distance blending from start to end
     const u1 = Math.min(1, t / T_FLY), k1 = u1 * u1 * u1 * (u1 * (u1 * 6 - 15) + 10);

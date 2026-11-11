@@ -336,6 +336,7 @@ class App {
   firstShelf() { if (!this.lib.shelves.length) { const R = this.lib.hub; this.lib.shelves.push({ id: 'sh-' + uid(), name: 'Unsorted', kind: 'vertical', x: -R.w / 2 + .28, z: 0, rot: Math.PI / 2, color: '#8a2a1e' }); } return this.lib.shelves[0]; }
   saveLib() { store.saveLater(LIB_KEY, () => this.lib, 300); }
   saveRoom(id, room) { store.saveLater('room:' + id, () => room, 400); republishLater(this, this.lib.books.find(b => b.id === id)); }
+  prefetchRoom(id) { this._pre = { id, at: Date.now(), p: this.loadRoom(id) }; this._pre.p.catch(() => { }); }
   async loadRoom(id) {
     const r = (await store.get('room:' + id)) || { dims: { w: 12, d: 10, h: 5.5 }, parts: [] };
     // example rooms saved before grounding existed get their verified sources and teaching fields once
@@ -547,7 +548,7 @@ class App {
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
     this.route({ room: bookId, scroll: opts.openPart || null }); this.rememberRoom(bookId, opts.openPart);
-    const data = await this.loadRoom(bookId);
+    const P = this._pre; this._pre = null; const data = P && P.id === bookId && Date.now() - P.at < 20000 ? await P.p.catch(() => this.loadRoom(bookId)) : await this.loadRoom(bookId);   /* read ahead while a scroll flew (prefetchRoom) */
     // a scroll the room no longer has (a stale link, a re-split book) leaves the address (replaced, not a new entry) and
     // the door's memory
     if (opts.openPart && !(data.parts || []).some(p => p.id === opts.openPart)) {
