@@ -58,6 +58,9 @@ export class Gfx {
     r.toneMapping = THREE.AgXToneMapping; r.toneMappingExposure = .9;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.maxDpr = Math.min(window.devicePixelRatio || 1, 2); this.dpr = Math.min(this.maxDpr, 1.5);
+    // the resolution never goes below 85 % of a CSS pixel: at the old floor (half) a weak GPU's hall was drawn at 620 × 390
+    // in a 1240 × 790 window, and walking through it looked pixelated, its thin gilt strips broken into dashes
+    this.minDpr = Math.min(this.maxDpr, .85);
     r.setPixelRatio(this.dpr);
     const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 });
     const c = this.composer = new EffectComposer(r, rt);
@@ -151,16 +154,15 @@ export class Gfx {
     // lowest resolution, no bloom, one quality level down.
     if (dtMs > 3000) { this._slowRun = 0; return; }
     this._slowRun = dtMs > 150 ? (this._slowRun || 0) + 1 : 0;
-    if (this._slowRun >= 4) { this._slowRun = 0; this._acc = 0; this._n = 0; this.frameMs = dtMs; this._skip = 3; if (this.dpr > .75) { this.dpr = .75; this.resize(); } this.bloom.enabled = false;
+    if (this._slowRun >= 4) { this._slowRun = 0; this._acc = 0; this._n = 0; this.frameMs = dtMs; this._skip = 3; if (this.dpr > this.minDpr) { this.dpr = this.minDpr; this.resize(); } this.msaa(2);
       if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } this.onSevere && this.onSevere(q, dtMs); } return; }
     this._acc += Math.min(dtMs, 100); this._n++;
     if (this._acc > 2000) {
       const avg = this._acc / this._n; this._acc = 0; this._n = 0; this.frameMs = avg;
-      if (avg > 24 && this.dpr > .75) { this.dpr = Math.max(.75, this.dpr - .25); this.resize(); }
-      else if (avg < 13 && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .25); this.resize(); }
-      this.bloom.enabled = !(avg > 30 && this.dpr <= .75);
+      if (avg > 24 && this.dpr > this.minDpr) { this.dpr = Math.max(this.minDpr, this.dpr - .1); this.resize(); }
+      else if (avg < 13 && this.dpr < this.maxDpr && !this.moving) { this.dpr = Math.min(this.maxDpr, this.dpr + .1); this.resize(); }
       // still too slow at the resolution floor for two windows in a row: one quality level down, remembered per GPU
-      this._slow = avg > 30 && this.dpr <= .75 ? this._slow + 1 : 0;
+      this._slow = avg > 30 && this.dpr <= this.minDpr ? this._slow + 1 : 0;
       if (this._slow >= 2 && this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._slow = 0; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
     }
   }
@@ -180,15 +182,24 @@ export class Gfx {
     if (now - this._gpuAt < 1500 || T.ms.length < 12) return; this._gpuAt = now;
     const xs = T.ms.splice(0).sort((a, b) => a - b), med = xs[xs.length >> 1]; this.gpuMs = med;
     if (this._gpuSkip > 0) { this._gpuSkip--; return; } if (this.holdQuality) return;
-    if (med > 17) { this._fast = 0; this._downs = (this._downs || 0) + 1;
+    // a steady picture first: a change of resolution or of the bloom is itself a visible jump, so the governor waits for
+    // agreement (two slow windows, 3 s; or one very slow) before stepping down, for four fast windows and 8 s of calm
+    // before stepping up, never steps up while the camera moves (walking costs more than standing: it would only step
+    // down again), and never switches the bloom off and on. At the floor it trades multisampling (4x -> 2x) before
+    // anything else: far less visible than a coarser picture.
+    const now2 = performance.now(), calm = now2 - (this._lastStep || 0) > 8000;
+    if (med > 18) { this._fast = 0; this._slowW = (this._slowW || 0) + 1; if (this._slowW < 2 && med < 28) return; this._slowW = 0; this._downs = (this._downs || 0) + 1; this._lastStep = now2;
       if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._gpuSkip = 1; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
-      else if (!this.fixedRes && this.dpr > .5) { this.dpr = Math.max(.5, this.dpr - .15); this.resize(); this._gpuSkip = 1; }   // the resolution floor at 'low': half (a weak GPU in a full-HD window)
-      this.bloom.enabled = !(this.quality === 'low' && this.dpr <= .7 && med > 22);
-    } else if (med < 6.5) { this._fast = (this._fast || 0) + 1; if (this._fast < 3) return; this._fast = 0;
-      if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .17); this.resize(); this._gpuSkip = 1; this.bloom.enabled = true; }
+      else if (!this.fixedRes && this.dpr > this.minDpr + .01) { this.dpr = Math.max(this.minDpr, this.dpr - .1); this.resize(); this._gpuSkip = 1; }
+      else if (this.msaa() > 2) { this.msaa(2); this._gpuSkip = 1; }
+    } else if (med < 8) { this._slowW = 0; this._fast = (this._fast || 0) + 1; if (this._fast < 4 || !calm || this.moving) return; this._fast = 0; this._lastStep = now2;
+      if (this.msaa() < 4 && this.dpr >= this.minDpr) this.msaa(4);
+      else if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .1); this.resize(); this._gpuSkip = 1; }
       else if (!this._downs) { const cap = this.gpuClass || 'high', order = ['low', 'medium', 'high'], i = order.indexOf(this.quality); if (i < order.indexOf(cap)) { this.setQuality(order[i + 1]); this._gpuSkip = 1; } }
-    } else this._fast = 0;
+    } else { this._fast = 0; this._slowW = 0; }
   }
+  // the composer's multisampling (4 by default; 2 when a weak GPU is at its resolution floor)
+  msaa(n) { const c = this.composer, T = [c.renderTarget1, c.renderTarget2]; if (n == null) return T[0].samples; T.forEach(t => { if (t.samples !== n) { t.samples = n; t.dispose(); } }); return n; }
   get timed() { return !!this._gpuT; }
   // ---- quality API: 'low' | 'medium' | 'high' (detected at start; see docs/research/aaa-rendering.md) ----
   // POM steps, glints, self-shadowing, pixel-depth offset and the atmosphere pass change at once; the number of
