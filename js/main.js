@@ -5,6 +5,7 @@ import { BAKE } from './gfx/textures.js';
 import * as store from './store.js';
 import * as ingest from './ai/ingest.js';
 import { initAI } from './ai/claude.js';
+import { aiButton } from './ai/aipanel.js';
 import { initEvidence } from './ai/evidence.js';
 import { Hub } from './hub/hub.js';
 import { BookRoom } from './room/room.js';
@@ -49,7 +50,7 @@ class App {
     initAI(); initEvidence();
     // sound: one speaker button, a soft click for every button, ambience per place
     this.sfx = sfx; document.body.append(sfx.button());
-    this.qualityControl();
+    this.qualityControl(); aiButton(this);   // the AI engine settings (js/ai/aipanel.js), under the graphics button
     document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button, .btn, [role=button], summary'); if (b && !b.classList.contains('sound-btn')) sfx.play('click', { gain: .6 }); }, true);
   }
   // Graphics quality (renderer.js: 'low' | 'medium' | 'high'). "auto" keeps the detected level and the automatic step-

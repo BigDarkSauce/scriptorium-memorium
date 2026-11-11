@@ -31,13 +31,13 @@ export async function testProvider(p, { signal, onStep } = {}) {
   // ping and chain: the best model first; if it is at its limit or broken, the next ones (up to three)
   for (const m of L.slice(0, 3)) {
     R.model = m.id; step('Ping ' + m.id + '…');
-    try { const r = await FREE.call(p, m.id, 'Return exactly this JSON with the sum filled in: {"ok": true, "sum": <3 + 4>}', { signal, maxTokens: 400 }); const v = parseJSONLoose(r.text); R.ping = { ok: !!v && v.ok === true && +v.sum === 7, ms: Math.round(r.ms) }; }
+    try { const r = await FREE.call(p, m.id, 'Return exactly this JSON with the sum filled in: {"ok": true, "sum": <3 + 4>}', { signal, maxTokens: 400, timeoutMs: 45000 }); const v = parseJSONLoose(r.text); R.ping = { ok: !!v && v.ok === true && +v.sum === 7, ms: Math.round(r.ms) }; }
     catch (e) { R.ping = { ok: false, why: FREE.errText(e) }; if (e && e.code === 'cancelled') throw e; continue; }
     if (!R.ping.ok) continue;
     step('Writing a chain with ' + m.id + '…');
     try {
       const prompt = chapterPrompt({ book: 'A test of free models', chapter: 'Springs (test passage)', text: PASSAGE, depth: 'complete', sections: SECTIONS });
-      const r = await FREE.call(p, m.id, prompt, { signal });
+      const r = await FREE.call(p, m.id, prompt, { signal, timeoutMs: 240000 });
       let A; try { A = parseJSONLoose(r.text); } catch (e) { R.chain = { ok: false, why: 'answer was not JSON', ms: Math.round(r.ms), chars: r.text.length }; continue; }
       if (r.finish === 'length' || A._truncated) { R.chain = { ok: false, why: 'answer cut off at the output limit', ms: Math.round(r.ms) }; continue; }
       try { normalizeChain(A); } catch (e) { }
