@@ -501,6 +501,9 @@ class App {
         }
         if (note) note.done(); mark('sm:sw-ready'); }
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // the frames' own check (the loop's gate) has the last word: the place updates between frames (a room lights its
+      // scroll spots), so the veil lifts only once a frame has been drawn with nothing left to compile
+      { const t0 = performance.now(); let note = null; while (this.mode && this._gateN && performance.now() - t0 < 20000) { if (!note && performance.now() - t0 > 700) note = this.prepNote(this.mode); if (note) note.update(this._gateN); await sleep(40); } if (note) note.done(); }
       mark('sm:sw-frames'); await sleep(60);
       if (irisNext) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false;
         const U = document.getElementById('ui'); if (U) { U.style.transition = 'opacity 1.2s ease .5s'; U.style.opacity = ''; setTimeout(() => { U.style.transition = ''; }, 1900); }

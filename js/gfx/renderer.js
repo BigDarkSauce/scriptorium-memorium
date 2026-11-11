@@ -219,8 +219,12 @@ export class Gfx {
   // Precompile every program a scene will need across its states (sketch → real), without rendering:
   // variants = [{ apply(), restore() }]; each state is applied, compiled (parallel where KHR_parallel_shader_compile
   // exists) and restored synchronously. Texture/cube backgrounds get their background program from a 1×1 render.
+  // the scene as a frame will draw it: on 'low' a frame first tames it (tier.js: accent lights out, glass simplified), and
+  // a light count is part of every lit program, so whatever compiles ahead of a frame must see the tamed scene (it saw
+  // the untamed one, and the first frames then compiled their own programs synchronously: 3.7 s on a Radeon 610M)
+  tameFor(scene) { try { if (scene) { const low = AAA.quality === 'low'; if (scene.userData.tamed !== low) tame(scene, low); } } catch (e) { console.warn(e); } }
   prewarm(scene, camera, variants = [], backgrounds = []) {
-    const r = this.renderer, t0 = performance.now(), jobs = [];
+    this.tameFor(scene); const r = this.renderer, t0 = performance.now(), jobs = [];
     // r.compile() queues the programs (in parallel where KHR_parallel_shader_compile exists) and returns the material
     // set. We poll readiness ourselves instead of using three's compileAsync: its poll calls currentProgram.isReady()
     // unguarded, and variant materials restored/disposed meanwhile have no program -> uncaught TypeError + a promise
@@ -259,7 +263,7 @@ export class Gfx {
   // start compiling in the GPU process (KHR_parallel_shader_compile); a frame drawn before they are linked would wait for
   // them on the page's thread, so under the veil such a frame is skipped instead (main.js loop) and the veil waits.
   pending(scene, camera) {
-    const r = this.renderer, props = r.properties, prev = r.getRenderTarget(); let set = null;
+    this.tameFor(scene); const r = this.renderer, props = r.properties, prev = r.getRenderTarget(); let set = null;
     r.setRenderTarget(this.composer.readBuffer); try { set = r.compile(scene, camera); } catch (e) { return 0; } finally { r.setRenderTarget(prev); }
     let n = 0; if (set) for (const m of set) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) n++; } return n;
   }
