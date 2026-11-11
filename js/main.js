@@ -128,17 +128,17 @@ class App {
     const id = 's' + uid().replace(/[^a-z0-9]/gi, '').slice(0, 10), m = { id, name: String(name || 'A new scriptorium').slice(0, 60), created: Date.now(), played: Date.now() };
     this.slots.push(m); await store.setGlobal('slots', this.slots); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id);
     await this.loadLibrary({ empty: !examples }); this.saveLib();
-    this._arrive = { from: 'title' }; this._dissolveNext = true; return this.openHub();
+    this._arrive = { enter: true }; this._irisNext = true; return this.openHub();
   }
   async renameSlot(id, name) { const m = this.slots.find(x => x.id === id); if (m) { m.name = String(name).slice(0, 60); await store.setGlobal('slots', this.slots); } }
   async deleteSlot(id) { if (id === 'main' || id === this.slotId) return false; await store.dropSlot(id); this.slots = this.slots.filter(x => x.id !== id); await store.setGlobal('slots', this.slots); return true; }
   // the title screen; "Continue" returns to the place the slot was left in, by a camera move into it
   openTitle() { try { this.rememberPlace(); store.flushSaves(); } catch (e) { }   /* Continue comes back to exactly here */
-    this._dissolveNext = true;
+    this._irisNext = true;
     this.route({}); sfx.ambience('library'); return this.switchMode(() => new TitleScreen(this)); }
   async continueSlot(id) {
     await this.switchSlot(id); this.slotMeta({ played: Date.now() }); const L = this.lib.lastPlace, book = L && L.book && this.lib.books.find(b => b.id === L.book);
-    this._arrive = L && L.cam && !L.part ? { pose: L.cam } : { from: 'title' }; this._dissolveNext = true;
+    this._arrive = { enter: true, pose: L && L.cam && !L.part ? L.cam : null }; this._irisNext = true;
     return book ? this.openRoom(book.id, { openPart: L.part || undefined }) : this.openHub();
   }
   // ---------- camera choreography owned by the app: runs after the place's own update, before drawing ----------
@@ -170,6 +170,26 @@ class App {
     if (!M || !M.camera) return; const cam = M.camera, f = new THREE.Vector3(); cam.getWorldDirection(f);
     const goal = how.pose ? { p: new THREE.Vector3(...how.pose.p), a: new THREE.Vector3(...how.pose.a) } : { p: cam.position.clone(), a: M.controls && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
     const D = M.doorInfo, pick = M.doorPick;
+    if (how.enter && D && D.set && pick) {
+      // from the title screen, through the door: the iris opens on the closed double door seen from the gallery behind it;
+      // the leaves swing open onto the place, the camera walks in over the threshold, the doors close behind it, and the
+      // camera goes on to where it was left (or the place's opening view)
+      const c = pick.position, T = D.tunnel, p0 = new THREE.Vector3(c.x, 1.6, c.z + 2.6), a0 = new THREE.Vector3(c.x, 1.48, c.z - 4);
+      const p1 = new THREE.Vector3(c.x, 1.62, c.z - 1.5), a1 = new THREE.Vector3(c.x, 1.5, c.z - 7);
+      cam.position.copy(p0); cam.lookAt(a0); D.travel = true; D.set(0); if (T) { T.setFlow(0); T.setGlow(0); }
+      let swing = 'wait', shut = false, irisAt = 0;
+      const hold = () => {   // until the change is done and the iris has opened enough to see the doors; then the swing
+        if (this.switching) return true;
+        if (swing === 'wait') { irisAt = irisAt || performance.now(); if (performance.now() - irisAt < 900) return true; swing = 'go'; sfx.play('whoosh', { gain: .22 });
+          const t0 = performance.now(); const st = () => { if (M.disposed) return; const k = Math.min(1, (performance.now() - t0) / 1100); D.set(1 - Math.pow(1 - k, 3)); if (k < 1) requestAnimationFrame(st); else swing = 'open'; }; st(); }
+        return swing !== 'open';
+      };
+      const close = q => { D.set(1 - (q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2)); if (q >= 1 && !shut) { shut = true; D.travel = false; D.set(0); sfx.play('thud', { gain: .35 }); } };
+      this.cineRun(M, [{ p: p0, a: a0, dur: .05, hold },
+        { p: p1, a: a1, dur: 2.2, ease: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, at: k => { if (k > .55) close((k - .55) / .45 * .6); } },
+        { p: goal.p, a: goal.a, dur: 'auto', at: k => { if (!shut) close(.6 + Math.min(1, k * 2.5) * .4); } }]).then(() => { if (!shut) { D.travel = false; D.set(0); } });
+      return;
+    }
     if (how.door && D && D.set && pick) {
       // out of this place's own tunnel: the camera starts far down the bore with the room framed by the open door ahead,
       // held there until the veil has lifted, glides up the tunnel (the light slowing round it), through the doorway, and
@@ -421,9 +441,12 @@ class App {
       // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
       const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
       // a dissolve (title screen <-> library): the still covers the change, so the veil drops at once beneath it
-      const still = this._dissolveNext && this.mode && !this.veilHold ? await this.snapshot() : null; this._dissolveNext = false;
+      // the iris (title screen <-> library): shut from the edges in before anything is built; the change happens in black
+      const irisNext = this._irisNext && this.mode && !this.veilHold; this._irisNext = false;
+      if (irisNext) { const U = document.getElementById('ui'); if (U) { U.style.transition = 'opacity .5s ease'; U.style.opacity = '0'; } await this.iris(0, 1100); }
+      const still = !irisNext && this._dissolveNext && this.mode && !this.veilHold ? await this.snapshot() : null; this._dissolveNext = false;
       const uiEl = document.getElementById('ui'); if (still && uiEl) uiEl.style.opacity = '0';   // the next place's buttons rise with the dissolve, not before it
-      if (!still && g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
+      if (!still && !irisNext && g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
       g.value = 1;
       // from here until the new place's reflections are captured nothing is drawn: the screen is black (uFade 1) and the
       // frames would only compete with the bakes, the compile and the probe for the GPU (with a software GPU a hall frame
@@ -438,9 +461,9 @@ class App {
       // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
       // starting 0.8 s after the veil had lifted, so the hall first showed under the flat studio light, then popped to its
       // own reflections. Now: its materials are enriched and the capture scheduled (captureProbe draws nothing), the
-      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, every
-      // program is compiled for that look (in parallel where the browser can), and only then is the probe drawn in full
-      // (RoomProbe.finish), with programs that are already compiled
+      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, the
+      // programs the probe draws with are compiled (in parallel where the browser can), the probe is drawn in full
+      // (RoomProbe.finish), and then every program is compiled again for the look it gives (scene.environment)
       const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
       if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
       // the programs are queued first (r.compile; flushed so the GPU process starts on them now) and the surface maps baked
@@ -448,26 +471,39 @@ class App {
       // the probe's first draw waiting for every link afterwards. (Baking only swaps a texture's pixels: no program
       // changes.) The awaited prewarm below picks up what a diorama's scanned detail adds.
       mark('sm:sw-mode'); const early = this.mode && this.mode.scene && this.mode.camera ? this.mode : null;
-      if (early) { try { this.gfx.prewarm(early.scene, early.camera, [{ apply() { }, restore() { } }]).catch(() => { }); this.gfx.renderer.getContext().flush(); } catch (e) { console.warn(e); } }
+      if (early) { try { this.gfx.prewarm(early.scene, early.camera).catch(() => { }); this.gfx.renderer.getContext().flush(); } catch (e) { console.warn(e); } }
       try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
       if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
-      if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
-      mark('sm:sw-prewarm'); if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
+      // the probe first: it sets scene.environment, which changes every lit material's program. Prewarmed before it, the
+      // programs compiled were the wrong ones and all recompiled synchronously in the first frame (3-4 s measured on a
+      // Radeon 610M); prewarmed after it, they are the ones drawn.
+      if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
+      if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera), sleep(4000)]); } catch (e) { } }
+      mark('sm:sw-prewarm');
       this.gfx.resetAdapt(); this.veilHold = false;
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       mark('sm:sw-frames'); await sleep(60);
-      if (still) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false; this.dissolve(still, 1700, true); }
+      if (irisNext) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false;
+        const U = document.getElementById('ui'); if (U) { U.style.transition = 'opacity 1.2s ease .5s'; U.style.opacity = ''; setTimeout(() => { U.style.transition = ''; }, 1900); }
+        this.iris(1.35, 1900); }   // opens from the centre while the arrival's camera move runs
+      else if (still) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false; this.dissolve(still, 1700, true); }
       else await fade(1, 0, 330);
       g.value = 0; done = true; mark('sm:sw-end');
-    } finally { this.switching = false; this.veilHold = false; if (!done) { g.value = 0; document.querySelectorAll('.xfade').forEach(o => this.dissolve(o, 300)); const U = document.getElementById('ui'); if (U) U.style.opacity = ''; } }
+    } finally { this.switching = false; this.veilHold = false; if (!done) { g.value = 0; this.gfx.grade.uniforms.uIris.value = 2; document.querySelectorAll('.xfade').forEach(o => this.dissolve(o, 300)); const U = document.getElementById('ui'); if (U) U.style.opacity = ''; } }
+  }
+  // The iris: the view darkens from its edges towards its centre until it is black, and opens again from the centre
+  // outwards (the grade pass's uIris: about 1.35 fully open, 0 shut). By the wall clock, eased.
+  iris(to, ms) {
+    const U = this.gfx.grade.uniforms.uIris, from = Math.min(1.35, U.value), t0 = performance.now();
+    return new Promise(res => { const step = () => { const k = Math.min(1, (performance.now() - t0) / ms), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; U.value = from + (to - from) * e; if (k < 1) requestAnimationFrame(step); else { U.value = to >= 1.3 ? 2 : to; res(); } }; requestAnimationFrame(step); });
   }
   // Dissolves. The last drawn frame is copied into a canvas laid over the 3D view (under the interface), and what is
   // costly happens under it: building the next scene, compiling its programs, uploading its textures, its first frames.
   // Then the still fades away (a CSS transition, run by the compositor: it keeps its pace even while the page's own thread
-  // or the GPU is busy) onto the new scene, already moving. A slow drift of the still hides that it has stopped.
+  // or the GPU is busy) onto the new scene, already moving. The still does not move: a picture with nothing moving on it cannot be seen to stall.
   snapshot() {
     return new Promise(res => {
       let done = false; const fin = o => { if (done) return; done = true; res(o); };
@@ -519,7 +555,7 @@ class App {
     if (!this.veilHold) {
       const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
-      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60 && !(this.mode && this.mode.fixedRes); if (full) this.gfx.adapt(this._rAcc);   /* (fixedRes: the title screen keeps one resolution: a resize mid-shot is a visible hitch) */ else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
+      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
     }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
   }

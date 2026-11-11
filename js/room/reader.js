@@ -21,7 +21,11 @@ import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, colle
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
 let sketchQ = Promise.resolve();
-const queueSketch = f => (sketchQ = sketchQ.then(nextFrame).then(f).catch(e => console.warn(e)));
+// sketches are drawn one at a time, each when the page is idle, and only once its card comes near the visible part of
+// the scroll (a scroll that is opened draws nothing until you read towards a drawing)
+const nextIdle = () => new Promise(r => (window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 600 }) : setTimeout(r, 30)));
+const queueSketch = f => (sketchQ = sketchQ.then(nextFrame).then(nextIdle).then(f).catch(e => console.warn(e)));
+const whenNear = node => new Promise(res => { if (!('IntersectionObserver' in window)) return res(); const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); res(); } }, { rootMargin: '700px 0px' }); io.observe(node); });
 const TOOLNAME = { search_literature: 'OpenAlex', search_evidence: 'Consensus', search_biomedical: 'PubMed', search_any_discipline: 'SciSpace', search_computing: 'Hugging Face', search_clinical_trials: 'ClinicalTrials.gov' };
 const toolStatus = st => (name, input) => { st.textContent = `Looking it up in ${TOOLNAME[name] || name}: “${String((input && input.query) || '').slice(0, 70)}”…`; };
 
@@ -441,14 +445,14 @@ export class Reader {
         el('figcaption', {}, [el('div', {}, [el('div', { class: 'kicker', text: stage ? `stage of the diorama shown in ${stage.first} · numbered parts are this step's bodies` : (d.technique || d.style || 'card') + ' · ' + (d.type === 'scene' ? 'authored scene' : d.type) }), el('b', { mathLabel: d.title || d.type })]), el('div', { class: 'row' }, [
           el('button', { class: 'btn small', text: 'Pedestal', title: 'Show this as the card model on the pedestal by this scroll', onclick: () => { this.part.pedestal = { step: st.id, demo: i }; this.save(); this.room.refreshStation(this.part); toast('Placed on the pedestal'); } }), go])]));
       img.addEventListener('click', () => this.openDiorama(d, st, img));
-      queueSketch(() => !this.el.isConnected ? null : renderSketch(this.app.gfx, d, 800, stage ? 420 : 500, stage || {}).then(url => {
+      whenNear(card).then(() => queueSketch(() => !this.el.isConnected ? null : renderSketch(this.app.gfx, d, 800, stage ? 420 : 500, stage || {}).then(url => {
         if (!url) { // nothing specific to frame: a compact reference rather than the same picture again
           card.className = 'sketch-ref'; card.innerHTML = '';
           card.append(el('span', { class: 'ic', text: '↺' }), el('span', { html: `Same diorama as <a>${esc(stage.first)}</a>${d.params ? ', with this step\'s settings: ' + esc(Object.entries(d.params).map(([k, v]) => k + ' = ' + v).join(', ')) : ''}.` }), el('button', { class: 'btn small primary', text: 'Open ▸', onclick: () => this.openDiorama(d, st, null) }));
           card.querySelector('a').onclick = () => { const t = this.el.querySelector(`[data-sid="${CSS.escape(stage.first)}"]`); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
           return;
         }
-        img.src = url; card.classList.add('ready'); }).catch(e => { card.querySelector('.sketch-loading').textContent = 'Could not draw: ' + e.message; }));
+        img.src = url; card.classList.add('ready'); }).catch(e => { card.querySelector('.sketch-loading').textContent = 'Could not draw: ' + e.message; })));
     };
     fill(); return card;
   }

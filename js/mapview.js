@@ -140,7 +140,10 @@ export class MapView {
     // order-keeping spread of intervals along a line: wanted centres c, sizes s, kept within [lo, hi]
     const spread = (c, s2, lo, hi) => { const n = c.length, p = c.slice(); for (let i = 0; i < n; i++) { p[i] = Math.max(p[i], lo + s2[i] / 2); if (i) p[i] = Math.max(p[i], p[i - 1] + (s2[i - 1] + s2[i]) / 2 + GAP); } for (let i = n - 1; i >= 0; i--) { p[i] = Math.min(p[i], hi - s2[i] / 2); if (i < n - 1) p[i] = Math.min(p[i], p[i + 1] - (s2[i + 1] + s2[i]) / 2 - GAP); } return p; };
     const put = (i, x, y) => { L[i].style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`; wrap.append(L[i]); };
-    const lead = (i, pts) => leads.append(S('path', { class: 'fm-lead', 'data-i': i, d: 'M' + pts.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' L') }), S('circle', { class: 'fm-lead', 'data-i': i, cx: pts[0][0].toFixed(1), cy: pts[0][1].toFixed(1), r: 2.8 }));
+    // a leader leaves its icon's ring at the ring's edge, towards its first bend (not from the icon's centre)
+    const RING = 24 / 2 + 3;
+    const lead = (i, pts) => { const [c, nx] = pts, dx = nx[0] - c[0], dy = nx[1] - c[1], L = Math.hypot(dx, dy) || 1; const p0 = [c[0] + dx / L * RING, c[1] + dy / L * RING];
+      leads.append(S('path', { class: 'fm-lead', 'data-i': i, d: 'M' + [p0, ...pts.slice(1)].map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' L') })); };
     const g = i => D.groups[i];
     for (const side of ['left', 'right']) {   // columns beside the plan
       const ids = walls[side].sort((a, b) => g(a).cy - g(b).cy); if (!ids.length) continue;

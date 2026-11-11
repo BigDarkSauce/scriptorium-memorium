@@ -24,6 +24,7 @@ import { DIO } from './models.js';
 import { renderHook, renderPayoff, normHook } from '../room/hooks.js';
 import { dioHook } from '../seeds-hooks.js';
 import { Lab } from './lab.js';
+import * as store from '../store.js';
 const PREFS_KEY = 'scriptorium.view';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
 const savePrefs = p => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { } };
@@ -863,9 +864,18 @@ export function fitSketchKey(b, fk, w, h) {
     D *= Math.min(1.6, Math.max(.6, sc)); }
   return { target: aim, dir, fov: fk.fov, frameH: 2 * D * th, dist: D, near: Math.max(.01, D - depth * 2), far: D + depth * 2 + 1, up0 };
 }
+// A sketch (a drawing of a diorama on its card) costs a whole scene built on the page's thread, its programs and one
+// draw; it used to read its pixels back synchronously (readRenderTargetPixels: the GPU drains everything queued before
+// it answers) and compile on first use, and it was kept only until the page closed. Measured on a Radeon 610M, opening a
+// scroll stalled the page for 1.6 s. Now: drawn once and kept in the browser's storage (by its content: a scroll opened
+// again shows its sketches at once, in any scriptorium); compiled in parallel first (compileAsync); read back without
+// a stall (readRenderTargetPixelsAsync: a fence, read a few frames later). Raise SKETCH_V when the drawing changes.
+const SKETCH_V = 1, fnv = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + s.length.toString(36); };
 export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
-  const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '']);
+  const key = JSON.stringify([spec.type, spec.technique, spec.params, spec.bodies && spec.bodies.length, spec.title, spec.code && spec.code.length, spec.overrides, spec.additions, opts.focusText || '', opts.label || '', w, h]);
   if (sketchCache.has(key)) return sketchCache.get(key);
+  const pk = 'sketch:' + SKETCH_V + ':' + fnv(key + JSON.stringify(spec).length);
+  try { const kept = await store.getGlobal(pk); if (kept && kept.k === key) { sketchCache.set(key, kept.url); return kept.url; } } catch (e) { }
   const ds = new DioramaScene(gfx, spec, { headless: true });
   ds.step(0);
   // the overview frames the subject (sketchSubject): its outlines are as thick as the subject is large, not the world
@@ -899,8 +909,13 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   }
   const rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 }); const r = gfx.renderer;
   const prevT = r.getRenderTarget(), prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
-  r.setRenderTarget(rt); r.render(ds.scene, cam); r.setRenderTarget(prevT); r.toneMapping = prevTM;
-  const px = new Uint8Array(w * h * 4); r.readRenderTargetPixels(rt, 0, 0, w, h, px);
+  // its programs compiled first, in parallel where the GPU allows, in the very state of the draw (target, tone mapping)
+  r.setRenderTarget(rt); let cp = null; try { cp = r.compileAsync(ds.scene, cam); } catch (e) { } r.setRenderTarget(prevT); r.toneMapping = prevTM;
+  if (cp) { try { await Promise.race([cp, new Promise(res => setTimeout(res, 5000))]); } catch (e) { } }
+  const prevT2 = r.getRenderTarget(), prevTM2 = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
+  r.setRenderTarget(rt); r.render(ds.scene, cam); r.setRenderTarget(prevT2); r.toneMapping = prevTM2;
+  const px = new Uint8Array(w * h * 4);
+  try { await r.readRenderTargetPixelsAsync(rt, 0, 0, w, h, px); } catch (e) { r.readRenderTargetPixels(rt, 0, 0, w, h, px); }   // no stall: fenced, read a few frames later
   const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); const img = g.createImageData(w, h);
   for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
   g.putImageData(img, 0, 0);
@@ -941,5 +956,5 @@ export async function renderSketch(gfx, spec, w = 800, h = 500, opts = {}) {
   g.fillStyle = 'rgba(239,233,220,.94)'; g.fillRect(15, h - 44, w - 30, 29); g.strokeStyle = 'rgba(29,28,25,.35)'; g.beginPath(); g.moveTo(15, h - 44); g.lineTo(w - 15, h - 44); g.stroke();
   g.fillStyle = 'rgba(29,28,25,.85)'; g.fillText(Lt, 26, h - 25); g.textAlign = 'right'; g.fillText(Rt, w - 26, h - 25);
   rt.dispose(); ds.scene.background = keepBg; ds.scene.fog = keepFog; disposeTree(ds.scene, gfx.scene);   // like ds.dispose(), plus its textures (labels, canvases); the scene on screen keeps what it shares
-  const url = c.toDataURL('image/jpeg', .86); sketchCache.set(key, url); return url;
+  const url = c.toDataURL('image/jpeg', .86); sketchCache.set(key, url); store.setGlobal(pk, { k: key, url }).catch(() => { }); return url;
 }

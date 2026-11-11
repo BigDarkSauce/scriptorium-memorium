@@ -17,7 +17,9 @@ const ago = t => { if (!t) return ''; const s = (Date.now() - t) / 1000; return 
 async function showcase(app) {
   const out = [], L = app.lib.lastRoom, books = [...app.lib.books].sort((a, b) => (b.id === (L && L.book)) - (a.id === (L && L.book)));
   for (const b of books.slice(0, 14)) {
-    const room = await store.get('room:' + b.id); if (!room || !Array.isArray(room.parts)) continue;
+    // through loadRoom: its upgrades bring an example room's built-in scenes to their current version (the room as stored
+    // can hold a copy from an older release: the water cycle's cone mountains and sphere clouds)
+    let room = null; try { room = await app.loadRoom(b.id); } catch (e) { room = await store.get('room:' + b.id); } if (!room || !Array.isArray(room.parts)) continue;
     for (const p of room.parts) for (const s of ((p.analysis || {}).chain || [])) for (const d of (s.demos || [])) if (is3D(d) && !needsAuthoring(d) && out.length < 40) out.push({ spec: d, book: b.title, part: p.title, step: s.title });
   }
   const seen = new Set(), pick = out.filter(x => { const k = (x.spec.type || '') + '|' + (x.spec.title || ''); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -27,12 +29,12 @@ async function showcase(app) {
 }
 export class TitleScreen {
   constructor(app) {
-    this.app = app; this.gfx = app.gfx; this.t = 0; this.i = -1; this.items = []; this.ds = null; this.fixedRes = true;
+    this.app = app; this.gfx = app.gfx; this.t = 0; this.i = -1; this.items = []; this.ds = null;
     this.camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, .1, 500);
     this._scene = new THREE.Scene(); this._scene.background = new THREE.Color('#0c0a08'); this.gfx.setView(this._scene, this.camera);
     // the dips between dioramas go through the title's own dark, not the paper colour the rest of the app fades through
     const G = this.gfx.grade.uniforms; this._fc = G.uFadeColor.value.clone(); G.uFadeColor.value.setRGB(.047, .039, .031);
-    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); }   // one steady resolution for the whole showcase (fixedRes)
+    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); }   // at most the screen's own pixels; the GPU governor lowers it on a weak GPU (renderer.js pollGpu)
     this.ui = el('div', { class: 'title-ui' }); app.ui.append(this.ui); this.buildUI();
     this.onResize = () => this.frame(); addEventListener('resize', this.onResize);
     this.ready = showcase(app).then(L => { this.items = L; if (!this.disposed) this.next(true); });
@@ -45,7 +47,7 @@ export class TitleScreen {
   // and it is run and drawn for a few frames, so textures, shadows and the variants it only switches on once running are
   // ready. Then the still fades away (a compositor transition: its pace does not depend on the page's thread) onto the
   // new diorama, already in its slow camera move. The old one is freed once the dissolve is over. The canvas is never
-  // resized (gfx.swapScene) and the resolution stays fixed for the whole showcase (fixedRes).
+  // resized (gfx.swapScene); the GPU governor (renderer.js pollGpu) may lower the resolution on a weak GPU.
   async next(first) {
     if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; let still = null;
     try {
@@ -53,17 +55,17 @@ export class TitleScreen {
       let ds = null, tries = this.items.length;
       while (!ds && tries-- > 0 && !this.disposed) {
         this.i = (this.i + 1) % this.items.length; const it = this.items[this.i];
-        try { ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); }
+        try { performance.mark('sm:t-build0'); ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); performance.measure('sm:t-build', 'sm:t-build0'); }
         catch (e) { console.warn('title showcase', e); ds = null; if (this.items.length > 1) { this.items.splice(this.i, 1); this.i--; } }
       }
       if (!ds || this.disposed) { if (ds) ds.dispose(); this.app.dissolve(still, 400); return; }
       const old = this.ds; this.shot = { kind: ['orbit', 'push', 'crane', 'circle'][this.i % 4], t: 0, dir: Math.random() < .5 ? -1 : 1 };
       this.ds = ds; this.frame(); this.pose(0);
       if (first) this.gfx.setView(ds.scene, this.camera); else this.gfx.swapScene(ds.scene, this.camera);
-      if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } }
-      for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } }
+      performance.mark('sm:t-warm0'); if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } } performance.measure('sm:t-warm', 'sm:t-warm0');
+      performance.mark('sm:t-frames0'); for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } } performance.measure('sm:t-frames', 'sm:t-frames0');
       this.shot.t = 0;
-      if (still) this.app.dissolve(still, 1800);
+      if (still) this.app.dissolve(still, 1800); setTimeout(() => this.ui && this.ui.classList.remove('busy'), still ? 900 : 0);
       if (old) setTimeout(() => this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } }), still ? 2000 : 0);
       if (!this.disposed) this.caption(this.items[this.i], first);
     } finally { this.preparing = false; }
@@ -86,6 +88,9 @@ export class TitleScreen {
     // the shot's clock is the wall clock (a slow frame never stretches it); the scene steps by the frame's dt
     const wall = Math.min(.1, this.app.loopDt || dt); this.ds.step(dt); this.shot.t += wall; this.pose();
     if (!this.app.switching) g.value = 0;
+    // just before the change the golden motes fade out: the change's work (building, compiling) can stall the page and
+    // the GPU for a moment, and a still picture with nothing moving on it cannot be seen to stall; they return after
+    if (this.shot.t >= SHOT - .45 && !this.ui.classList.contains('busy') && this.items.length > 1) this.ui.classList.add('busy');
     if (this.shot.t >= SHOT) { if (this.items.length > 1) this.next(); else this.shot.t = 0; }
     this.prog.style.transform = `scaleX(${Math.min(1, this.shot.t / SHOT).toFixed(4)})`;
   }
@@ -112,7 +117,7 @@ export class TitleScreen {
     this.cap.innerHTML = ''; this.cap.append(el('div', { class: 'tt-ck', text: it.book + (it.part ? ' · ' + it.part : '') }), el('div', { class: 'tt-ct', html: mathHTML(it.spec.title || it.step || 'Diorama', 'label') }), el('div', { class: 'tt-cn', text: `${this.i + 1} / ${this.items.length}` }));
     setTimeout(() => this.cap.classList.add('show'), first ? 400 : 120);
   }
-  go(fn) { if (this.leaving) return; this.leaving = true; this.ui.classList.add('out'); setTimeout(() => fn(), 380); }
+  go(fn) { if (this.leaving) return; this.leaving = true; this.ui.classList.add('out'); setTimeout(() => fn(), 60); }   // the menu fades while the iris shuts (App._irisNext)
   newSlot() {
     const name = el('input', { class: 'field', value: 'My scriptorium ' + (this.app.slots.length + 1), 'aria-label': 'Name' }), ex = el('input', { type: 'checkbox', checked: true });
     this.panel.innerHTML = ''; this.panel.append(el('div', { class: 'tt-card glass' }, [el('h3', { text: 'A new scriptorium' }), el('p', { class: 'dim small', text: 'Private to you: kept in this browser, with its own bookcases, scrolls and dioramas. Your other scriptoria stay as they are.' }),

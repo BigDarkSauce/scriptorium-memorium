@@ -8,12 +8,13 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { envScene } from './proc.js';
+import { tame, classifyGpu } from './tier.js';
 import { AAA, initAAA, detectQuality, setQuality as setAAAQuality, prebake, rebakeAll, AtmospherePass, aaaFrame, QUALITY } from './aaa.js';
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uIris: { value: 2 }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uIris,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
   if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*uTiltR*uRes.y/800.;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
@@ -25,7 +26,9 @@ const GradeShader = {
   float v=1.-uVignette*smoothstep(.25,.85,length(d*vec2(1.15,1.)));
   c.rgb*=v;c.rgb+=vec3(uWarm,uWarm*.4,-uWarm*.6)*(1.-length(d));
   float g=(h(vUv*vec2(1920.,1080.)+fract(uTime*7.))-.5)*uGrain;c.rgb+=g;
-  c.rgb=mix(c.rgb,uFadeColor,uFade);gl_FragColor=c;}`
+  c.rgb=mix(c.rgb,uFadeColor,uFade);
+  if(uIris<1.6){float asp=uRes.x/max(uRes.y,1.),ir=length(d*vec2(asp,1.))/(.5*length(vec2(asp,1.)));c.rgb*=1.-smoothstep(uIris-.3,uIris,ir);}   /* the iris: dark from the edges in (App.iris) */
+  gl_FragColor=c;}`
 };
 
 export class Gfx {
@@ -61,7 +64,9 @@ export class Gfx {
     c.addPass(this.renderPass);
     // AAA: procedural surfaces + quality level (see js/gfx/aaa.js). Both composer buffers carry a depth texture, so
     // the atmosphere pass (height fog + god rays, linear HDR, before bloom and AgX) can reconstruct world positions.
-    initAAA(r); { const d = detectQuality(r); this.gpu = d.gpu; setAAAQuality(d.quality); this.dpr = Math.min(this.maxDpr, { high: 1.5, medium: 1.25, low: 1 }[d.quality] || 1.25); r.setPixelRatio(this.dpr); }   /* integrated and software GPUs start at a resolution they can hold; adapt() raises it when frames are fast */
+    initAAA(r); { const d = detectQuality(r); this.gpu = d.gpu; this.gpuClass = classifyGpu(d.gpu) === 'low' ? 'medium' : 'high'; setAAAQuality(d.quality); this.dpr = Math.min(this.maxDpr, { high: 1.5, medium: 1.25, low: 1 }[d.quality] || 1.25); r.setPixelRatio(this.dpr); }   /* integrated and software GPUs start at a resolution they can hold; adapt() raises it when frames are fast */
+    this._tameTick = 0; { const gl = r.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2'); this._gpuT = ext ? { gl, ext, pend: [], ms: [], busy: false } : null; }
+    r.shadowMap.type = AAA.quality === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     [c.renderTarget1, c.renderTarget2].forEach(t => { t.depthTexture = new THREE.DepthTexture(2, 2); t.depthTexture.type = THREE.UnsignedIntType; });
     this.atmos = new AtmospherePass(); this.atmos.enabled = false; this.atmos.configure(AAA.Q); c.addPass(this.atmos);
     this.outline = new OutlinePass(new THREE.Vector2(2, 2), this.renderPass.scene, this.renderPass.camera);
@@ -117,7 +122,7 @@ export class Gfx {
     // these linear gains bring plaster and marble back to a warm white (hall: plaster B/R .31 → ~.6, floor marble .50 → ~.95)
     return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping, wb: { gain: [.84, 1.45, 3.4], mid: 0, hi: 0 } };
   }
-  setView(scene, camera) {
+  setView(scene, camera) { this._smReset();
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);
     this.renderPass.scene = scene; this.renderPass.camera = camera;
     this.outline.renderScene = scene; this.outline.renderCamera = camera;
@@ -125,7 +130,8 @@ export class Gfx {
   }
   // another scene under the same camera and canvas (the title screen's showcase): no resize, so the composer's targets
   // are not reallocated on every change of scene (setView resizes, which costs a frame or more)
-  swapScene(scene, camera) { this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look); this.renderPass.scene = scene; this.renderPass.camera = camera; this.outline.renderScene = scene; this.outline.renderCamera = camera; }
+  _smReset() { if (this._smHalf) { this.renderer.shadowMap.autoUpdate = true; this.renderer.shadowMap.needsUpdate = true; this._smHalf = false; } }
+  swapScene(scene, camera) { this._smReset(); this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look); this.renderPass.scene = scene; this.renderPass.camera = camera; this.outline.renderScene = scene; this.outline.renderCamera = camera; }
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setPixelRatio(this.dpr); this.renderer.setSize(w, h, false);
@@ -134,9 +140,9 @@ export class Gfx {
   }
   // Adaptive resolution: keep frames under ~22 ms. One-off stalls (shader compiles, a mode being built, a tab coming
   // back from the background) are not frame cost and are left out of the average.
-  resetAdapt() { this._acc = 0; this._n = 0; this._skip = 8; }
+  resetAdapt() { this._acc = 0; this._n = 0; this._skip = 8; this._gpuSkip = 1; if (this._gpuT) this._gpuT.ms.length = 0; }
   adapt(dtMs) {
-    if (!(dtMs > 0)) return; if (this._skip > 0) { this._skip--; return; }
+    if (!(dtMs > 0) || this._gpuT) return;   // with the GPU timer, pollGpu() decides (from the GPU's own time) if (this._skip > 0) { this._skip--; return; }
     // A scene that draws at one frame a second must be lightened at once, not after minutes: frames used to be counted
     // as at most 100 ms each with a 2 s window, so at 1 fps a window took 20 s and the step-down several windows, and
     // the scene looked frozen. Now four slow frames in a row (each over 150 ms; a single stall from a compile or a
@@ -157,12 +163,42 @@ export class Gfx {
       if (this._slow >= 2 && this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._slow = 0; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
     }
   }
+  // ---- the GPU governor: decisions from the GPU's own time per frame (where the timer extension exists) ----
+  // A frame's GPU time is what the scene costs; the time between frames also holds the page's own work and the
+  // browser's, which made the old governor (below) both late and blind to a scene that holds 30-40 fps on a weak GPU.
+  // Budget: 13 ms of GPU per frame (60 fps with room for the rest). Every 1.5 s, from the median of the window:
+  //   over 17 ms: one quality level down at once (taming the scene at 'low'); at 'low', the resolution down a step;
+  //   under 6.5 ms for three windows running: the resolution up a step, then (never past what the GPU was classed as,
+  //   and never after this session has had to step down) the quality up a level.
+  pollGpu() {
+    const T = this._gpuT, gl = T.gl; if (!T.pend.length) return;
+    const disjoint = gl.getParameter(T.ext.GPU_DISJOINT_EXT);
+    while (T.pend.length) { const q = T.pend[0]; if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break; T.pend.shift(); if (!disjoint) T.ms.push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6); gl.deleteQuery(q); }
+    if (T.pend.length > 12) { T.pend.splice(0, T.pend.length - 12).forEach(q => gl.deleteQuery(q)); }
+    const now = performance.now(); if (!this._gpuAt) this._gpuAt = now;
+    if (now - this._gpuAt < 1500 || T.ms.length < 12) return; this._gpuAt = now;
+    const xs = T.ms.splice(0).sort((a, b) => a - b), med = xs[xs.length >> 1]; this.gpuMs = med;
+    if (this._gpuSkip > 0) { this._gpuSkip--; return; } if (this.holdQuality) return;
+    if (med > 17) { this._fast = 0; this._downs = (this._downs || 0) + 1;
+      if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._gpuSkip = 1; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
+      else if (!this.fixedRes && this.dpr > .5) { this.dpr = Math.max(.5, this.dpr - .15); this.resize(); this._gpuSkip = 1; }   // the resolution floor at 'low': half (a weak GPU in a full-HD window)
+      this.bloom.enabled = !(this.quality === 'low' && this.dpr <= .7 && med > 22);
+    } else if (med < 6.5) { this._fast = (this._fast || 0) + 1; if (this._fast < 3) return; this._fast = 0;
+      if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .17); this.resize(); this._gpuSkip = 1; this.bloom.enabled = true; }
+      else if (!this._downs) { const cap = this.gpuClass || 'high', order = ['low', 'medium', 'high'], i = order.indexOf(this.quality); if (i < order.indexOf(cap)) { this.setQuality(order[i + 1]); this._gpuSkip = 1; } }
+    } else this._fast = 0;
+  }
+  get timed() { return !!this._gpuT; }
   // ---- quality API: 'low' | 'medium' | 'high' (detected at start; see docs/research/aaa-rendering.md) ----
   // POM steps, glints, self-shadowing, pixel-depth offset and the atmosphere pass change at once; the number of
   // sun shadow cascades applies when the next diorama is built.
   get quality() { return AAA.quality; }
   set quality(q) { this.setQuality(q); }
-  setQuality(q) { if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.warmAtmos(); this.onQuality && this.onQuality(q); return q; }
+  setQuality(q) {
+    if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.warmAtmos();
+    const st = q === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; if (this.renderer.shadowMap.type !== st) { this.renderer.shadowMap.type = st; if (this.scene) this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
+    this._gpuWin = []; this.onQuality && this.onQuality(q); return q;
+  }
   get qualityLevels() { return Object.keys(QUALITY); }
   // compile the atmosphere programs for the target they really draw into (a linear composer buffer, not the screen)
   warmAtmos() { const r = this.renderer, prev = r.getRenderTarget(); try { r.setRenderTarget(this.composer.writeBuffer); this.atmos.warm(r); } catch (e) { console.warn(e); } finally { r.setRenderTarget(prev); } }
@@ -195,11 +231,33 @@ export class Gfx {
     // compile for the target the scene really renders into: the composer's linear half-float buffer (no tone mapping,
     // linear output). Compiling against the screen (render target null) builds sRGB + AgX variants that are never used.
     const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);
-    try { for (const v of variants) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
+    // (no variants: the scene as it is. Called with none, it used to compile nothing at all: the title screen's dioramas
+    // then compiled synchronously on their first frame, a 1.1 s stall on a Radeon 610M)
+    if (!variants.length) { r.setRenderTarget(prevRT); jobs.push(this.compileSliced(scene, camera)); }
+    else try { for (const v of variants) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
     const bgs = backgrounds.filter(b => b && (b.isTexture || b.isCubeTexture));
     if (bgs.length) { if (!this._warmRT) this._warmRT = new THREE.WebGLRenderTarget(1, 1); const s = new THREE.Scene(), prev = r.getRenderTarget(); r.setRenderTarget(this._warmRT); bgs.forEach(b => { s.background = b; r.render(s, camera); }); r.setRenderTarget(prev); }
     this.prewarmMs = performance.now() - t0;
     return Promise.all(jobs);
+  }
+  // The scene as it is, compiled a few objects at a time, each slice in its own task of about 25 ms: three builds every
+  // new material's shader source on the page's thread (dozens of materials took one 450 ms task on a Radeon 610M); the
+  // GPU then compiles in parallel (KHR_parallel_shader_compile) and the programs are polled until ready. Within a slice
+  // the other objects are hidden and shown again before the task ends, so no frame ever draws the scene half hidden.
+  async compileSliced(scene, camera) {
+    const r = this.renderer, props = r.properties, objs = []; scene.traverseVisible(o => { if (o.material && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) objs.push(o); });
+    const mats = new Set(); let i = 0, k = 6;
+    while (i < objs.length) {
+      const t0 = performance.now(), chunk = objs.slice(i, i + k), keep = new Set(chunk), vis = objs.map(o => o.visible);
+      objs.forEach(o => { if (!keep.has(o)) o.visible = false; });
+      const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);
+      try { const set = r.compile(scene, camera); if (set) set.forEach(m => mats.add(m)); } catch (e) { console.warn(e); }
+      finally { r.setRenderTarget(prevRT); objs.forEach((o, j) => { o.visible = vis[j]; }); }
+      i += k; const dt = performance.now() - t0; k = Math.max(2, Math.min(40, Math.round(k * (dt > 0 ? 25 / dt : 2))));
+      if (i < objs.length) await new Promise(res => setTimeout(res, 0));
+    }
+    const t1 = performance.now();
+    await new Promise(res => { const poll = () => { let pending = 0; for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; } if (!pending || performance.now() - t1 > 6000) res(); else setTimeout(poll, 10); }; poll(); });
   }
   // Frame statistics for profiling (draw calls and triangles of one full composer frame, shadow passes included).
   stats() {
@@ -216,7 +274,18 @@ export class Gfx {
     const sc = this.scene, A = sc && sc.userData.aaaAtmos, k = A ? (sc.userData.aaaAtmosK ?? 1) : 0;
     this.atmos.enabled = !!(A && k > .001 && AAA.Q.god > 0 && this.camera);
     if (this.atmos.enabled) this.atmos.update(this.camera, A, k, t);
+    // 'low' tames the scene (tier.js): glass that refracts, fill lights, soft shadows; checked again every 30 frames
+    // for what was added since (every object is marked once, so the pass is cheap)
+    if (sc) { const low = AAA.quality === 'low'; if (sc.userData.tamed !== low || (low && ++this._tameTick % 30 === 0)) tame(sc, low); }
+    // 'low': shadows of a moving scene drawn every other frame (where the place has not taken the shadow updates over
+    // itself, as the hall does: it redraws them only when something changed). Measured: 4 of the storm glass's 17 ms.
+    { const sm = this.renderer.shadowMap, low = AAA.quality === 'low';
+      if (low && sm.autoUpdate) { sm.autoUpdate = false; this._smHalf = true; }
+      if (this._smHalf) { if (!low) { sm.autoUpdate = true; this._smHalf = false; } else if ((this._smTick = (this._smTick || 0) + 1) % 2 === 0) sm.needsUpdate = true; } }
+    // the GPU's own time for the frame (EXT_disjoint_timer_query_webgl2): read a few frames later, never waited for
+    const T = this._gpuT; let q = null; if (T && !T.busy) { q = T.gl.createQuery(); T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q); T.busy = true; }
     this.composer.render(dt);
+    if (q) { T.gl.endQuery(T.ext.TIME_ELAPSED_EXT); T.pend.push(q); T.busy = false; } if (T) this.pollGpu();
     // a still of this frame for a dissolve (App.snapshot): read now, in the task that drew it, while the buffer still holds it
     if (this._snap) { const f = this._snap; this._snap = null; try { f(this.renderer.domElement); } catch (e) { console.warn(e); } }
   }
