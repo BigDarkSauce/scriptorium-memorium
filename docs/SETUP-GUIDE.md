@@ -8,7 +8,7 @@ gets everything working, including free AI models with very large monthly allowa
 
 | | In the Claude app (the published page) | On your computer (Launch Scriptorium.bat) |
 |---|---|---|
-| Open it | https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie | double-click `Launch Scriptorium.bat` |
+| Open it | https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie | double-click `Launch Scriptorium.bat` (or, without installing anything: https://bigdarksauce.github.io/scriptorium-memorium/) |
 | AI: Claude | yes (your Claude plan) | no (Claude lives in the Claude app) |
 | AI: free models | yes, with the **Scriptorium extension** (step 2) | yes, through the launcher's AI relay |
 | FreeLLMAPI (34 providers) | yes, found by itself through the extension | yes, found by itself through the relay |

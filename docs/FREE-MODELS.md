@@ -94,7 +94,7 @@ own Node.js. (By hand: bridge/README.md.) Only the Artifact's owner can use a se
 
 The standalone page still works on its own (free models only):
 * **Launch Scriptorium.bat** in your Scriptorium Memorium folder (http://localhost:8000);
-* or from GitHub: https://raw.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html
+* or from GitHub: https://bigdarksauce.github.io/scriptorium-memorium/
 
 Each place keeps its own library in its browser storage: move it with **Import / export**.
 
