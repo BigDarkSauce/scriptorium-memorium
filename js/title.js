@@ -11,7 +11,7 @@ import { el, toast, mathHTML, disposeTree, confirmBox } from './util.js';
 import * as store from './store.js';
 const sleep = ms => new Promise(r => setTimeout(r, ms)), frames = n => new Promise(r => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
 
-const SHOT = 9.5;
+const SHOT = 11, RISE = 1.6;   // a shot's length (the last quarter fades to black) and the fade up out of black, in seconds
 const ago = t => { if (!t) return ''; const s = (Date.now() - t) / 1000; return s < 90 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
 // the dioramas this scriptorium holds (the room visited last first), up to 12; the built-in models if it holds none
 async function showcase(app) {
@@ -42,31 +42,32 @@ export class TitleScreen {
   get scene() { return this.ds ? this.ds.scene : this._scene; }
   framing() { return !this.ds; }   // main.js waits under the veil until the first diorama stands
   // ---------- the showcase ----------
-  // A change of diorama is a dissolve: a still of the last frame is laid over the view (App.snapshot) and everything
-  // costly happens under it, unseen: the next diorama is built, its programs compiled (in parallel where the GPU allows),
-  // and it is run and drawn for a few frames, so textures, shadows and the variants it only switches on once running are
-  // ready. Then the still fades away (a compositor transition: its pace does not depend on the page's thread) onto the
-  // new diorama, already in its slow camera move. The old one is freed once the dissolve is over. The canvas is never
-  // resized (gfx.swapScene); the GPU governor (renderer.js pollGpu) may lower the resolution on a weak GPU.
+  // A change of diorama is a fade through black. From three quarters of its shot the diorama, still moving, darkens
+  // slowly (the grade's uDim, the edges a little ahead of the centre) until the screen is black; nothing is ever frozen
+  // on screen (the still of the last frame held there read as a stall). Under the black the costly part happens unseen:
+  // the next diorama is built, its programs compiled (in parallel where the GPU allows), run and drawn for a few frames,
+  // so textures, shadows and the variants it only switches on once running are ready. Then it comes up out of the black,
+  // already in its slow camera move. The canvas is never resized (gfx.swapScene); the GPU governor (renderer.js
+  // pollGpu) may lower the resolution on a weak GPU.
   async next(first) {
-    if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; let still = null;
+    if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; const dim = this.gfx.grade.uniforms.uDim;
     try {
-      if (!first) still = await this.app.snapshot();
+      if (!first) dim.value = 1;
       let ds = null, tries = this.items.length;
       while (!ds && tries-- > 0 && !this.disposed) {
         this.i = (this.i + 1) % this.items.length; const it = this.items[this.i];
         try { performance.mark('sm:t-build0'); ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); performance.measure('sm:t-build', 'sm:t-build0'); }
         catch (e) { console.warn('title showcase', e); ds = null; if (this.items.length > 1) { this.items.splice(this.i, 1); this.i--; } }
       }
-      if (!ds || this.disposed) { if (ds) ds.dispose(); this.app.dissolve(still, 400); return; }
+      if (!ds || this.disposed) { if (ds) ds.dispose(); this.rise = { t: 0, dur: .6 }; return; }
       const old = this.ds; this.shot = { kind: ['orbit', 'push', 'crane', 'circle'][this.i % 4], t: 0, dir: Math.random() < .5 ? -1 : 1 };
       this.ds = ds; this.frame(); this.pose(0);
       if (first) this.gfx.setView(ds.scene, this.camera); else this.gfx.swapScene(ds.scene, this.camera);
       performance.mark('sm:t-warm0'); if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } } performance.measure('sm:t-warm', 'sm:t-warm0');
       performance.mark('sm:t-frames0'); for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } } performance.measure('sm:t-frames', 'sm:t-frames0');
-      this.shot.t = 0;
-      if (still) this.app.dissolve(still, 1800); setTimeout(() => this.ui && this.ui.classList.remove('busy'), still ? 900 : 0);
-      if (old) setTimeout(() => this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } }), still ? 2000 : 0);
+      this.shot.t = 0; if (!first) this.rise = { t: 0, dur: RISE };
+      setTimeout(() => this.ui && this.ui.classList.remove('busy'), first ? 0 : 700);
+      if (old) this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } });
       if (!this.disposed) this.caption(this.items[this.i], first);
     } finally { this.preparing = false; }
   }
@@ -83,15 +84,20 @@ export class TitleScreen {
     this.camera.position.copy(p); this.camera.lookAt(tg);
   }
   update(dt) {
-    if (!this.ds) return; const g = this.gfx.grade.uniforms.uFade;
-    if (this.preparing) return;   // under the still: the next one is being made ready
+    if (!this.ds) return; const g = this.gfx.grade.uniforms.uFade, dim = this.gfx.grade.uniforms.uDim;
+    if (this.preparing) return;   // under the black: the next one is being made ready
     // the shot's clock is the wall clock (a slow frame never stretches it); the scene steps by the frame's dt
     const wall = Math.min(.1, this.app.loopDt || dt); this.ds.step(dt); this.shot.t += wall; this.pose();
     if (!this.app.switching) g.value = 0;
-    // just before the change the golden motes fade out: the change's work (building, compiling) can stall the page and
-    // the GPU for a moment, and a still picture with nothing moving on it cannot be seen to stall; they return after
-    if (this.shot.t >= SHOT - .45 && !this.ui.classList.contains('busy') && this.items.length > 1) this.ui.classList.add('busy');
-    if (this.shot.t >= SHOT) { if (this.items.length > 1) this.next(); else this.shot.t = 0; }
+    // the fade: up out of black after a change, down into it over the last quarter of the shot (eased at both ends)
+    const k = this.shot.t / SHOT, ease = x => x * x * (3 - 2 * x);
+    if (this.rise) { this.rise.t += wall; const u = Math.min(1, this.rise.t / this.rise.dur); dim.value = 1 - ease(u); if (u >= 1) this.rise = null; }
+    else dim.value = this.items.length ? ease(Math.max(0, Math.min(1, (k - .75) / .25))) : 0;
+    // as the screen nears black the golden motes fade out too: the change's work (building, compiling) can stall the page
+    // for a moment, and nothing moving is left on screen to show it; they return as the next diorama comes up
+    if (k >= .93 && !this.ui.classList.contains('busy')) this.ui.classList.add('busy');
+    if (k >= .88 && !this.rise && this.cap.classList.contains('show')) this.cap.classList.remove('show');   // the caption goes with its diorama
+    if (this.shot.t >= SHOT) { dim.value = 1; if (this.items.length > 1) this.next(); else { this.shot.t = 0; this.pose(); this.rise = { t: 0, dur: RISE }; setTimeout(() => this.ui && this.ui.classList.remove('busy'), 700); } }
     this.prog.style.transform = `scaleX(${Math.min(1, this.shot.t / SHOT).toFixed(4)})`;
   }
   // ---------- the menu ----------
@@ -134,7 +140,7 @@ export class TitleScreen {
     draw(); this.panel.innerHTML = ''; this.panel.append(el('div', { class: 'tt-card glass' }, [el('h3', { text: 'Your scriptoria' }), list, el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Close', onclick: () => { this.panel.innerHTML = ''; } })])]));
   }
   dispose() {
-    this.disposed = true; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.resetAdapt();
+    this.disposed = true; this.gfx.grade.uniforms.uDim.value = 0; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.resetAdapt();
     // the app's own fade colour comes back once the next place has faded in (changing it under a closed veil would flash)
     const A = this.app, G = this.gfx.grade.uniforms, fc = this._fc, back = () => { if (A.mode instanceof TitleScreen) return; if (!A.switching && G.uFade.value < .01) G.uFadeColor.value.copy(fc); else requestAnimationFrame(back); }; requestAnimationFrame(back);
     if (this.ds) { const d = this.ds; this.ds = null; try { d.dispose(); } catch (e) { disposeTree(d.scene); } }
