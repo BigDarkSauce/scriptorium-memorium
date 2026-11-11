@@ -17,6 +17,7 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 ## Run it
 
 - **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorialium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
+- **Free AI models as well (all three AI engines in the Claude app):** double-click `bridge/Scriptorium free models.mcpb` once; Claude Desktop installs it as an extension. The page inside the Claude app may not contact outside addresses itself; the extension makes its free-model requests from your computer, so “Claude + free models” and “Free models only” work there next to Claude (`docs/FREE-MODELS.md`, `bridge/README.md`).
 - **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
 - **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening `index.html` directly:
 
@@ -27,7 +28,7 @@ A walkable 3D library for studying anything. Each PDF becomes a **room**. Its ch
 Notes for running locally:
 - three.js, MathJax, pdf.js and the fonts load from CDNs, so you need to be online.
 - Your library, rooms and PDFs are stored in the browser (IndexedDB) for that address. The example books' dioramas are brought up to date by themselves when a new version changes them, unless you edited them (`js/seeds-version.js`). Use the same address and port each time (http://localhost:8000) or you will see an empty library; *Import / export* moves a library between browsers.
-- The built-in Claude analysis and the research connectors only work inside claude.ai. Locally every AI step shows its prompt for *Copy prompt / Paste JSON* with any AI (see `docs/PROTOCOL.md`), and `tools/verify-chain.mjs` checks the answer before you paste it.
+- The built-in Claude analysis and the research connectors only work inside claude.ai. Locally the free models can do the AI steps (the AI engine button), or every AI step shows its prompt for *Copy prompt / Paste JSON* with any AI (see `docs/PROTOCOL.md`), and `tools/verify-chain.mjs` checks the answer before you paste it.
 
 ## Check a chain from another AI
 

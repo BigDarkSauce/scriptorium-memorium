@@ -428,3 +428,47 @@ Measured on the device itself (Radeon 610M via ANGLE/D3D11) with GPU timer queri
 - **Polish gate 12/12**: sign badges clear of edge labels (loops.js: labelled edges get room, badges slide along
   their curve), wrapped lines 1.28 em apart, axis titles inside the figure, the camera's cut name steps below the
   step cue.
+
+## Round 19: the scroll freeze, steady graphics, a symbol library, the free-model bridge, sharing fixed
+
+Measured on the reader's laptop (AMD Radeon 610M, Direct3D 11 through ANGLE), not in a software renderer.
+
+- **Opening a scroll froze the screen (13.8 s from a click in the hall to the room, cold).** Two causes, both shader
+  compilation on the page's thread:
+  1. the opening scroll's back light was *added* to the hall on the click; a light count is part of every lit
+     program, so 21 programs were rebuilt on that frame (4.3 s cold). The light (`openLight`) now lives in the hall
+     from the start, dark, and is only moved and brightened: compiled with the hall, under the veil.
+  2. on 'low' quality a frame first *tames* the scene (tier.js: accent lights out); the room then lights its scroll
+     spots. The prewarm compiled the untamed scene, so the first frames compiled 36 + 28 programs synchronously
+     (3.5 s and 4.8 s frames). Now `Gfx.tameFor()` runs before every prewarm, `Gfx.pending(scene, camera)` asks for
+     exactly what the next frame needs (compiled in parallel, KHR_parallel_shader_compile), the loop does not draw a
+     frame under the veil while any of it is still linking (`_gateN`), and the veil lifts only once a frame has
+     nothing left to compile (at most 20 s; after 0.7 s it says “Preparing the room… compiling its materials for
+     this computer (n of m); only the first time”).
+  Measured after: hall entered cold in 3.1 s (was 7.8 s), no frame stall; click → room cold 7.8 s with the worst
+  frame 100 ms during the flight, warm 5.5 s; a scroll in a room opens its reader in 1.33 s (its flight), worst frame
+  27 ms. The opening itself plays at 1.3× (`OPEN_PACE`) and the room's data is read during the flight
+  (`prefetchRoom`).
+- **Pixelated and flickering while walking.** The governor's floor was half resolution (a weak GPU in a full-screen
+  window: ~620 px across) and it switched the bloom off and on and stepped the resolution up and down as the load
+  changed while walking. Now: floor 0.85 of a CSS pixel (`minDpr`); at the floor multisampling drops 4× → 2× first
+  (`Gfx.msaa`); a step down needs two slow windows (3 s) or one very slow; a step up four fast windows, 8 s of calm,
+  and a still camera (`gfx.moving`); the bloom is never toggled. The cupboard doors' gilt frames are 16 mm (10 mm was
+  a pixel or less across the hall: dashed lines). Measured walking in the hall: resolution steady, 6.5–11 ms GPU,
+  ~100 fps.
+- **Select symbol** (js/symbols.js): a button at the top right of the wide map (hall and room) and every icon in the
+  map's legend open a searchable library: the app's own 40 symbols and Lucide's 2,020 (ISC licence,
+  assets/symbols.json built by tools/build-symbols.mjs, every icon converted to one path: 1,993 identical to the
+  original, 27 differing by ≤ 15 px of 2,304 where strokes overlap). Search by name or meaning (tags), the app's own
+  stems match whole words ('chemi' → chemistry), letter glyphs rank after pictures. A chosen symbol is kept with the
+  bookcase or scroll (`icon` 'lu:<name>', `iconD` its drawing) so it draws at once and travels with Import / export.
+- **The free-model bridge** (bridge/, js/ai/bridge.js; docs/FREE-MODELS.md): inside the Claude app the page may not
+  call outside addresses, and outside it Claude is unavailable, so “Claude + free models” had nowhere to work. The
+  Scriptorium free-models extension (an MCPB bundle: one double-click into Claude Desktop) is a dependency-free MCP
+  server on the reader's computer; the page reaches it through the Artifact's `mcp` capability (`host:scriptorium-free`)
+  and `bridgeFetch()` gives free.js a fetch-shaped Response streamed by polling. Tests: tools/test-bridge.mjs (the
+  server over stdio, then the router through it to a mock provider), tools/test-engines.mjs (all 15 engine checks now
+  through an in-process bridge, as inside the app).
+- **“Make it visible to everyone” failed** with “Cannot add property bk-…, object is not extensible”: the Artifact
+  database hands documents back frozen and share.js added to the index in place. It copies first now;
+  tools/test-share.mjs reproduces the old failure and passes.

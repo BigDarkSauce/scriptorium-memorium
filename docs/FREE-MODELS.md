@@ -36,7 +36,8 @@ quota is spent for the day it finishes after the reset, unless a local model or 
 
 ## What works from a web page (measured, November 2026)
 
-Cross-origin requests from the app's page were tried against each provider:
+Cross-origin requests from the app's page were tried against each provider (the standalone page; inside the Claude
+app the extension makes the requests and none of this applies):
 
 * **answer from the page:** Groq, Google Gemini, Cerebras, Mistral, OpenRouter, Cohere, Z.ai, Chutes, Hugging Face,
   OVHcloud, LLM7, Pollinations;
@@ -67,19 +68,35 @@ Keys stay in this browser (localStorage `sm-ai`) and are sent only to the provid
 may use prompts to improve their models (Google outside the EEA/UK/Switzerland, Mistral's free plan unless you opt
 out, some OpenRouter providers); the panel says so beside each one.
 
-## Where the app runs
+## Where the app runs, and the bridge that makes “Claude + free models” work in the Claude app
 
-Inside claude.ai the app is an Artifact, and an Artifact's page **may not call outside addresses** (tested: every
-provider, even the keyless ones, is unreachable from it). There the free engines cannot run: the hybrid mode then uses
-Claude for everything, and the free-only mode shows each request to copy into any AI. The panel says so.
+Inside the Claude app Scriptorium is an Artifact, and an Artifact's page **may not call outside addresses** (tested:
+every provider, even the keyless ones, is unreachable from it). Claude, on the other hand, is only reachable from
+inside the Claude app. So without help, “Claude + free models” had no place where both halves worked.
 
-They work in the **standalone app**, the same files outside claude.ai:
-* **Launch Scriptorium.bat** in your Scriptorium Memorium folder (serves it at http://localhost:8000 and opens it): the
-  free providers, and FreeLLMAPI and Ollama on the same computer, are all reachable from there;
+The help is **the Scriptorium free-models extension** (`bridge/`, packed as `Scriptorium free models.mcpb`): a tiny
+MCP server that runs on your own computer inside Claude Desktop. An Artifact may call such a server (its `mcp`
+capability, server `host:scriptorium-free`); the page hands it each free-model request, it makes the request with
+Node's own fetch (no browser rules: NVIDIA NIM, GitHub Models, SambaNova and Cloudflare are reachable too) and passes
+the answer back as it streams (`http_start`, then `http_poll` every few seconds, so a long answer never meets the
+app's ~130 s limit per call). It only calls LLM-shaped addresses (`https://…/models`, `…/chat/completions`) and
+servers on your own computer; its tools are read-only, so the app does not ask to confirm each request.
+
+| Where | Claude | Free models |
+|---|---|---|
+| **Claude app, extension installed** | yes | yes, through the extension: all three modes work |
+| Claude app, no extension | yes | no: “Claude + free models” uses Claude for everything; the panel offers the extension |
+| Standalone page (Launch Scriptorium.bat, or GitHub) | no (Claude lives in the Claude app) | yes, straight from the page |
+
+Install: double-click `Scriptorium free models.mcpb` (your Scriptorium Memorium folder, or **Download the extension**
+in the AI panel) → Claude Desktop → **Install**; then **Check again** in the panel. Claude Desktop runs it with its
+own Node.js. (By hand: bridge/README.md.) Only the Artifact's owner can use a server on their computer.
+
+The standalone page still works on its own (free models only):
+* **Launch Scriptorium.bat** in your Scriptorium Memorium folder (http://localhost:8000);
 * or from GitHub: https://raw.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html
 
-Each place keeps its own library in its browser storage: move it with **Import / export**. Keys are entered once in
-each place.
+Each place keeps its own library in its browser storage: move it with **Import / export**.
 
 ## The live test
 
