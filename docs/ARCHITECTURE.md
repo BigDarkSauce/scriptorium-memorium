@@ -397,3 +397,34 @@ Measured on the device itself (Radeon 610M via ANGLE/D3D11) with GPU timer queri
   swing open, walks through, and closes them behind.
 - **Maps**: leader lines start on the ring around each icon, not at its centre.
 - **Title showcase** loads rooms through `app.loadRoom`, so seed upgrades apply (the newest dioramas).
+
+## Round 18: free models, a fade through black, one lens through the tunnel
+
+- **Three AI engines** (docs/FREE-MODELS.md): *Claude directs*, *Claude + free models*, *free models only*, chosen in
+  the AI panel (js/ai/aipanel.js; the sparkle button under the graphics button). `askJSON` (js/ai/claude.js) takes a
+  `role`: the director's requests (a chapter's chain, a diorama's plan and critique) go to Claude in the hybrid mode,
+  the worker's (coverage, repairs, figures, domain compile, diorama authoring, expansions) to the free pool; each
+  stands in for the other at its limit. tools/test-engines.mjs checks the routing (15 checks, mocked providers).
+- **The free router** (js/ai/free.js): live model lists, a ranking for long exact JSON, per-model budgets learned
+  from 429s (minute and day, reset headers, 00:00 UTC), validation with one named retry, a 30-day answer cache, and a
+  wait for the earliest reset instead of a failure. Keys stay in localStorage.
+- **Measured from a page on the test laptop, no key at all:** OVHcloud's Qwen3.5-397B wrote the test chain (7 steps,
+  0 quality-gate issues, 106 s); the full pipeline on a test part (chain → coverage → gate → figures → domain
+  compile) ran in 6 min 9 s on OVHcloud alone (gpt-oss-120b wrote the chain after Qwen's answer failed to parse;
+  6 correct steps, 18 figure slots, one plot without axis titles); a diorama (mass on a spring) was planned and
+  authored by Qwen3.5-397B (the full version failed the scene check, the simpler one passed: 5 bodies, 3 lessons,
+  params and readouts) in 2 min 41 s and ran without errors. LLM7 and Pollinations answer without a key but only
+  with small models and tight limits (Pollinations: one reply per 45 s, short answers). Keyed providers (Gemini,
+  Groq, Cerebras, Mistral, OpenRouter…) answer cross-origin from the page; their writing is tested by the panel's
+  "Test the free models" once a key is entered.
+- **Inside claude.ai the free engines cannot run**: the Artifact's page may not call outside addresses (tested in the
+  published artifact: every provider unreachable). The panel says so; hybrid then uses Claude for all, free-only
+  falls back to copy-and-paste. Standalone (Launch Scriptorium.bat → localhost:8000, or raw.githack.com) they work.
+- **Title showcase**: each diorama darkens over the last quarter of its shot (grade uniform `uDim`, edges slightly
+  ahead), the change happens in black, the next comes up out of black (1.6 s). No frozen frame.
+- **Arrivals keep one lens**: the walking view's 68° lens used to snap on in the first free frame after a flight
+  (50°/55° during it). `nav.lensFov()` is now the last key's target and the flight eases to it; the tunnel cut uses
+  one lens on both sides (62°). Largest per-frame change measured: 0.05°.
+- **Polish gate 12/12**: sign badges clear of edge labels (loops.js: labelled edges get room, badges slide along
+  their curve), wrapped lines 1.28 em apart, axis titles inside the figure, the camera's cut name steps below the
+  step cue.

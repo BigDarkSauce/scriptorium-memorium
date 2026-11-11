@@ -12,9 +12,9 @@ import { tame, classifyGpu } from './tier.js';
 import { AAA, initAAA, detectQuality, setQuality as setAAAQuality, prebake, rebakeAll, AtmospherePass, aaaFrame, QUALITY } from './aaa.js';
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uIris: { value: 2 }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uIris: { value: 2 }, uDim: { value: 0 }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uIris,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uIris,uDim,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
   if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*uTiltR*uRes.y/800.;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
@@ -28,6 +28,7 @@ const GradeShader = {
   float g=(h(vUv*vec2(1920.,1080.)+fract(uTime*7.))-.5)*uGrain;c.rgb+=g;
   c.rgb=mix(c.rgb,uFadeColor,uFade);
   if(uIris<1.6){float asp=uRes.x/max(uRes.y,1.),ir=length(d*vec2(asp,1.))/(.5*length(vec2(asp,1.)));c.rgb*=1.-smoothstep(uIris-.3,uIris,ir);}   /* the iris: dark from the edges in (App.iris) */
+  if(uDim>0.){float e=smoothstep(.2,.75,length(d*vec2(1.15,1.)));c.rgb*=1.-clamp(uDim*(1.+.45*e)-.45*e*uDim*uDim,0.,1.);}   /* a slow fade to black, the edges a little ahead of the centre (title showcase) */
   gl_FragColor=c;}`
 };
 
