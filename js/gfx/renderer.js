@@ -231,7 +231,10 @@ export class Gfx {
     // compile for the target the scene really renders into: the composer's linear half-float buffer (no tone mapping,
     // linear output). Compiling against the screen (render target null) builds sRGB + AgX variants that are never used.
     const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);
-    try { for (const v of variants) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
+    // (no variants: the scene as it is. Called with none, it used to compile nothing at all: the title screen's dioramas
+    // then compiled synchronously on their first frame, a 1.1 s stall on a Radeon 610M)
+    const vs = variants.length ? variants : [{ apply() { }, restore() { } }];
+    try { for (const v of vs) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
     const bgs = backgrounds.filter(b => b && (b.isTexture || b.isCubeTexture));
     if (bgs.length) { if (!this._warmRT) this._warmRT = new THREE.WebGLRenderTarget(1, 1); const s = new THREE.Scene(), prev = r.getRenderTarget(); r.setRenderTarget(this._warmRT); bgs.forEach(b => { s.background = b; r.render(s, camera); }); r.setRenderTarget(prev); }
     this.prewarmMs = performance.now() - t0;
