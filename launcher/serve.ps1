@@ -16,7 +16,7 @@ $handler = {
     '.png'='image/png'; '.ico'='image/x-icon'; '.svg'='image/svg+xml'; '.pdf'='application/pdf'; '.txt'='text/plain; charset=utf-8';
     '.jpg'='image/jpeg'; '.jpeg'='image/jpeg'; '.webp'='image/webp'; '.woff2'='font/woff2'; '.wasm'='application/wasm'; '.mcpb'='application/octet-stream' }
   try {
-    $req = $c.Request; $res = $c.Response; $p = [Uri]::UnescapeDataString($req.Url.AbsolutePath)
+    $req = $c.Request; $res = $c.Response; $p = [Uri]::UnescapeDataString($req.Url.AbsolutePath); $res.AddHeader('X-Scriptorium-Relay', '1.0.0')   # the page checks this on a HEAD of itself
     if ($p -eq '/__relay/info') {
       $b = [Text.Encoding]::UTF8.GetBytes('{"name":"scriptorium-relay","version":"1.0.0"}'); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
     }

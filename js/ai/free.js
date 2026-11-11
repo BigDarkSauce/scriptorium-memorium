@@ -27,7 +27,7 @@ import { bridgeReady, bridgeFetch, inClaudeApp, bridgeVault, bridgeDetect } from
 // Opened from this computer with Launch Scriptorium.bat, the local server carries an AI relay (launcher/serve.py): then
 // every request goes through it (no browser rules: FreeLLMAPI, NVIDIA NIM, GitHub Models, Cloudflare all reachable).
 let RELAY = null; const relayP = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && typeof fetch === 'function' && !inClaudeApp())
-  ? fetch('/__relay/info', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => (RELAY = !!(j && j.name === 'scriptorium-relay'))).catch(() => (RELAY = false)) : Promise.resolve(RELAY = false);
+  ? fetch(location.pathname || '/', { method: 'HEAD', cache: 'no-store' }).then(r => (RELAY = !!r.headers.get('x-scriptorium-relay'))).catch(() => (RELAY = false)) : Promise.resolve(RELAY = false);   /* the launcher marks every answer (a probe of a missing path would log a 404 on a plain server) */
 export const via = () => inClaudeApp() ? 'bridge' : RELAY ? 'relay' : 'direct';
 const net = async (url, init) => { if (!inClaudeApp()) await relayP; return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init); };
 

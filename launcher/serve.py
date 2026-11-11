@@ -75,6 +75,10 @@ def freellmapi_detect():
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):  # every answer says the relay is here (the page checks this on a HEAD of itself)
+        self.send_header('X-Scriptorium-Relay', VERSION)
+        super().end_headers()
+
     def __init__(self, *a, **k):
         super().__init__(*a, directory=ROOT, **k)
 
