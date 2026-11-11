@@ -34,6 +34,7 @@ export async function testProvider(p, { signal, onStep } = {}) {
     try { const r = await FREE.call(p, m.id, 'Return exactly this JSON with the sum filled in: {"ok": true, "sum": <3 + 4>}', { signal, maxTokens: 400, timeoutMs: 45000 }); const v = parseJSONLoose(r.text); R.ping = { ok: !!v && v.ok === true && +v.sum === 7, ms: Math.round(r.ms) }; }
     catch (e) { R.ping = { ok: false, why: FREE.errText(e) }; if (e && e.code === 'cancelled') throw e; continue; }
     if (!R.ping.ok) continue;
+    if (p.gapMs && !(FREE.settings().keys[p.id] || '').trim()) { step('Waiting ' + Math.round(p.gapMs / 1000) + ' s (its limit: one reply per ' + Math.round(p.gapMs / 1000) + ' s without a key)…'); await new Promise(r => setTimeout(r, p.gapMs)); }
     step('Writing a chain with ' + m.id + '…');
     try {
       const prompt = chapterPrompt({ book: 'A test of free models', chapter: 'Springs (test passage)', text: PASSAGE, depth: 'complete', sections: SECTIONS });
@@ -45,7 +46,7 @@ export async function testProvider(p, { signal, onStep } = {}) {
       try { const G = qualityGate(A, SECTIONS, []); issues = G.issues || []; } catch (e) { }
       const kinds = {}; issues.forEach(i => { kinds[i.kind] = (kinds[i.kind] || 0) + 1; });
       const ok = steps >= 3 && issues.length <= Math.max(2, steps * .3);
-      R.chain = { ok, steps, issues: issues.length, kinds, ms: Math.round(r.ms), tokens: r.usage && r.usage.total_tokens, sample: (A.chain || []).slice(0, 2).map(s => s.title || s.claim || '').filter(Boolean) };
+      R.chain = { ok, steps, issues: issues.length, kinds, ms: Math.round(r.ms), tokens: r.usage && r.usage.total_tokens, sample: (A.chain || []).slice(0, 2).map(s => s.title || s.claim || '').filter(Boolean) }; R.answer = A;
       if (ok) break;
     } catch (e) { R.chain = { ok: false, why: FREE.errText(e) }; if (e && e.code === 'cancelled') throw e; }
   }

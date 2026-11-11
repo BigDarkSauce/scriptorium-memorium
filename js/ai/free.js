@@ -24,8 +24,8 @@ import { parseJSONLoose } from './claude.js';
 export const PROVIDERS = [
   // no key needed: work from the first minute (slow: small per-IP limits)
   { id: 'ovh', name: 'OVHcloud AI Endpoints', base: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', key: 'optional', keyUrl: 'https://endpoints.ai.cloud.ovh.net/', rpm: 2, rpd: 2000, perModel: true, note: 'No key: 2 requests a minute per model, from EU data centres.' },
-  { id: 'llm7', name: 'LLM7.io', base: 'https://api.llm7.io/v1', key: 'optional', keyUrl: 'https://token.llm7.io/', rpm: 20, rpd: 250, note: 'No key: small anonymous quota; a free token raises it.' },
-  { id: 'pollinations', name: 'Pollinations', base: 'https://text.pollinations.ai/openai', key: 'none', rpm: 3, rpd: 300, fixed: ['openai-fast'], json: false, note: 'No key, one small fast model.' },
+  { id: 'llm7', name: 'LLM7.io', base: 'https://api.llm7.io/v1', key: 'optional', keyUrl: 'https://token.llm7.io/', rpm: 20, rpd: 250, anon: ['mistral-Nemo-Instruct-2407', 'default'], note: 'No key: two small models (Mistral Nemo, Codestral). A free token (100k tokens a day) opens gpt-oss and others.' },
+  { id: 'pollinations', name: 'Pollinations', base: 'https://text.pollinations.ai/openai', key: 'optional', keyUrl: 'https://enter.pollinations.ai/', rpm: 1, rpd: 1000, gapMs: 46000, fixed: ['openai-fast'], json: false, note: 'No key: one reply every 45 s per address (gpt-oss-20b). A pollen key removes the wait.' },
   // a free key (sign-up, no card): the large daily capacity
   { id: 'gemini', name: 'Google AI Studio (Gemini)', base: 'https://generativelanguage.googleapis.com/v1beta/openai', key: 'required', keyUrl: 'https://aistudio.google.com/apikey', rpm: 10, rpd: 250, perModel: true, json: true, vision: true, out: 65536, note: 'The strongest free models; free-tier prompts may be used by Google outside the EEA/UK/Switzerland.' },
   { id: 'groq', name: 'Groq', base: 'https://api.groq.com/openai/v1', key: 'required', keyUrl: 'https://console.groq.com/keys', rpm: 30, rpd: 1000, perModel: true, json: true, out: 32768, note: 'Very fast; 1,000 requests a day per model.' },
@@ -84,6 +84,7 @@ function budget(p, m) {
   const r = (recent.get(k) || []).filter(t => now - t < 60000); recent.set(k, r);
   if ((u.n[k] || 0) >= rpd) return { ok: false, until: nextMidnight() };
   if (r.length >= rpm) return { ok: false, until: r[0] + 60000 };
+  if (p.gapMs && !keyOf(p) && r.length && now - r[r.length - 1] < p.gapMs) return { ok: false, until: r[r.length - 1] + p.gapMs };
   return { ok: true };
 }
 function spend(p, m, tokens) { const u = use(), k = keyFor(p, m); u.n[k] = (u.n[k] || 0) + 1; u.tok[p.id] = (u.tok[p.id] || 0) + (tokens || 0); (recent.get(k) || recent.set(k, []).get(k)).push(Date.now()); saveUse(); }
@@ -94,7 +95,7 @@ function resetOf(res, body) {
   const h = n => res.headers.get(n); const ra = h('retry-after');
   if (ra) { const s = +ra; if (isFinite(s)) return { ms: s * 1000 }; const d = Date.parse(ra); if (d) return { ms: d - Date.now() }; }
   for (const n of ['x-ratelimit-reset-requests', 'x-ratelimit-reset', 'x-ratelimit-reset-tokens', 'ratelimit-reset']) { const v = h(n); if (!v) continue; const m = String(v).match(/(?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?(?:([\d.]+)ms)?/); if (m && m[0]) { const ms = ((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0)) * 1000 + (+m[4] || 0); if (ms > 0) return { ms }; } const x = +v; if (isFinite(x)) return { ms: x > 1e9 ? x * 1000 - Date.now() : x * 1000 }; }
-  const t = String(body || ''); if (/per[ -]?day|daily|\bRPD\b|requests per day|quota|exceeded your current|free-models-per-day|limit: 0/i.test(t)) return { ms: nextMidnight() - Date.now(), day: true };
+  const t = String(body || ''); { const m = t.match(/retry[_ ]after"?:?\s*(\d+)|Retry after (\d+)s/i); if (m) return { ms: (+(m[1] || m[2]) + 1) * 1000 }; } if (/per[ -]?day|daily|\bRPD\b|requests per day|quota|exceeded your current|free-models-per-day|limit: 0/i.test(t)) return { ms: nextMidnight() - Date.now(), day: true };
   return { ms: 60000 };
 }
 
@@ -103,6 +104,7 @@ const MKEY = 'sm-ai-models';
 export async function models(p, { fresh = false } = {}) {
   const S = settings(); if (p.editableModel || S.models[p.id]) { const m = (S.models[p.id] || '').trim(); return m ? m.split(/\s*,\s*/).map(id => ({ id, rank: rankOf(id), vision: VISION.test(id) })) : []; }
   if (p.fixed) return p.fixed.map(id => ({ id, rank: rankOf(id), vision: !!p.vision }));
+  if (p.anon && !keyOf(p, S)) return p.anon.map(id => ({ id, rank: rankOf(id) - 8, vision: false }));   // without a key only these answer
   const cache = read(MKEY, {}), c = cache[p.id]; if (!fresh && c && Date.now() - c.at < 864e5 && c.base === baseOf(p, S)) return c.list;
   const r = await fetch(baseOf(p, S) + '/models', { headers: keyOf(p, S) ? { Authorization: 'Bearer ' + keyOf(p, S) } : {}, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw { code: r.status === 401 || r.status === 403 ? 'key' : 'models', status: r.status };
@@ -126,7 +128,7 @@ export async function call(p, model, prompt, { images = [], signal, onText, maxT
   try {
     let res; try { res = await fetch(baseOf(p, S) + '/chat/completions', { method: 'POST', headers: H, body: JSON.stringify(body), signal: ctl.signal }); }
     catch (e) { if (signal && signal.aborted) throw { code: 'cancelled' }; throw { code: 'network', message: String(e && e.message || e) }; }
-    if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 600), res }; }
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 || res.status === 402 && /limit/i.test(t) ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 600), res }; }
     let text = '', finish = null, usage = null;
     const ct = res.headers.get('content-type') || '';
     if (!/event-stream/.test(ct)) { const j = await res.json(); const c = j.choices && j.choices[0]; text = (c && c.message && c.message.content) || ''; finish = c && c.finish_reason; usage = j.usage; onText && onText(text); }
