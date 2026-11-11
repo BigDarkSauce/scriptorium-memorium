@@ -8,7 +8,9 @@
 //                    progress list, Cancel, and Resume (also after a reload: unfinished jobs are offered again)
 // The hub API is used when present (typeof checks) and replaced by the library's own fields when it is not.
 import { el, toast, uid, esc } from '../util.js';
-import { aiAvailable } from '../ai/claude.js';
+import { aiAvailable, engine } from '../ai/claude.js';
+// who writes, as the dialog says it (the AI settings choose: js/ai/aipanel.js)
+const engineLine = () => ({ claude: 'Your Claude writes each part', hybrid: 'Your Claude reads and plans each part, the free models write the rest', free: 'The free models write each part' })[engine()] || 'Your Claude writes each part';
 import { evidenceAvailable } from '../ai/evidence.js';
 import { runJob, saveJob, pendingJobs, allocateSteps, STAGES } from '../ai/pipeline.js';
 
@@ -165,7 +167,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
       el('div', { class: 'ap-level' + (S.level === 'exact' ? ' on' : ''), onclick: e => { if (S.level !== 'exact' && e.target.tagName !== 'INPUT') { S.level = 'exact'; render(); } } }, [radio('exact'), el('label', { class: 'ap-lt', for: 'aplevel-exact', text: 'Exact number of steps' }), el('span', { class: 'ap-ld' }, [N, ` for the whole range (at least ${minN}: one per subsection).`]), alloc]),
       el('label', { class: 'ap-check ap-deep' }, [el('input', { type: 'checkbox', checked: S.deep, onchange: e => { S.deep = e.target.checked; render(); } }), el('span', {}, [el('b', { text: 'Deepest dive' }), ' (with any of the three): written for a reader with no background who forgets and gets lost. Every claim, assumption, formula and symbol is taken apart down to the principles it rests on and rebuilt from them, step by step, saying why, how and what for. Longer and slower to write.'])]),
       el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.dioramas, onchange: e => { S.dioramas = e.target.checked; } }), ' Build the dioramas each part needs (one per dynamic or spatial idea, more for complex parts)']),
-      el('p', { class: 'dim small', text: aiAvailable() ? `Your Claude writes each part${evidenceAvailable() ? ', with your research connectors for sources and extra examples' : ''}; a quality check rewrites any step that pastes the PDF or does not explain, and every paragraph gets a figure.` : 'Claude is not reachable from this view: each part\'s prompt is shown for you to run in any AI and paste back; figures and dioramas are then completed here.' }));
+      el('p', { class: 'dim small', text: aiAvailable() ? `${engineLine()}${evidenceAvailable() && engine() !== 'free' ? ', with your research connectors for sources and extra examples' : ''}; a quality check rewrites any step that pastes the PDF or does not explain, and every paragraph gets a figure.` : 'Claude is not reachable from this view: each part\'s prompt is shown for you to run in any AI and paste back; figures and dioramas are then completed here.' }));
     showAlloc(); nav('Next');
   }
   const chosenParts = () => { const sp = S.split; return app.ingest.restrictParts ? app.ingest.restrictParts(sp.parts.filter(p => S.picked.has(p._k)), S.from, S.to) : sp.parts.filter(p => S.picked.has(p._k)); };

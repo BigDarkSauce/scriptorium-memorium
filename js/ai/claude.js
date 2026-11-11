@@ -1,14 +1,27 @@
-// AI connector. Inside claude.ai the page asks the viewer's own Claude (sample capability).
-// Everywhere else (or when the viewer prefers another AI), every request can be exported as a prompt
-// and the JSON answer pasted back — see docs/PROTOCOL.md. The JSON formats are identical either way.
+// AI connector. Three engines, chosen in the AI settings (js/ai/free.js, js/ai/aipanel.js):
+//   claude   Claude directs: inside claude.ai the page asks the viewer's own Claude (sample capability);
+//   hybrid   Claude + free models: Claude takes the director's requests (reading a chapter into its chain, planning
+//            and checking each diorama: role 'director'), the pool of free models the volume work (coverage, repairs,
+//            figures, diorama authoring, expansions: role 'worker'). Each stands in for the other when it is at its
+//            limit or unreachable, so a job never stops for want of an engine;
+//   free     free models only (the router in free.js: many providers, budgets, waits for the next reset, never fails).
+// With no engine reachable, every request can be exported as a prompt and the JSON answer pasted back — see
+// docs/PROTOCOL.md. The prompts and the JSON formats are the same whichever engine answers.
 import { el, toast } from '../util.js';
+import * as FREE from './free.js';
 let SAMPLE = null, LIMITS = null, ready;
 export function initAI() {
   ready = (async () => { try { if (window.claude && claude.use) { SAMPLE = await claude.use('sample'); if (SAMPLE) LIMITS = await SAMPLE.limits().catch(() => null); } } catch (e) { } })();
   return ready;
 }
-export const aiAvailable = () => !!SAMPLE;
-export const imageLimit = () => (LIMITS && LIMITS.images ? LIMITS.images.maxCount : 0);
+export const claudeAvailable = () => !!SAMPLE;
+export const engine = () => FREE.mode();
+export const aiAvailable = () => { const m = FREE.mode(); return m === 'claude' ? !!SAMPLE : m === 'hybrid' ? !!SAMPLE || FREE.hasAny() : FREE.hasAny(); };
+// pictures go with a request only where the engine that answers it can see them (the chapter's reading: Claude in the
+// hybrid mode; a free vision model, Gemini, otherwise)
+export const imageLimit = () => { const c = LIMITS && LIMITS.images ? LIMITS.images.maxCount : 0, m = FREE.mode(), fv = FREE.hasVision() ? 6 : 0; return m === 'claude' ? c : m === 'hybrid' ? (SAMPLE ? c : fv) : fv; };
+// who writes, in words, for the status lines
+export const writer = (role = 'worker') => { const m = FREE.mode(); return m === 'claude' || (m === 'hybrid' && role === 'director' && SAMPLE) ? 'Claude' : 'The free models'; };
 export function errCopy(err) {
   const code = err && err.code;
   return ({ cancelled: 'Stopped.', not_granted: 'Claude access was declined for this page.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'Claude declined this request.', session_expired: 'Your session expired. Sign in again on claude.ai.', unavailable: 'Claude is not reachable from this view. Use "Copy prompt" to run it in any AI, then paste the answer back.', images_unavailable: 'This view cannot send images to Claude.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
@@ -39,16 +52,32 @@ export function repairTruncatedJSON(s) {
   for (let k = cutStack.length - 1; k >= 0; k--) out += cutStack[k] === '{' ? '}' : ']';
   return out;
 }
-// Ask for JSON. onText streams progress. Falls back to the manual relay dialog when Claude is unavailable.
-export async function askJSON(prompt, { onText, onTool, images, signal, tools, tier = 'complex', manualTitle = 'Run this request in any AI' } = {}) {
+// Ask for JSON. onText streams progress; onStatus says which engine and model is at work, and any wait. role: 'director'
+// or 'worker' (see the top). validate(v) → null | what is wrong: a free model's answer that fails it goes to the next.
+export async function askJSON(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI' } = {}) {
   await ready;
-  if (!SAMPLE) return manualRelay(prompt, manualTitle);
-  const opts = { modelTier: tier, cache: false, signal, onText: ({ text }) => onText && onText(text) };
-  if (images && images.length) opts.images = images;
-  // research tools (js/ai/evidence.js): each execute is wrapped so the UI can show what is being looked up
-  if (tools && tools.length) opts.tools = tools.map(t => ({ ...t, execute: async input => { onTool && onTool(t.name, input); try { return await t.execute(input); } catch (e) { return { error: (e && (e.code || e.message)) || 'failed' }; } } }));
-  const { text, truncated } = await SAMPLE(prompt, opts);
-  const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
+  const m = FREE.mode();
+  const viaClaude = async () => {
+    const opts = { modelTier: tier, cache: false, signal, onText: ({ text }) => onText && onText(text) };
+    if (images && images.length) opts.images = images;
+    // research tools (js/ai/evidence.js): each execute is wrapped so the UI can show what is being looked up
+    if (tools && tools.length) opts.tools = tools.map(t => ({ ...t, execute: async input => { onTool && onTool(t.name, input); try { return await t.execute(input); } catch (e) { return { error: (e && (e.code || e.message)) || 'failed' }; } } }));
+    const { text, truncated } = await SAMPLE(prompt, opts);
+    const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
+  };
+  const viaFree = exhausted => FREE.ask(prompt, { images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted });
+  if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
+  if (m === 'free' || !SAMPLE) { if (!FREE.hasAny()) return manualRelay(prompt, manualTitle); return viaFree(false); }
+  // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other
+  const STANDIN = /rate_limited|unavailable|not_granted|session_expired|invalid_json|refused|timeout|overloaded|server/;
+  if (role === 'director') {
+    try { return await viaClaude(); } catch (e) { if (e && e.code === 'cancelled') throw e; if (!(e && STANDIN.test(e.code || ''))) throw e; onStatus && onStatus('Claude is not available for this one (' + (errCopy(e) || e.code) + '): the free models take it.'); return viaFree(false); }
+  }
+  try { return await viaFree(true); } catch (e) {
+    if (e && e.code === 'cancelled') throw e;
+    onStatus && onStatus(e && e.code === 'free_exhausted' ? 'Every free model is at its limit: Claude takes this one.' : 'The free models could not do this one: Claude takes it.');
+    try { return await viaClaude(); } catch (e2) { if (e2 && e2.code === 'cancelled') throw e2; if (e2 && STANDIN.test(e2.code || '')) return viaFree(false); throw e2; }
+  }
 }
 // Manual relay: show the prompt to copy into any AI, accept the pasted JSON answer.
 export function manualRelay(prompt, title) {

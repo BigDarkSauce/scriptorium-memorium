@@ -10,7 +10,7 @@
 // ctx = { app, book, data, save(part), refresh(part) }. Without the viewer's Claude (no `sample`), the chain comes
 // through the copy/paste relay and the later stages run without AI: deterministic fixes, figures built from the steps,
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
-import { askJSON, aiAvailable, imageLimit } from './claude.js';
+import { askJSON, aiAvailable, imageLimit, writer } from './claude.js';
 import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
 import { classifyStep, autoPrimitive } from '../dio/domains.js';
 import { evidenceTools } from './evidence.js';
@@ -47,7 +47,7 @@ export async function material(ctx, part, { onStatus } = {}) {
 
 // ---------------------------------------------------------------- the stages
 async function ask(prompt, o, title) {
-  return askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), manualTitle: title });
+  return askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, manualTitle: title });
 }
 // stage 1: one structured call for the whole part
 export async function writeChain(ctx, P, M, o) {
@@ -57,8 +57,8 @@ export async function writeChain(ctx, P, M, o) {
   else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
   const meta = ctx.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
   const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', deep: !!o.deep, n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
-  o.onStatus && o.onStatus('Claude is reading and planning. Long parts can take a minute or two.');
-  const A = await ask(prompt, { ...o, images, writing: 'Writing the chain' }, 'Analyse "' + P.title + '" in any AI');
+  o.onStatus && o.onStatus(writer('director') + ' ' + (writer('director') === 'Claude' ? 'is' : 'are') + ' reading and planning. Long parts can take a minute or two.');
+  const A = await ask(prompt, { ...o, images, writing: 'Writing the chain', role: 'director', validate: v => v && Array.isArray(v.chain) && v.chain.length ? null : 'the answer has no "chain" array of steps' }, 'Analyse "' + P.title + '" in any AI');
   if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
   if (A._truncated && A.chain.length > 1) A.chain.pop();
   const N = normalizeChain(A); delete N._truncated; N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n; if (o.deep) N.deep = true;
@@ -166,7 +166,7 @@ export async function planDemo(ctx, st, d, context, o = {}) {
   if (d.plan) return d.plan; let issues = '';
   for (let k = 0; k < 2; k++) {
     check(o.signal); o.onStatus && o.onStatus(`Planning the explanation: diorama “${d.title || st.title}”${k ? ' (second try)' : ''}…`);
-    try { const p = await ask(planPrompt({ ...d, issues }, context), { ...o, tools: false, writing: 'Planning the explanation' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
+    try { const p = await ask(planPrompt({ ...d, issues }, context), { ...o, tools: false, writing: 'Planning the explanation', role: 'director' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
       const faults = checkPlan(plan).filter(x => x.level === 'fault'); if (!faults.length) return plan; issues = faults.slice(0, 6).map(x => x.issue).join('; ');
     } catch (e) { if (e && e.code === 'cancelled') throw e; return null; }
   }
@@ -179,7 +179,7 @@ export async function critiqueDemo(s, plan, o = {}) {
   s.critique = { local: local.length, faults: local.filter(x => x.level === 'fault').map(x => x.issue).slice(0, 8) };
   try {
     check(o.signal); o.onStatus && o.onStatus('Checking the explanation: could a newcomer explain it after watching?');
-    const ans = await ask(critiquePrompt(plan, s), { ...o, tools: false, writing: 'Checking the explanation' }, 'Check this diorama in any AI');
+    const ans = await ask(critiquePrompt(plan, s), { ...o, tools: false, writing: 'Checking the explanation', role: 'director' }, 'Check this diorama in any AI');
     if (!ans || typeof ans !== 'object') return s.critique;
     Object.assign(s.critique, { canExplain: +ans.canExplain || 0, attractive: +ans.attractive || 0, verdict: ans.verdict === 'revise' ? 'revise' : 'pass', issues: (ans.issues || []).slice(0, 6).map(String) });
     let n = 0; if (ans.verdict === 'revise' && Array.isArray(ans.patch)) ans.patch.forEach(P => { const l = P && (s.lessons || [])[+P.i]; if (!l) return; ['text', 'explain', 'explainBack'].forEach(k => { if (typeof P[k] === 'string' && P[k].trim().length > 8 && P[k].length < 1400) { l[k] = P[k].trim(); n++; } }); });
