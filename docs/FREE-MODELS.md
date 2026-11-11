@@ -69,11 +69,17 @@ out, some OpenRouter providers); the panel says so beside each one.
 
 ## Where the app runs
 
-Inside claude.ai the app is an Artifact. Whether its page may call outside addresses is decided by claude.ai; the AI
-panel's test shows it. Where they are blocked, the free engines work in the standalone app: the same files served from
-GitHub (`https://rawcdn.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html`) or from your own folder
-(`python -m http.server` in the project folder, then http://localhost:8000). A library moves between the two with
-**Import / export**.
+Inside claude.ai the app is an Artifact, and an Artifact's page **may not call outside addresses** (tested: every
+provider, even the keyless ones, is unreachable from it). There the free engines cannot run: the hybrid mode then uses
+Claude for everything, and the free-only mode shows each request to copy into any AI. The panel says so.
+
+They work in the **standalone app**, the same files outside claude.ai:
+* **Launch Scriptorium.bat** in your Scriptorium Memorium folder (serves it at http://localhost:8000 and opens it): the
+  free providers, and FreeLLMAPI and Ollama on the same computer, are all reachable from there;
+* or from GitHub: https://raw.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html
+
+Each place keeps its own library in its browser storage: move it with **Import / export**. Keys are entered once in
+each place.
 
 ## The live test
 

@@ -417,6 +417,9 @@ Measured on the device itself (Radeon 610M via ANGLE/D3D11) with GPU timer queri
   with small models and tight limits (Pollinations: one reply per 45 s, short answers). Keyed providers (Gemini,
   Groq, Cerebras, Mistral, OpenRouter…) answer cross-origin from the page; their writing is tested by the panel's
   "Test the free models" once a key is entered.
+- **Inside claude.ai the free engines cannot run**: the Artifact's page may not call outside addresses (tested in the
+  published artifact: every provider unreachable). The panel says so; hybrid then uses Claude for all, free-only
+  falls back to copy-and-paste. Standalone (Launch Scriptorium.bat → localhost:8000, or raw.githack.com) they work.
 - **Title showcase**: each diorama darkens over the last quarter of its shot (grade uniform `uDim`, edges slightly
   ahead), the change happens in black, the next comes up out of black (1.6 s). No frozen frame.
 - **Arrivals keep one lens**: the walking view's 68° lens used to snap on in the first free frame after a flight
