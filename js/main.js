@@ -490,6 +490,16 @@ class App {
       this.gfx.resetAdapt(); this.veilHold = false;
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
+      // and everything its first frames draw is compiled first (Gfx.pending): the veil stays down, saying why when it takes
+      // long, instead of a frame that stops the page for seconds while its shaders compile. At most 20 s (then it draws)
+      { const t0 = performance.now(), M = this.mode; let note = null;
+        while (M && this.mode === M && M.scene && M.camera && performance.now() - t0 < 20000) {
+          const n = this.gfx.pending(M.scene, M.camera); if (!n) break;
+          if (!note && performance.now() - t0 > 700) note = this.prepNote(M);
+          if (note) note.update(n);
+          await sleep(40);
+        }
+        if (note) note.done(); mark('sm:sw-ready'); }
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       mark('sm:sw-frames'); await sleep(60);
       if (irisNext) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false;
@@ -499,6 +509,13 @@ class App {
       else await fade(1, 0, 330);
       g.value = 0; done = true; mark('sm:sw-end');
     } finally { this.switching = false; this.veilHold = false; if (!done) { g.value = 0; this.gfx.grade.uniforms.uIris.value = 2; document.querySelectorAll('.xfade').forEach(o => this.dissolve(o, 300)); const U = document.getElementById('ui'); if (U) U.style.opacity = ''; } }
+  }
+  // a quiet line on the black veil while a place's materials compile (shown only when that takes longer than 0.7 s:
+  // the first visit to a place on a computer whose shader cache does not have it yet)
+  prepNote(M) {
+    const what = M instanceof BookRoom ? 'the room' : M instanceof DioramaView ? 'the diorama' : M instanceof Hub ? 'the library hall' : 'the view';
+    const o = el('div', { class: 'prep-note', role: 'status', 'aria-live': 'polite' }, [el('b', { text: 'Preparing ' + what + '…' }), el('span', { text: '' })]); document.body.append(o); requestAnimationFrame(() => o.classList.add('in'));
+    let max = 0; return { update: n => { max = Math.max(max, n); o.lastChild.textContent = `compiling its materials for this computer (${max - n} of ${max}); only the first time`; }, done: () => { o.classList.remove('in'); setTimeout(() => o.remove(), 400); } };
   }
   // The iris: the view darkens from its edges towards its centre until it is black, and opens again from the centre
   // outwards (the grade pass's uIris: about 1.35 fully open, 0 shut). By the wall clock, eased.
@@ -561,7 +578,10 @@ class App {
     if (!this.veilHold) {
       const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
-      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
+      // under the veil a frame whose programs are still compiling is not drawn: drawing it would wait for them on this
+      // thread (seconds with a cold shader cache); the GPU process links them meanwhile (Gfx.pending)
+      const gate = this.switching && this.mode && this.mode.scene && this.mode.camera ? this.gfx.pending(this.mode.scene, this.mode.camera) : 0; this._gateN = gate;
+      if (!gate && (fps >= 60 || this._rAcc >= 1000 / fps - 4)) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
     }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
   }

@@ -4,6 +4,7 @@
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { claudeAvailable } from './claude.js';
+import { bridgeReady, bridgeInfo, inClaudeApp } from './bridge.js';
 
 const MODE_TEXT = {
   claude: ['Claude directs', 'Your Claude reads every chapter, plans and writes every scroll and diorama. The best quality; uses your Claude plan\'s limits.'],
@@ -18,10 +19,11 @@ export function aiButton(app) {
 }
 export function openAIPanel(app) {
   if (document.querySelector('.ai-panel')) return;
-  let S = FREE.settings(); const close = () => { veil.remove(); document.removeEventListener('keydown', esc); }, esc = e => { if (e.key === 'Escape') close(); };
+  let S = FREE.settings(), reachState = null, offS = null; const close = () => { if (offS) offS(); veil.remove(); document.removeEventListener('keydown', esc); }, esc = e => { if (e.key === 'Escape') close(); };
   const modes = el('div', { class: 'ai-modes', role: 'radiogroup', 'aria-label': 'AI engine' });
   const drawModes = () => { modes.innerHTML = ''; Object.keys(MODE_TEXT).forEach(k => { const [t, d] = MODE_TEXT[k], on = S.mode === k;
-    const warn = k !== 'free' && !claudeAvailable() ? el('span', { class: 'ai-warn', text: 'Claude is not reachable from this page' + (k === 'hybrid' ? ': the free models do all of it here.' : ': requests are shown for you to paste into any AI.') }) : null;
+    const warn = k !== 'free' && !claudeAvailable() ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Claude is only available inside the Claude app: here the free models do all of it.' : 'Claude is only available inside the Claude app: here each request is shown for you to paste into any AI.' })
+      : k !== 'claude' && inClaudeApp() && FREE.reachable && reachState === false ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the free-models extension (below): until it is installed, Claude does all of it.' : 'Needs the free-models extension (below).' }) : null;
     modes.append(el('button', { type: 'button', role: 'radio', 'aria-checked': String(on), class: 'ai-mode' + (on ? ' on' : ''), onclick: () => { S = FREE.saveSettings({ mode: k }); drawModes(); drawProviders(); } }, [el('b', { text: t }), el('span', { text: d }), warn])); }); };
   const plist = el('div', { class: 'ai-providers' }), out = el('div', { class: 'ai-test' });
   const use = FREE.usageToday();
@@ -61,11 +63,22 @@ export function openAIPanel(app) {
     el('div', { class: 'row' }, [testBtn, stopBtn, forget]), out])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); }); document.addEventListener('keydown', esc);
   drawModes(); drawProviders(); document.body.append(veil);
-  // can this page reach the free providers at all? Inside claude.ai an Artifact may not call outside addresses: then the
-  // free engines work in the standalone app (the same files from your folder or from GitHub), and say so here
-  const reach = el('p', { class: 'ai-reach' }); modes.after(reach);
-  FREE.reachable().then(ok => { if (ok) { reach.remove(); return; }
-    reach.append(el('b', { text: 'This page cannot reach the free models.' }), ' Inside claude.ai the app may not call outside addresses, so here the free modes fall back to Claude (hybrid) or to copy-and-paste (free only). Open the same app outside claude.ai and they work: ',
-      el('a', { href: 'https://raw.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html', target: '_blank', rel: 'noopener', text: 'the app from GitHub ↗' }), ', or “Launch Scriptorium.bat” in your Scriptorium Memorium folder (http://localhost:8000, which can also reach FreeLLMAPI and Ollama on your computer). Move your library with Import / export.'); });
+  // how the free models are reached from here. Inside the Claude app the page may not contact outside addresses: the
+  // Scriptorium free-models extension on this computer makes the requests for it (js/ai/bridge.js), so Claude and the
+  // free models work together in the same window. Outside the app (the standalone page) they are called directly.
+  const reach = el('div', { class: 'ai-reach' }); modes.after(reach);
+  const drawReach = ok => { reachState = ok; reach.innerHTML = ''; drawModes();
+    if (!inClaudeApp()) { reach.className = 'ai-reach' + (ok ? ' good' : '');
+      reach.append(el('b', { text: ok ? 'Free models: called straight from this page.' : 'This page cannot reach the free models (offline?).' }), ' Claude itself is only available inside the Claude app: open Scriptorium there for “Claude directs” and “Claude + free models” (with the free-models extension installed, the free models work there too).'); return; }
+    if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium free-models extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here.`); return; }
+    reach.className = 'ai-reach';
+    const dl = el('button', { class: 'btn small primary', type: 'button', text: 'Download the extension', onclick: async () => { dl.disabled = true; try { const blob = await (await fetch('bridge/Scriptorium free models.mcpb')).blob(); const D = window.claude && await claude.use('downloads'); if (D) await D.save({ filename: 'Scriptorium free models.mcpb', data: blob }); else { const a = el('a', { href: URL.createObjectURL(blob), download: 'Scriptorium free models.mcpb' }); a.click(); } } catch (e) { if (!(e && e.code === 'declined')) toast('Could not download it here: it is also in your Scriptorium Memorium folder.'); } finally { dl.disabled = false; } } });
+    const again = el('button', { class: 'btn small', type: 'button', text: 'Check again', onclick: async () => { again.disabled = true; again.textContent = 'Checking…'; const v = await FREE.reachable({ fresh: true }); again.disabled = false; again.textContent = 'Check again'; drawReach(v); if (v) toast('Free models connected'); } });
+    reach.append(el('b', { text: 'To use free models inside the Claude app, add the Scriptorium free-models extension.' }),
+      el('ol', { class: 'ai-steps' }, [el('li', { text: 'Download it (or take “Scriptorium free models.mcpb” from your Scriptorium Memorium folder).' }), el('li', { text: 'Double-click the file: Claude Desktop opens it; press Install. (Or Settings → Extensions → drag the file in.)' }), el('li', { text: 'Come back here and press Check again.' })]),
+      el('p', { class: 'dim small', text: 'Why: inside the Claude app this page may not contact outside addresses; the extension makes the free-model requests from your computer (only to LLM addresses; nothing else) and passes the answers back. It is yours alone: only the page’s owner can use it.' }),
+      el('div', { class: 'row' }, [dl, again])); };
+  if (S.mode !== 'claude' || !inClaudeApp()) FREE.reachable().then(drawReach); else { reach.append(el('span', { class: 'dim small', text: 'Choose a free mode to connect the free models.' })); }
+  offS = FREE.onSettings(Sx => { if (Sx.mode !== 'claude' && reachState == null && document.body.contains(reach)) FREE.reachable().then(drawReach); });
   try { const last = JSON.parse(localStorage.getItem('sm-ai-test') || 'null'); if (last && last.res) out.append(el('p', { class: 'dim small', text: `Last test ${new Date(last.at).toLocaleString()}: ` + last.res.map(r => `${r.name} — ${r.verdict}`).join(' · ') })); } catch (e) { }
 }

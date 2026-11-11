@@ -223,7 +223,7 @@ export class Gfx {
           const poll = () => {
             let pending = 0;
             for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; }
-            if (!pending || performance.now() - t1 > 6000) res(); else setTimeout(poll, 10);
+            if (!pending || performance.now() - t1 > 20000) res(); else setTimeout(poll, 10);
           };
           poll();
         }));
@@ -240,6 +240,17 @@ export class Gfx {
     if (bgs.length) { if (!this._warmRT) this._warmRT = new THREE.WebGLRenderTarget(1, 1); const s = new THREE.Scene(), prev = r.getRenderTarget(); r.setRenderTarget(this._warmRT); bgs.forEach(b => { s.background = b; r.render(s, camera); }); r.setRenderTarget(prev); }
     this.prewarmMs = performance.now() - t0;
     return Promise.all(jobs);
+  }
+  // How many of the programs the next frame of this scene will use are still being compiled. r.compile() asks for exactly
+  // what a frame in the scene's present state needs (its lights as they are now: a room switches its scroll spots and
+  // lamps on in its first frames, so a prewarm made earlier had compiled variants with other light counts and the first
+  // frames compiled 94 programs synchronously, 3-5 s each frame on a Radeon 610M with a cold shader cache). New programs
+  // start compiling in the GPU process (KHR_parallel_shader_compile); a frame drawn before they are linked would wait for
+  // them on the page's thread, so under the veil such a frame is skipped instead (main.js loop) and the veil waits.
+  pending(scene, camera) {
+    const r = this.renderer, props = r.properties, prev = r.getRenderTarget(); let set = null;
+    r.setRenderTarget(this.composer.readBuffer); try { set = r.compile(scene, camera); } catch (e) { return 0; } finally { r.setRenderTarget(prev); }
+    let n = 0; if (set) for (const m of set) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) n++; } return n;
   }
   // The scene as it is, compiled a few objects at a time, each slice in its own task of about 25 ms: three builds every
   // new material's shader source on the page's thread (dozens of materials took one 450 ms task on a Radeon 610M); the
@@ -258,7 +269,7 @@ export class Gfx {
       if (i < objs.length) await new Promise(res => setTimeout(res, 0));
     }
     const t1 = performance.now();
-    await new Promise(res => { const poll = () => { let pending = 0; for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; } if (!pending || performance.now() - t1 > 6000) res(); else setTimeout(poll, 10); }; poll(); });
+    await new Promise(res => { const poll = () => { let pending = 0; for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; } if (!pending || performance.now() - t1 > 20000) res(); else setTimeout(poll, 10); }; poll(); });
   }
   // Frame statistics for profiling (draw calls and triangles of one full composer frame, shadow passes included).
   stats() {

@@ -2,7 +2,8 @@
 // PDFs are added as folded scrolls, and opening a scroll unfolds it in a shaft of light and carries you into its room.
 import { MapView } from '../mapview.js';
 import { lookQ, flyPose, flightDur, easeSine } from '../camfly.js';
-import { iconFor, iconSVG, ICONS, ICON_NAMES } from '../icons.js';
+import { iconFor, iconSVG, ICONS, ICON_NAMES, rememberIcon } from '../icons.js';
+import { openSymbolPicker } from '../symbols.js';
 import { autoTags } from '../share.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -52,6 +53,10 @@ export class Hub {
     // the hero's key light: one warm spot (always present, so the light count and the shaders never change), aimed at
     // the bookcase holding the user's newest scrolls; every bookcase with scrolls also gets a warm pool on the floor
     this.key = new THREE.SpotLight(0xffeedd, 0, 0, .5, .75, 2); this.key.castShadow = false; this.key.name = 'hero-key'; this.scene.add(this.key, this.key.target);
+    // the light an opening scroll carries (openScroll) is here from the start, dark: a light added on the click changed the
+    // hall's light count, and every lit material's shader was rebuilt on that frame (21 programs; seconds on a Radeon 610M
+    // the first time). Present from the start, it is compiled with the hall, under the veil.
+    this.openLight = new THREE.PointLight(0xffd59a, 0, 2.6, 2); this.openLight.name = 'opening-light'; this.scene.add(this.openLight);
     this.buildRoom(); this.buildShelves(); this.buildUI();
     this.frameHero(); this.syncGlow();
     this.gfx.setView(this.scene, this.camera);
@@ -269,7 +274,7 @@ export class Hub {
     const menuBtn = el('button', { class: 'btn', text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() });
     u.append(el('div', { class: 'hub-actions glass' }, [add, get, this.buildBtn, menuBtn, more]));
     // the map of the hall: bookcases, their names, how many scrolls and about what (mapview.js)
-    this.map = new MapView(u, { camera: this.camera, provider: () => this.mapPlan(), onIcon: it => { const sh = this.lib.shelves.find(x => x.id === it.id); if (sh) this.chooseShelfIcon(sh); }, onPick: it => { const so = this.shelfObjs.get(it.id); if (!so) return; const p = so.getWorldPosition(V3()); p.y = 1.5; const n = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())); this.frameAt(p, n); } });
+    this.map = new MapView(u, { camera: this.camera, provider: () => this.mapPlan(), onIcon: it => { const sh = this.lib.shelves.find(x => x.id === it.id); if (sh) this.chooseShelfIcon(sh); }, onSymbols: () => this.chooseShelfIcon(null), onPick: it => { const so = this.shelfObjs.get(it.id); if (!so) return; const p = so.getWorldPosition(V3()); p.y = 1.5; const n = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())); this.frameAt(p, n); } });
     this.hint = el('div', { class: 'hint glass', text: HINTS.look() }); u.append(this.hint);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
@@ -311,14 +316,11 @@ export class Hub {
   }
   // the icon of a bookcase (on the map and in its legend): chosen from the set, or "automatic" (what its name calls for)
   chooseShelfIcon(s) {
-    const auto = iconFor(s.name), cur = s.icon || '', box = el('div', { class: 'modal glass icon-dlg', role: 'dialog', 'aria-label': 'Icon of ' + s.name }), veil = el('div', { class: 'modal-veil' }, [box]);
-    const close = () => { veil.remove(); removeEventListener('keydown', onK); }, onK = e => { if (e.key === 'Escape') close(); };
-    const set = v => { if (v) s.icon = v; else delete s.icon; this.app.saveLib(); if (this.map) this.map.sig = ''; this.renderBuildPanel(); close(); toast(v ? `${s.name}: ${ICONS[v].label}` : `${s.name}: the icon follows its name`); };
-    const btn = (name, label, on) => el('button', { class: 'icon-pick' + (on ? ' on' : ''), type: 'button', title: label, 'aria-label': label, 'aria-pressed': String(on), html: iconSVG(name, 24) + `<span>${esc(label)}</span>`, onclick: () => set(name === auto && label.startsWith('Automatic') ? '' : name) });
-    box.append(el('h3', { text: 'An icon for “' + s.name + '”' }), el('p', { class: 'dim small', text: 'Shown on the map of the hall. Automatic picks the icon its name calls for, and follows the name if you rename the bookcase.' }),
-      el('div', { class: 'icon-grid' }, [btn(auto, 'Automatic · ' + ICONS[auto].label, !cur), ...ICON_NAMES.map(n => btn(n, ICONS[n].label, cur === n))]),
-      el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: close })]));
-    veil.addEventListener('click', e => { if (e.target === veil) close(); }); addEventListener('keydown', onK); document.body.append(veil); box.querySelector('.icon-pick.on, .icon-pick').focus();
+    const items = this.mapPlan().items, targets = this.lib.shelves.map(sh => { const it = items.find(x => x.id === sh.id); return { id: sh.id, label: sh.name, sub: it ? it.sub : '', icon: sh.icon || '', auto: it ? it.auto : iconFor(sh.name) }; });
+    openSymbolPicker({ title: 'Select a symbol', kind: 'bookcase', targets, current: s ? s.id : null, onSet: (t, name, d) => {
+      const sh = this.lib.shelves.find(x => x.id === t.id); if (!sh) return;
+      if (name) sh.icon = name; else delete sh.icon; if (d) sh.iconD = d; else delete sh.iconD;
+      this.app.saveLib(); if (this.map) { this.map.sig = ''; this.map.update(1); } if (this.build) this.renderBuildPanel(); } });
   }
   // Every slider step shows at once: the built hall is stretched to the new size (a scale on the shell, no rebuild)
   // and the bookcases and furniture move with their walls; 150 ms after the slider stops moving the shell is rebuilt
@@ -646,12 +648,12 @@ export class Hub {
   // the plan for the map: each bookcase as its footprint, with its name, its number of scrolls and their subjects
   mapPlan() {
     const R = this.lib.hub, items = [], box = new THREE.Box3(), q = new THREE.Quaternion();
-    for (const sh of this.lib.shelves) { const so = this.shelfObjs.get(sh.id); if (!so) continue;
+    for (const sh of this.lib.shelves) { if (sh.icon && sh.iconD) rememberIcon(sh.icon, '', sh.iconD); const so = this.shelfObjs.get(sh.id); if (!so) continue;
       if (!so.userData._mapWD) { const r = so.rotation.y; so.rotation.y = 0; so.updateMatrixWorld(true); box.setFromObject(so); so.rotation.y = r; so.updateMatrixWorld(true); so.userData._mapWD = [box.max.x - box.min.x, box.max.z - box.min.z]; }
       const p = so.getWorldPosition(V3()), books = this.lib.books.filter(b => b.shelf === sh.id), subj = {}; books.forEach(b => autoTags(b, { parts: [] }).forEach(t => { subj[t] = (subj[t] || 0) + 1; }));
       const top = Object.entries(subj).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]);
       so.getWorldQuaternion(q); const rot = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
-      items.push({ id: sh.id, kind: 'case', x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: +so.userData._mapWD[0].toFixed(2), d: +Math.max(.3, so.userData._mapWD[1]).toFixed(2), rot: +rot.toFixed(3), label: sh.name, icon: sh.icon || iconFor(sh.name + ' ' + top.join(' ')), sub: `${books.length} scroll${books.length === 1 ? '' : 's'}${top.length ? ' · ' + top.join(', ') : ''}` }); }
+      items.push({ id: sh.id, kind: 'case', x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: +so.userData._mapWD[0].toFixed(2), d: +Math.max(.3, so.userData._mapWD[1]).toFixed(2), rot: +rot.toFixed(3), label: sh.name, icon: sh.icon || iconFor(sh.name + ' ' + top.join(' ')), auto: iconFor(sh.name + ' ' + top.join(' ')), sub: `${books.length} scroll${books.length === 1 ? '' : 's'}${top.length ? ' · ' + top.join(', ') : ''}` }); }
     return { title: 'The library hall', kind: 'hall', w: R.w, d: R.d, door: this.doorPick ? { x: 0, z: R.d / 2 } : null, items };
   }
   // "Move to…": bookcase, then a grid of rows × places (taken places disabled); the ghost and the camera preview the
@@ -722,7 +724,7 @@ export class Hub {
     O.sheet = makeSheet(SCROLL_L - .02, .6, b.title);   /* the sheet is as wide as the roll it leaves */ sc.add(O.sheet);
     // the back light: behind the sheet's middle (the viewer is toward local −x), it warms the bookcase behind it into a
     // soft halo round the sheet's edges
-    O.light = new THREE.PointLight(0xffd59a, 0, 2.6, 2); sc.add(O.light); O.light.position.set(.28, -.32, 0);
+    O.light = this.openLight; O.light.intensity = 0; sc.add(O.light); O.light.position.set(.28, -.32, 0);
     this.hint.textContent = 'Opening "' + b.title + '"…';
     document.body.classList.add('cine');
   }
@@ -758,7 +760,7 @@ export class Hub {
     S.sheet.scale.y = Math.max(.001, e3); S.rod.position.y = -S.h * e3; S.sheet.visible = S.rod.visible = e3 > .002; this.glowAt(O, e3);
     if (C.t < C.dur) return;
     O.so.attach(sc); sc.position.copy(O.slotP); sc.quaternion.copy(O.slotQ); if (O.chainsOff != null) this.refill(O.chainsOff);
-    sc.remove(O.sheet, O.light); this.trash([O.sheet]); O.light.dispose();
+    sc.remove(O.sheet); this.trash([O.sheet]); O.light.intensity = 0; this.scene.add(O.light);   /* back to the hall, dark (never removed: the light count stays the same) */
     sc.userData.paper.emissiveIntensity = 0; this.gfx.bloom.strength = this.scene.userData.look.bloom;
     this.opening = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update();
     this.hint.textContent = this.build ? HINTS.build() : HINTS.look(); document.body.classList.remove('cine'); this.shadowsDirty = true;

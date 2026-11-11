@@ -61,8 +61,17 @@ export function iconFor(text, fallback = 'book') {
 export function dioramaIcon(spec) { const d = spec || {}; return BY_TYPE[d.type] || iconFor([d.title, d.sceneTitle].filter(Boolean).join(' '), 'cube'); }
 // markup: an inline SVG, for HTML (size in px)
 export function iconSVG(name, size = 18, cls = 'ico') {
-  const ic = I[name] || I.book;
+  const ic = I[name] || EXTRA[name] || I.book;
   return `<svg class="${cls}" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${ic.d}"/></svg>`;
 }
 // the path data alone (for drawing inside another SVG)
-export const iconPath = name => (I[name] || I.book).d;
+export const iconPath = name => (I[name] || EXTRA[name] || I.book).d;
+export const iconLabel = name => (I[name] || EXTRA[name] || I.book).label;
+// Symbols chosen from the library (js/symbols.js, 'lu:<name>'): their drawing is kept with what wears it (iconD on a
+// bookcase or a scroll, so an exported library carries it) and in this browser, so it draws at once, before the
+// library itself is loaded. Unknown names draw as the book.
+const EXTRA = {}, XKEY = 'sm-icons';
+try { Object.assign(EXTRA, JSON.parse(localStorage.getItem(XKEY) || '{}')); } catch (e) { }
+export function rememberIcon(name, label, d) { if (!name || !d || I[name]) return; if (EXTRA[name] && EXTRA[name].d === d) return; EXTRA[name] = { label: label || name, d, words: [] }; try { localStorage.setItem(XKEY, JSON.stringify(EXTRA)); } catch (e) { } }
+export const knownIcon = name => !!(I[name] || EXTRA[name]);
+export const iconD = name => (I[name] || EXTRA[name] || {}).d || '';

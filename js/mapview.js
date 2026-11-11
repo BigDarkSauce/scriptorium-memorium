@@ -53,8 +53,8 @@ const hit = (r, L) => L.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.
 export class MapView {
   // provider(): { title, kind: 'hall' | 'room', w, d, door: {x, z} | null, items: [{ id, kind: 'case' | 'station', x, z, w, d, rot,
   //   label, sub, icon, dios: [{ name, icon, x, z }] }] }   (rot: the way the footprint faces into the room, about y)
-  constructor(host, { provider, camera, onPick, onIcon = null, key = 'sm-map-open' }) {
-    Object.assign(this, { provider, camera, onPick, onIcon, key, host });
+  constructor(host, { provider, camera, onPick, onIcon = null, onSymbols = null, key = 'sm-map-open' }) {
+    Object.assign(this, { provider, camera, onPick, onIcon, onSymbols, key, host });
     this.btn = el('button', { class: 'map-btn glass', type: 'button', title: 'Minimap (the full map: M)', 'aria-label': 'Minimap', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>', onclick: () => this.toggle() });
     this.card = el('aside', { class: 'map-card glass', 'aria-label': 'Minimap', hidden: true });
     this.tip = el('div', { class: 'map-tip', hidden: true, role: 'tooltip' });
@@ -105,7 +105,7 @@ export class MapView {
     const F = this.full; F.innerHTML = '';
     const plate = el('div', { class: 'fm-plan' }), legend = el('ol', { class: 'map-legend fm-legend' });
     const panel = el('div', { class: 'fm-panel glass' }, [
-      el('div', { class: 'fm-head' }, [el('div', {}, [el('div', { class: 'fm-kicker', text: P.kind === 'hall' ? 'The library hall' : 'The room' }), el('h2', { text: P.kind === 'hall' ? 'Map of the hall' : P.title })]), el('button', { class: 'btn', text: 'Close · M', onclick: () => this.closeFull() })]),
+      el('div', { class: 'fm-head' }, [el('div', {}, [el('div', { class: 'fm-kicker', text: P.kind === 'hall' ? 'The library hall' : 'The room' }), el('h2', { text: P.kind === 'hall' ? 'Map of the hall' : P.title })]), el('div', { class: 'fm-actions' }, [this.onSymbols ? el('button', { class: 'btn fm-sym', type: 'button', title: 'Search the symbol library and give a symbol to a ' + (P.kind === 'hall' ? 'bookcase' : 'scroll'), html: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6"/></svg> Select symbol', onclick: () => this.onSymbols(null) }) : null, el('button', { class: 'btn', text: 'Close · M', onclick: () => this.closeFull() })])]),
       el('div', { class: 'fm-body' }, [plate, el('div', { class: 'fm-side' }, [el('div', { class: 'fm-count dim small', text: `${P.items.length} ${P.kind === 'hall' ? 'bookcase' : 'scroll'}${P.items.length === 1 ? '' : 's'}` + (P.kind === 'room' ? ` · ${P.items.reduce((a, it) => a + (it.dios || []).length, 0)} dioramas` : '') }), legend])])]);
     F.append(panel);
     // Names are placed as on an annotated plan (boundary labelling): every footprint against a wall has its name in a
@@ -171,7 +171,7 @@ export class MapView {
       this.wire(g(i).g, it, i, false);
       L[i].addEventListener('click', () => { this.closeFull(); this.onPick && this.onPick(it); }); L[i].addEventListener('pointerenter', () => this.hot(i, true)); L[i].addEventListener('pointerleave', () => this.hot(i, false));
       legend.append(el('li', { 'data-i': i, tabindex: 0, onclick: () => { this.closeFull(); this.onPick && this.onPick(it); }, onpointerenter: () => this.hot(i, true), onpointerleave: () => this.hot(i, false) }, [
-        this.onIcon ? el('button', { class: 'map-lico', type: 'button', title: 'Choose an icon', 'aria-label': 'Choose an icon for ' + it.label, html: iconSVG(it.icon || 'book', 18), onclick: e => { e.stopPropagation(); this.onIcon(it); } }) : el('span', { class: 'map-lico', html: iconSVG(it.icon || 'book', 18) }),
+        this.onIcon ? el('button', { class: 'map-lico', type: 'button', title: 'Select a symbol', 'aria-label': 'Select a symbol for ' + it.label, html: iconSVG(it.icon || 'book', 18), onclick: e => { e.stopPropagation(); this.onIcon(it); } }) : el('span', { class: 'map-lico', html: iconSVG(it.icon || 'book', 18) }),
         el('div', {}, [el('b', { text: it.label }), it.sub ? el('span', { class: 'dim', text: ' ' + it.sub }) : null,
           (it.dios || []).length ? el('div', { class: 'map-dios' }, it.dios.map(dd => el('span', { class: 'map-dchip' }, [el('span', { class: 'map-dico', html: iconSVG(dd.icon || 'cube', 14) }), el('span', { text: dd.name })]))) : null])]));
     });

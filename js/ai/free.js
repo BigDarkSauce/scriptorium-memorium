@@ -20,6 +20,12 @@
 // SambaNova, Cloudflare and Kilo do not (they are reachable through FreeLLMAPI, which runs as a local server).
 import * as store from '../store.js';
 import { parseJSONLoose } from './claude.js';
+import { bridgeReady, bridgeFetch, inClaudeApp } from './bridge.js';
+
+// How a request leaves this page: inside the Claude app (an Artifact may not contact outside addresses) through the
+// Scriptorium free-models extension on your computer (js/ai/bridge.js); anywhere else straight from the page.
+export const via = () => inClaudeApp() ? 'bridge' : 'direct';
+const net = (url, init) => via() === 'bridge' ? bridgeFetch(url, init) : fetch(url, init);
 
 export const PROVIDERS = [
   // no key needed: work from the first minute (slow: small per-IP limits)
@@ -106,7 +112,7 @@ export async function models(p, { fresh = false } = {}) {
   if (p.fixed) return p.fixed.map(id => ({ id, rank: rankOf(id), vision: !!p.vision }));
   if (p.anon && !keyOf(p, S)) return p.anon.map(id => ({ id, rank: rankOf(id) - 8, vision: false }));   // without a key only these answer
   const cache = read(MKEY, {}), c = cache[p.id]; if (!fresh && c && Date.now() - c.at < 864e5 && c.base === baseOf(p, S)) return c.list;
-  const r = await fetch(baseOf(p, S) + '/models', { headers: keyOf(p, S) ? { Authorization: 'Bearer ' + keyOf(p, S) } : {}, signal: AbortSignal.timeout(15000) });
+  const r = await net(baseOf(p, S) + '/models', { headers: keyOf(p, S) ? { Authorization: 'Bearer ' + keyOf(p, S) } : {}, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw { code: r.status === 401 || r.status === 403 ? 'key' : 'models', status: r.status };
   const j = await r.json(); let ids = (j.data || j.models || []).map(m => String(m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
   if (p.onlyFree) ids = ids.filter(id => /:free$|^openrouter\/free$/.test(id)); if (p.onlyMatch) ids = ids.filter(id => p.onlyMatch.test(id));
@@ -129,7 +135,7 @@ export async function call(p, model, prompt, { images = [], signal, onText, onTh
   const ctl = new AbortController(), stop = () => ctl.abort(); if (signal) { if (signal.aborted) throw { code: 'cancelled' }; signal.addEventListener('abort', stop, { once: true }); }
   let idle = setTimeout(stop, 90000); const hard = setTimeout(stop, timeoutMs); const t0 = performance.now();
   try {
-    let res; try { res = await fetch(baseOf(p, S) + '/chat/completions', { method: 'POST', headers: H, body: JSON.stringify(body), signal: ctl.signal }); }
+    let res; try { res = await net(baseOf(p, S) + '/chat/completions', { method: 'POST', headers: H, body: JSON.stringify(body), signal: ctl.signal }); }
     catch (e) { if (signal && signal.aborted) throw { code: 'cancelled' }; throw { code: 'network', message: String(e && e.message || e) }; }
     if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 || res.status === 402 && /limit/i.test(t) ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 600), res }; }
     let text = '', finish = null, usage = null, think = 0;
@@ -157,11 +163,14 @@ export async function candidates({ images = 0, minRank = 0 } = {}) {
   await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) out.push({ p, m: m.id, rank: m.rank + (p.local ? -6 : 0) }); }); }));
   return out.sort((a, b) => b.rank - a.rank);
 }
-// can this page call outside addresses at all? (one keyless provider's model list; remembered for the session)
+// can this page reach the free providers? Outside the Claude app: one keyless provider's model list; inside it: is the
+// free-models extension installed and running (remembered for the session; the AI panel asks again)
 // (asked only once a free engine is chosen or the panel is opened: nothing is sent anywhere in the Claude mode)
-let reachP = null, reachOK = null; export const reachable = () => reachP || (reachP = fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', { signal: AbortSignal.timeout(8000) }).then(r => true, () => fetch('https://api.llm7.io/v1/models', { signal: AbortSignal.timeout(8000) }).then(() => true, () => false)).then(v => (reachOK = v)));
+let reachP = null, reachOK = null;
+export const reachable = ({ fresh = false } = {}) => (!fresh && reachP) || (reachP = (via() === 'bridge' ? bridgeReady({ fresh }) : fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', { signal: AbortSignal.timeout(8000) }).then(r => true, () => fetch('https://api.llm7.io/v1/models', { signal: AbortSignal.timeout(8000) }).then(() => true, () => false))).then(v => (reachOK = v)));
 if (mode() !== 'claude') reachable(); onSettings(S => { if (S.mode !== 'claude') reachable(); });
-// a provider counts only where the page can reach it (inside claude.ai it cannot: hybrid then uses Claude for all)
+// a provider counts only where the page can reach it (inside the Claude app without the extension it cannot: hybrid
+// then uses Claude for all)
 export const hasAny = () => reachOK !== false && active().length > 0;
 export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,

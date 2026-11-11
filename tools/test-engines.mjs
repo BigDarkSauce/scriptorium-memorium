@@ -10,7 +10,18 @@ globalThis.location = { origin: 'http://test' }; globalThis.requestAnimationFram
 let claudeMode = 'ok', claudeCalls = 0;
 const SAMPLE = async (prompt, o) => { claudeCalls++; if (claudeMode === 'rate') throw { code: 'rate_limited' }; return { text: JSON.stringify({ by: 'claude', chain: [{ id: 'S1' }] }) }; };
 SAMPLE.limits = async () => ({ images: { maxCount: 5 } });
-globalThis.window = { claude: { use: async n => n === 'sample' ? SAMPLE : null } }; globalThis.claude = globalThis.window.claude;
+// inside the Claude app the free providers are reached through the free-models extension (js/ai/bridge.js): an
+// in-process stand-in for it serves the scripted providers below (tools/test-bridge.mjs runs the real one)
+const jobs = new Map(); let jn = 0;
+const BRIDGE = { async callTool(server, name, a) {
+  if (server !== 'host:scriptorium-free') throw { code: 'server_not_connected' };
+  if (name === 'bridge_info') return { payload: { name: 'scriptorium-free', version: 'test' } };
+  if (name === 'http_start') { const id = 'j' + (++jn), J = { status: 0, headers: {}, text: '', done: false }; jobs.set(id, J);
+    (async () => { try { const r = await globalThis.fetch(a.url, { method: a.method, headers: a.headers, body: a.body }); J.status = r.status; r.headers.forEach((v, k) => { J.headers[k] = v; }); J.text = await r.text(); } catch (e) { J.error = String(e); } J.done = true; })(); return { payload: { id } }; }
+  if (name === 'http_poll') { const J = jobs.get(a.id); while (!J.done) await new Promise(r => setTimeout(r, 1)); return { payload: { status: J.status, headers: J.headers, text: J.text.slice(a.from || 0), next: J.text.length, done: true, error: J.error || null } }; }
+  if (name === 'http_cancel') { jobs.delete(a.id); return { payload: { ok: true } }; }
+} };
+globalThis.window = { claude: { use: async n => n === 'sample' ? SAMPLE : n === 'mcp' ? BRIDGE : null } }; globalThis.claude = globalThis.window.claude;
 
 // the free providers: OVH (no key) and Groq (key); behaviour per (provider, model) scripted by `script`
 const script = {}; let fetches = 0;

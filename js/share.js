@@ -36,7 +36,8 @@ export async function publishBook(book, room, { tags = [], shelfName = '' } = {}
   const { db, me } = await caps(); if (!db || !me) throw new Error('Sharing needs you to be signed in with permission to add to this page');
   const text = JSON.stringify(clean(room)), n = Math.ceil(text.length / CH), base = `pub/${me}/books/${book.id}`;
   for (let k = 0; k < n; k++) await db.doc(`${base}/chunks/${k}`).set({ d: text.slice(k * CH, (k + 1) * CH) });
-  const idx = db.doc('pub/' + me), cur = await idx.get(), items = (cur.exists && cur.data().items) || {};
+  // the database hands its documents back frozen: the index is copied before it is changed
+  const idx = db.doc('pub/' + me), cur = await idx.get(), items = { ...((cur.exists && (cur.data() || {}).items) || {}) };
   // stale chunks past the new end are removed
   const old = items[book.id] && items[book.id].chunks || 0; for (let k = n; k < old; k++) await db.doc(`${base}/chunks/${k}`).delete().catch(() => { });
   items[book.id] = { title: String(book.title).slice(0, 200), tags: tags.slice(0, 12).map(s => String(s).slice(0, 40)), shelf: String(shelfName || '').slice(0, 80), ...statsOf(room), color: book.color || '', icon: book.icon || '', chunks: n, updated: Date.now() };
@@ -44,7 +45,7 @@ export async function publishBook(book, room, { tags = [], shelfName = '' } = {}
 }
 export async function unpublishBook(bookId) {
   const { db, me } = await caps(); if (!db || !me) return;
-  const idx = db.doc('pub/' + me), cur = await idx.get(); if (!cur.exists) return; const items = cur.data().items || {}, n = (items[bookId] || {}).chunks || 0;
+  const idx = db.doc('pub/' + me), cur = await idx.get(); if (!cur.exists) return; const items = { ...((cur.data() || {}).items || {}) }, n = (items[bookId] || {}).chunks || 0;
   for (let k = 0; k < n; k++) await db.doc(`pub/${me}/books/${bookId}/chunks/${k}`).delete().catch(() => { });
   delete items[bookId]; await idx.set({ items, updated: Date.now() });
 }

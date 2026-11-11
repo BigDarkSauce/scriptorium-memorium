@@ -5,7 +5,8 @@
 // The room grows when more scrolls need hanging.
 import { MapView } from '../mapview.js';
 import { lookQ, flyPose, flightDur, easeSine } from '../camfly.js';
-import { iconFor, dioramaIcon } from '../icons.js';
+import { iconFor, dioramaIcon, rememberIcon } from '../icons.js';
+import { openSymbolPicker } from '../symbols.js';
 const plain = t => String(t).replace(/\$([^$]*)\$/g, '$1').replace(/\\[a-zA-Z]+\{?|[{}_^]/g, '');   // a title with maths, readable as plain text
 import { CEILINGS, ceilingTheme } from '../gfx/ceilings.js';
 import * as THREE from 'three';
@@ -169,7 +170,7 @@ export class BookRoom {
     this.frameStart();
     this.gfx.setView(this.scene, this.camera);
     // the map of the room: the chapter scrolls in reading order, the dioramas on their pedestals (mapview.js)
-    this.map = new MapView(this.ui, { camera: this.camera, provider: () => this.mapPlan(), onPick: it => { const st = this.stations.get(it.id); if (!st) return; const n = st.slot.n, c = st.sheet.getWorldPosition(V3()); const to = c.clone().addScaledVector(n, 2.6).setY(1.62), look = c.clone().setY(1.3); this.flyTo(to, look, flightDur(this.camera.position, this.camera.quaternion, to, lookQ(to, look))); if (this.anim) this.anim.ease = easeSine; } });
+    this.map = new MapView(this.ui, { camera: this.camera, provider: () => this.mapPlan(), onIcon: it => this.chooseSymbol(it.id), onSymbols: () => this.chooseSymbol(null), onPick: it => { const st = this.stations.get(it.id); if (!st) return; const n = st.slot.n, c = st.sheet.getWorldPosition(V3()); const to = c.clone().addScaledVector(n, 2.6).setY(1.62), look = c.clone().setY(1.3); this.flyTo(to, look, flightDur(this.camera.position, this.camera.quaternion, to, lookQ(to, look))); if (this.anim) this.anim.ease = easeSine; } });
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const D = this.data.dims, c = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; return { minX: -D.w / 2 + c, maxX: D.w / 2 - c, minZ: -D.d / 2 + c, maxZ: D.d / 2 - c, h: D.h }; },
       obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => st0(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
@@ -182,10 +183,18 @@ export class BookRoom {
     if (opts.openPart) { const p = this.data.parts.find(x => x.id === opts.openPart); if (p) setTimeout(() => { if (!this.disposed) this.openPart(p, true); }, 200); }
   }
   save() { this.app.saveRoom(this.book.id, this.data); }
+  // a symbol for a scroll on the room's map (js/symbols.js): from the wide map's "Select symbol" or a scroll's own icon
+  chooseSymbol(id) {
+    const items = this.mapPlan().items; if (!items.length) { toast('This room has no scrolls yet.'); return; }
+    openSymbolPicker({ title: 'Select a symbol', kind: 'scroll', current: id, targets: items.map(it => ({ id: it.id, label: it.label, sub: it.sub, icon: (this.data.parts.find(p => p.id === it.id) || {}).icon || '', auto: it.auto })), onSet: (t, name, d) => {
+      const p = this.data.parts.find(x => x.id === t.id); if (!p) return;
+      if (name) p.icon = name; else delete p.icon; if (d) p.iconD = d; else delete p.iconD;
+      this.save(); if (this.map) { this.map.sig = ''; this.map.update(1); } } });
+  }
   mapPlan() {
     const D = this.data.dims, items = [];
-    this.orderedParts().forEach((p, i) => { const st = this.stations.get(p.id); if (!st) return; const c = st.group.getWorldPosition(V3()), n = st.slot.n;
-      items.push({ id: p.id, kind: 'station', n: i + 1, x: +(c.x + n.x * .5).toFixed(2), z: +(c.z + n.z * .5).toFixed(2), w: p.subOf ? .9 : 1.15, d: .5, rot: +Math.atan2(n.x, n.z).toFixed(3), label: p.title || 'Scroll', icon: iconFor(p.title, 'scroll'), sub: p.analysis ? ((p.analysis.chain || []).length + ' steps') : 'not analysed yet',
+    this.orderedParts().forEach((p, i) => { if (p.icon && p.iconD) rememberIcon(p.icon, '', p.iconD); const st = this.stations.get(p.id); if (!st) return; const c = st.group.getWorldPosition(V3()), n = st.slot.n;
+      items.push({ id: p.id, kind: 'station', n: i + 1, x: +(c.x + n.x * .5).toFixed(2), z: +(c.z + n.z * .5).toFixed(2), w: p.subOf ? .9 : 1.15, d: .5, rot: +Math.atan2(n.x, n.z).toFixed(3), label: p.title || 'Scroll', icon: p.icon || iconFor(p.title, 'scroll'), auto: iconFor(p.title, 'scroll'), sub: p.analysis ? ((p.analysis.chain || []).length + ' steps') : 'not analysed yet',
         dios: st.bays.filter(b => b.spec).map(b => { const q = b.group.getWorldPosition(V3()); return { name: plain(b.spec.d.title || b.spec.st.title || b.spec.d.type || 'Diorama'), icon: dioramaIcon({ ...b.spec.d, sceneTitle: b.spec.st && b.spec.st.title }), x: +q.x.toFixed(2), z: +q.z.toFixed(2) }; }) }); });
     return { title: 'The room of “' + this.book.title + '”', kind: 'room', w: D.w, d: D.d, door: this.doorPick ? { x: 0, z: D.d / 2 } : null, items };
   }
