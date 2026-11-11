@@ -123,6 +123,9 @@ export class Gfx {
     this.outline.renderScene = scene; this.outline.renderCamera = camera;
     this.resize();
   }
+  // another scene under the same camera and canvas (the title screen's showcase): no resize, so the composer's targets
+  // are not reallocated on every change of scene (setView resizes, which costs a frame or more)
+  swapScene(scene, camera) { this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look); this.renderPass.scene = scene; this.renderPass.camera = camera; this.outline.renderScene = scene; this.outline.renderCamera = camera; }
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setPixelRatio(this.dpr); this.renderer.setSize(w, h, false);

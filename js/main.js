@@ -25,6 +25,7 @@ import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
 import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
+import { lookQ, flyPose } from './camfly.js';
 import { TitleScreen } from './title.js';
 import { openGetScroll, openVisibility, republishLater } from './share.js';
 import { choosePlace } from './room/addpdf.js';
@@ -132,7 +133,8 @@ class App {
   async renameSlot(id, name) { const m = this.slots.find(x => x.id === id); if (m) { m.name = String(name).slice(0, 60); await store.setGlobal('slots', this.slots); } }
   async deleteSlot(id) { if (id === 'main' || id === this.slotId) return false; await store.dropSlot(id); this.slots = this.slots.filter(x => x.id !== id); await store.setGlobal('slots', this.slots); return true; }
   // the title screen; "Continue" returns to the place the slot was left in, by a camera move into it
-  openTitle() { this.route({}); sfx.ambience('library'); return this.switchMode(() => new TitleScreen(this)); }
+  openTitle() { try { this.rememberPlace(); store.flushSaves(); } catch (e) { }   /* Continue comes back to exactly here */
+    this.route({}); sfx.ambience('library'); return this.switchMode(() => new TitleScreen(this)); }
   async continueSlot(id) {
     await this.switchSlot(id); this.slotMeta({ played: Date.now() }); const L = this.lib.lastPlace, book = L && L.book && this.lib.books.find(b => b.id === L.book);
     this._arrive = L && L.cam && !L.part ? { pose: L.cam } : { from: 'title' };
@@ -150,8 +152,10 @@ class App {
   }
   stepCine(dt) {
     const C = this.cine; if (!C) return; if (C.M !== this.mode || C.M.disposed) { this.cine = null; C.res(); return; }
-    const K = C.keys[C.i]; C.t += dt; const k = Math.min(1, C.t / K.dur), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, cam = C.M.camera;
-    cam.position.lerpVectors(C.from.p, K.p, e); const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); cam.lookAt(a); if (K.at) K.at(k);
+    const K = C.keys[C.i]; if (K.hold && K.hold()) { C.t = 0; if (!K.q0) { C.M.camera.position.copy(K.p); C.M.camera.quaternion.copy(lookQ(K.p, K.a)); } return; }   /* (hold: a pose kept until the veil has lifted) */
+    C.t += dt; const k = Math.min(1, C.t / K.dur), e = K.ease ? K.ease(k) : k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, cam = C.M.camera;
+    if (!K.q0) { K.q0 = cam.quaternion.clone(); K.q1 = lookQ(K.p, K.a); K.p0 = C.from.p.clone(); }   /* turn along the shortest arc (camfly.js) */
+    flyPose(cam, { p0: K.p0, p1: K.p, q0: K.q0, q1: K.q1 }, e); const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); if (K.at) K.at(k);
     if (k >= 1) { C.from = { p: K.p.clone(), a: K.a.clone() }; C.i++; C.t = 0;
       if (C.i >= C.keys.length) { this.cine = null; const M = C.M; if (M.controls) { M.controls.target.copy(a); M.controls.enabled = !(M.nav && M.nav.mode === 'walk') && !M.anim; M.controls.update(); } if (M.nav && M.nav.syncFromCamera) M.nav.syncFromCamera(); C.res(); } }
   }
@@ -162,9 +166,16 @@ class App {
     const goal = how.pose ? { p: new THREE.Vector3(...how.pose.p), a: new THREE.Vector3(...how.pose.a) } : { p: cam.position.clone(), a: M.controls && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
     const D = M.doorInfo, pick = M.doorPick;
     if (how.door && D && D.set && pick) {
-      const c = pick.position, inn = new THREE.Vector3(0, 0, -1), p0 = new THREE.Vector3(c.x, 1.62, c.z + .25), a0 = p0.clone().addScaledVector(inn, 4).setY(1.5);
-      cam.position.copy(p0); cam.lookAt(a0); D.set(1);
-      let shut = false; this.cineRun(M, [{ p: goal.p, a: goal.a, dur: 2.6, at: k => { if (k > .3) { const q = Math.min(1, (k - .3) / .45); D.set(1 - (q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2)); if (q >= 1 && !shut) { shut = true; sfx.play('thud', { gain: .35 }); } } } }]);
+      // out of this place's own tunnel: the camera starts far down the bore with the room framed by the open door ahead,
+      // held there until the veil has lifted, glides up the tunnel (the light slowing round it), through the doorway, and
+      // on to the view; the leaves close behind
+      const c = pick.position, T = D.tunnel, p0 = new THREE.Vector3(c.x, 1.5, c.z + 9.5), a0 = new THREE.Vector3(c.x, 1.45, c.z - 6), p1 = new THREE.Vector3(c.x, 1.6, c.z - .35), a1 = new THREE.Vector3(c.x, 1.5, c.z - 6);
+      cam.position.copy(p0); cam.lookAt(a0); D.travel = true; D.set(1); if (T) { T.setFlow(-14); T.setGlow(0); }
+      let shut = false; const done = () => { D.travel = false; D.set(D.open); };
+      this.cineRun(M, [{ p: p0, a: a0, dur: .05, hold: () => this.switching },
+        { p: p1, a: a1, dur: 2.1, ease: k => 1 - Math.pow(1 - k, 3), at: k => { if (T) T.setFlow(-14 * Math.pow(1 - k, 2) - .6); if (k > .9 && D.travel) done(); } },
+        { p: goal.p, a: goal.a, dur: 2.4, at: k => { if (k > .2) { const q = Math.min(1, (k - .2) / .5); D.set(1 - (q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2)); if (q >= 1 && !shut) { shut = true; sfx.play('thud', { gain: .35 }); } } } }]).then(() => { D.travel = false; if (!shut) D.set(0); });
+      sfx.play('whoosh', { gain: .3, pitch: .8 });
       return;
     }
     const back = goal.p.clone().sub(goal.a).setY(0).normalize(); if (!isFinite(back.x)) back.set(0, 0, 1);
@@ -177,12 +188,21 @@ class App {
   async walkThroughDoor(go) {
     const M = this.mode; if (!M || this.cine || this.switching) return; const D = M.doorInfo, pick = M.doorPick;
     if (!D || !D.set || !pick) return go();
-    const c = pick.position, out = new THREE.Vector3(0, 0, 1);
+    const c = pick.position, T = D.tunnel;
     await this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z - 2.4), a: new THREE.Vector3(c.x, 1.45, c.z), dur: 1.25 }]);
-    sfx.play('whoosh', { gain: .25 });
+    if (M.disposed || this.mode !== M) return;
+    sfx.play('whoosh', { gain: .25 }); if (T) { T.setFlow(1.5); T.setGlow(0); }
     await new Promise(res => { const t0 = performance.now(); const step = () => { if (M.disposed) return res(); const k = Math.min(1, (performance.now() - t0) / 950); D.set(1 - Math.pow(1 - k, 3)); if (k < 1) requestAnimationFrame(step); else res(); }; step(); });   /* by the clock: a slow frame never stretches the swing */
-    this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z + .7), a: new THREE.Vector3(c.x, 1.6, c.z + 4).addScaledVector(out, 0), dur: 1.05 }]);
-    await sleep(500); this._arrive = { door: true }; return go();
+    if (M.disposed || this.mode !== M) return;
+    // into the tunnel: a step over the threshold, then the run down the bore, the light rushing faster and the far end
+    // brightening until it fills the view; the next place is opened through that light (arrive: {door})
+    D.travel = true; let gone = false;
+    const leave = () => { if (gone) return; gone = true; this._arrive = { door: true }; go(); };
+    sfx.play('whoosh', { gain: .45, pitch: 1.2 });
+    this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.58, c.z + 1.2), a: new THREE.Vector3(c.x, 1.5, c.z + 12), dur: .9 },
+      { p: new THREE.Vector3(c.x, 1.5, c.z + 17), a: new THREE.Vector3(c.x, 1.48, c.z + 40), dur: 1.9, ease: k => k * k * k, at: k => { if (T) { T.setFlow(1.5 + 30 * k * k); T.setGlow(k * k); } if (k > .62) leave(); } }]);
+    // whatever the frame rate, the switch starts by the clock too (a slow software GPU still leaves)
+    setTimeout(() => { if (this.mode === M) leave(); }, 4200);
   }
   // where you are, kept as you move (Continue returns there): the place, the scroll open in it, the camera
   rememberPlace() {
@@ -466,7 +486,7 @@ class App {
     this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
     if (this.mode) { try { this.mode.update(dt, this.t); } catch (e) { if (!this._errT || now - this._errT > 5000) { this._errT = now; console.error(e); } } }
     this.loopDt = 0;   // (an update driven by hand, outside this loop, steps by its own dt only)
-    if (this.cine) this.stepCine(dt);   /* the app's camera moves (doors, arrivals) after the place's own update */
+    if (this.cine) this.stepCine(Math.min(.1, raw / 1000));   /* the app's camera moves (doors, arrivals) after the place's own update, by the wall clock (capped): a slow frame never stretches a door walk */
     this._placeT = (this._placeT || 0) + dt; if (this._placeT > 1.5) { this._placeT = 0; this.rememberPlace(); }
     // nothing to see under a closed veil (_switch); the old place's GPU resources wait for the new one's first drawn frames
     // a frame budget per place (docs/ARCHITECTURE.md, "Frame budget"): a still hall or room, or a room under an open
@@ -474,7 +494,7 @@ class App {
     if (!this.veilHold) {
       const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
-      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
+      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60 && !(this.mode && this.mode.fixedRes); if (full) this.gfx.adapt(this._rAcc);   /* (fixedRes: the title screen keeps one resolution: a resize mid-shot is a visible hitch) */ else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
     }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
   }

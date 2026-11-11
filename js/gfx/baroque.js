@@ -4,9 +4,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ceilingTex } from './ceilings.js';
-import { canvasTex, marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
+import { marbleTex, gildTex, marbleFloor, frescoTex, rocailleTex, eggDartTex, bookSpinesTex, windowSkyTex, shaftTex, plaster, woodGrain, radialGlow, fluteNormal, figuredWood, spineAtlas, SPINE_VARIANTS, parchment, companions, marbleSet } from './textures.js';
 import { surface } from './surfaces.js';
 import { AAA } from './aaa.js';
+import { makeTunnel } from './tunnel.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -657,7 +658,8 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   // ---- walls (with arched window openings) ----
   walls.forEach(W => {
     const M = WM(W), L = W.len, isWin = W.name === windowWall, isDoor = door && W.name === 'front';
-    const shape = new THREE.Shape(); shape.moveTo(-L / 2, 0); shape.lineTo(L / 2, 0); shape.lineTo(L / 2, ys + .02); shape.lineTo(-L / 2, ys + .02); shape.lineTo(-L / 2, 0);
+    // (the front wall has a real opening behind the double door: the tunnel shows through it when the door opens)
+    const shape = new THREE.Shape(); shape.moveTo(-L / 2, 0); if (isDoor) { const hw = doorW / 2 + .005; shape.lineTo(-hw, 0); shape.lineTo(-hw, doorH + .005); shape.lineTo(hw, doorH + .005); shape.lineTo(hw, 0); } shape.lineTo(L / 2, 0); shape.lineTo(L / 2, ys + .02); shape.lineTo(-L / 2, ys + .02); shape.lineTo(-L / 2, 0);
     const wins = [];
     if (isWin) {
       for (let i = 0; i < W.piers.length - 1; i++) {
@@ -716,8 +718,14 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
   });
   // ---- entablature, dado and skirting as mitred rings round the room ----
   const ring = (y0, y1, p, mat, uvFn) => {
-    const s = new THREE.Shape(); s.moveTo(-w / 2 - .01, -d / 2 - .01); s.lineTo(w / 2 + .01, -d / 2 - .01); s.lineTo(w / 2 + .01, d / 2 + .01); s.lineTo(-w / 2 - .01, d / 2 + .01); s.lineTo(-w / 2 - .01, -d / 2 - .01);
-    const hl = new THREE.Path(); hl.moveTo(-w / 2 + p, -d / 2 + p); hl.lineTo(-w / 2 + p, d / 2 - p); hl.lineTo(w / 2 - p, d / 2 - p); hl.lineTo(w / 2 - p, -d / 2 + p); hl.lineTo(-w / 2 + p, -d / 2 + p); s.holes.push(hl);
+    const s = new THREE.Shape();
+    if (door && y0 < doorH) {   // a ring below the door's head stops at the doorway (shape y = -d/2 is the front wall): a C, open where the door is
+      const hw = doorW / 2, Fo = -d / 2 - .01, Fi = -d / 2 + p, Lo = -w / 2 - .01, Li = -w / 2 + p, Ro = w / 2 + .01, Ri = w / 2 - p, Bo = d / 2 + .01, Bi = d / 2 - p;
+      s.moveTo(-hw, Fo); s.lineTo(Lo, Fo); s.lineTo(Lo, Bo); s.lineTo(Ro, Bo); s.lineTo(Ro, Fo); s.lineTo(hw, Fo); s.lineTo(hw, Fi); s.lineTo(Ri, Fi); s.lineTo(Ri, Bi); s.lineTo(Li, Bi); s.lineTo(Li, Fi); s.lineTo(-hw, Fi); s.lineTo(-hw, Fo);
+    } else {
+      s.moveTo(-w / 2 - .01, -d / 2 - .01); s.lineTo(w / 2 + .01, -d / 2 - .01); s.lineTo(w / 2 + .01, d / 2 + .01); s.lineTo(-w / 2 - .01, d / 2 + .01); s.lineTo(-w / 2 - .01, -d / 2 - .01);
+      const hl = new THREE.Path(); hl.moveTo(-w / 2 + p, -d / 2 + p); hl.lineTo(-w / 2 + p, d / 2 - p); hl.lineTo(w / 2 - p, d / 2 - p); hl.lineTo(w / 2 - p, -d / 2 + p); hl.lineTo(-w / 2 + p, -d / 2 + p); s.holes.push(hl);
+    }
     const geo = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false }); geo.rotateX(-Math.PI / 2); geo.translate(0, y0, 0);
     const gg = A.add(mat, geo); if (uvFn) uvFn(gg, y0, y1);
   };
@@ -813,7 +821,7 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const wn = bmat('walnut'), wd = bmat('walnut-dark'), gf = bmat('gilt-fine'), lw = doorW / 2 - .01;
     // the two leaves are real hinged objects (not in the atlas) so the door can swing open: each leaf's parts are merged
     // per material under a pivot on its hinge (at the jamb); info.door.set(k) opens both by k ∈ [0, 1] (0 shut, 1 at
-    // 100°, into the room). Behind them, in the opening, a passage of warm light (the other place) instead of plaster.
+    // 100°, into the room). Behind them, through a real opening in the wall, the tunnel to the other place.
     const dg = new THREE.Group(); dg.matrixAutoUpdate = false; dg.matrix.copy(M); dg.name = 'door'; g.add(dg); const leaves = [];
     [-1, 1].forEach(sd => {
       const cx = sd * doorW / 4, hx = sd * doorW / 2, parts = new Map(), P = (mat, geo, x, y, z) => { geo.translate(x - hx, y, z); (parts.get(mat) || parts.set(mat, []).get(mat)).push(geo); };
@@ -826,9 +834,9 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       parts.forEach((G, mat) => { const geo = mergeGeometries(G.map(x => x.index ? x.toNonIndexed() : x), false); const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; piv.add(m); });
       leaves.push({ piv, sd });
     });
-    { const t = canvasTex('door-beyond', 128, 256, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#fff6e2'); gr.addColorStop(.55, '#ffe2a8'); gr.addColorStop(1, '#c99a5a'); c.fillStyle = gr; c.fillRect(0, 0, w, h); const r = c.createRadialGradient(w / 2, h * .45, 4, w / 2, h * .45, w * .9); r.addColorStop(0, 'rgba(255,255,255,.9)'); r.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = r; c.fillRect(0, 0, w, h); });
-      const bm = new THREE.Mesh(new THREE.PlaneGeometry(doorW - .02, doorH - .01), new THREE.MeshBasicMaterial({ map: t, toneMapped: false })); bm.position.set(0, doorH / 2, .003); bm.name = 'door-beyond'; dg.add(bm); }
-    info.door.leaves = leaves; info.door.set = k => { const a = Math.max(0, Math.min(1, k)) * 1.75; leaves.forEach(L => { L.piv.rotation.y = L.sd * a; }); info.door.open = k; };
+    // behind the leaves, through a real opening in the wall: the tunnel to the other place (tunnel.js), drawn only while the door stands open
+    const tun = makeTunnel({ w: doorW, h: doorH }); dg.add(tun); info.door.tunnel = tun.userData.tunnel;
+    info.door.leaves = leaves; info.door.set = k => { const a = Math.max(0, Math.min(1, k)) * 1.75; leaves.forEach(L => { L.piv.rotation.y = L.sd * a; }); info.door.open = k; tun.visible = k > .001 || !!info.door.travel; };
     D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), -doorW / 2 - .11, (doorH + .22) / 2, .06); D(stucco, new THREE.BoxGeometry(.22, doorH + .22, .12), doorW / 2 + .11, (doorH + .22) / 2, .06);
     D(stucco, new THREE.BoxGeometry(doorW + .44, .22, .12), 0, doorH + .11, .06);
     // the gilt bead round the opening stands 4 mm into it (its inner faces never share the stucco jambs' plane)

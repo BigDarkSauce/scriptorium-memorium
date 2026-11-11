@@ -308,3 +308,34 @@ and every frame while something flies or unfolds; the hall's only while somethin
   (Substack) and `search_films` (Letterboxd), run as catalogued providers through `firecrawl_scrape`. They inform the
   design of a diorama or the order of reveals, never the facts. Reddit and Pinterest are not wired: both refuse
   automated access, and the honest route to them is their official API through a connector of their own.
+
+## Round 15: tunnels, named maps, steady flights, a smooth showcase
+
+- **Main menu.** A button beside "Arrange library" in the hall (and in a room's bar) opens the title screen. The place
+  is remembered and saves are flushed first, so Continue returns there.
+- **The tunnel (`js/gfx/tunnel.js`).** The front wall now has a real opening behind the double door (the wall's shape
+  and the dado and skirting rings stop at the doorway), and behind it runs a 30 m tube in the door's own frame: one
+  shader draws its six light rails, rings and streaks, all offset by a flow (metres) that the walk advances by the
+  wall clock, and the far end brightens into warm light. A throat and an end wall close it round the doorway; a light
+  outline marks the doorway from inside. It is drawn only while the door stands open or a walk is under way
+  (`door.travel`). Leaving: approach, the leaves open, a step over the threshold, then the run down the bore (ease-in,
+  the flow and the end's glow rising), and the next place is opened at 62 % of the run (or after 4.2 s), through the
+  app's warm veil. Arriving: the camera starts 9.5 m down the destination's own tunnel, held there (`hold`) until the
+  veil lifts, glides out through the doorway (ease-out, the flow slowing) and on to the view while the leaves close.
+- **Flights that turn smoothly (`js/camfly.js`).** Camera moves (map flights in the hall and in rooms, the room's
+  `flyTo`, the app's door and arrival moves) blend position and turn the orientation along the shortest arc
+  (quaternion slerp), instead of blending the point looked at, which whipped the view sideways when that point passed
+  near the camera. In a room, walk mode now takes up the heading a flight ends on (it used to snap back to its old one).
+  The app's camera keys step by the wall clock (capped at 0.1 s), so a slow frame never stretches a door walk.
+- **Maps with names and icons (`js/icons.js`, `js/mapview.js`).** 40 line icons, each with the word stems that call for
+  it; `iconFor(name)` takes the longest matching stem. Bookcases get theirs from their name (and their scrolls'
+  subjects) unless the reader chose one (Arrange library → Icon, or the icon beside a bookcase in the map's legend:
+  `shelf.icon`). Scrolls take theirs from their titles; dioramas from their model type, else their titles. The plan draws
+  each footprint with its icon and its name beside it, on the room side and beyond its dioramas, nudged apart when two
+  names would collide; dioramas are drawn as icons where their pedestals stand.
+- **The title screen's showcase.** A change of diorama happens entirely in the dark (the title's own dark, not the paper
+  colour): the next diorama is built, its programs compiled, and it is run and drawn for six frames before it fades in.
+  `gfx.swapScene` changes scene without resizing the canvas, and the title keeps one resolution (`fixedRes`: no
+  adaptive steps during a shot). Measured over four changes: no visible resize; the visible compiles fell from three
+  to one, and that one is the outgoing diorama's own cloud shadows switching on mid-dip. The decoration's large
+  animated layer no longer uses a blend mode.

@@ -4,6 +4,9 @@
 // inlay and labelled with its number and title; clicking a model (or its bay) unfolds it and carries you inside.
 // The room grows when more scrolls need hanging.
 import { MapView } from '../mapview.js';
+import { lookQ, flyPose } from '../camfly.js';
+import { iconFor, dioramaIcon } from '../icons.js';
+const plain = t => String(t).replace(/\$([^$]*)\$/g, '$1').replace(/\\[a-zA-Z]+\{?|[{}_^]/g, '');   // a title with maths, readable as plain text
 import { CEILINGS, ceilingTheme } from '../gfx/ceilings.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -182,8 +185,9 @@ export class BookRoom {
   mapPlan() {
     const D = this.data.dims, items = [];
     this.orderedParts().forEach((p, i) => { const st = this.stations.get(p.id); if (!st) return; const c = st.group.getWorldPosition(V3()), n = st.slot.n;
-      items.push({ id: p.id, kind: 'station', n: i + 1, x: +(c.x + n.x * .5).toFixed(2), z: +(c.z + n.z * .5).toFixed(2), w: p.subOf ? .9 : 1.15, d: .5, rot: +Math.atan2(n.x, n.z).toFixed(3), label: p.title || 'Scroll', sub: p.analysis ? ((p.analysis.chain || []).length + ' steps') : 'not analysed yet', pins: st.bays.filter(b => b.spec).map(b => String(b.spec.d.title || b.spec.st.title || b.spec.d.type || 'Diorama')) }); });
-    return { title: 'The room of “' + this.book.title + '”', w: D.w, d: D.d, door: this.doorPick ? { x: 0, z: D.d / 2 } : null, items };
+      items.push({ id: p.id, kind: 'station', n: i + 1, x: +(c.x + n.x * .5).toFixed(2), z: +(c.z + n.z * .5).toFixed(2), w: p.subOf ? .9 : 1.15, d: .5, rot: +Math.atan2(n.x, n.z).toFixed(3), label: p.title || 'Scroll', icon: iconFor(p.title, 'scroll'), sub: p.analysis ? ((p.analysis.chain || []).length + ' steps') : 'not analysed yet',
+        dios: st.bays.filter(b => b.spec).map(b => { const q = b.group.getWorldPosition(V3()); return { name: plain(b.spec.d.title || b.spec.st.title || b.spec.d.type || 'Diorama'), icon: dioramaIcon({ ...b.spec.d, sceneTitle: b.spec.st && b.spec.st.title }), x: +q.x.toFixed(2), z: +q.z.toFixed(2) }; }) }); });
+    return { title: 'The room of “' + this.book.title + '”', kind: 'room', w: D.w, d: D.d, door: this.doorPick ? { x: 0, z: D.d / 2 } : null, items };
   }
   // free removed objects once the rebuilt room has drawn, keeping what is still on screen (shared materials, cached textures)
   trash(objs) { this.app.retire(() => disposeTree(objs, this.disposed ? null : this.scene)); }
@@ -476,6 +480,7 @@ export class BookRoom {
     u.append(el('div', { class: 'hub-actions glass' }, [
       el('button', { class: 'btn', text: '‹ Library', onclick: () => this.app.openHub({ fromRoom: this.book.id }) }),
       el('button', { class: 'btn', text: 'Room', onclick: () => this.togglePanel() }),
+      el('button', { class: 'btn', text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() }),
       el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog(this.book.id) })]));
     const touch = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
     this.hint = el('div', { class: 'hint glass', text: touch ? 'Scrolls begin on the left wall · tap a scroll to read it · tap a model to enter its diorama' : 'Scrolls begin on the left wall · click a scroll to read it · click a model to enter its diorama · V: walk' }); u.append(this.hint);
@@ -522,7 +527,7 @@ export class BookRoom {
     const o = this.pick(e); if (!o) { if (this.doorAt() && !this.reader) this.app.walkThroughDoor(() => this.app.openHub({ fromRoom: this.book.id })); return; } const p = this.data.parts.find(x => x.id === o.station);
     if (o.kind === 'pedestal') this.enterPedestal(p, o.bay); else this.openPart(p);
   }
-  flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, k: 0, dur, then }; this.controls.enabled = false; }
+  flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, F: { p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: pos.clone(), q1: lookQ(pos, look) }, k: 0, dur, then }; this.controls.enabled = false; }
   openPart(p, instant) {
     const st = this.stations.get(p.id); if (!st) return; if (this.reader) { this._swapReader = true; try { this.reader.close(); } finally { this._swapReader = false; } }
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
@@ -560,7 +565,7 @@ export class BookRoom {
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
-    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.camera.position.lerpVectors(a.from.p, a.to.p, e); this.controls.target.lerpVectors(a.from.t, a.to.t, e); this.camera.lookAt(this.controls.target); if (a.k >= 1) { this.anim = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
+    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.controls.target.lerpVectors(a.from.t, a.to.t, e); flyPose(this.camera, a.F, e); if (a.k >= 1) { this.anim = null; this.nav.needsSync = true;   /* walking takes up the heading the flight ended on (it used to snap back to the one it had before) */ this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
       this.nav.update(dt, !!this.reader || !!this.unfold);
     }
