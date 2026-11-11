@@ -461,9 +461,9 @@ class App {
       // the place's final look before the veil lifts. A room's reflection probe used to be captured over ~14 frames
       // starting 0.8 s after the veil had lifted, so the hall first showed under the flat studio light, then popped to its
       // own reflections. Now: its materials are enriched and the capture scheduled (captureProbe draws nothing), the
-      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, every
-      // program is compiled for that look (in parallel where the browser can), and only then is the probe drawn in full
-      // (RoomProbe.finish), with programs that are already compiled
+      // surface maps still waiting for an idle slice are baked (BAKE.now), a diorama's scanned detail is waited for, the
+      // programs the probe draws with are compiled (in parallel where the browser can), the probe is drawn in full
+      // (RoomProbe.finish), and then every program is compiled again for the look it gives (scene.environment)
       const M = this.mode, P = M && M.probe && M.captureProbe ? M.probe : null;
       if (P) { try { if (M.probeDirty || !P.rt) M.captureProbe(); } catch (e) { console.warn(e); } }
       // the programs are queued first (r.compile; flushed so the GPU process starts on them now) and the surface maps baked
@@ -475,8 +475,12 @@ class App {
       try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
       if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
+      // the probe first: it sets scene.environment, which changes every lit material's program. Prewarmed before it, the
+      // programs compiled were the wrong ones and all recompiled synchronously in the first frame (3-4 s measured on a
+      // Radeon 610M); prewarmed after it, they are the ones drawn.
+      if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
       if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera), sleep(4000)]); } catch (e) { } }
-      mark('sm:sw-prewarm'); if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
+      mark('sm:sw-prewarm');
       this.gfx.resetAdapt(); this.veilHold = false;
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
