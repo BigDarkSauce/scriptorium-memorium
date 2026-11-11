@@ -371,3 +371,29 @@ and every frame while something flies or unfolds; the hall's only while somethin
   shift with the flow (wrapped every two bays) and the moving parts are clipped at the doorway. One shader lights it
   (no lamps out there); it undoes the place's colour grade (the house look multiplies blue by 3.4 to cancel the
   lamplight; to the power .75, so the marble stays ivory).
+
+## Round 17: lag at the root (measured on an AMD Radeon 610M), the iris, the door
+
+Measured on the device itself (Radeon 610M via ANGLE/D3D11) with GPU timer queries, long-task observers and CPU profiles.
+
+- **GPU class** (`js/gfx/tier.js` `classifyGpu`): "AMD Radeon" used to match the discrete rule, so the weakest
+  integrated GPU ran at 'high'. Integrated GPUs now start at 'low'; `tame()` makes 'low' really cheap (refraction ->
+  see-through glass, no clearcoat/sheen/iridescence/anisotropy, two lights besides the shadow caster with their energy
+  folded into an ambient fill, hard PCF shadows at most 1024 px, updated every other frame).
+- **GPU governor** (`renderer.pollGpu`): EXT_disjoint_timer_query_webgl2 times the composer each frame. Over 17 ms the
+  level steps down (remembered per GPU), at 'low' the pixel ratio falls to .5; under 6.5 ms for three windows it climbs
+  back. The old CPU frame-time rule could not see GPU cost. Title at 1920x1080: median frame 39.6 -> ~15 ms. Storm
+  glass: 58.6 -> 16.7 ms.
+- **Prewarm** with no variants compiled nothing; it now compiles the scene in ~25 ms slices (`compileSliced`) and waits
+  for parallel compiles. Title first frames: 1152 -> 31-100 ms.
+- **Room switch order**: the reflection probe (`P.finish`, which sets `scene.environment`) used to run after the
+  prewarm, so every lit program recompiled synchronously in the first frame. Probe first, then prewarm. Hall -> room:
+  long tasks 762+1385+3981 ms -> 918+463+213 ms; veil 2.3 s. Room -> hall: veil 1.0 s, one 301 ms task, then median
+  13.4 ms frames.
+- **Sketches**: async compile + async pixel read, a persistent cache keyed by content hash and size, drawn only near
+  the viewport and in idle time. Opening a scroll: no long tasks (was 337+1583+174 ms).
+- **Iris** (`uIris` in the grade shader, `App.iris`): Continue / New / Back to title close the screen from the edges
+  to black and open it again from the centre. Entering from the title starts in the gallery before closed doors that
+  swing open, walks through, and closes them behind.
+- **Maps**: leader lines start on the ring around each icon, not at its centre.
+- **Title showcase** loads rooms through `app.loadRoom`, so seed upgrades apply (the newest dioramas).
