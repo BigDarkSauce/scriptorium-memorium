@@ -53,11 +53,12 @@ export function openAIPanel(app) {
     finally { testBtn.disabled = false; stopBtn.hidden = true; }
   } });
   const stopBtn = el('button', { class: 'btn', type: 'button', text: 'Stop', hidden: true });
+  const forget = el('button', { class: 'btn ghost', type: 'button', text: 'Forget today\'s limits', title: 'Clear the counted requests and cool-downs kept in this browser (after a provider raised its limits, or a new key)', onclick: () => { FREE.resetUsage(); toast('Limits forgotten: every model is tried again.'); } });
   const veil = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide ai-panel', role: 'dialog', 'aria-label': 'AI engine' }, [
     el('div', { class: 'row between' }, [el('h3', { text: 'AI engine' }), el('button', { class: 'ibtn', type: 'button', 'aria-label': 'Close', text: '✕', onclick: close })]),
     modes, plist,
     el('p', { class: 'dim small', text: 'Keys stay in this browser only and go only to the provider they belong to. Free tiers have limits per minute and per day; the router moves to the next free model, and when every one is busy it waits for the earliest reset. A model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no limit at all.' }),
-    el('div', { class: 'row' }, [testBtn, stopBtn]), out])]);
+    el('div', { class: 'row' }, [testBtn, stopBtn, forget]), out])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); }); document.addEventListener('keydown', esc);
   drawModes(); drawProviders(); document.body.append(veil);
   try { const last = JSON.parse(localStorage.getItem('sm-ai-test') || 'null'); if (last && last.res) out.append(el('p', { class: 'dim small', text: `Last test ${new Date(last.at).toLocaleString()}: ` + last.res.map(r => `${r.name} — ${r.verdict}`).join(' · ') })); } catch (e) { }

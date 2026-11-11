@@ -205,4 +205,5 @@ export async function ask(prompt, o = {}) {
 export const errText = e => ({ rate: 'at its limit', key: 'key rejected', model: 'model not available', request: 'request refused', server: 'server error', network: 'not reachable from here', timeout: 'too slow', invalid_json: 'answer was not JSON', truncated: 'answer cut off', invalid: 'answer failed the check' }[e && e.code] || (e && (e.message || e.code)) || 'failed');
 export const fmtWait = ms => ms < 90000 ? Math.ceil(ms / 1000) + ' s' : ms < 5400e3 ? Math.ceil(ms / 60000) + ' min' : (ms / 3600e3).toFixed(1) + ' h';
 const sleepAbortable = (ms, signal) => new Promise((res, rej) => { const t = setTimeout(res, ms); if (signal) signal.addEventListener('abort', () => { clearTimeout(t); rej({ code: 'cancelled' }); }, { once: true }); });
+export function resetUsage() { U = null; recent.clear(); try { localStorage.removeItem(UKEY); } catch (e) { } }   // the panel's "Forget today's limits" (and the tests)
 export function usageToday() { const u = use(); return { day: u.day, requests: u.n, tokens: u.tok, cool: u.cool }; }
