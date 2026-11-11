@@ -1180,3 +1180,5 @@ body:has(.title-ui) .ai-btn { z-index: 6; }
 .ai-row i { font-style: normal; font-size: 11.5px; }
 .ai-row.good i { color: #9fd49f; } .ai-row.mid i { color: #e6c27a; } .ai-row.bad i { color: #e6957a; }
 .ai-sum { font-weight: 500; color: var(--brass-hi); margin: 4px 0; }
+.ai-reach { margin: 0; padding: 9px 12px; border-radius: 10px; background: rgba(230,150,110,.12); border: 1px solid rgba(230,150,110,.35); font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.ai-reach b { color: #f0b48e; font-weight: 500; } .ai-reach a { color: var(--brass); }

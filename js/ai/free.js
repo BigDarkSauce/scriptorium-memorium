@@ -157,7 +157,12 @@ export async function candidates({ images = 0, minRank = 0 } = {}) {
   await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) out.push({ p, m: m.id, rank: m.rank + (p.local ? -6 : 0) }); }); }));
   return out.sort((a, b) => b.rank - a.rank);
 }
-export const hasAny = () => active().length > 0;
+// can this page call outside addresses at all? (one keyless provider's model list; remembered for the session)
+// (asked only once a free engine is chosen or the panel is opened: nothing is sent anywhere in the Claude mode)
+let reachP = null, reachOK = null; export const reachable = () => reachP || (reachP = fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', { signal: AbortSignal.timeout(8000) }).then(r => true, () => fetch('https://api.llm7.io/v1/models', { signal: AbortSignal.timeout(8000) }).then(() => true, () => false)).then(v => (reachOK = v)));
+if (mode() !== 'claude') reachable(); onSettings(S => { if (S.mode !== 'claude') reachable(); });
+// a provider counts only where the page can reach it (inside claude.ai it cannot: hybrid then uses Claude for all)
+export const hasAny = () => reachOK !== false && active().length > 0;
 export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,
 // with the problem named once to the same model first). o.onWait(ms, why) when everything is busy; o.exhausted: throw

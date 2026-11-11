@@ -35,7 +35,7 @@ export function openAIPanel(app) {
       const n = Object.entries(use.requests).filter(([k]) => k.startsWith(p.id + '|')).reduce((a, [, v]) => a + v, 0);
       const ready = on && (p.key !== 'required' || (S.keys[p.id] || '').trim());
       plist.append(el('div', { class: 'ai-prov' + (ready ? ' ready' : '') }, [
-        el('label', { class: 'ai-pname' }, [tog, el('b', { text: p.name }), el('span', { class: 'ai-chip', text: p.key === 'none' || p.key === 'optional' && !p.local ? 'no key needed' : p.local ? 'your computer' : 'free key' }), n ? el('span', { class: 'ai-used', text: n + ' today' }) : null]),
+        el('label', { class: 'ai-pname' }, [tog, el('b', { text: p.name }), el('span', { class: 'ai-chip', text: p.editableModel ? 'your endpoint' : p.local ? 'your computer' : p.key === 'required' ? 'free key' : 'no key needed' }), n ? el('span', { class: 'ai-used', text: n + ' today' }) : null]),
         el('div', { class: 'ai-pnote', text: p.note }),
         el('div', { class: 'ai-pkeys' }, [base, key, model, p.keyUrl ? el('a', { href: p.keyUrl, target: '_blank', rel: 'noopener', class: 'ai-get', text: p.key === 'required' ? 'Get a free key ↗' : 'Site ↗' }) : null].filter(Boolean))]));
     });
@@ -61,5 +61,11 @@ export function openAIPanel(app) {
     el('div', { class: 'row' }, [testBtn, stopBtn, forget]), out])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); }); document.addEventListener('keydown', esc);
   drawModes(); drawProviders(); document.body.append(veil);
+  // can this page reach the free providers at all? Inside claude.ai an Artifact may not call outside addresses: then the
+  // free engines work in the standalone app (the same files from your folder or from GitHub), and say so here
+  const reach = el('p', { class: 'ai-reach' }); modes.after(reach);
+  FREE.reachable().then(ok => { if (ok) { reach.remove(); return; }
+    reach.append(el('b', { text: 'This page cannot reach the free models.' }), ' Inside claude.ai the app may not call outside addresses, so here the free modes fall back to Claude (hybrid) or to copy-and-paste (free only). Open the same app outside claude.ai and they work: ',
+      el('a', { href: 'https://raw.githack.com/BigDarkSauce/scriptorium-memorium/main/index.html', target: '_blank', rel: 'noopener', text: 'the app from GitHub ↗' }), ', or “Launch Scriptorium.bat” in your Scriptorium Memorium folder (http://localhost:8000, which can also reach FreeLLMAPI and Ollama on your computer). Move your library with Import / export.'); });
   try { const last = JSON.parse(localStorage.getItem('sm-ai-test') || 'null'); if (last && last.res) out.append(el('p', { class: 'dim small', text: `Last test ${new Date(last.at).toLocaleString()}: ` + last.res.map(r => `${r.name} — ${r.verdict}`).join(' · ') })); } catch (e) { }
 }
