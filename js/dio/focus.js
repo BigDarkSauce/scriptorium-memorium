@@ -175,7 +175,7 @@ export class Cues {
     const w = innerWidth, h = innerHeight, phone = w < 760; if (!this.chip._w) { this.chip._w = this.chip.offsetWidth || 240; this.chip._h = this.chip.offsetHeight || 26; }
     let x, y; if (phone) { x = 10; y = h - 128 - this.chip._h - 10; }
     else { const fr = d ? d.freeFrame(w) : [0, w], dc = d && d.chipEl && !d.chipEl.hidden && !d.chipEl.classList.contains('out'); x = clamp((fr[0] + fr[1]) / 2 - this.chip._w / 2, fr[0] + 8, Math.max(fr[0] + 8, fr[1] - this.chip._w - 8)); y = 74 + (dc ? 44 : 0); }
-    const tc = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (this.chip._tf !== tc) { this.chip._tf = tc; this.chip.style.transform = tc; }
+    const tc = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`; if (this.chip._tf !== tc) { this.chip._tf = tc; this.chip.style.transform = tc; const cn = document.querySelector('.cut-name.in'); if (cn && cn._keep) cn._keep(); }
   }
   chainEvent(ev) { const C = this.chain; if (!C || !C.on || C.done) return; const t = String(ev.text || '').toLowerCase(); if ((ev.id && ev.id.toLowerCase() === C.on) || t.includes(C.on)) { C.ev = true; C.evAt = performance.now(); } }
   advance() {
@@ -194,7 +194,7 @@ export class Cues {
     const note = L.note ? mathHTML(String(L.note).split(/\s+/).slice(0, 7).join(' '), 'label') : '';
     const key = '<span class="cue-key">' + C.links.map((x, i) => `<i${i === gi ? ' class="now"' : ''}>${i + 1} ${mathHTML(x.a.name.split(' · ')[0], 'label')}</i>`).join('') + '</span>';
     this.chipBody = (note ? `<span class="cue-note">${note}</span>` : '') + key;
-    this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (note ? ' · ' + note : '') + key; this.chip._w = 0;
+    this.chip.hidden = false; this.chip.innerHTML = `<b>Step ${gi + 1} of ${C.n}</b>` + (note ? ' · ' + note : '') + key; this.chip._w = 0; { const cn = document.querySelector('.cut-name.in'); if (cn && cn._keep) cn._keep(); }   // the camera's cut name steps out of its way (director.js nameCut)
     this.kicker(`Step ${gi + 1} of ${C.n}`);
     this.v.highlightPins && this.v.touchLabels && this.v.touchLabels([L.a]);
     this.log.push({ k: gi + 1, pass: C.pass, t: performance.now(), evAt: C.evAt || null, sim: this.v.ds.t });

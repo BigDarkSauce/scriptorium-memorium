@@ -238,13 +238,17 @@ export class Director {
     const N = { wide: ['wide shot', 'the whole system at once'], medium: ['medium shot', 'one object and its neighbours'], push: ['push in', 'towards the part that matters'], close: ['close-up', 'the event itself'], track: ['tracking shot', 'riding along with it'], pov: ['point of view', 'seen from the moving body'], zoom: ['zoom across scales', 'down to what causes it'] }[kind]; if (!N) return;
     const c = this.cutEl || (this.cutEl = el('div', { class: 'cut-name' })); if (!c.isConnected) this.layer.append(c);
     c.innerHTML = `<b>${N[0]}</b> · ${N[1]}`; c.style.left = Math.round(this.freeFrame(innerWidth)[0] + 6) + 'px';   /* at the top left of the free frame: beside the steps, under the title */ c.classList.remove('in'); void c.offsetWidth; c.classList.add('in'); void b;
-    // the step cue (focus.js) floats beside the object it names and may come up under the name: for the name's 3.2 s it
-    // steps below the cue whenever the two would touch
-    c.style.top = ''; cancelAnimationFrame(this._cutRaf); const t0 = performance.now(), top0 = c.offsetTop;
-    const keep = () => { if (!c.isConnected || performance.now() - t0 > 3300) { c.style.top = ''; return; } let top = top0;
-      const oy = this.layer.getBoundingClientRect().top; for (const q of document.querySelectorAll('.cue-step')) { if (q.hidden || !q.offsetWidth) continue; const a = q.getBoundingClientRect(), r = c.getBoundingClientRect(), h = r.bottom - r.top, at = a.top - oy, ab = a.bottom - oy; if (r.left < a.right + 4 && r.right > a.left - 4 && top < ab + 4 && top + h > at - 4) top = Math.max(top, ab + 6); }
-      if (Math.abs(top - c.offsetTop) > .5) c.style.top = top + 'px'; this._cutRaf = requestAnimationFrame(keep); };
-    this._cutRaf = requestAnimationFrame(keep);
+    // the step cue and its badges (focus.js) float beside the objects they name and may come up under the name: while
+    // they touch it the name gives way (hidden), and shows again when they move off; checked at once, every frame for the
+    // name's 3.2 s, and whenever the cue moves (focus.js calls c._keep)
+    cancelAnimationFrame(this._cutRaf); const t0 = performance.now();
+    // (with reduced motion the name has no fade: it is taken away after the same 3.2 s)
+    clearTimeout(this._cutT); this._cutT = setTimeout(() => c.classList.remove('in'), 3200); c.style.visibility = '';
+    const keep = () => { if (!c.isConnected || !c.classList.contains('in') || performance.now() - t0 > 3400) { c.style.visibility = ''; return; }
+      const r = c.getBoundingClientRect(); let hit = false;
+      for (const q of document.querySelectorAll('.cue-step, .cue-badge, .cue-card')) { if (q.hidden || !q.offsetWidth || q.style.visibility === 'hidden') continue; const a = q.getBoundingClientRect(); if (r.left < a.right + 4 && r.right > a.left - 4 && r.top < a.bottom + 4 && r.bottom > a.top - 4) { hit = true; break; } }
+      const v = hit ? 'hidden' : ''; if (c.style.visibility !== v) c.style.visibility = v; this._cutRaf = requestAnimationFrame(keep); };
+    c._keep = () => { cancelAnimationFrame(this._cutRaf); keep(); }; keep();   /* at once too (and again when a step cue comes up: focus.js), not a frame later */
   }
   chip(html, ms) { this.hud(); const c = this.chipEl; clearTimeout(this._chipT); if (!html) { c.hidden = true; return; } c.innerHTML = html; c.hidden = false; c.classList.remove('out'); if (ms) this._chipT = setTimeout(() => c.classList.add('out'), ms); }
   restoreLens() { const L = this._lens; if (!L) return; const c = this.v.camera; const d = c.position.distanceTo(this.v.controls.target); c.near = Math.min(L.near, Math.max(1e-4, d * .05)); c.far = L.far; c.updateProjectionMatrix(); this.v.controls.minDistance = Math.min(L.minD, d * .98); this._minD0 = L.minD; this._near0 = L.near; this._lens = null; }   // never clamp the orbit radius while the camera is still close in (no snap); the old minimum returns at the next cut
