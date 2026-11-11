@@ -48,6 +48,9 @@ class App {
     this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0;
     this.gfx.onRestore = () => { toast('Graphics restored'); this.restoreMode(); };
     initAI(); initEvidence();
+    // the AI keys and choices: the newest kept copy (this browser, its IndexedDB, the extension's file on this computer),
+    // then FreeLLMAPI connected by itself where the extension finds it (js/ai/free.js)
+    import('./ai/free.js').then(F => F.restoreSettings().then(() => F.autoFreeLLMAPI())).catch(e => console.warn('ai settings', e));
     // sound: one speaker button, a soft click for every button, ambience per place
     this.sfx = sfx; document.body.append(sfx.button());
     this.qualityControl(); aiButton(this);   // the AI engine settings (js/ai/aipanel.js), under the graphics button
@@ -581,7 +584,7 @@ class App {
     // scroll, is drawn at a lower rate (the state still updates every frame); any input brings the full rate back at once
     if (!this.veilHold) {
       const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
-      this.gfx.moving = moved || (this._movedT && now - this._movedT < 1500); if (moved) this._movedT = now;   /* the governor never sharpens while you walk (renderer.js pollGpu) */
+      this.gfx.eyeFast = !!this.switching; this.gfx.moving = moved || (this._movedT && now - this._movedT < 1500); if (moved) this._movedT = now;   /* the governor never sharpens while you walk (renderer.js pollGpu) */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
       // under the veil a frame whose programs are still compiling is not drawn: drawing it would wait for them on this
       // thread (seconds with a cold shader cache); the GPU process links them meanwhile (Gfx.pending)

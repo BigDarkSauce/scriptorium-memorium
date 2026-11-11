@@ -14,6 +14,12 @@
 //   http_poll   {id, from?, wait_ms?}             the response so far: {status, headers, text (from `from`), done, error}
 //                                                 (waits up to wait_ms, at most 20 s, for something new: few calls)
 //   http_cancel {id}                              stops a request
+//   vault_get                                     the AI settings kept on this computer (keys, choices) or null
+//   vault_set   {data}                            keeps them (~/.scriptorium/ai-settings.json): keys survive every new
+//                                                 version of the app and a cleared browser (the one tool that writes)
+//   freellmapi_detect                             finds FreeLLMAPI on this computer: its port (desktop app 31415, Docker
+//                                                 or npm 3001; its own config.json) and its unified key (read from its
+//                                                 local database, checked against the live server)
 // The request runs on here between polls, so an answer that takes minutes never meets the Claude app's per-call time
 // limit (about 130 s).
 //
@@ -23,8 +29,11 @@
 //
 // No dependencies: Node 18+ (Claude Desktop ships its own). The MCP stdio transport is newline-delimited JSON-RPC 2.0.
 import { createInterface } from 'node:readline';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
-const VERSION = '1.0.0', NAME = 'scriptorium-free';
+const VERSION = '1.1.0', NAME = 'scriptorium-free';
 const jobs = new Map(); let seq = 0;
 const MAX_TEXT = 4e6, KEEP_MS = 10 * 60e3;
 
@@ -64,6 +73,39 @@ async function poll({ id, from = 0, wait_ms = 15000, have_status = false } = {})
   return out;
 }
 function cancel({ id } = {}) { const J = jobs.get(id); if (J && !J.done) { J.cancelled = true; J.ctl.abort(); } jobs.delete(id); return { ok: true }; }
+// ---------- the vault: the page's AI settings, kept on this computer ----------
+const VDIR = join(homedir(), '.scriptorium'), VFILE = join(VDIR, 'ai-settings.json');
+function vaultGet() { try { return JSON.parse(readFileSync(VFILE, 'utf8')); } catch (e) { return null; } }
+function vaultSet({ data } = {}) {
+  if (!data || typeof data !== 'object') throw new Error('data must be an object');
+  const text = JSON.stringify({ ...data, savedAt: Date.now() }, null, 1); if (text.length > 200000) throw new Error('too large');
+  mkdirSync(VDIR, { recursive: true }); const tmp = VFILE + '.tmp'; writeFileSync(tmp, text, { mode: 0o600 }); renameSync(tmp, VFILE);
+  return { ok: true, path: VFILE };
+}
+// ---------- FreeLLMAPI on this computer ----------
+function fdataDirs() {
+  const h = homedir(), out = [];
+  if (process.env.APPDATA) out.push(join(process.env.APPDATA, 'FreeLLMAPI'));
+  out.push(join(h, 'Library', 'Application Support', 'FreeLLMAPI'), join(h, '.config', 'FreeLLMAPI'), join(h, 'AppData', 'Roaming', 'FreeLLMAPI'));
+  return [...new Set(out)].filter(d => existsSync(d));
+}
+async function okJSON(url, key, ms = 4000) { try { const r = await fetch(url, { headers: key ? { Authorization: 'Bearer ' + key } : {}, signal: AbortSignal.timeout(ms) }); return { status: r.status, json: r.ok ? await r.json().catch(() => null) : null }; } catch (e) { return { status: 0 }; } }
+async function freellmapiDetect() {
+  const dirs = fdataDirs(), ports = [];
+  for (const d of dirs) { try { const c = JSON.parse(readFileSync(join(d, 'config.json'), 'utf8')); if (c && +c.port) ports.push(+c.port); } catch (e) { } }
+  ports.push(31415, 3001);
+  let base = null;
+  for (const p of [...new Set(ports)]) { const b = `http://127.0.0.1:${p}/v1`, r = await okJSON(b + '/models', null, 2500); if (r.status === 200 || r.status === 401) { base = b; break; } }
+  if (!base) return { found: false, dataDirs: dirs, why: 'FreeLLMAPI is not running on this computer (tried ' + [...new Set(ports)].join(', ') + ')' };
+  // the unified key: 'freellmapi-' + 48 hex in its SQLite settings (the WAL holds the newest); the one the server
+  // accepts is the live one (a regenerated key leaves old copies in freed pages)
+  const cands = new Set();
+  for (const d of dirs) for (const f of ['freeapi.db-wal', 'freeapi.db']) { try { const t = readFileSync(join(d, f)).toString('latin1'); for (const m of t.matchAll(/freellmapi-[0-9a-f]{48}/g)) cands.add(m[0]); } catch (e) { } }
+  let key = null; for (const k of cands) { const r = await okJSON(base + '/usage', k); if (r.status === 200) { key = k; break; } }
+  const m = await okJSON(base + '/models?execution_status=ready', key), ready = m.json && Array.isArray(m.json.data) ? m.json.data.length : null;
+  const all = await okJSON(base + '/models', key), total = all.json && Array.isArray(all.json.data) ? all.json.data.length : null;
+  return { found: true, base, key, keyFound: !!key, candidates: cands.size, readyModels: ready, catalogModels: total, docker: !dirs.length };
+}
 setInterval(() => { const now = Date.now(); for (const [k, J] of jobs) if (now - J.at > KEEP_MS) { if (!J.done) J.ctl.abort(); jobs.delete(k); } }, 60e3).unref();
 
 const RO = { readOnlyHint: true, openWorldHint: true };
@@ -71,11 +113,14 @@ const TOOLS = [
   { name: 'bridge_info', description: 'Version of the Scriptorium free-model bridge and what it may call.', inputSchema: { type: 'object', properties: {} }, annotations: { ...RO, title: 'Bridge info' } },
   { name: 'http_start', description: 'Start one request to an OpenAI-compatible LLM endpoint (https …/models or …/chat/completions, or a server on this computer). Returns {id}; read the answer with http_poll.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST'] }, headers: { type: 'object', additionalProperties: { type: 'string' } }, body: { type: 'string' } }, required: ['url'] }, annotations: { ...RO, title: 'Start an LLM request' } },
   { name: 'http_poll', description: 'The response of a request started with http_start so far: status, headers, the text from offset `from`, and whether it is done. Waits up to wait_ms (≤ 20000) for new text.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, from: { type: 'number' }, wait_ms: { type: 'number' }, have_status: { type: 'boolean' } }, required: ['id'] }, annotations: { ...RO, title: 'Read an LLM answer' } },
+  { name: 'vault_get', description: 'The Scriptorium AI settings kept on this computer (keys and choices), or null.', inputSchema: { type: 'object', properties: {} }, annotations: { ...RO, openWorldHint: false, title: 'Read the kept AI settings' } },
+  { name: 'vault_set', description: 'Keep the Scriptorium AI settings (keys and choices) on this computer, in ~/.scriptorium/ai-settings.json, so they survive new versions of the app and a cleared browser.', inputSchema: { type: 'object', properties: { data: { type: 'object' } }, required: ['data'] }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false, title: 'Keep the AI settings on this computer' } },
+  { name: 'freellmapi_detect', description: 'Find FreeLLMAPI running on this computer: its address, its unified key (from its local database, checked against the server) and how many models are ready.', inputSchema: { type: 'object', properties: {} }, annotations: { ...RO, title: 'Find FreeLLMAPI' } },
   { name: 'http_cancel', description: 'Stop a request started with http_start.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, annotations: { ...RO, title: 'Stop an LLM request' } },
 ];
 const HANDLERS = {
-  bridge_info: () => ({ name: NAME, version: VERSION, node: process.version, calls: 'https …/models and …/chat/completions; anything on localhost' }),
-  http_start: start, http_poll: poll, http_cancel: cancel,
+  bridge_info: () => ({ name: NAME, version: VERSION, node: process.version, calls: 'https …/models and …/chat/completions; anything on localhost', tools: TOOLS.map(t => t.name) }),
+  http_start: start, http_poll: poll, http_cancel: cancel, vault_get: vaultGet, vault_set: vaultSet, freellmapi_detect: freellmapiDetect,
 };
 
 const send = m => process.stdout.write(JSON.stringify(m) + '\n');

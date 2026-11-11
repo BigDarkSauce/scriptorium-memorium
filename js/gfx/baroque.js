@@ -513,10 +513,10 @@ function caseSection(A, books, M, F, x0, x1, y0, y1, D, r, { base = false, niche
   // the back: 34 mm thick, so it covers the dado and skirting rings (26 mm proud of the wall), the pilaster bases (30 mm)
   // and their gilt edges (32 mm) with 2 mm or more to spare, and 2 mm short of the section's ends (never in a stile's plane)
   B(back, cx, (yb + top) / 2, .017, W - .004, top - yb, .034);
-  [x0 + st / 2, x1 - st / 2].forEach(x => { B(car, x, (yb + top) / 2, D / 2, st, top - yb, D); B(trim, x, (yb + top) / 2, D + .002, .01, top - yb, .004); });
+  [x0 + st / 2, x1 - st / 2].forEach(x => { B(car, x, (yb + top) / 2, D / 2, st, top - yb, D); B(trim, x, (yb + top) / 2, D + .002, .014, top - yb, .005); });   /* gilt stile beads 14 mm (10 mm broke into dashes across the hall) */
   const rows = Math.max(1, Math.round((top - yb) / pitch)), p = (top - yb) / rows;
   for (let k = 0; k < rows; k++) {
-    const yy = yb + k * p; if (k > 0) { B(car, cx, yy, (D - .01) / 2, W - 2 * st, .022, D - .01); B(trim, cx, yy - .002, D - .008, W - 2 * st, .01, .005); }
+    const yy = yb + k * p; if (k > 0) { B(car, cx, yy, (D - .01) / 2, W - 2 * st, .022, D - .01); B(trim, cx, yy - .002, D - .007, W - 2 * st, .014, .006);   /* the shelves' gilt lips 14 mm */ }
     if (books) bookRow(books, M, x0 + st, x1 - st, yy + (k > 0 ? .011 : 0), p - .055, D - .03, D - .07, r);
   }
   if (cornice) caseCornice(A, M, F, x0, x1, top, D);

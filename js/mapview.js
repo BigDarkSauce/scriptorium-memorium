@@ -55,7 +55,7 @@ export class MapView {
   //   label, sub, icon, dios: [{ name, icon, x, z }] }] }   (rot: the way the footprint faces into the room, about y)
   constructor(host, { provider, camera, onPick, onIcon = null, onSymbols = null, key = 'sm-map-open' }) {
     Object.assign(this, { provider, camera, onPick, onIcon, onSymbols, key, host });
-    this.btn = el('button', { class: 'map-btn glass', type: 'button', title: 'Minimap (the full map: M)', 'aria-label': 'Minimap', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>', onclick: () => this.toggle() });
+    this.btn = el('button', { class: 'map-btn glass', type: 'button', title: 'Minimap: show or fold it (the full map: M)', 'aria-label': 'Minimap', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>', onclick: () => this.toggle() });
     this.card = el('aside', { class: 'map-card glass', 'aria-label': 'Minimap', hidden: true });
     this.tip = el('div', { class: 'map-tip', hidden: true, role: 'tooltip' });
     host.append(this.btn, this.card); document.body.append(this.tip); this.sig = ''; this.t = 0;
@@ -89,7 +89,7 @@ export class MapView {
   drawMini(P) {
     const D = drawPlan(P, fitGeom(P, { w: 288, h: 230 }, .5), { badge: 15, dioBadge: 10 }); this.mini = D;
     D.groups.forEach(({ g, it }, i) => this.wire(g, it, i, true));
-    const head = el('div', { class: 'map-head' }, [el('b', { text: P.title }), el('button', { class: 'ibtn map-expand', type: 'button', title: 'The full map, with every name (M)', 'aria-label': 'Open the full map', html: '⤢', onclick: () => this.openFull() })]);
+    const head = el('div', { class: 'map-head' }, [el('b', { text: P.title }), el('span', { class: 'map-tools' }, [el('button', { class: 'ibtn map-expand', type: 'button', title: 'The full map, with every name (M)', 'aria-label': 'Open the full map', html: '⤢', onclick: () => this.openFull() }), el('button', { class: 'ibtn map-fold', type: 'button', title: 'Fold the minimap away (the map button brings it back; remembered)', 'aria-label': 'Fold the minimap', html: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', onclick: () => { this.toggle(false); this.btn.focus(); } })])]);
     this.card.innerHTML = ''; this.card.append(head, D.svg, el('div', { class: 'map-hint dim small', text: `${P.items.length} ${P.kind === 'hall' ? 'bookcase' : 'scroll'}${P.items.length === 1 ? '' : 's'} · hover to name · M for the full map` }));
   }
   // ---------- the full map ----------

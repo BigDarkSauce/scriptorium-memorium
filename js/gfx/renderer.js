@@ -6,6 +6,39 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+
+// Highlights are softly limited before multisampling averages them (a knee at 4, never above 8, in linear HDR): a gilt
+// edge reflecting a window reached ~20 next to dark wood at ~0.05, so after the MSAA resolve (which averages BEFORE tone
+// mapping) the edge pixels were still saturated and the line read as broken dashes; tone-mapped, nothing above ~4 shows
+// any difference, so the picture keeps its look. (Karis' tone-mapped resolve, done where three.js lets us: in the
+// material's own output.) Applies to every built-in material.
+THREE.ShaderChunk.opaque_fragment = THREE.ShaderChunk.opaque_fragment.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+  '{ float smPk = max( outgoingLight.r, max( outgoingLight.g, outgoingLight.b ) ); if ( smPk > 4.0 ) outgoingLight *= ( 4.0 + ( smPk - 4.0 ) / ( 1.0 + ( smPk - 4.0 ) / 4.0 ) ) / smPk; }\ngl_FragColor = vec4( outgoingLight, diffuseColor.a );');
+
+// Eye adaptation, as games do it: the finished picture's mean brightness is measured on the GPU four times a second
+// (a 16 x 16 reduction, read back without a stall) and the exposure drifts toward a calm interior level. Bounded:
+// at most x1.85 brighter (dim corners of the hall, a room lit only by its spots on a weak GPU) and x0.8 darker, so it
+// never pumps; slow (1.6 s) in a place, quick under a veil.
+class MeterPass extends Pass {
+  constructor() {
+    super(); this.needsSwap = false; this.mean = null; this.due = 0; this.busy = false; this.px = new Uint8Array(16 * 16 * 4);
+    this.rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.UnsignedByteType, depthBuffer: false });
+    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null } }, depthTest: false, depthWrite: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
+      fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+        vec3 lin(vec3 c){ return pow(max(c, 0.), vec3(2.2)); }
+        void main(){ float s = 0.; for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { vec2 o = (vec2(float(i), float(j)) - 1.5) / 64.; vec3 c = lin(texture2D(tDiffuse, vUv + o).rgb); s += dot(c, vec3(.2126, .7152, .0722)); }
+          gl_FragColor = vec4(sqrt(s / 16.), 0., 0., 1.); }` }));
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    const now = performance.now(); if (this.busy || now < this.due || !renderer.readRenderTargetPixelsAsync) return; this.due = now + 250;
+    this.quad.material.uniforms.tDiffuse.value = readBuffer.texture; const prev = renderer.getRenderTarget(); renderer.setRenderTarget(this.rt); this.quad.render(renderer); renderer.setRenderTarget(prev);
+    this.busy = true; renderer.readRenderTargetPixelsAsync(this.rt, 0, 0, 16, 16, this.px).then(() => { let s = 0; for (let i = 0; i < 256; i++) { const v = this.px[i * 4] / 255; s += v * v; } this.mean = s / 256; }).catch(() => { }).finally(() => { this.busy = false; });
+  }
+  dispose() { this.rt.dispose(); this.quad.dispose(); }
+}
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { envScene } from './proc.js';
 import { tame, classifyGpu } from './tier.js';
@@ -79,6 +112,10 @@ export class Gfx {
     c.addPass(this.outline);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), .32, .55, .86); c.addPass(this.bloom);
     c.addPass(new OutputPass());
+    // SMAA after tone mapping (display-referred, where edges have their final contrast): it finishes the lines MSAA
+    // leaves broken (thin gilt against dark wood) and the specular crawl on fluted pilasters
+    this.smaa = new SMAAPass(2, 2); c.addPass(this.smaa);
+    this.meter = new MeterPass(); c.addPass(this.meter); this.eyeK = 1;
     this.grade = new ShaderPass(GradeShader); c.addPass(this.grade);
     this.pmrem = new THREE.PMREMGenerator(r); this.envs = {};
     this.makeStudioEnv();
@@ -311,7 +348,10 @@ export class Gfx {
       if (this._smHalf) { if (!low) { sm.autoUpdate = true; this._smHalf = false; } else if ((this._smTick = (this._smTick || 0) + 1) % 2 === 0) sm.needsUpdate = true; } }
     // the GPU's own time for the frame (EXT_disjoint_timer_query_webgl2): read a few frames later, never waited for
     const T = this._gpuT; let q = null; if (T && !T.busy) { q = T.gl.createQuery(); T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q); T.busy = true; }
-    this.composer.render(dt);
+    // eye adaptation (MeterPass): the place's own exposure times eyeK, which drifts toward a calm interior level
+    { const M = this.meter; if (M && M.mean != null) { const err = Math.max(-1.2, Math.min(1.2, Math.log2(.15 / Math.max(.004, M.mean)))), tau = this.eyeFast ? .25 : 1.6; this.eyeK = Math.max(.8, Math.min(1.85, this.eyeK * Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)))); M.mean *= Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)); } }   /* the estimate follows the exposure until the next reading (no overshoot from a reading 250 ms old) */
+    const r0 = this.renderer, baseExp = r0.toneMappingExposure; r0.toneMappingExposure = baseExp * this.eyeK;
+    try { this.composer.render(dt); } finally { r0.toneMappingExposure = baseExp; }
     if (q) { T.gl.endQuery(T.ext.TIME_ELAPSED_EXT); T.pend.push(q); T.busy = false; } if (T) this.pollGpu();
     // a still of this frame for a dissolve (App.snapshot): read now, in the task that drew it, while the buffer still holds it
     if (this._snap) { const f = this._snap; this._snap = null; try { f(this.renderer.domElement); } catch (e) { console.warn(e); } }

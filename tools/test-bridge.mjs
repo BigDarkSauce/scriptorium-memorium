@@ -21,7 +21,17 @@ const srv = http.createServer((q, r) => {
 const base = `http://localhost:${srv.address().port}/v1`;
 
 // the server process and a JSON-RPC client for it
-const p = spawn(process.execPath, [SERVER]); let buf = '', n = 0; const wait = new Map();
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join } from 'node:path';
+const HOME = mkdtempSync(join(tmpdir(), 'smb-')), APPDATA = join(HOME, 'AppData', 'Roaming'), FDIR = join(APPDATA, 'FreeLLMAPI'); mkdirSync(FDIR, { recursive: true });
+// a FreeLLMAPI on this computer: its config names the port; its database holds an old key (left in a freed page) and the live one
+const LIVE = 'freellmapi-' + 'a1'.repeat(24), OLD = 'freellmapi-' + 'b2'.repeat(24);
+const fla = http.createServer((q, r) => { const ok = (q.headers.authorization || '') === 'Bearer ' + LIVE;
+  if (q.url.startsWith('/v1/usage')) { r.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' }); return r.end(ok ? '{"tokens":0}' : '{"error":"no"}'); }
+  if (q.url.startsWith('/v1/models')) { r.writeHead(200, { 'content-type': 'application/json' }); return r.end(JSON.stringify({ data: q.url.includes('ready') ? [{ id: 'gemini-2.5-pro' }, { id: 'llama-3.3-70b' }] : [{ id: 'gemini-2.5-pro' }, { id: 'llama-3.3-70b' }, { id: 'x' }] })); }
+  r.writeHead(404); r.end(); }).listen(0);
+writeFileSync(join(FDIR, 'config.json'), JSON.stringify({ port: fla.address().port }));
+writeFileSync(join(FDIR, 'freeapi.db'), Buffer.concat([Buffer.from('SQLite format 3\0 ... settings unified_api_key '), Buffer.from(OLD), Buffer.from(' ... '), Buffer.from(LIVE), Buffer.alloc(64)]));
+const p = spawn(process.execPath, [SERVER], { env: { ...process.env, HOME, USERPROFILE: HOME, APPDATA } }); let buf = '', n = 0; const wait = new Map();
 p.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); const f = wait.get(m.id); if (f) { wait.delete(m.id); f(m); } } });
 const rpc = (method, params) => new Promise(res => { const id = ++n; wait.set(id, res); p.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
 const tool = async (name, args) => { const m = await rpc('tools/call', { name, arguments: args }); return m.result.isError ? { err: m.result.content[0].text } : m.result.structuredContent; };
@@ -29,7 +39,11 @@ const tool = async (name, args) => { const m = await rpc('tools/call', { name, a
 // 1. the server
 const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } }); ok(init.result && init.result.serverInfo.name === 'scriptorium-free', 'server: initialize');
 p.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-const L = await rpc('tools/list', {}); ok(L.result.tools.length === 4 && L.result.tools.every(t => t.annotations.readOnlyHint), 'server: four tools, all read-only (no confirm per call in the app)');
+const L = await rpc('tools/list', {}); ok(L.result.tools.length === 7 && L.result.tools.filter(t => !t.annotations.readOnlyHint).map(t => t.name).join() === 'vault_set', 'server: seven tools, all read-only but vault_set (no confirm per request in the app)');
+ok((await tool('vault_get', {})) === null, 'vault: empty at first');
+const vs = await tool('vault_set', { data: { keys: { groq: 'gsk_x' }, mode: 'hybrid' } }); ok(vs.ok && /\.scriptorium/.test(vs.path), 'vault: keeps the settings in ~/.scriptorium');
+const vg = await tool('vault_get', {}); ok(vg && vg.keys.groq === 'gsk_x' && vg.mode === 'hybrid' && vg.savedAt > 0, 'vault: reads them back (they survive any new version of the app)');
+const fd = await tool('freellmapi_detect', {}); ok(fd.found && fd.key === LIVE && fd.candidates === 2 && fd.readyModels === 2 && fd.catalogModels === 3 && fd.base.endsWith(':' + fla.address().port + '/v1'), 'FreeLLMAPI: found by its config\'s port, the live unified key picked out of two, 2 of 3 models ready');
 ok((await tool('http_start', { url: 'https://example.com/' })).err, 'server: refuses an address that is not an LLM endpoint');
 ok((await tool('http_start', { url: 'http://example.com/v1/models' })).err, 'server: refuses plain http outside this computer');
 let s = await tool('http_start', { url: base + '/models' }), r = await tool('http_poll', { id: s.id, wait_ms: 5000 }); while (!r.done) r = await tool('http_poll', { id: s.id, wait_ms: 5000, have_status: true });
@@ -50,6 +64,11 @@ const F = await import('../js/ai/free.js'), C = await import('../js/ai/claude.js
 F.saveSettings({ mode: 'free', on: { custom: true }, bases: { custom: base }, models: { custom: 'm1' }, off: { ovh: true, llm7: true, pollinations: true } });
 ok(F.via() === 'bridge', 'page: inside the Claude app requests go through the bridge');
 ok(await F.reachable({ fresh: true }), 'page: the installed extension is found (bridge_info)');
+{ await tool('vault_set', { data: { keys: { groq: 'gsk_x' }, mode: 'free', on: { custom: true }, bases: { custom: base }, models: { custom: 'm1' }, off: { ovh: true, llm7: true, pollinations: true }, at: Date.now() + 5000 } });   /* the newest copy is the one on this computer (the browser's were cleared) */
+  const keep = LS.get('sm-ai'); LS.delete('sm-ai'); const r = await F.restoreSettings(); const S = F.settings(); ok(r === 'restored' && S.keys.groq === 'gsk_x', 'page: keys come back from the file on this computer when the browser kept none (a cleared browser, a new version)'); if (keep) LS.set('sm-ai', keep); }
+{ const d = await F.autoFreeLLMAPI(); const S = F.settings(); ok(d && d.found && S.on.freellmapi && S.keys.freellmapi === LIVE, 'page: FreeLLMAPI connected by itself (switched on, its address and unified key set)');
+  const L = await F.models(F.PROVIDERS.find(p => p.id === 'freellmapi'), { fresh: true }); ok(L[0].id === 'gemini-2.5-pro' && L.some(m => m.id === 'auto:smart'), 'page: FreeLLMAPI\'s ready models, best first, then its own auto:smart (' + L.map(m => m.id).join(', ') + ')');
+  F.saveSettings({ on: { custom: true }, off: { ovh: true, llm7: true, pollinations: true } }); }
 let seen = ''; const v = await C.askJSON('a request ' + Math.random(), { onText: t => { seen = t; } });
 ok(v && v.by === 'bridge' && v.chain && v.chain.length === 1 && direct === 0, `page: "Free models only" answered through the bridge, streamed (${calls} tool calls, no direct fetch)`);
 ok(seen.length > 20, 'page: the answer streamed into onText as it arrived');
@@ -57,4 +76,4 @@ ok(seen.length > 20, 'page: the answer streamed into onText as it arrived');
 MCP.callTool = async () => { throw { code: 'server_not_connected' }; }; await F.reachable({ fresh: true });
 F.saveSettings({ mode: 'hybrid' }); const SAMPLE = async () => ({ text: '{"by":"claude","chain":[{"id":"S1"}]}' }); SAMPLE.limits = async () => ({}); window.claude.use = async k => k === 'sample' ? SAMPLE : k === 'mcp' ? MCP : null;
 ok(!F.hasAny(), 'page: without the extension the free models count as out of reach');
-console.log(fail ? fail + ' failed' : 'all passed'); p.kill(); srv.close(); process.exit(fail ? 1 : 0);
+console.log(fail ? fail + ' failed' : 'all passed'); p.kill(); srv.close(); fla.close(); process.exit(fail ? 1 : 0);

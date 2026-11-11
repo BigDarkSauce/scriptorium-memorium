@@ -6,6 +6,7 @@ if not exist "%~dp0Scriptorium Memorialium.lnk" powershell -NoProfile -Execution
 set PORT=8000
 set "URL=http://localhost:%PORT%/"
 
+rem The server is launcher\serve.py (or serve.ps1): the app's files plus the AI relay (FreeLLMAPI, NVIDIA, GitHub Models...).
 rem Pick the server: a Python that really runs (the Microsoft Store placeholder "python" fails this probe),
 rem else the py launcher, else the PowerShell server in launcher\serve.ps1.
 set "SERVER=powershell"
@@ -20,9 +21,9 @@ rem The browser opens only once the server answers (launcher\open-when-ready.ps1
 start "" /b powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\open-when-ready.ps1" -Url "%URL%" -Seconds 10
 
 if "%SERVER%"=="python" (
-  python -m http.server %PORT%
+  python "%~dp0launcher\serve.py" %PORT%
 ) else if "%SERVER%"=="py" (
-  py -3 -m http.server %PORT%
+  py -3 "%~dp0launcher\serve.py" %PORT%
 ) else (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\serve.ps1" -Port %PORT%
 )

@@ -61,3 +61,7 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
   });
   return new Response(stream, { status: r.status >= 200 && r.status <= 599 && r.status !== 204 ? r.status : 502, headers: r.headers || {} });
 }
+
+// the AI settings kept on this computer (the vault), and FreeLLMAPI found on it (extension 1.1+)
+export async function bridgeVault(op, data) { if (!(await bridgeReady())) return null; if (!INFO || !(INFO.tools || []).includes('vault_get')) return null; return op === 'set' ? tool('vault_set', { data }) : tool('vault_get', {}); }
+export async function bridgeDetect() { if (!(await bridgeReady())) return null; if (!INFO || !(INFO.tools || []).includes('freellmapi_detect')) return { found: false, why: 'the extension is older than 1.1: install the new one' }; return tool('freellmapi_detect', {}); }

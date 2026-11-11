@@ -24,6 +24,14 @@ const DISCRETE = /nvidia|geforce|rtx|gtx|quadro|radeon rx|radeon pro|apple m[1-9
 export function classifyGpu(name) { const n = String(name || '').toLowerCase(); if (INTEGRATED.test(n)) return 'low'; if (DISCRETE.test(n)) return 'high'; return 'medium'; }
 
 const SAVE = '__tame';
+// The lights tame() switched off, back on for the duration of fn (the room's reflection capture: it stands in for baked
+// bounce light, so it records the room as designed, every lamp lit, even where the live view draws fewer lights; it was
+// captured tamed and the rooms read dim). Returns what fn returns.
+export function withAllLights(scene, fn) {
+  const back = []; scene.traverse(o => { const s = o.isLight && o.userData[SAVE]; if (s && s.off && !o.visible && s.visible !== false) { o.visible = true; back.push(o); } });
+  const a = scene.userData.tameFill, ai = a ? a.intensity : 0; if (a) a.intensity = 0;
+  try { return fn(); } finally { back.forEach(o => { o.visible = false; }); if (a) a.intensity = ai; }
+}
 export function tame(scene, on) {
   if (!scene) return; const fill = [];
   scene.traverse(o => {

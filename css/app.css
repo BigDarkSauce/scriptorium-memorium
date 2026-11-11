@@ -1088,6 +1088,8 @@ body.cine .map-btn, body.cine .map-card { opacity: 0 !important; pointer-events:
 /* ---- maps, round 16: the minimap (markers only) and the full map (names on plates, leader lines) ---- */
 .map-card { position: fixed; right: 68px; top: 132px; width: 316px; padding: 12px 14px 10px; border-radius: 14px; z-index: 30; }
 .map-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.map-tools { display: inline-flex; gap: 4px; align-items: center; }
+.map-fold { display: inline-grid; place-items: center; }
 .map-head b { font-family: var(--f-display); font-size: 15px; color: var(--brass-hi); letter-spacing: .02em; line-height: 1.2; }
 .map-expand { font-size: 18px; width: 30px; height: 30px; }
 .map-hint { margin-top: 6px; }

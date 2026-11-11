@@ -14,6 +14,7 @@
 //  • RoomAO: three's GTAOPass at quality 'high' only, fed by the composer's own resolved depth (normals reconstructed
 //    from depth), so it costs one AO + one denoise pass and no extra scene render.
 import * as THREE from 'three';
+import { withAllLights } from './tier.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { AAA } from './aaa.js';
 import { companions } from './textures.js';
@@ -204,7 +205,7 @@ export class RoomProbe {
       const gi = J.gi.map(L => { const v = L.intensity; L.intensity = J.bounce ? L.userData.giBase * (o.giScale ?? .3) : L.userData.giBase; return () => { L.intensity = v; }; });
       const sm = r.shadowMap, au = sm.autoUpdate, prev = r.getRenderTarget(), xr = r.xr.enabled;
       sm.autoUpdate = false; if (J.face === 0 && J.bounce === 0) sm.needsUpdate = true;
-      try { r.xr.enabled = false; this.apply(scene, J.bounce > 0); r.setRenderTarget(J.crt, J.face); r.render(scene, J.cam.children[J.face]); }
+      try { r.xr.enabled = false; this.apply(scene, J.bounce > 0); r.setRenderTarget(J.crt, J.face); withAllLights(scene, () => r.render(scene, J.cam.children[J.face])); }
       catch (e) { console.warn('room probe', e); }
       finally { r.setRenderTarget(prev); r.xr.enabled = xr; sm.autoUpdate = au; boosts.forEach(f => f()); gi.forEach(f => f()); hidden.forEach(x => { x.visible = true; }); this.apply(scene, true); }
       J.face++;
