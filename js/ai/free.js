@@ -117,26 +117,29 @@ export async function models(p, { fresh = false } = {}) {
 // ---------------------------------------------------------------- one call
 const SYSTEM = 'You write content for Scriptorium Memorialium, a study app that turns textbook chapters into logical chains of steps, figures and interactive 3D dioramas. Follow the request exactly. Answer with ONE JSON value in exactly the requested format: no prose before or after it, no markdown fences, no comments. Use only facts supported by the given text or well established knowledge.';
 async function blobToDataUrl(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
-export async function call(p, model, prompt, { images = [], signal, onText, maxTokens, json = true, timeoutMs = 300000 } = {}) {
+export async function call(p, model, prompt, { images = [], signal, onText, onThink, maxTokens, json = true, timeoutMs = 420000 } = {}) {
   const S = settings(), key = keyOf(p, S), H = { 'Content-Type': 'application/json' }; if (key) H.Authorization = 'Bearer ' + key;
   if (p.id === 'openrouter') { H['HTTP-Referer'] = location.origin; H['X-Title'] = 'Scriptorium Memorialium'; }
   const content = images.length ? [{ type: 'text', text: prompt }, ...(await Promise.all(images.map(async b => ({ type: 'image_url', image_url: { url: typeof b === 'string' ? b : await blobToDataUrl(b) } }))))] : prompt;
   const body = { model, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content }], temperature: .3, stream: true, max_tokens: maxTokens || p.out || 16384 };
   if (json && p.json) body.response_format = { type: 'json_object' };
+  // reasoning models think before they write: gpt-oss at 'medium' is ~3x faster than its default 'high' on long JSON
+  // and keeps the structure right (measured: a chapter's chain 250 s at the default on OVHcloud)
+  if (/gpt-oss/i.test(model) && p.id !== 'pollinations') body.reasoning_effort = 'medium';
   const ctl = new AbortController(), stop = () => ctl.abort(); if (signal) { if (signal.aborted) throw { code: 'cancelled' }; signal.addEventListener('abort', stop, { once: true }); }
   let idle = setTimeout(stop, 90000); const hard = setTimeout(stop, timeoutMs); const t0 = performance.now();
   try {
     let res; try { res = await fetch(baseOf(p, S) + '/chat/completions', { method: 'POST', headers: H, body: JSON.stringify(body), signal: ctl.signal }); }
     catch (e) { if (signal && signal.aborted) throw { code: 'cancelled' }; throw { code: 'network', message: String(e && e.message || e) }; }
     if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 || res.status === 402 && /limit/i.test(t) ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 600), res }; }
-    let text = '', finish = null, usage = null;
+    let text = '', finish = null, usage = null, think = 0;
     const ct = res.headers.get('content-type') || '';
     if (!/event-stream/.test(ct)) { const j = await res.json(); const c = j.choices && j.choices[0]; text = (c && c.message && c.message.content) || ''; finish = c && c.finish_reason; usage = j.usage; onText && onText(text); }
     else {
       const rd = res.body.getReader(), dec = new TextDecoder(); let buf = '';
       for (;;) { const { done, value } = await rd.read(); if (done) break; clearTimeout(idle); idle = setTimeout(stop, 90000); buf += dec.decode(value, { stream: true }); let i;
         while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line.startsWith('data:')) continue; const d = line.slice(5).trim(); if (d === '[DONE]') continue;
-          try { const j = JSON.parse(d); if (j.error) throw { code: 'server', body: JSON.stringify(j.error).slice(0, 400) }; const c = j.choices && j.choices[0]; if (c) { const piece = (c.delta && c.delta.content) || ''; if (piece) { text += piece; onText && onText(text); } if (c.finish_reason) finish = c.finish_reason; } if (j.usage) usage = j.usage; } catch (e) { if (e && e.code) throw e; } } }
+          try { const j = JSON.parse(d); if (j.error) throw { code: 'server', body: JSON.stringify(j.error).slice(0, 400) }; const c = j.choices && j.choices[0]; if (c) { const piece = (c.delta && c.delta.content) || ''; if (piece) { text += piece; onText && onText(text); } else if (c.delta && (c.delta.reasoning || c.delta.reasoning_content)) { think += (c.delta.reasoning || c.delta.reasoning_content).length; onThink && onThink(think); } if (c.finish_reason) finish = c.finish_reason; } if (j.usage) usage = j.usage; } catch (e) { if (e && e.code) throw e; } } }
     }
     return { text, finish, usage, ms: performance.now() - t0, model, provider: p.id };
   } catch (e) { if (ctl.signal.aborted && !(signal && signal.aborted)) throw { code: 'timeout' }; if (signal && signal.aborted) throw { code: 'cancelled' }; throw e; }
@@ -147,6 +150,7 @@ export async function call(p, model, prompt, { images = [], signal, onText, maxT
 const hash = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length; };
 const est = s => Math.ceil(String(s).length / 3.6);
 export const lastRoute = { provider: null, model: null };
+export const lastBad = [];   // the last answers that did not parse (for the panel's diagnostics)
 // every (provider, model) that could take this request, best first
 export async function candidates({ images = 0, minRank = 0 } = {}) {
   const out = [];
@@ -178,9 +182,9 @@ export async function ask(prompt, o = {}) {
     onStatus && onStatus(`Writing with ${p.name} · ${m}…`);
     spend(p, m, 0);
     try {
-      const r = await call(p, m, fixNote ? prompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : prompt, { images, signal, onText });
+      const r = await call(p, m, fixNote ? prompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : prompt, { images, signal, onText, onThink: n => onStatus && onStatus(`${p.name} · ${m} is thinking… ${n.toLocaleString()} characters of reasoning`) });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
-      let v; try { v = parseJSONLoose(r.text); } catch (e) { throw { code: 'invalid_json' }; }
+      let v; try { v = parseJSONLoose(r.text); } catch (e) { lastBad.push({ at: Date.now(), provider: p.id, model: m, finish: r.finish, text: r.text.slice(0, 1500) + (r.text.length > 1500 ? ' … ' + r.text.slice(-500) : '') }); if (lastBad.length > 6) lastBad.shift(); throw { code: 'invalid_json' }; }
       if (r.finish === 'length' || (v && v._truncated)) throw { code: 'truncated' };
       const bad = validate ? validate(v) : null; if (bad) { if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
       fixNote = null; lastRoute.provider = p.name; lastRoute.model = m;
