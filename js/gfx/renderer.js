@@ -217,6 +217,8 @@ export class Gfx {
     this.atmos.enabled = !!(A && k > .001 && AAA.Q.god > 0 && this.camera);
     if (this.atmos.enabled) this.atmos.update(this.camera, A, k, t);
     this.composer.render(dt);
+    // a still of this frame for a dissolve (App.snapshot): read now, in the task that drew it, while the buffer still holds it
+    if (this._snap) { const f = this._snap; this._snap = null; try { f(this.renderer.domElement); } catch (e) { console.warn(e); } }
   }
 }
 

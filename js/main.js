@@ -25,7 +25,7 @@ import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
 import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
-import { lookQ, flyPose } from './camfly.js';
+import { lookQ, flyPose, flightDur, easeSine } from './camfly.js';
 import { TitleScreen } from './title.js';
 import { openGetScroll, openVisibility, republishLater } from './share.js';
 import { choosePlace } from './room/addpdf.js';
@@ -128,16 +128,17 @@ class App {
     const id = 's' + uid().replace(/[^a-z0-9]/gi, '').slice(0, 10), m = { id, name: String(name || 'A new scriptorium').slice(0, 60), created: Date.now(), played: Date.now() };
     this.slots.push(m); await store.setGlobal('slots', this.slots); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id);
     await this.loadLibrary({ empty: !examples }); this.saveLib();
-    this._arrive = { from: 'title' }; return this.openHub();
+    this._arrive = { from: 'title' }; this._dissolveNext = true; return this.openHub();
   }
   async renameSlot(id, name) { const m = this.slots.find(x => x.id === id); if (m) { m.name = String(name).slice(0, 60); await store.setGlobal('slots', this.slots); } }
   async deleteSlot(id) { if (id === 'main' || id === this.slotId) return false; await store.dropSlot(id); this.slots = this.slots.filter(x => x.id !== id); await store.setGlobal('slots', this.slots); return true; }
   // the title screen; "Continue" returns to the place the slot was left in, by a camera move into it
   openTitle() { try { this.rememberPlace(); store.flushSaves(); } catch (e) { }   /* Continue comes back to exactly here */
+    this._dissolveNext = true;
     this.route({}); sfx.ambience('library'); return this.switchMode(() => new TitleScreen(this)); }
   async continueSlot(id) {
     await this.switchSlot(id); this.slotMeta({ played: Date.now() }); const L = this.lib.lastPlace, book = L && L.book && this.lib.books.find(b => b.id === L.book);
-    this._arrive = L && L.cam && !L.part ? { pose: L.cam } : { from: 'title' };
+    this._arrive = L && L.cam && !L.part ? { pose: L.cam } : { from: 'title' }; this._dissolveNext = true;
     return book ? this.openRoom(book.id, { openPart: L.part || undefined }) : this.openHub();
   }
   // ---------- camera choreography owned by the app: runs after the place's own update, before drawing ----------
@@ -145,18 +146,22 @@ class App {
   cineRun(M, keys) {
     return new Promise(res => {
       const cam = M.camera, f = new THREE.Vector3(); cam.getWorldDirection(f);
-      const start = { p: cam.position.clone(), a: M.controls && M.controls.target && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
+      const start = { p: cam.position.clone(), q: cam.quaternion.clone(), a: M.controls && M.controls.target && !(M.nav && M.nav.mode === 'walk') ? M.controls.target.clone() : cam.position.clone().addScaledVector(f, 2.5) };
       if (M.controls) M.controls.enabled = false;
       this.cine = { M, keys: keys.map(k => ({ ...k, p: new THREE.Vector3(...[].concat(k.p.toArray ? k.p.toArray() : k.p)), a: new THREE.Vector3(...[].concat(k.a.toArray ? k.a.toArray() : k.a)) })), i: 0, t: 0, from: start, res };
     });
   }
   stepCine(dt) {
     const C = this.cine; if (!C) return; if (C.M !== this.mode || C.M.disposed) { this.cine = null; C.res(); return; }
-    const K = C.keys[C.i]; if (K.hold && K.hold()) { C.t = 0; if (!K.q0) { C.M.camera.position.copy(K.p); C.M.camera.quaternion.copy(lookQ(K.p, K.a)); } return; }   /* (hold: a pose kept until the veil has lifted) */
-    C.t += dt; const k = Math.min(1, C.t / K.dur), e = K.ease ? K.ease(k) : k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, cam = C.M.camera;
-    if (!K.q0) { K.q0 = cam.quaternion.clone(); K.q1 = lookQ(K.p, K.a); K.p0 = C.from.p.clone(); }   /* turn along the shortest arc (camfly.js) */
+    const K = C.keys[C.i]; if (K.hold && K.hold()) { C.t = 0; if (!K.q0) { C.M.camera.position.copy(K.p); C.M.camera.quaternion.copy(lookQ(K.p, K.a)); C.from = { p: K.p.clone(), q: lookQ(K.p, K.a), a: K.a.clone() }; } return; }   /* (hold: a pose kept until the veil has lifted) */
+    C.t += dt; const cam = C.M.camera;
+    // each key turns along the shortest arc (camfly.js) from where the last key ended: never from the camera as it stands
+    // this frame, which the place's own walking or orbit controls may already have turned back to their old heading (that
+    // was the kick to the right on the way into the tunnel). dur 'auto': as long as the way and the turn need.
+    if (!K.q0) { K.q0 = C.from.q.clone(); K.q1 = lookQ(K.p, K.a); K.p0 = C.from.p.clone(); if (K.dur === 'auto') { K.dur = flightDur(K.p0, K.q0, K.p, K.q1, .9, 2.8); K.ease = K.ease || easeSine; } }
+    const k = Math.min(1, C.t / K.dur), e = K.ease ? K.ease(k) : k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
     flyPose(cam, { p0: K.p0, p1: K.p, q0: K.q0, q1: K.q1 }, e); const a = new THREE.Vector3().lerpVectors(C.from.a, K.a, e); if (K.at) K.at(k);
-    if (k >= 1) { C.from = { p: K.p.clone(), a: K.a.clone() }; C.i++; C.t = 0;
+    if (k >= 1) { C.from = { p: K.p.clone(), q: K.q1.clone(), a: K.a.clone() }; C.i++; C.t = 0;
       if (C.i >= C.keys.length) { this.cine = null; const M = C.M; if (M.controls) { M.controls.target.copy(a); M.controls.enabled = !(M.nav && M.nav.mode === 'walk') && !M.anim; M.controls.update(); } if (M.nav && M.nav.syncFromCamera) M.nav.syncFromCamera(); C.res(); } }
   }
   // arriving in a place: through its door (the leaves stand open and close behind you), from the title screen (a slow
@@ -181,7 +186,7 @@ class App {
     const back = goal.p.clone().sub(goal.a).setY(0).normalize(); if (!isFinite(back.x)) back.set(0, 0, 1);
     const p0 = goal.p.clone().addScaledVector(back, how.pose ? 2.2 : 3).add(new THREE.Vector3(0, how.pose ? .9 : 1.6, 0));
     cam.position.copy(p0); cam.lookAt(goal.a);
-    this.cineRun(M, [{ p: goal.p, a: goal.a, dur: how.pose ? 2.8 : 3.4 }]);
+    this.cineRun(M, [{ p: p0, a: goal.a, dur: .05, hold: () => this.switching }, { p: goal.p, a: goal.a, dur: how.pose ? 3 : 3.6, ease: easeSine }]);   /* held until the change is done, then the descent runs under the dissolve */
   }
   // the door: the camera walks up to it, the leaves swing open, the camera passes through into the light, and the next
   // place is entered through its own door (arrive) — never a cut from where you stood
@@ -189,7 +194,7 @@ class App {
     const M = this.mode; if (!M || this.cine || this.switching) return; const D = M.doorInfo, pick = M.doorPick;
     if (!D || !D.set || !pick) return go();
     const c = pick.position, T = D.tunnel;
-    await this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z - 2.4), a: new THREE.Vector3(c.x, 1.45, c.z), dur: 1.25 }]);
+    await this.cineRun(M, [{ p: new THREE.Vector3(c.x, 1.62, c.z - 2.4), a: new THREE.Vector3(c.x, 1.45, c.z), dur: 'auto' }]);
     if (M.disposed || this.mode !== M) return;
     sfx.play('whoosh', { gain: .25 }); if (T) { T.setFlow(1.5); T.setGlow(0); }
     await new Promise(res => { const t0 = performance.now(); const step = () => { if (M.disposed) return res(); const k = Math.min(1, (performance.now() - t0) / 950); D.set(1 - Math.pow(1 - k, 3)); if (k < 1) requestAnimationFrame(step); else res(); }; step(); });   /* by the clock: a slow frame never stretches the swing */
@@ -415,7 +420,10 @@ class App {
     try {
       // the fade is timed by the clock, not by frame count, so a slow frame never stretches it
       const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
-      if (g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
+      // a dissolve (title screen <-> library): the still covers the change, so the veil drops at once beneath it
+      const still = this._dissolveNext && this.mode && !this.veilHold ? await this.snapshot() : null; this._dissolveNext = false;
+      const uiEl = document.getElementById('ui'); if (still && uiEl) uiEl.style.opacity = '0';   // the next place's buttons rise with the dissolve, not before it
+      if (!still && g.value < .99) await fade(g.value, 1, 200 * (1 - g.value));
       g.value = 1;
       // from here until the new place's reflections are captured nothing is drawn: the screen is black (uFade 1) and the
       // frames would only compete with the bakes, the compile and the probe for the GPU (with a software GPU a hall frame
@@ -450,9 +458,26 @@ class App {
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
       // drawn frames, counted (not timed: a software GPU may take seconds per frame), until it says it is framed
       for (let k = 0; k < 12 && this.mode && (k < 3 || (this.mode.framing && this.mode.framing())); k++) await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      mark('sm:sw-frames'); await sleep(60); await fade(1, 0, 330); g.value = 0; done = true; mark('sm:sw-end');
-    } finally { this.switching = false; this.veilHold = false; if (!done) g.value = 0; }
+      mark('sm:sw-frames'); await sleep(60);
+      if (still) { g.value = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); this.switching = false; this.dissolve(still, 1700, true); }
+      else await fade(1, 0, 330);
+      g.value = 0; done = true; mark('sm:sw-end');
+    } finally { this.switching = false; this.veilHold = false; if (!done) { g.value = 0; document.querySelectorAll('.xfade').forEach(o => this.dissolve(o, 300)); const U = document.getElementById('ui'); if (U) U.style.opacity = ''; } }
   }
+  // Dissolves. The last drawn frame is copied into a canvas laid over the 3D view (under the interface), and what is
+  // costly happens under it: building the next scene, compiling its programs, uploading its textures, its first frames.
+  // Then the still fades away (a CSS transition, run by the compositor: it keeps its pace even while the page's own thread
+  // or the GPU is busy) onto the new scene, already moving. A slow drift of the still hides that it has stopped.
+  snapshot() {
+    return new Promise(res => {
+      let done = false; const fin = o => { if (done) return; done = true; res(o); };
+      this.gfx._snap = cv => { const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; o.className = 'xfade'; o.setAttribute('aria-hidden', 'true'); o.getContext('2d').drawImage(cv, 0, 0); cv.insertAdjacentElement('afterend', o); fin(o); };
+      setTimeout(() => { if (!done) { this.gfx._snap = null; fin(null); } }, 1200);   // nothing drawn meanwhile: carry on without one
+    });
+  }
+  dissolve(o, ms = 1500, ui = false) {
+    const U = ui && document.getElementById('ui'); if (U && U.style.opacity === '0') { U.style.transition = `opacity ${Math.round(ms * .8)}ms ease ${Math.round(ms * .25)}ms`; void U.offsetWidth; U.style.opacity = ''; setTimeout(() => { U.style.transition = ''; }, ms + 200); }
+    if (!o) return; o.style.transition = `opacity ${ms}ms cubic-bezier(.45,0,.25,1)`; void o.offsetWidth; o.style.opacity = '0'; setTimeout(() => o.remove(), ms + 120); }
   // free GPU resources a few frames from now (after the next mode or rebuilt model has rendered once)
   retire(fn, frames = 3) { this.trash.push({ fn, frames }); }
   flushTrash() { if (!this.trash.length) return; const due = this.trash.filter(x => --x.frames <= 0); this.trash = this.trash.filter(x => x.frames > 0); due.forEach(x => { try { x.fn(); } catch (e) { console.warn(e); } }); }

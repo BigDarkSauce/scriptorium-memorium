@@ -1,7 +1,7 @@
 // The library hub: a cozy, resizable room where bookcases are placed, moved, rotated and named,
 // PDFs are added as folded scrolls, and opening a scroll unfolds it in a shaft of light and carries you into its room.
 import { MapView } from '../mapview.js';
-import { lookQ, flyPose } from '../camfly.js';
+import { lookQ, flyPose, flightDur, easeSine } from '../camfly.js';
 import { iconFor, iconSVG, ICONS, ICON_NAMES } from '../icons.js';
 import { autoTags } from '../share.js';
 import * as THREE from 'three';
@@ -500,11 +500,17 @@ export class Hub {
     if (this.opening) return; const R = this.lib.hub, c = this.caseDepth() + .4, walk = this.nav.mode === 'walk';
     const to = p.clone().addScaledVector(n, 2.0).add(V3(n.z, 0, -n.x).multiplyScalar(.35)); to.y = walk ? this.camera.position.y : clamp(p.y + .35, 1.3, R.h - .5);
     to.x = clamp(to.x, -R.w / 2 + c, R.w / 2 - c); to.z = clamp(to.z, -R.d / 2 + c, R.d / 2 - c);
-    const a1 = p.clone().add(V3(0, -.28, 0)), far = this.camera.position.distanceTo(to);
-    this.camTween = { t: 0, dur: clamp(.7 + far * .09, .8, 1.6), p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: to, q1: lookQ(to, a1), a1, walk };   /* a longer way takes a little longer */
+    // land only where walking or the overview allows (js/nav.js): out of every bookcase's footprint, inside the hall; and in
+    // the overview, the point orbited must lie inside the hall's limits, so it is drawn back along the line of sight
+    // (the view does not turn). Before, the landing spot was pushed sideways on the next frame: the kick to the side.
+    const B = this.nav.bounds(); if (walk) this.nav.collide(to, B, .28); else { to.x = clamp(to.x, B.minX + .3, B.maxX - .3); to.z = clamp(to.z, B.minZ + .3, B.maxZ - .3); to.y = clamp(to.y, .4, B.h - .3); }
+    const a1 = p.clone().add(V3(0, -.28, 0)), inB = q => q.x >= B.minX + .1 && q.x <= B.maxX - .1 && q.z >= B.minZ + .1 && q.z <= B.maxZ - .1;
+    if (!walk && !inB(a1)) { let lo = 0, hi = 1; const d = a1.clone().sub(to), q = V3(); for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; q.copy(to).addScaledVector(d, m); if (inB(q)) lo = m; else hi = m; } a1.copy(to).addScaledVector(d, Math.max(.05, lo)); }
+    const far = this.camera.position.distanceTo(to);
+    const q1 = lookQ(to, a1); this.camTween = { t: 0, dur: flightDur(this.camera.position, this.camera.quaternion, to, q1), p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: to, q1, a1, walk, lift: walk ? 0 : Math.min(.9, far * .07) };   /* longer ways and larger turns take longer; the overview arcs up a little on long ones */
   }
   stepCamTween(dt) {
-    const T = this.camTween; T.t += dt; const k = easeInOutQuint(Math.min(1, T.t / T.dur));
+    const T = this.camTween; T.t += dt; const k = easeSine(Math.min(1, T.t / T.dur));
     flyPose(this.camera, T, k);
     if (k >= 1) { this.camTween = null; if (!T.walk) { this.controls.target.copy(T.a1); this.controls.update(); } }
   }
@@ -813,7 +819,7 @@ export class Hub {
     if (this.camTween) this.stepCamTween(dt);
     if (this.ghost && this.ghost.visible) { this._gT = (this._gT || 0) + dt; this.ghost.userData.mat.opacity = .24 + .1 * Math.sin(this._gT * 4); }
     // walking (overview or first person) — see js/nav.js
-    this.nav.update(dt, !!this.dragging || !!this.sdrag || !!this.camTween);
+    this.nav.update(dt, !!this.dragging || !!this.sdrag || !!this.camTween || !!this.app.cine);   /* the app's camera moves own the camera too */
     if (this.glowDirty || this.dragging) this.syncGlow();
     this._arriving = false;
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null) { this._arriving = true; o.userData.arrive = Math.min(1, o.userData.arrive + dt * 1.4); o.scale.setScalar(easeOut(o.userData.arrive) || .01); if (o.userData.arrive >= 1) delete o.userData.arrive; } });

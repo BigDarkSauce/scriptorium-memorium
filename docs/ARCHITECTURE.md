@@ -339,3 +339,35 @@ and every frame while something flies or unfolds; the hall's only while somethin
   adaptive steps during a shot). Measured over four changes: no visible resize; the visible compiles fell from three
   to one, and that one is the outgoing diorama's own cloud shadows switching on mid-dip. The decoration's large
   animated layer no longer uses a blend mode.
+
+## Round 16: dissolves, a classical gallery, maps that read like plans, flights that never kick
+
+- **Dissolves (`App.snapshot`, `App.dissolve`).** The last drawn frame is copied (in the task that drew it:
+  `gfx._snap`, called after `composer.render`) into a canvas over the 3D view and under the interface (`.xfade`,
+  z-index 1), which drifts slowly while it waits. Everything costly happens under it; then it fades by a CSS transition,
+  which the compositor runs at its own pace even while the page's thread or the GPU is busy. Used for every change of
+  diorama on the title screen (no more dips to dark) and for the title ↔ library switch (`_dissolveNext`: Continue,
+  New, Load, Main menu), where the veil drops at once under the still, the arrival's camera move is held (`hold`) until
+  the switch is done and then descends during the dissolve, and the interface fades in with it. Measured over four
+  changes of diorama: no program compiled and no resize on a visible frame.
+- **Flights that never kick.** (1) The app's camera keys start each turn from where the last key ended (`C.from.q`),
+  never from the camera as it stands that frame (the place's walking or orbit controls had already turned it back to
+  their old heading: the kick to the right into the tunnel); hall and room treat `app.cine` as busy. (2) A map flight in
+  the hall lands only where walking or the overview allows (out of footprints, inside the hall; in the overview the
+  orbit point is drawn back along the line of sight into the hall's limits): before, the next frame pushed the camera
+  sideways. (3) Durations come from the way and the turn (`flightDur`), with a sine ease (peak speed π/2 × mean): the
+  worst turn went from 24.8° to 5.2° per 1/20 s. The walk up to a door uses `dur: 'auto'` too.
+- **Maps (`js/mapview.js`), after games and cartography.** The minimap carries markers only (icons on footprints,
+  badges on dioramas, the camera's arrow and field of view), named on hover. The full map (M) names everything by
+  boundary labelling: each wall's names stand in a column or rows outside that wall, in the same order as along it,
+  joined by leaders that leave straight through the wall and bend once (they cannot cross); free-standing footprints
+  get a plate beside them. Plates are measured in a wide hidden box first (a narrow one wrapped them after every word),
+  the number of rows above and below and the plan's scale are settled together, and the plan fills the space left.
+  Hovering a footprint, a plate or a legend line lights all three; a click flies there.
+- **The gallery behind the doors (`js/gfx/tunnel.js`).** Classical instead of sci-fi: fluted Ionic columns on
+  plinths (instanced), a gilded entablature, a coffered barrel vault with rosettes and oculi every other bay, an ivory
+  marble floor with a red porphyry runner and gilt fillets, the floor level with the rooms', and the far end's light as a
+  haze that thickens down the gallery. Everything repeats every bay (1.7 m), so the colonnade, the coffers and the inlay
+  shift with the flow (wrapped every two bays) and the moving parts are clipped at the doorway. One shader lights it
+  (no lamps out there); it undoes the place's colour grade (the house look multiplies blue by 3.4 to cancel the
+  lamplight; to the power .75, so the marble stays ivory).

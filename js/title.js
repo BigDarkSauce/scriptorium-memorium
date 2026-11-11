@@ -11,7 +11,7 @@ import { el, toast, mathHTML, disposeTree, confirmBox } from './util.js';
 import * as store from './store.js';
 const sleep = ms => new Promise(r => setTimeout(r, ms)), frames = n => new Promise(r => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
 
-const SHOT = 9.5, DIP = .45;
+const SHOT = 9.5;
 const ago = t => { if (!t) return ''; const s = (Date.now() - t) / 1000; return s < 90 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
 // the dioramas this scriptorium holds (the room visited last first), up to 12; the built-in models if it holds none
 async function showcase(app) {
@@ -40,30 +40,31 @@ export class TitleScreen {
   get scene() { return this.ds ? this.ds.scene : this._scene; }
   framing() { return !this.ds; }   // main.js waits under the veil until the first diorama stands
   // ---------- the showcase ----------
-  // The change of diorama happens entirely in the dark: the screen dips to the title's dark, the next diorama is built
-  // there (the build is a stall of a frame or two, unseen), its programs are compiled (in parallel where the GPU allows)
-  // and one frame is drawn, still dark, so textures and shadows are on the GPU; only then does it fade in. Nothing is
-  // compiled or uploaded on a visible frame, and the canvas is never resized (gfx.swapScene).
+  // A change of diorama is a dissolve: a still of the last frame is laid over the view (App.snapshot) and everything
+  // costly happens under it, unseen: the next diorama is built, its programs compiled (in parallel where the GPU allows),
+  // and it is run and drawn for a few frames, so textures, shadows and the variants it only switches on once running are
+  // ready. Then the still fades away (a compositor transition: its pace does not depend on the page's thread) onto the
+  // new diorama, already in its slow camera move. The old one is freed once the dissolve is over. The canvas is never
+  // resized (gfx.swapScene) and the resolution stays fixed for the whole showcase (fixedRes).
   async next(first) {
-    if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true;
+    if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; let still = null;
     try {
-      if (!first) await frames(2);   // the dark frame is on screen before the build stalls the thread
+      if (!first) still = await this.app.snapshot();
       let ds = null, tries = this.items.length;
       while (!ds && tries-- > 0 && !this.disposed) {
         this.i = (this.i + 1) % this.items.length; const it = this.items[this.i];
         try { ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); }
         catch (e) { console.warn('title showcase', e); ds = null; if (this.items.length > 1) { this.items.splice(this.i, 1); this.i--; } }
       }
-      if (!ds || this.disposed) { if (ds) ds.dispose(); return; }
+      if (!ds || this.disposed) { if (ds) ds.dispose(); this.app.dissolve(still, 400); return; }
       const old = this.ds; this.shot = { kind: ['orbit', 'push', 'crane', 'circle'][this.i % 4], t: 0, dir: Math.random() < .5 ? -1 : 1 };
       this.ds = ds; this.frame(); this.pose(0);
       if (first) this.gfx.setView(ds.scene, this.camera); else this.gfx.swapScene(ds.scene, this.camera);
       if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } }
-      // run and drawn a few frames in the dark: textures uploaded, shadow maps drawn, and the variants a scene only switches
-      // on once it runs (cloud shadows, effects that start with the first step) compiled there rather than on screen
       for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } }
-      this.shot.t = 0; this.fadeIn = 0;
-      if (old) this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } });
+      this.shot.t = 0;
+      if (still) this.app.dissolve(still, 1800);
+      if (old) setTimeout(() => this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } }), still ? 2000 : 0);
       if (!this.disposed) this.caption(this.items[this.i], first);
     } finally { this.preparing = false; }
   }
@@ -81,13 +82,11 @@ export class TitleScreen {
   }
   update(dt) {
     if (!this.ds) return; const g = this.gfx.grade.uniforms.uFade;
-    if (this.preparing) { if (!this.app.switching) g.value = 1; return; }   // held in the dark while the next one is made ready
-    // the shot's clock is the wall clock (a slow frame never stretches a fade); the scene itself steps by the frame's dt
+    if (this.preparing) return;   // under the still: the next one is being made ready
+    // the shot's clock is the wall clock (a slow frame never stretches it); the scene steps by the frame's dt
     const wall = Math.min(.1, this.app.loopDt || dt); this.ds.step(dt); this.shot.t += wall; this.pose();
-    if (this.app.switching) return;
-    const left = SHOT - this.shot.t;
-    if (left < DIP) g.value = Math.min(1, 1 - left / DIP); else if (this.shot.t < DIP) g.value = Math.max(0, 1 - this.shot.t / DIP); else g.value = 0;
-    if (left <= 0) { if (this.items.length > 1) this.next(); else this.shot.t = DIP; }
+    if (!this.app.switching) g.value = 0;
+    if (this.shot.t >= SHOT) { if (this.items.length > 1) this.next(); else this.shot.t = 0; }
     this.prog.style.transform = `scaleX(${Math.min(1, this.shot.t / SHOT).toFixed(4)})`;
   }
   // ---------- the menu ----------
@@ -106,7 +105,7 @@ export class TitleScreen {
       el('header', { class: 'tt-head' }, [el('div', { class: 'tt-kicker', text: 'A library of living knowledge' }), el('h1', { class: 'tt-title' }, [el('span', { text: 'Scriptorium' }), el('span', { text: 'Memorialium' })]), el('div', { class: 'tt-rule' })]),
       menu, this.panel, el('div', { class: 'tt-saved', text: 'Everything is saved as you go, in this browser' }),
       el('div', { class: 'tt-capbox' }, [this.cap, el('div', { class: 'tt-prog' }, [this.prog])]));
-    setTimeout(() => this.ui.classList.add('in'), 60);
+    const show = () => { if (this.disposed) return; if (this.app.switching) return setTimeout(show, 60); this.ui.classList.add('in'); }; setTimeout(show, 60);
   }
   caption(it, first) {
     this.cap.classList.remove('show'); void this.cap.offsetWidth;

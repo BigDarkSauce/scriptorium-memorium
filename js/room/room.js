@@ -4,7 +4,7 @@
 // inlay and labelled with its number and title; clicking a model (or its bay) unfolds it and carries you inside.
 // The room grows when more scrolls need hanging.
 import { MapView } from '../mapview.js';
-import { lookQ, flyPose } from '../camfly.js';
+import { lookQ, flyPose, flightDur, easeSine } from '../camfly.js';
 import { iconFor, dioramaIcon } from '../icons.js';
 const plain = t => String(t).replace(/\$([^$]*)\$/g, '$1').replace(/\\[a-zA-Z]+\{?|[{}_^]/g, '');   // a title with maths, readable as plain text
 import { CEILINGS, ceilingTheme } from '../gfx/ceilings.js';
@@ -169,7 +169,7 @@ export class BookRoom {
     this.frameStart();
     this.gfx.setView(this.scene, this.camera);
     // the map of the room: the chapter scrolls in reading order, the dioramas on their pedestals (mapview.js)
-    this.map = new MapView(this.ui, { camera: this.camera, provider: () => this.mapPlan(), onPick: it => { const st = this.stations.get(it.id); if (!st) return; const n = st.slot.n, c = st.sheet.getWorldPosition(V3()); this.flyTo(c.clone().addScaledVector(n, 2.6).setY(1.62), c.clone().setY(1.3), 1.2); } });
+    this.map = new MapView(this.ui, { camera: this.camera, provider: () => this.mapPlan(), onPick: it => { const st = this.stations.get(it.id); if (!st) return; const n = st.slot.n, c = st.sheet.getWorldPosition(V3()); const to = c.clone().addScaledVector(n, 2.6).setY(1.62), look = c.clone().setY(1.3); this.flyTo(to, look, flightDur(this.camera.position, this.camera.quaternion, to, lookQ(to, look))); if (this.anim) this.anim.ease = easeSine; } });
     this.nav = new Navigator({ camera: this.camera, controls: this.controls, canvas: this.gfx.canvas, keys: this.keys, host: this.ui,
       bounds: () => { const D = this.data.dims, c = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; return { minX: -D.w / 2 + c, maxX: D.w / 2 - c, minZ: -D.d / 2 + c, maxZ: D.d / 2 - c, h: D.h }; },
       obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => st0(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
@@ -565,9 +565,9 @@ export class BookRoom {
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
-    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = easeInOutQuint(a.k); this.controls.target.lerpVectors(a.from.t, a.to.t, e); flyPose(this.camera, a.F, e); if (a.k >= 1) { this.anim = null; this.nav.needsSync = true;   /* walking takes up the heading the flight ended on (it used to snap back to the one it had before) */ this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
+    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = (a.ease || easeInOutQuint)(a.k); this.controls.target.lerpVectors(a.from.t, a.to.t, e); flyPose(this.camera, a.F, e); if (a.k >= 1) { this.anim = null; this.nav.needsSync = true;   /* walking takes up the heading the flight ended on (it used to snap back to the one it had before) */ this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
-      this.nav.update(dt, !!this.reader || !!this.unfold);
+      this.nav.update(dt, !!this.reader || !!this.unfold || !!this.app.cine);
     }
     this.placeSpots();
     // card models turn slowly; the chosen one unfolds (grows, lifts, glows) before the dive
