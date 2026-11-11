@@ -88,3 +88,7 @@ assets/               app icon (scriptorium.ico / .png)
 ```
 
 Built with three.js r170, MathJax 3 and pdf.js 3.11. Almost every texture is drawn in code; the image files are the app icons and three CC0 scanned surface sets (ground, moss, bark) in `assets/textures` (see `CREDITS.txt` there) that add fine detail to the dioramas' landscapes.
+
+## Licence
+
+All rights reserved: see [LICENSE](LICENSE). You may view, download and run it for your own personal study; copying, modifying or republishing needs the owner's permission. Third-party components keep their own licences ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).

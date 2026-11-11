@@ -25,7 +25,7 @@ The three AI engines (the sparkle button):
 
 ## The quick way (Windows)
 
-1. Download the project: **https://github.com/BigDarkSauce/scriptorium-memorium** → Code → Download ZIP, and unzip it
+1. Download the project (all rights reserved: free to run for your own study, see LICENSE): **https://github.com/BigDarkSauce/scriptorium-memorium** → Code → Download ZIP, and unzip it
    (or `git clone https://github.com/BigDarkSauce/scriptorium-memorium.git`).
 2. Double-click **`Setup Scriptorium.bat`** in the folder. It asks before each step:
    1. shortcuts on the Desktop;

@@ -1,0 +1,24 @@
+Scriptorium Memorialium
+Copyright (c) 2026 BigDarkSauce (github.com/BigDarkSauce). All rights reserved.
+
+This software, its source code, designs, texts, dioramas, figures and documentation ("the Work") are the property of
+the copyright holder. No licence is granted except as stated here.
+
+You may, free of charge:
+  - view the Work and download it;
+  - run it, unmodified, on your own computers for your own personal, non-commercial study, including the setup
+    script, the launcher and the Scriptorium free-models extension it contains;
+  - share links to the repository and to the published page.
+
+You may not, without the copyright holder's prior written permission:
+  - copy, modify, translate, adapt or create derivative works of the Work or any part of it;
+  - redistribute, sublicense, sell, host or publish the Work or any part of it, modified or not;
+  - use the Work or any part of it for commercial purposes or to train machine-learning models.
+
+Scrolls you write with the Work from your own documents are yours. Third-party components keep their own licences
+(see THIRD-PARTY-NOTICES.md); nothing here restricts what those licences allow.
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE WORK OR ITS USE.
+
+Permission requests: open an issue at https://github.com/BigDarkSauce/scriptorium-memorium/issues

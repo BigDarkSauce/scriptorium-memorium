@@ -6,13 +6,14 @@
   "description": "Lets the Scriptorium Memorialium page reach free LLM APIs and FreeLLMAPI from inside the Claude app, and keeps your API keys safe on this computer across updates.",
   "long_description": "The Scriptorium page inside the Claude app may not contact outside addresses, so its free-model modes could not run there. This extension makes those requests from your own computer: the page passes it a request to an OpenAI-compatible endpoint and reads the answer back as it streams. It only calls https addresses ending in /models or /chat/completions, and servers on this computer. Your keys stay in the page's own storage and pass through here only on their way to their provider.",
   "author": {
-    "name": "Scriptorium Memorialium"
+    "name": "BigDarkSauce",
+    "url": "https://github.com/BigDarkSauce"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/BigDarkSauce/scriptorium-memorium"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "server": {
     "type": "node",
     "entry_point": "server/index.mjs",
