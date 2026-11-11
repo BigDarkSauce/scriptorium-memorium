@@ -233,12 +233,31 @@ export class Gfx {
     const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);
     // (no variants: the scene as it is. Called with none, it used to compile nothing at all: the title screen's dioramas
     // then compiled synchronously on their first frame, a 1.1 s stall on a Radeon 610M)
-    const vs = variants.length ? variants : [{ apply() { }, restore() { } }];
-    try { for (const v of vs) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
+    if (!variants.length) { r.setRenderTarget(prevRT); jobs.push(this.compileSliced(scene, camera)); }
+    else try { for (const v of variants) { try { v.apply(); compile(); } finally { v.restore(); } } } finally { r.setRenderTarget(prevRT); }
     const bgs = backgrounds.filter(b => b && (b.isTexture || b.isCubeTexture));
     if (bgs.length) { if (!this._warmRT) this._warmRT = new THREE.WebGLRenderTarget(1, 1); const s = new THREE.Scene(), prev = r.getRenderTarget(); r.setRenderTarget(this._warmRT); bgs.forEach(b => { s.background = b; r.render(s, camera); }); r.setRenderTarget(prev); }
     this.prewarmMs = performance.now() - t0;
     return Promise.all(jobs);
+  }
+  // The scene as it is, compiled a few objects at a time, each slice in its own task of about 25 ms: three builds every
+  // new material's shader source on the page's thread (dozens of materials took one 450 ms task on a Radeon 610M); the
+  // GPU then compiles in parallel (KHR_parallel_shader_compile) and the programs are polled until ready. Within a slice
+  // the other objects are hidden and shown again before the task ends, so no frame ever draws the scene half hidden.
+  async compileSliced(scene, camera) {
+    const r = this.renderer, props = r.properties, objs = []; scene.traverseVisible(o => { if (o.material && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) objs.push(o); });
+    const mats = new Set(); let i = 0, k = 6;
+    while (i < objs.length) {
+      const t0 = performance.now(), chunk = objs.slice(i, i + k), keep = new Set(chunk), vis = objs.map(o => o.visible);
+      objs.forEach(o => { if (!keep.has(o)) o.visible = false; });
+      const prevRT = r.getRenderTarget(); r.setRenderTarget(this.composer.readBuffer);
+      try { const set = r.compile(scene, camera); if (set) set.forEach(m => mats.add(m)); } catch (e) { console.warn(e); }
+      finally { r.setRenderTarget(prevRT); objs.forEach((o, j) => { o.visible = vis[j]; }); }
+      i += k; const dt = performance.now() - t0; k = Math.max(2, Math.min(40, Math.round(k * (dt > 0 ? 25 / dt : 2))));
+      if (i < objs.length) await new Promise(res => setTimeout(res, 0));
+    }
+    const t1 = performance.now();
+    await new Promise(res => { const poll = () => { let pending = 0; for (const m of mats) { const p = props.get(m).currentProgram; if (p && p.isReady && !p.isReady()) pending++; } if (!pending || performance.now() - t1 > 6000) res(); else setTimeout(poll, 10); }; poll(); });
   }
   // Frame statistics for profiling (draw calls and triangles of one full composer frame, shadow passes included).
   stats() {

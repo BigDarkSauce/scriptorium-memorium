@@ -471,11 +471,11 @@ class App {
       // the probe's first draw waiting for every link afterwards. (Baking only swaps a texture's pixels: no program
       // changes.) The awaited prewarm below picks up what a diorama's scanned detail adds.
       mark('sm:sw-mode'); const early = this.mode && this.mode.scene && this.mode.camera ? this.mode : null;
-      if (early) { try { this.gfx.prewarm(early.scene, early.camera, [{ apply() { }, restore() { } }]).catch(() => { }); this.gfx.renderer.getContext().flush(); } catch (e) { console.warn(e); } }
+      if (early) { try { this.gfx.prewarm(early.scene, early.camera).catch(() => { }); this.gfx.renderer.getContext().flush(); } catch (e) { console.warn(e); } }
       try { BAKE.now(); } catch (e) { console.warn(e); } mark('sm:sw-bake');
       if (scansReady()) await Promise.race([scansReady(), sleep(4000)]);   /* aaa.js loadScans, asked for by a diorama's first realistic material */
       // compile the new scene's shaders while the screen is still veiled (parallel where the browser supports it)
-      if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera, [{ apply() { }, restore() { } }]), sleep(4000)]); } catch (e) { } }
+      if (this.mode && this.mode.scene && this.mode.camera) { try { await Promise.race([this.gfx.prewarm(this.mode.scene, this.mode.camera), sleep(4000)]); } catch (e) { } }
       mark('sm:sw-prewarm'); if (P && this.mode === M) { try { P.finish(); M.shadowsDirty = true; } catch (e) { console.warn(e); } } mark('sm:sw-probe');
       this.gfx.resetAdapt(); this.veilHold = false;
       // the new mode settles its opening view under the veil (a diorama re-frames once its panels are laid out): a few
