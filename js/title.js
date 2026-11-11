@@ -65,7 +65,7 @@ export class TitleScreen {
       performance.mark('sm:t-warm0'); if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } } performance.measure('sm:t-warm', 'sm:t-warm0');
       performance.mark('sm:t-frames0'); for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } } performance.measure('sm:t-frames', 'sm:t-frames0');
       this.shot.t = 0;
-      if (still) this.app.dissolve(still, 1800);
+      if (still) this.app.dissolve(still, 1800); setTimeout(() => this.ui && this.ui.classList.remove('busy'), still ? 900 : 0);
       if (old) setTimeout(() => this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } }), still ? 2000 : 0);
       if (!this.disposed) this.caption(this.items[this.i], first);
     } finally { this.preparing = false; }
@@ -88,6 +88,9 @@ export class TitleScreen {
     // the shot's clock is the wall clock (a slow frame never stretches it); the scene steps by the frame's dt
     const wall = Math.min(.1, this.app.loopDt || dt); this.ds.step(dt); this.shot.t += wall; this.pose();
     if (!this.app.switching) g.value = 0;
+    // just before the change the golden motes fade out: the change's work (building, compiling) can stall the page and
+    // the GPU for a moment, and a still picture with nothing moving on it cannot be seen to stall; they return after
+    if (this.shot.t >= SHOT - .45 && !this.ui.classList.contains('busy') && this.items.length > 1) this.ui.classList.add('busy');
     if (this.shot.t >= SHOT) { if (this.items.length > 1) this.next(); else this.shot.t = 0; }
     this.prog.style.transform = `scaleX(${Math.min(1, this.shot.t / SHOT).toFixed(4)})`;
   }

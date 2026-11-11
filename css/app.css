@@ -1145,5 +1145,5 @@ button.map-lico { cursor: pointer; } button.map-lico:hover, button.map-lico:focu
 .fm-station .fm-lico { background: rgba(138,106,51,.16); color: #6d4f22; }
 .fm-top, .fm-bottom { max-width: 176px; }
 /* a dissolve's still (App.snapshot): over the 3D view, under the interface; it drifts a little while it waits */
-.xfade { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; transform-origin: 38% 50%; animation: xfDrift 5s cubic-bezier(.2,.6,.3,1) forwards; will-change: transform, opacity; }
-@keyframes xfDrift { to { transform: scale(1.045); } }
+.xfade { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; will-change: opacity; }   /* still: a picture that cannot be seen to stall */
+.title-ui .tt-motes { transition: opacity .4s ease; } .title-ui.busy .tt-motes { opacity: 0; }

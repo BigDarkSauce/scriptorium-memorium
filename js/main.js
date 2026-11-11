@@ -499,7 +499,7 @@ class App {
   // Dissolves. The last drawn frame is copied into a canvas laid over the 3D view (under the interface), and what is
   // costly happens under it: building the next scene, compiling its programs, uploading its textures, its first frames.
   // Then the still fades away (a CSS transition, run by the compositor: it keeps its pace even while the page's own thread
-  // or the GPU is busy) onto the new scene, already moving. A slow drift of the still hides that it has stopped.
+  // or the GPU is busy) onto the new scene, already moving. The still does not move: a picture with nothing moving on it cannot be seen to stall.
   snapshot() {
     return new Promise(res => {
       let done = false; const fin = o => { if (done) return; done = true; res(o); };
