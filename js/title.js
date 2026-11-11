@@ -29,12 +29,12 @@ async function showcase(app) {
 }
 export class TitleScreen {
   constructor(app) {
-    this.app = app; this.gfx = app.gfx; this.t = 0; this.i = -1; this.items = []; this.ds = null; this.fixedRes = true;
+    this.app = app; this.gfx = app.gfx; this.t = 0; this.i = -1; this.items = []; this.ds = null;
     this.camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, .1, 500);
     this._scene = new THREE.Scene(); this._scene.background = new THREE.Color('#0c0a08'); this.gfx.setView(this._scene, this.camera);
     // the dips between dioramas go through the title's own dark, not the paper colour the rest of the app fades through
     const G = this.gfx.grade.uniforms; this._fc = G.uFadeColor.value.clone(); G.uFadeColor.value.setRGB(.047, .039, .031);
-    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); } this.gfx.fixedRes = true;   // one steady resolution for the whole showcase (fixedRes)
+    if (this.gfx.dpr > 1) { this.gfx.dpr = 1; this.gfx.resize(); }   // at most the screen's own pixels; the GPU governor lowers it on a weak GPU (renderer.js pollGpu)
     this.ui = el('div', { class: 'title-ui' }); app.ui.append(this.ui); this.buildUI();
     this.onResize = () => this.frame(); addEventListener('resize', this.onResize);
     this.ready = showcase(app).then(L => { this.items = L; if (!this.disposed) this.next(true); });
@@ -47,7 +47,7 @@ export class TitleScreen {
   // and it is run and drawn for a few frames, so textures, shadows and the variants it only switches on once running are
   // ready. Then the still fades away (a compositor transition: its pace does not depend on the page's thread) onto the
   // new diorama, already in its slow camera move. The old one is freed once the dissolve is over. The canvas is never
-  // resized (gfx.swapScene) and the resolution stays fixed for the whole showcase (fixedRes).
+  // resized (gfx.swapScene); the GPU governor (renderer.js pollGpu) may lower the resolution on a weak GPU.
   async next(first) {
     if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; let still = null;
     try {
@@ -131,7 +131,7 @@ export class TitleScreen {
     draw(); this.panel.innerHTML = ''; this.panel.append(el('div', { class: 'tt-card glass' }, [el('h3', { text: 'Your scriptoria' }), list, el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Close', onclick: () => { this.panel.innerHTML = ''; } })])]));
   }
   dispose() {
-    this.disposed = true; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.fixedRes = false; this.gfx.resetAdapt();
+    this.disposed = true; removeEventListener('resize', this.onResize); this.camera.clearViewOffset(); this.ui.remove(); this.gfx.resetAdapt();
     // the app's own fade colour comes back once the next place has faded in (changing it under a closed veil would flash)
     const A = this.app, G = this.gfx.grade.uniforms, fc = this._fc, back = () => { if (A.mode instanceof TitleScreen) return; if (!A.switching && G.uFade.value < .01) G.uFadeColor.value.copy(fc); else requestAnimationFrame(back); }; requestAnimationFrame(back);
     if (this.ds) { const d = this.ds; this.ds = null; try { d.dispose(); } catch (e) { disposeTree(d.scene); } }

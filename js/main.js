@@ -551,7 +551,7 @@ class App {
     if (!this.veilHold) {
       const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
-      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60 && !(this.mode && this.mode.fixedRes); if (full) this.gfx.adapt(this._rAcc);   /* (fixedRes: the title screen keeps one resolution: a resize mid-shot is a visible hitch) */ else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
+      if (fps >= 60 || this._rAcc >= 1000 / fps - 4) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
     }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
   }

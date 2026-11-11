@@ -122,7 +122,7 @@ export class Gfx {
     // these linear gains bring plaster and marble back to a warm white (hall: plaster B/R .31 → ~.6, floor marble .50 → ~.95)
     return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping, wb: { gain: [.84, 1.45, 3.4], mid: 0, hi: 0 } };
   }
-  setView(scene, camera) {
+  setView(scene, camera) { this._smReset();
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);
     this.renderPass.scene = scene; this.renderPass.camera = camera;
     this.outline.renderScene = scene; this.outline.renderCamera = camera;
@@ -130,7 +130,8 @@ export class Gfx {
   }
   // another scene under the same camera and canvas (the title screen's showcase): no resize, so the composer's targets
   // are not reallocated on every change of scene (setView resizes, which costs a frame or more)
-  swapScene(scene, camera) { this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look); this.renderPass.scene = scene; this.renderPass.camera = camera; this.outline.renderScene = scene; this.outline.renderCamera = camera; }
+  _smReset() { if (this._smHalf) { this.renderer.shadowMap.autoUpdate = true; this.renderer.shadowMap.needsUpdate = true; this._smHalf = false; } }
+  swapScene(scene, camera) { this._smReset(); this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look); this.renderPass.scene = scene; this.renderPass.camera = camera; this.outline.renderScene = scene; this.outline.renderCamera = camera; }
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setPixelRatio(this.dpr); this.renderer.setSize(w, h, false);
@@ -180,7 +181,7 @@ export class Gfx {
     if (this._gpuSkip > 0) { this._gpuSkip--; return; } if (this.holdQuality) return;
     if (med > 17) { this._fast = 0; this._downs = (this._downs || 0) + 1;
       if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._gpuSkip = 1; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
-      else if (!this.fixedRes && this.dpr > .67) { this.dpr = Math.max(.67, this.dpr - .17); this.resize(); this._gpuSkip = 1; }
+      else if (!this.fixedRes && this.dpr > .5) { this.dpr = Math.max(.5, this.dpr - .15); this.resize(); this._gpuSkip = 1; }   // the resolution floor at 'low': half (a weak GPU in a full-HD window)
       this.bloom.enabled = !(this.quality === 'low' && this.dpr <= .7 && med > 22);
     } else if (med < 6.5) { this._fast = (this._fast || 0) + 1; if (this._fast < 3) return; this._fast = 0;
       if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .17); this.resize(); this._gpuSkip = 1; this.bloom.enabled = true; }
@@ -254,6 +255,11 @@ export class Gfx {
     // 'low' tames the scene (tier.js): glass that refracts, fill lights, soft shadows; checked again every 30 frames
     // for what was added since (every object is marked once, so the pass is cheap)
     if (sc) { const low = AAA.quality === 'low'; if (sc.userData.tamed !== low || (low && ++this._tameTick % 30 === 0)) tame(sc, low); }
+    // 'low': shadows of a moving scene drawn every other frame (where the place has not taken the shadow updates over
+    // itself, as the hall does: it redraws them only when something changed). Measured: 4 of the storm glass's 17 ms.
+    { const sm = this.renderer.shadowMap, low = AAA.quality === 'low';
+      if (low && sm.autoUpdate) { sm.autoUpdate = false; this._smHalf = true; }
+      if (this._smHalf) { if (!low) { sm.autoUpdate = true; this._smHalf = false; } else if ((this._smTick = (this._smTick || 0) + 1) % 2 === 0) sm.needsUpdate = true; } }
     // the GPU's own time for the frame (EXT_disjoint_timer_query_webgl2): read a few frames later, never waited for
     const T = this._gpuT; let q = null; if (T && !T.busy) { q = T.gl.createQuery(); T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q); T.busy = true; }
     this.composer.render(dt);
