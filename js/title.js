@@ -55,15 +55,15 @@ export class TitleScreen {
       let ds = null, tries = this.items.length;
       while (!ds && tries-- > 0 && !this.disposed) {
         this.i = (this.i + 1) % this.items.length; const it = this.items[this.i];
-        try { ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); }
+        try { performance.mark('sm:t-build0'); ds = new DioramaScene(this.gfx, JSON.parse(JSON.stringify(it.spec))); ds.U.uFrontR.value = 1e5; ds.U.uJitter.value = 0; ds.U.uSeamK.value = 0; ds.step(.016); performance.measure('sm:t-build', 'sm:t-build0'); }
         catch (e) { console.warn('title showcase', e); ds = null; if (this.items.length > 1) { this.items.splice(this.i, 1); this.i--; } }
       }
       if (!ds || this.disposed) { if (ds) ds.dispose(); this.app.dissolve(still, 400); return; }
       const old = this.ds; this.shot = { kind: ['orbit', 'push', 'crane', 'circle'][this.i % 4], t: 0, dir: Math.random() < .5 ? -1 : 1 };
       this.ds = ds; this.frame(); this.pose(0);
       if (first) this.gfx.setView(ds.scene, this.camera); else this.gfx.swapScene(ds.scene, this.camera);
-      if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } }
-      for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } }
+      performance.mark('sm:t-warm0'); if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } } performance.measure('sm:t-warm', 'sm:t-warm0');
+      performance.mark('sm:t-frames0'); for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } } performance.measure('sm:t-frames', 'sm:t-frames0');
       this.shot.t = 0;
       if (still) this.app.dissolve(still, 1800);
       if (old) setTimeout(() => this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } }), still ? 2000 : 0);
