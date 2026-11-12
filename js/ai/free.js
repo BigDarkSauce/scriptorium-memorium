@@ -245,20 +245,21 @@ const usable = v => v && typeof v === 'object' && (Array.isArray(v) ? v.length >
 export async function ask(prompt, o = {}) {
   const { signal, onText, onStatus, validate, images = [], minRank = 0 } = o, h = hash(prompt + '|' + images.length);
   if (!o.fresh) { const hit = await store.getGlobal('aic:' + h).catch(() => null); if (hit && hit.v && Date.now() - hit.at < 30 * 864e5 && (validate ? !validate(hit.v) : usable(hit.v))) { lastRoute.provider = hit.provider + ' (cached)'; lastRoute.model = hit.model; return hit.v; } }
-  const tried = new Set(); let lastErr = null, fixNote = null;
+  const tried = new Set(), rateHits = new Map(); let lastErr = null, fixNote = null, waited = 0;
   for (let round = 0; ; round++) {
     if (signal && signal.aborted) throw { code: 'cancelled' };
     const all = (await candidates({ images: images.length })).filter(c => !tried.has(c.p.id + '|' + c.m)), strong = all.filter(c => c.rank >= minRank), weak = all.filter(c => c.rank < minRank);
     const C = strong.length ? strong : all;   // nothing strong enough left (none set up, or each tried once): the rest
     let pick = null, soonest = Infinity, why = '';
     for (const c of C) { const b = budget(c.p, c.m); if (b.ok) { pick = c; break; } if (b.until < soonest) { soonest = b.until; why = c.p.name + ' · ' + c.m; } }
-    if (!pick && strong.length && weak.length && soonest - Date.now() > 90000) { pick = weak.find(c => budget(c.p, c.m).ok) || null; if (pick) onStatus && onStatus(`The strongest free models are busy for ${fmtWait(soonest - Date.now())}: a lighter one takes this.`); }
+    const refusing = strong.length && strong.every(c => (rateHits.get(c.p.id + '|' + c.m) || 0) >= 3);   /* every strong model has refused this request three times */
+    if (!pick && strong.length && weak.length && (soonest - Date.now() > 90000 || waited > 90000 || refusing)) { pick = weak.find(c => budget(c.p, c.m).ok) || null; if (pick) onStatus && onStatus(`The strongest free models are busy for ${fmtWait(soonest - Date.now())}: a lighter one takes this.`); }
     if (!pick) {
       if (!C.length && tried.size) { tried.clear(); if (round > 40) throw lastErr || { code: 'free_failed' }; continue; }   // every model tried once: start again (the budgets have moved on)
       if (!C.length) throw { code: 'free_none', message: 'No free provider is set up or reachable from here.' };
       if (o.exhausted) throw { code: 'free_exhausted', until: soonest };
       const ms = Math.max(1000, soonest - Date.now()); onStatus && onStatus(`Every free model is at its limit; the next one free is ${why} in ${fmtWait(ms)}. Waiting (you can stop).`); o.onWait && o.onWait(ms, why);
-      await sleepAbortable(Math.min(ms, 60000), signal); continue;
+      const nap = Math.min(ms, 60000); waited += nap; await sleepAbortable(nap, signal); continue;
     }
     const { p, m } = pick, pin = est(prompt);
     onStatus && onStatus(`Writing with ${p.name} · ${m}…`);
@@ -276,7 +277,7 @@ export async function ask(prompt, o = {}) {
       if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {
-      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; if (!(e.code === 'rate' && minRank > 0 && pick.rank >= minRank)) tried.add(p.id + '|' + m);   /* a strong model at its limit stays in play: its budget waits for the reset (above) */
+      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; { const k = p.id + '|' + m, n = e.code === 'rate' ? (rateHits.get(k) || 0) + 1 : 0; if (n) rateHits.set(k, n); if (!(e.code === 'rate' && minRank > 0 && pick.rank >= minRank && n < 3)) tried.add(k); }   /* a strong model at its limit stays in play (its budget waits for the reset, above), until it has refused this request three times: then the next model, so a model that keeps answering 429 cannot hold the job forever */
       if (e.code === 'rate') { const r = resetOf(e.res, e.body); cool(p, m, r.ms, r.day ? 'day' : 'min'); }
       else if (e.code === 'key') cool(p, m, 6 * 3600e3, 'key', true);
       else if (e.code === 'model') banModel(p, m, 864e5);

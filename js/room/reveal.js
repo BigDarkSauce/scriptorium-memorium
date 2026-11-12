@@ -132,7 +132,7 @@ export function renderReveal(st, ctx) {
     await loadLedger();
     const ok = skipped ? null : R.options ? !!R.options[pick].correct : null;
     const e = ledger.e[id] = Object.assign(ledger.e[id] || {}, { t: Date.now(), p: skipped ? null : R.options ? pick : free.slice(0, 400), c: conf, ok, title: st.title || '', part: ctx.partTitle || '' });
-    if (!e.tr) { const tr = revisitCard(st, R); if (tr) e.tr = tr; }
+    if (!e.tr || (e.tr.recall && !e.tr.n && R.transfer)) { const tr = revisitCard(st, R); if (tr) e.tr = tr; }   /* a recall card enrolled by "Check yourself" yields to the transfer card */
     session(); save(); show(e, true);
   };
   const show = (e, fresh) => {

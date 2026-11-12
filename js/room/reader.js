@@ -230,6 +230,7 @@ export class Reader {
   // bar, keeping the reader's place (the step at the top of the view stays there). Never while a field has the focus.
   liveRefresh(p) {
     if (this.closed || !this._improving || (p && p.id !== this.part.id) || (p && p.job && p.job.stage === 'done')) return;
+    if (Object.values(this._mediaJobs || {}).some(Boolean)) { this._refreshAfterMedia = true; return; }   /* a picture or reading being made: its step is rebuilt when it ends */
     const a = document.activeElement; if (a && this.el.contains(a) && a.matches && a.matches('textarea, input, select')) { if (!this._refreshWait) { this._refreshWait = true; a.addEventListener('blur', () => { this._refreshWait = false; this.liveRefresh(this.part); }, { once: true }); } return; }
     this.keepPlace(() => { this.el.querySelectorAll('.fig.prim').forEach(b => { try { b._prim && b._prim.dispose(); } catch (e) { } }); this.render(); });
   }
@@ -257,7 +258,7 @@ export class Reader {
       const shown = !st.isConnected; this._improving = null;
       if (shown && !this.closed) this.keepPlace(() => this.render());   // the scroll was already readable: drop the bar, say what stopped
       const s2 = st.isConnected ? st : this.el.querySelector('.analyse-bar .status'), g2 = go.isConnected ? go : this.el.querySelector('.analyse-bar .btn.primary');
-      if (g2) g2.disabled = false; if (s2) s2.textContent = errCopy(e);
+      if (g2) g2.disabled = false; if (s2) s2.textContent = errCopy(e); else if (!this.closed) toast(errCopy(e), 6000);   /* a first analysis that stopped after its chain has no bar left to say so */
     }
   }
   // verify coverage; with auto, write what is missing in as few calls as possible (≤ 100k characters of text each)
@@ -386,7 +387,7 @@ export class Reader {
     } catch (e) {
       if (e && e.code === 'cancelled') st2.textContent = 'Stopped.';
       else { st2.innerHTML = ''; st2.append((e && (e.message || errCopy(e))) || 'Failed.', ' '); if (e && e.report) st2.append(this.reportLink(e.report)); }
-    } finally { if (jobs[kind] === ctl) jobs[kind] = null; btn.textContent = was; }
+    } finally { if (jobs[kind] === ctl) jobs[kind] = null; btn.textContent = was; if (this._refreshAfterMedia && !Object.values(jobs).some(Boolean)) { this._refreshAfterMedia = false; this.liveRefresh(this.part); } }
   }
   playReading(blobs, b) {
     if (this._audio && this._audio.btn === b) { this.stopReading(); return; } this.stopReading();

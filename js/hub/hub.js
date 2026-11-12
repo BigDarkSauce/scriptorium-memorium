@@ -918,6 +918,7 @@ export class Hub {
     this.ao.update();
     // the hall is static: its 2048² sun shadow map is redrawn only while something moves (opening, dragging, arriving)
     const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false;
+    if (this._shQ !== this.gfx.quality) { this._shQ = this.gfx.quality; this.shadowsDirty = true; }   /* a quality step replaces the shadow map */
     if (this.shadowsDirty !== false || this.opening || this.dragging || this._arriving) { sm.needsUpdate = true; this.shadowsDirty = false; }
     if (this.opening) { this.stepOpening(dt); return; }
     if (this.camTween) this.stepCamTween(dt);

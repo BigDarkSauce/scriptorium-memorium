@@ -477,10 +477,11 @@ export class BookRoom {
   refreshStation(part) {
     if (this.disposed) return;   // an analysis that ends after the room was left: the live room (if any) is refreshed instead
     const st = this.stations.get(part.id); if (!st) { this.layout(); this.buildStations(); return; }
+    st.part = part; { const x = this.placed && this.placed.find(x => x.part.id === part.id); if (x) x.part = part; }   /* a save into the live room swaps the part object: the station follows it */
     // a different number of demos changes the plinth's footprint: lay the floor out again so nothing overlaps
     { const i = this.orderedParts().indexOf(part), f0 = this.footprints && this.footprints[i], f1 = plinthDims(this.pedestalSpecs(part).length), R = f0 && (Math.abs(f0.x1 - f0.x0) + Math.abs(f0.z1 - f0.z0)), want = f1.Wf + f1.Df;
       if (f0 && Math.abs(R - want) > 1e-3) { const D0 = { ...this.data.dims }; this.layout(); if (D0.w !== this.data.dims.w || D0.d !== this.data.dims.d) this.buildShell(); this.buildStations(); return; } }
-    const oldMap = st.sheet.material.map; st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part === part)); st.sheet.material.needsUpdate = true; if (oldMap) this.app.retire(() => oldMap.dispose()); this.buildPedestal(st);
+    const oldMap = st.sheet.material.map; st.sheet.material.map = this.sheetTexture(part, this.placed.findIndex(x => x.part.id === part.id)); st.sheet.material.needsUpdate = true; if (oldMap) this.app.retire(() => oldMap.dispose()); this.buildPedestal(st);
   }
   // Live room size: each slider step stretches the built shell to the new size at once and moves every station to
   // its new place on the walls; 150 ms after the slider stops the shell is rebuilt there (fast path); release builds all.
@@ -587,7 +588,7 @@ export class BookRoom {
   }
   kbClear() { this.kbFocus = null; this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; }
   onReaderClosed(r) {
-    if (this.reader === r) this.reader = null; this.stations.forEach(s => s.sheet.material.emissiveIntensity = 0); this.hint.hidden = false;
+    if (this.reader === r) this.reader = null; this.stations.forEach(s => s.sheet.material.emissiveIntensity = 0); this.hint.hidden = false; if (this.kbFocus) this.kbClear();   /* no invisible focus left for Enter to reopen */
     // the address loses its scroll (unless another scroll replaces it, or the room is being left)
     if (!this._swapReader && !this.disposed && this.app.mode === this) { this.app.route({ room: this.book.id }); this.app.rememberRoom(this.book.id, null); }
   }
