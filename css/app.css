@@ -1234,6 +1234,22 @@ body:has(.title-ui) .ai-btn { z-index: 6; }
 .gen-fig figcaption { font-size: .82em; opacity: .85; }
 .gen-tag { font-variant: small-caps; letter-spacing: .04em; border: 1px solid currentColor; border-radius: 3px; padding: 0 .35em; }
 .gen-status { display: block; font-size: .85em; margin-top: .3em; }
+/* the AI activity panel (js/ai/activity.js): what is being written, a bar through its stages, the time, Stop */
+.ai-activity { position: fixed; left: 16px; bottom: 16px; z-index: 9000; display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.aa-job { pointer-events: auto; background: rgba(24,19,13,.92); color: #f1e6cf; border: 1px solid rgba(201,164,92,.55); border-radius: 12px; padding: 10px 12px 9px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font: 14px/1.4 var(--f-serif, Georgia, serif); transition: opacity .6s; }
+.aa-job.ended { opacity: .7; }
+.aa-head { display: flex; align-items: baseline; gap: 8px; }
+.aa-label { font-family: var(--f-display, Cinzel, serif); font-weight: 600; letter-spacing: .02em; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aa-stage { font: 12.5px var(--f-mono, monospace); color: #d7c39a; white-space: nowrap; }
+.aa-time { font: 12.5px var(--f-mono, monospace); color: #a99a7e; white-space: nowrap; }
+.aa-stop { font: 13px var(--f-serif, Georgia, serif); padding: 3px 12px; border-radius: 12px; border: 1px solid #c9a45c; background: #3a2c18; color: #f6e7c4; cursor: pointer; }
+.aa-stop:hover { background: #5a4220; } .aa-stop:focus-visible { outline: 2px solid #e9c77d; outline-offset: 2px; }
+.aa-track { height: 5px; margin: 7px 0 6px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; position: relative; }
+.aa-fill { height: 100%; width: 0; background: linear-gradient(90deg, #b8893c, #e9c77d); border-radius: 3px; transition: width .5s ease; }
+.aa-track.indet .aa-fill { width: 30% !important; position: absolute; animation: aa-slide 1.6s ease-in-out infinite; }
+@keyframes aa-slide { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .aa-track.indet .aa-fill { animation: none; left: 0; width: 100% !important; opacity: .5; } }
+.aa-line { font-size: 13.5px; color: #e6dac2; overflow-wrap: anywhere; }
 .gen-report { max-height: 60vh; overflow: auto; display: grid; gap: .7em; }
 .gen-att { border-left: 2px solid rgba(160, 120, 50, .5); padding-left: .6em; display: grid; gap: .2em; }
 /* ---------- wayfinding and calm (UX pass: the HUD's ⋯ menu, first-visit tips, the library noticing you, arrivals) ---------- */
