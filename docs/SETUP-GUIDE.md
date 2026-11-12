@@ -87,8 +87,27 @@ Largest free tiers without a card, open worldwide (start here):
 | Z.ai (GLM Flash) | https://z.ai/manage-apikey/apikey-list | GLM Flash models free |
 | Hugging Face | https://huggingface.co/settings/tokens | small monthly router credit |
 
-No key at all (work at once, slowly): OVHcloud, LLM7, Pollinations, Kilo, AI Horde. The full list of 34, with what
-each gives: https://freellmapi.co/models.html
+No key at all (work at once, slowly): in FreeLLMAPI these are OVHcloud, Kilo, AI Horde (text) and Parallel (web
+search); add each on the Keys page → Add key → its platform, no key needed (about 50 text models at once). The full
+list, with what each gives: https://freellmapi.co/models.html
+
+Beyond text, FreeLLMAPI routes images (`/v1/images/generations`), speech (`/v1/audio/speech`), transcription
+(`/v1/audio/transcriptions`) and embeddings (`/v1/embeddings`), each with the same unified key. Which key opens which:
+
+| Kind | Providers (key needed) |
+|---|---|
+| Images (FLUX.1 schnell, FLUX.2, SDXL, Lucid Origin, Phoenix) | Cloudflare Workers AI only |
+| Speech, text to speech | Cloudflare (Deepgram Aura, MeloTTS), Google (Gemini TTS), Speechify (https://speechify.ai/api), Free.ai (Kokoro) |
+| Transcription, speech to text | Groq (Whisper Large v3 and Turbo), Cloudflare (Whisper, Deepgram Nova-3) |
+| Embeddings | Cloudflare, Google, Cohere, Mistral, NVIDIA, Inferbase, SEA-LION |
+| Video | none yet in FreeLLMAPI's catalogue |
+
+So the Cloudflare key is the single most useful one beyond text (Cloudflare → My Profile → API Tokens → Create token
+→ the "Workers AI" template; in FreeLLMAPI paste it as `account_id:token`, the account id is on the Workers AI page).
+
+In Ireland (and the rest of the EEA, the UK and Switzerland): Google's Gemini API terms say apps made available to
+users there must use the paid tier; using your own free key for your own study is the ordinary case. Every other
+provider above is open in Ireland.
 
 Honest limits: the 7.4 billion figure is the sum of every listed free tier. Some providers need things not everyone
 has (a Chinese real-name account: ModelScope, Qianfan, Volcengine, iFlytek; a payment method: Sail; Telegram
