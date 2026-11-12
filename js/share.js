@@ -87,8 +87,10 @@ export async function openGetScroll(app) {
       el('span', { class: 'gs-go', text: 'Add…' })])));
   };
   q.oninput = show; show();
+  let taking = false;   // a double click fetches (and copies) once
   async function take(x) {
-    let room; try { status.textContent = `Fetching “${x.title}”…`; room = await fetchShared(x); } catch (e) { status.textContent = e.message || String(e); return; }
+    if (taking) return; taking = true;
+    let room; try { status.textContent = `Fetching “${x.title}”…`; room = await fetchShared(x); } catch (e) { status.textContent = e.message || String(e); taking = false; return; }
     close(); app.addBookCopy({ title: x.title, color: x.color, icon: x.icon, room, from: { owner: x.owner, id: x.id }, verb: 'Put it there', heading: `Where should “${x.title}” go?` });
   }
 }
@@ -114,6 +116,9 @@ export async function openVisibility(app, book) {
 const timers = new Map();
 export function republishLater(app, book) {
   if (!book || book.visibility !== 'public') return; clearTimeout(timers.get(book.id));
-  timers.set(book.id, setTimeout(async () => { try { const room = await app.loadRoom(book.id), sh = app.lib.shelves.find(s => s.id === book.shelf); await publishBook(book, room, { tags: book.tags || [], shelfName: sh ? sh.name : '' }); } catch (e) { console.warn('republish', e); } }, 8000));
+  timers.set(book.id, setTimeout(async () => { timers.delete(book.id); if (app.lib && !app.lib.books.some(b => b.id === book.id)) return;   /* deleted meanwhile: never upload it again */
+    try { const room = await app.loadRoom(book.id), sh = app.lib.shelves.find(s => s.id === book.shelf); await publishBook(book, room, { tags: book.tags || [], shelfName: sh ? sh.name : '' }); } catch (e) { console.warn('republish', e); } }, 8000));
 }
 
+// a deleted book: its pending upload is dropped (main.js purgeBook unpublishes it)
+export function cancelRepublish(bookId) { clearTimeout(timers.get(bookId)); timers.delete(bookId); }

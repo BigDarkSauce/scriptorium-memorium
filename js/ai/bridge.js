@@ -39,12 +39,16 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
   if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
   const H = {}; new Headers(headers).forEach((v, k) => { H[k] = v; });
   const { id } = await tool('http_start', { url, method, headers: H, ...(body != null ? { body: String(body) } : {}) });
-  let from = 0, closed = false; const cancel = () => { if (closed) return; closed = true; tool('http_cancel', { id }).catch(() => { }); };
+  let from = 0, closed = false; const detach = () => { if (signal) signal.removeEventListener('abort', cancel); }, cancel = () => { detach(); if (closed) return; closed = true; tool('http_cancel', { id }).catch(() => { }); }, end = () => { closed = true; detach(); };
   if (signal) signal.addEventListener('abort', cancel, { once: true });
-  // the status first (an error answer arrives whole: wait for it, so its body and headers are complete)
-  let r = await tool('http_poll', { id, from, wait_ms: 20000 }, signal);
-  while (!r.done && !(r.status > 0)) { if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError'); r = await tool('http_poll', { id, from, wait_ms: 20000 }, signal); }
-  if (r.error && !(r.status > 0)) { closed = true; throw new TypeError('bridge: ' + r.error); }
+  // the status first (an error answer arrives whole: wait for it, so its body and headers are complete); a poll that
+  // fails here stops the request on the server too
+  let r;
+  try {
+    r = await tool('http_poll', { id, from, wait_ms: 20000 }, signal);
+    while (!r.done && !(r.status > 0)) { if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError'); r = await tool('http_poll', { id, from, wait_ms: 20000 }, signal); }
+  } catch (e) { cancel(); throw e; }
+  if (r.error && !(r.status > 0)) { end(); throw new TypeError('bridge: ' + r.error); }
   const enc = new TextEncoder(); let first = r;
   const stream = new ReadableStream({
     async pull(ctl) {
@@ -52,7 +56,7 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
         for (;;) {
           const x = first || await tool('http_poll', { id, from, wait_ms: 15000, have_status: true }, signal); first = null;
           if (x.text) { from = x.next; ctl.enqueue(enc.encode(x.text)); }
-          if (x.done) { closed = true; if (x.error && x.error !== 'cancelled') ctl.error(new TypeError('bridge: ' + x.error)); else ctl.close(); return; }
+          if (x.done) { end(); if (x.error && x.error !== 'cancelled') ctl.error(new TypeError('bridge: ' + x.error)); else ctl.close(); return; }
           if (x.text) return;   // one piece per pull: the reader decides the pace
         }
       } catch (e) { cancel(); ctl.error(signal && signal.aborted ? new DOMException('Aborted', 'AbortError') : e); }

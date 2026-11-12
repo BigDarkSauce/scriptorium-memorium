@@ -41,10 +41,17 @@ async function tx(mode, fn) {
 // library before slots used; the others live under "slot:<id>/". Global keys (the slot list itself) bypass the prefix.
 let P = '';
 export let slot = 'main';
-export function useSlot(id) { flushSaves(); slot = id || 'main'; P = slot === 'main' ? '' : 'slot:' + slot + '/'; mem.clear(); }
+// (in memory-only mode the map IS the storage, every slot's keys prefixed: it is cleared only when IndexedDB holds the data)
+export function useSlot(id) { flushSaves(); slot = id || 'main'; P = slot === 'main' ? '' : 'slot:' + slot + '/'; if (status.persistent) mem.clear(); }
 const K = k => P + k;
 export async function getGlobal(key) { const d = await db(); if (!d) return mem.get('§' + key); return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); } catch (e) { res(undefined); } }); }
 export async function setGlobal(key, val) { mem.set('§' + key, val); return tx('readwrite', s => s.put(val, key)); }
+export async function delGlobal(key) { mem.delete('§' + key); return tx('readwrite', s => s.delete(key)); }
+// the global keys (outside every slot's prefix) that start with `prefix`
+export async function globalKeys(prefix = '') {
+  const local = [...mem.keys()].filter(k => String(k).startsWith('§' + prefix)).map(k => String(k).slice(1)), d = await db(); if (!d) return local;
+  return new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).getAllKeys(); r.onsuccess = () => res([...new Set([...r.result.map(String).filter(k => k.startsWith(prefix)), ...local])]); r.onerror = () => res(local); } catch (e) { res(local); } });
+}
 // delete a whole slot's keys (never the main slot's)
 export async function dropSlot(id) { if (!id || id === 'main') return; const pre = 'slot:' + id + '/', d = await db(); if (!d) return; const all = await new Promise(res => { try { const r = d.transaction(OS).objectStore(OS).getAllKeys(); r.onsuccess = () => res(r.result); r.onerror = () => res([]); } catch (e) { res([]); } }); for (const k of all) if (String(k).startsWith(pre)) await tx('readwrite', s => s.delete(k)); }
 // values written in this session win (they are the newest, and they survive a failed write)

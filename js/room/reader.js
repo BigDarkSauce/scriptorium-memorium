@@ -8,7 +8,7 @@ import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
 import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
 import { chapterPrompt, detailPrompt } from '../ai/prompts.js';
-import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo } from '../ai/pipeline.js';
+import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo, roomCtx } from '../ai/pipeline.js';
 import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
@@ -61,9 +61,12 @@ export class Reader {
   close() {
     this.closed = true; this.stopReading(); Object.values(this._mediaJobs || {}).forEach(c => c && c.abort()); (this._mediaUrls || new Set()).forEach(u => URL.revokeObjectURL(u));
     this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
-  save() { this.room.save(); }
+  // saves go to whichever room of this book is live now (a long analysis may end after the room was left and entered
+  // again, or with no room open: then only this part is written into the stored room); pipeline.js roomCtx
+  save() { if (!this.room.disposed && this.app.mode === this.room) { this.room.save(); return; } this.ctx().save(this.part); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
   render() {
+    if (this.closed) return;   // an analysis or a check that ends after the scroll was closed: no listeners again
     const P = this.part, R = this.el; R.innerHTML = ''; this._figs = null;   // figures may have been cut since the last render
     const head = el('header', { class: 'reader-head' }, [
       el('div', { class: 'reader-title' }, [el('div', { class: 'kicker', text: (P.subOf ? 'Sub-scroll' : 'Part ' + (this.room.partIndex(P) + 1)) + (P.startPage ? ` · pages ${P.startPage}–${P.endPage}` : '') }), el('h2', { text: P.title })]),
@@ -205,7 +208,7 @@ export class Reader {
   // ---------- the analysis pipeline (docs/PROTOCOL.md, "Recipe for any AI"; js/ai/pipeline.js) ----------
   // chain → coverage follow-ups → quality gate with targeted repairs → figures → dioramas per subsection. Nothing stored
   // is ever recomputed or re-asked; an interrupted run resumes at the stage it reached.
-  ctx() { const room = this.room; return { app: this.app, book: room.book, data: room.data, save: () => this.save(), refresh: p => room.refreshStation(p) }; }
+  ctx() { const room = this.room, c = roomCtx(this.app, room.book.id); return Object.assign(c, { book: room.book, data: room.data }); }
   async material(st) { return pipeMaterial(this.ctx(), this.part, { onStatus: t => { if (st) st.textContent = t; } }); }
   async analyse(depth, n, st, go) {
     const P = this.part; go.disabled = true;

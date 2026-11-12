@@ -14,7 +14,7 @@ import { el, clamp } from './util.js';
 import { sfx } from './audio.js';
 
 const KEY = 'scriptorium.view';
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
+const load = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
 const save = o => { try { localStorage.setItem(KEY, JSON.stringify(Object.assign(load(), o))); } catch (e) { } };
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 export const EYE = 1.62, FOV_WALK = 68, JUMP_H = .45, GRAVITY = 9.81, HEAD = .12;
