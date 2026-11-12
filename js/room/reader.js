@@ -435,7 +435,7 @@ export class Reader {
     // "Check yourself" after the reading, unless the predict card above already asked this very question
     if (st.check && st.check.q && !(rv && (revealSpec(st) || {}).hook === st.check.q)) {
       // the check's figure may give the answer away: it is drawn only when the answer is revealed; looking at the answer
-      // puts the question in the spaced revisit deck (reveal.js enrollCheck)
+      // records the question in the ledger (reveal.js enrollCheck)
       const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
       art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); enrollCheck(this.part.id, this.part.title, st).catch(() => { }); } } }), ans]));
     }

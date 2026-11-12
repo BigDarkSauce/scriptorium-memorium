@@ -94,7 +94,7 @@ export function shuffleOrder(n, seed) {
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
   return order;   // order[k] = the original index of the option shown k-th
 }
-// The spaced card a step leaves in the revisit deck: its transfer question when it has one, else its "Check yourself"
+// The spaced card a step leaves in its ledger entry (kept for older ledgers and for transfer accuracy): its transfer question when it has one, else its "Check yourself"
 // (question and answer: free recall, graded by the reader with Again / Good), so every step with a check is spaced.
 export function revisitCard(st, R = revealSpec(st)) {
   const due = Date.now() + DAY;
