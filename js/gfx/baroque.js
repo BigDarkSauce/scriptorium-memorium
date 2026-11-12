@@ -990,10 +990,11 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const D0 = 40;
     // late-morning sun (~4800 K: warm-white, not orange); the candles stay at ~2000 K, the skylight in the probe is cool
     const sun = new THREE.DirectionalLight(0xffe6c8, 4.6); sun.position.copy(dir).multiplyScalar(-D0).add(V(0, h * .35, 0)); sun.target.position.set(0, h * .35, 0);
-    // the frustum fits the room's box (walls 0.6 m thick outside, the domes' rise above), not the sphere around it:
-    // texels ~5-7 mm instead of ~9, so the normal offset drops from 3.5 cm to 1.5 cm (no more shadows lifting off their
-    // casters) while staying >= 2 texels (no acne, even with the map at 1024 on 'low': tier.js); the depth bias, now over
-    // a shorter range, keeps ~1 cm
+    // the frustum fits the room's box (walls 0.6 m thick outside, the domes' rise above), not the sphere around it (the
+    // library hall: 23.5 x 18.7 m instead of 24.8 square, depth 22 m instead of 29); the normal offset is two texels of
+    // the 2048 map (2.3 cm in the hall, was 3.5: less lift-off at the casters' feet) and never under 1.5 cm, so with the
+    // map at 1024 on 'low' (tier.js) it is still a full texel (acne is worse than a little peter-panning); the depth bias
+    // stays ~1 cm over the shorter range
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     { const top = h + Math.max(0, ...domes.map(D => D.rise || 0)) + .3, tx = fitSunShadow(sun, new THREE.Box3(V(-w / 2 - .6, -.2, -d / 2 - .6), V(w / 2 + .6, top, d / 2 + .6)));
       const c = sun.shadow.camera; sun.shadow.normalBias = Math.max(.015, 2 * tx); sun.shadow.bias = -Math.min(.0006, .01 / Math.max(1, c.far - c.near)); }
