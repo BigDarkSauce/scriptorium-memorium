@@ -544,3 +544,42 @@ Measured on the reader's laptop (AMD Radeon 610M, Direct3D 11 through ANGLE), no
   the answer is an image). The launcher's relay has the same `?media=image` rule.
 - Tests: tools/test-media.mjs (29 checks: the word error rate and number words, the picture and audio thresholds, a
   3 MB picture and an audio answer byte-exact through the real extension, uploads byte-exact, the new address rules).
+
+## Round 22: five independent audits, four parallel implementations, one verifier
+
+How this round was run (and can be run again): five read-only auditors, each with one focus and a fresh context
+(rendering and frame stability; the learning pipeline against learning science and free-model reliability; a bug hunt;
+UX and immersion from real screenshots; an adversarial review of the media gates), each returning ranked findings with
+file:line evidence. Four implementers then worked in parallel on separate git worktrees (bugs, pipeline + learning,
+rendering, UX), each verifying with the unit suites and the browser smoke test, and their branches were merged here; a
+fresh verifier reviewed the integrated diff. Findings that proved wrong on inspection were skipped and said so.
+
+- **Media gates (adversarial review)**: a picture is first described *blind* (no step, no brief), then scored from that
+  description in a text-only call, so a reviewer cannot "see" what it is told; a blank-page canary drops reviewers that
+  cannot see; scores must be integers 0–5; a listed issue fails; any writing seen fails; the brief is checked against
+  the step before drawing; retries meet one more reviewer. Speech: one lost or changed critical word (negation,
+  number, comparative, long technical term) rejects a piece whatever the rate; symbols normalised on both sides; spoken
+  formulas checked by a second model; the first piece pins the voice, the rest run three at a time. Kept media carry a
+  hash of the step text (no stale picture after a rewrite); pictures kept as WebP.
+- **Bugs fixed** (13): "Re-split the PDF" emptied rooms without a PDF; a reader's analysis saved into a stale room copy;
+  leaving a room with a scroll open leaked it and kept audio playing; deleted public books stayed shared; memory-only
+  mode lost the other library on a slot switch; media never purged with its book; a PDF split kept building a closed
+  room; delete/undo across slots; render after close re-added listeners; Back during a room load; object URLs; double
+  "Get"; a bridge request left running. tools/test-lifecycle.mjs.
+- **Learning**: readable after the first stage (the scroll rebuilds in place while the rest is written); cut-off chains
+  kept when valid; only validated answers cached (`fresh` on a forced re-analysis); chain calls go to strong models
+  (rank ≥ 80) first; free models are no longer told to cite sources they cannot look up; unmatched numbers get one
+  rewrite. The predict card comes *before* the statement (pretesting), options shuffled per step; every step with a
+  check enters spaced revision as a free-recall card; worked examples reveal one line at a time, derivation reasons on
+  "why?".
+- **Rendering**: the governor steps MSAA, then resolution, then quality (only when still, behind the compile gate); a
+  guard lost inside a comment restored; resolution can rise again on 60 Hz without the GPU timer; white balance in
+  scene-linear before tone mapping (gains refitted to [.88, 1.39, 2.27] by least squares to the former look: no cyan
+  clipping); room shadows redrawn only on change; outline prewarmed; per-frame garbage removed; sun shadow frusta fitted
+  to the room, smaller bias; dust motes in the window shafts (one draw call); focus pull behind an open scroll; smoothed
+  mouse look. Measured on SwiftShader: room draw calls 76 → 47.
+- **UX**: the hall title clickable and inset again; staged first-visit tips and a glowing nearest scroll; the nearest
+  scroll's title engraved low on screen; letterboxed arrivals with a part card; the reader's first screen is reading
+  (authoring tools in its ⋯ menu); 17 px body, 72ch measure; reduced motion honoured by the camera; `[` / `]` cycle
+  scrolls and stations; F/V ignore Ctrl/Cmd; held keys released on blur; a quieter HUD; the AI panel defaults to an
+  engine that is available.
