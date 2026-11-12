@@ -6,7 +6,8 @@
 //   surprise  a confident wrong prediction is named as such, with the misconception refuted
 //   boundary  the case the rule fails on (the truth constraint: no compression ships without its edge)
 //   explain   the reader says why the answer is right, in their own words (kept, never graded by a machine)
-//   transfer  a new situation, asked again on a later day, interleaved with other scrolls' (the only honest measure)
+//   transfer  a new situation that uses the same rule, asked in the scroll right after the step's analogy (renderTransfer):
+//             the analogy says what is alike, the new situation tests whether the likeness was understood
 //
 // The evidence each phase rests on (all checked in OpenAlex; docs/research/revelation-engine.md):
 //   predicting first makes observing correctly ~20 % likelier, right or wrong (Miller et al. 2013, PRST-PER);
@@ -24,6 +25,7 @@
 import { el, toast } from '../util.js';
 import { prose } from './prose.js';
 import * as store from '../store.js';
+import { clipSentence } from '../dio/prims/spec.js';
 
 const KEY = 'reveal:ledger', DAY = 864e5;
 let ledger = null, loading = null;
@@ -64,7 +66,7 @@ export function revealSpec(st) {
 }
 // an AI's (or an import's) reveal, kept to known fields and plain strings (normalizeChain, reader.js)
 export function normReveal(r) {
-  if (!r || typeof r !== 'object') return null; const S = (v, n = 400) => v == null ? '' : String(v).replace(/\s+/g, ' ').trim().slice(0, n);
+  if (!r || typeof r !== 'object') return null; const S = (v, n = 400) => v == null ? '' : clipSentence(v, n);   /* a long text is shortened only at a sentence end */
   const opts = o => Array.isArray(o) ? o.filter(x => x && (x.text || typeof x === 'string')).slice(0, 5).map(x => typeof x === 'string' ? { text: S(x, 240) } : { text: S(x.text, 240), ...(x.correct ? { correct: true } : {}), ...(x.why ? { why: S(x.why, 300) } : {}) }) : null;
   const out = { ...(EPISTEMIC.includes(r.type) ? { type: r.type } : {}), ...(r.hook ? { hook: S(r.hook) } : {}), ...(r.rule ? { rule: S(r.rule) } : {}), ...(r.answer ? { answer: S(r.answer, 600) } : {}), ...(r.misconception ? { misconception: S(r.misconception) } : {}) };
   const po = r.predict && opts(r.predict.options); if (po && po.length >= 2) out.predict = { options: po };
@@ -148,14 +150,14 @@ export function renderReveal(st, ctx) {
     // a confident error is the best moment to correct a misconception: say what the wrong model was, and why it fails
     if (surprise && R.misconception) body.append(el('div', { class: 'rv-refute' }, [el('span', { class: 'rvl-tag', text: hyper ? 'Why it felt right' : 'The tempting model' }), el('span', { html: prose(R.misconception) })]));
     if (hyper) body.append(el('p', { class: 'rvl-note dim small', text: 'Confident errors, once corrected, are among the best-remembered things there are. This one is now worth more than a lucky guess.' }));
-    if (R.analogy) body.append(renderAnalogy(R.analogy));
+    if (R.analogy) body.append(renderAnalogy(R.analogy, ctx, st));
     // the truth constraint: the rule's edge, opened by the reader (finding where it breaks is the second "aha")
     if (R.boundary) { const b = el('div', { class: 'rv-bound', hidden: true, html: '<b>Where it stops working.</b> ' + prose(R.boundary.case) + (R.boundary.why ? ' <span class="dim">' + prose(R.boundary.why) + '</span>' : '') }); body.append(el('button', { class: 'linkbtn rv-edge', type: 'button', text: 'Find the edge of this rule', onclick: ev => { b.hidden = false; ev.target.remove(); ctx.typeset && ctx.typeset(b); } }), b); }
     // self-explanation: in their words, kept for them; never graded
     const ex = el('textarea', { class: 'rv-free', rows: 2, placeholder: 'Why is it so? Say it back in one line (it stays with this step).', 'aria-label': 'Your explanation', text: e.why || '' });
     ex.onchange = () => { e.why = ex.value.slice(0, 600); save(); };
     body.append(el('details', { class: 'rv-explain', open: !!e.why }, [el('summary', { text: e.why ? 'Your explanation' : 'Explain it back (optional)' }), ex]));
-    if (e.tr) body.append(el('div', { class: 'rv-next dim small', html: e.tr.recall ? `This question comes back ${dueText(e.tr.due)}, mixed with other scrolls', to answer from memory. Recalling it then, not reading it now, is what makes it stay.` : `A new situation that uses this rule will come back ${dueText(e.tr.due)}, mixed with other scrolls'. That, not this screen, is the real test.` }));
+    if (R.transfer) body.append(el('div', { class: 'rv-next dim small', text: 'A new situation that uses this rule waits further down this step, after the explanation: try it there.' }));
     body.append(el('button', { class: 'linkbtn rv-again', type: 'button', text: 'Predict again', onclick: () => { card.classList.remove('revealed', 'rv-surprise', 'rv-hyper', 'rv-right'); head.querySelector('.rv-kicker').textContent = 'Predict, then unfold'; pick = conf = null; free = ''; ask(); } }));
     ctx.typeset && ctx.typeset(card);
     if (fresh) {
@@ -167,7 +169,15 @@ export function renderReveal(st, ctx) {
   loadLedger().then(() => { const e = prior(); if (e && e.t) show(e, false); else ask(); });
   return card;
 }
-function renderAnalogy(a) {
+// an analogy in a reveal is drawn the same way as everywhere else: the selectable analogy map (js/dio/prims/analogy.js),
+// each row drawn on both sides when selected; only one too thin to map (fewer than two pairs) stays a small table
+export function analogyFigure(a, target) {
+  if (!a || !a.source || !Array.isArray(a.maps) || a.maps.length < 2) return null; const br = Array.isArray(a.breaks) ? a.breaks : a.breaks ? [a.breaks] : [];
+  if (!br.length) return null;
+  return { kind: 'analogy_map', caption: 'Click a row to see both sides drawn; the torn edge is where the likeness stops.', source: String(a.source), target: String(target || a.target || 'this idea'), maps: a.maps.map(m => Array.isArray(m) ? [m[0], m[1], m[2] || ''] : m), breaks: br };
+}
+function renderAnalogy(a, ctx, st) {
+  const f = analogyFigure(a, st && st.title); if (f && ctx.figure) return el('div', { class: 'rv-analogy' }, [el('span', { class: 'rvl-tag', text: 'Like ' + (a.source || 'this') }), ctx.figure(f)]);
   return el('div', { class: 'rv-analogy' }, [el('span', { class: 'rvl-tag', text: 'Like ' + (a.source || 'this') }),
     Array.isArray(a.maps) && a.maps.length ? el('table', { class: 'rv-map' }, [el('tbody', {}, a.maps.slice(0, 6).map(m => el('tr', {}, [el('td', { html: prose(String(m[0] || '')) }), el('td', { class: 'dim', text: '↔' }), el('td', { html: prose(String(m[1] || '')) })])))]) : null,
     a.breaks ? el('div', { class: 'rv-breaks', html: '<b>Where the likeness breaks:</b> ' + prose(a.breaks) }) : null]);
@@ -180,14 +190,7 @@ function session() {
   if (S.length === 6) toast('Six new models in one sitting. Spacing beats cramming: the ones due tomorrow will mean more then than a seventh would now.');
 }
 
-// ---- the transfer deck: new situations, spaced and interleaved across scrolls ----
-export async function dueTransfers(now = Date.now()) {
-  await loadLedger(); const out = Object.entries(ledger.e).filter(([, e]) => e.tr && e.tr.due <= now).map(([id, e]) => ({ id, e }));
-  // interleave: never two in a row from the same scroll when another is available
-  const by = {}; out.forEach(x => (by[x.e.part] = by[x.e.part] || []).push(x)); const keys = Object.keys(by), mixed = [];
-  while (keys.some(k => by[k].length)) keys.forEach(k => { if (by[k].length) mixed.push(by[k].shift()); });
-  return mixed;
-}
+// ---- the ledger's numbers (loops closed, transfer questions answered) ----
 export async function stats() {
   await loadLedger(); const E = Object.values(ledger.e), H = E.flatMap(e => (e.tr && !e.tr.recall && e.tr.hist) || []);   /* transfer accuracy counts transfer questions only, not self-graded recall */
   return { loops: E.filter(e => e.t).length, cards: E.filter(e => e.tr).length, predicted: E.filter(e => e.ok != null).length, rightFirst: E.filter(e => e.ok === true).length, transfers: H.length, transferRight: H.filter(Boolean).length, due: E.filter(e => e.tr && e.tr.due <= Date.now()).length };
@@ -196,31 +199,30 @@ export function answerTransfer(id, correct) {
   const e = ledger && ledger.e[id]; if (!e || !e.tr) return; const T = e.tr; T.n++; T.hist.push(correct ? 1 : 0); T.hist = T.hist.slice(-12);
   T.iv = correct ? Math.min(120, Math.max(2, T.iv * 2.5)) : 1; T.due = Date.now() + T.iv * DAY; save();
 }
-export async function openDeck(ctx = {}) {
-  const items = await dueTransfers(), S = await stats();
-  const veil = el('div', { class: 'modal-veil rv-deck-veil' }); const box = el('div', { class: 'modal rv-deck', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Revisit' }); veil.append(box);
-  const close = () => { veil.remove(); removeEventListener('keydown', key); ctx.onClose && ctx.onClose(); }, key = e => { if (e.key === 'Escape') close(); };
-  addEventListener('keydown', key); veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  const acc = S.transfers ? Math.round(100 * S.transferRight / S.transfers) + ' %' : '—';
-  box.append(el('div', { class: 'rv-deck-head' }, [el('h3', { text: 'Revisit: new situations' }), el('button', { class: 'ibtn', 'aria-label': 'Close', text: '×', onclick: close })]),
-    el('div', { class: 'rv-stats' }, [stat(S.loops, 'models built'), stat(acc, 'transfer, first try'), stat(S.due, 'due now')]),
-    el('p', { class: 'dim small', text: 'Each question puts a rule you uncovered into a situation you have not seen; a step’s “Check yourself” comes back to answer from memory. Getting these right is what understanding means here; they come back further apart each time you do.' }));
-  const list = el('div', { class: 'rv-deck-list' }); box.append(list);
-  if (!items.length) list.append(el('p', { class: 'rv-empty', text: S.loops || S.cards ? 'Nothing is due. The next ones come back on their own day.' : 'Predict in a scroll\'s "Predict, then unfold" cards: each rule you uncover comes back here later, in a new situation.' }));
-  items.slice(0, 8).forEach(({ id, e }) => {
-    const T = e.tr, row = el('div', { class: 'rv-item' }, [el('div', { class: 'rv-from dim small', text: e.part + ' · ' + e.title }), el('div', { class: 'rv-hook', html: prose(T.q) })]);
-    const finish = ok => { answerTransfer(id, ok); row.classList.add(ok ? 'rv-right' : 'rv-surprise'); row.append(el('div', { class: 'rv-answer', html: (T.recall ? '' : (ok ? '<b>Transferred.</b> ' : '<b>Not yet.</b> ') + prose(T.why || '')) + (T.rule ? `<div class="rv-rule"><span class="rvl-tag">The rule</span> ${prose(T.rule)}</div>` : '') + `<div class="dim small">Back ${dueText(T.due)}.</div>` })); ctx.typeset && ctx.typeset(row); };
-    // free recall (a step's "Check yourself"): answer from memory, then look, then say honestly how it went
-    if (T.recall) { const acts = el('div', { class: 'rv-actions' }); const show = el('button', { class: 'btn small', type: 'button', text: 'Show the answer', onclick: () => { show.remove(); row.insertBefore(el('div', { class: 'rv-answer', html: prose(T.a || '') }), acts); ctx.typeset && ctx.typeset(row);
-      const grade = ok => () => { acts.remove(); finish(ok); };
-      acts.append(el('span', { class: 'dim small', text: 'Did you recall it? ' }), el('button', { class: 'btn ghost small', type: 'button', text: 'Again', title: 'I did not recall it: back tomorrow', onclick: grade(false) }), el('button', { class: 'btn small', type: 'button', text: 'Good', title: 'I recalled it: back later', onclick: grade(true) }));
-      const g = acts.querySelector('button:last-child'); g && g.focus(); } });
-      acts.append(show); row.append(el('p', { class: 'dim small', text: 'Answer it in your head (or aloud) first.' }), acts); list.append(row); return; }
-    if (Array.isArray(T.options) && T.options.length) row.append(el('div', { class: 'rv-opts' }, shuffleOrder(T.options.length, id).map((i, k) => { const o = T.options[i]; return el('button', { class: 'rv-opt', type: 'button', 'data-opt': String(i), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(o.text), onclick: ev => { row.querySelectorAll('.rv-opt').forEach(b => { b.disabled = true; if (T.options[+b.dataset.opt].correct) b.classList.add('right'); }); if (!o.correct) ev.currentTarget.classList.add('wrong'); finish(!!o.correct); } }); })));
-    else row.append(el('div', { class: 'rv-actions' }, [el('button', { class: 'btn small', type: 'button', text: 'I could apply it', onclick: ev => { ev.target.parentNode.remove(); finish(true); } }), el('button', { class: 'btn ghost small', type: 'button', text: 'I could not', onclick: ev => { ev.target.parentNode.remove(); finish(false); } })]));
-    list.append(row);
-  });
-  document.body.append(veil); ctx.typeset && ctx.typeset(box); const f = box.querySelector('button.rv-opt, .rv-actions button'); f && f.focus();
-  return box;
+
+// ---- "Try it in a new situation": the step's transfer question, inline in the scroll, right after its analogy ----
+// (it replaces the separate Revisit window: a new situation means most next to the analogy and the rule it tests)
+// The answer is kept in the ledger entry of the step (e.ti = {p: the option's original index, ok, t}) and counted in
+// the transfer history (answerTransfer), so an older ledger with deck cards stays valid.
+export function transferSpec(st) { const r = st && st.reveal; return r && r.transfer && r.transfer.q ? r.transfer : null; }
+export function renderTransfer(st, ctx) {
+  const T = transferSpec(st); if (!T) return null;
+  const id = ctx.partId + '/' + st.id, opts = Array.isArray(T.options) && T.options.length >= 2 && T.options.some(o => o && o.correct) ? T.options : null, order = opts ? shuffleOrder(opts.length, id + '/transfer') : [];
+  const rule = (st.reveal && st.reveal.rule) || '';
+  const card = el('div', { class: 'transfer-card', 'data-sid': st.id }), body = el('div', { class: 'tr-body' });
+  card.append(el('div', { class: 'tr-head' }, [el('span', { class: 'rv-kicker', text: 'Try it in a new situation' }), el('div', { class: 'rv-hook', html: prose(T.q) })]), body);
+  const record = async (p, ok) => { await loadLedger(); const e = ledger.e[id] = Object.assign(ledger.e[id] || {}, { title: st.title || '', part: ctx.partTitle || '' }); if (!e.tr || e.tr.recall) e.tr = revisitCard(st, { transfer: T, rule }); e.ti = { p, ok, t: Date.now() }; if (e.tr && ok != null) answerTransfer(id, ok); else save(); };
+  const verdict = (ok) => el('div', { class: 'rv-answer tr-why', html: (ok === true ? '<b>Transferred.</b> ' : ok === false ? '<b>Not yet.</b> ' : '') + prose(T.why || '') + (rule ? `<div class="rv-rule"><span class="rvl-tag">The rule</span> <span>${prose(rule)}</span></div>` : '') });
+  const ask = () => { body.innerHTML = ''; card.classList.remove('rv-right', 'rv-surprise');
+    if (opts) body.append(el('div', { class: 'rv-opts', role: 'group', 'aria-label': 'Your answer' }, order.map((i, k) => el('button', { class: 'rv-opt', type: 'button', 'data-opt': String(i), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(opts[i].text), onclick: () => { record(i, !!opts[i].correct); shown(i, true); } }))));
+    else body.append(el('div', { class: 'rv-actions' }, [el('span', { class: 'dim small', text: 'Work it out first, then look.' }), el('button', { class: 'btn small', type: 'button', text: 'Show the answer', onclick: () => { record(null, null); shown(null, true); } })]));
+  };
+  const shown = (p, fresh) => { body.innerHTML = '';
+    if (opts) { const ok = p != null && !!opts[p].correct; card.classList.toggle('rv-right', ok); card.classList.toggle('rv-surprise', p != null && !ok);
+      body.append(el('div', { class: 'rv-opts done' }, order.map((i, k) => { const o = opts[i]; return el('div', { class: 'rv-opt' + (o.correct ? ' right' : '') + (i === p && !o.correct ? ' wrong' : '') + (i === p ? ' picked' : ''), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(o.text) + (o.why && (o.correct || i === p) ? `<span class="rv-why">${prose(o.why)}</span>` : '') }); })), verdict(ok)); }
+    else body.append(verdict(null));
+    body.append(el('button', { class: 'linkbtn rv-again', type: 'button', text: 'Try it again', onclick: ask }));
+    ctx.typeset && ctx.typeset(card); if (fresh && ctx.sfx) ctx.sfx.play(opts && p != null && opts[p].correct ? 'step-done' : 'paper', { gain: .6 }); };
+  ask(); loadLedger().then(() => { const e = ledger.e[id]; if (e && e.ti && (e.ti.p == null || (opts && opts[e.ti.p]))) shown(e.ti.p, false); }).catch(() => { });
+  return card;
 }
-const stat = (v, t) => el('div', { class: 'rv-stat' }, [el('b', { text: String(v) }), el('span', { text: t })]);

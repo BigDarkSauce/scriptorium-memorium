@@ -8,6 +8,8 @@
 //   domainSequence(domain)  the didactic beats a domain's explanation follows (used by js/dio/plans.js)
 // A step may carry the AI's own choice as  "visual": {"domain","structure","primitive","why"}; it wins when valid.
 
+import { clipSentence, normDepict } from './prims/spec.js';
+
 export const DOMAINS = ['cs', 'maths', 'economics', 'business', 'philosophy', 'data', 'physical'];
 export const DOMAIN_NAMES = { cs: 'Programming & computation', maths: 'Mathematics', economics: 'Economics', business: 'Business', philosophy: 'Philosophy', data: 'Data & evidence', physical: 'Physical sciences' };
 export const STRUCTURES = ['construction', 'state_machine', 'transformation', 'distribution', 'causal_graph', 'competing', 'flow_network', 'argument_graph', 'taxonomy', 'data_narrative', 'algorithm', 'mechanism', 'agent_system', 'inference', 'emergence', 'control', 'analogy'];
@@ -273,10 +275,15 @@ export function validatePrimitive(f, E) {
     f.delay = num(f.delay) ? Math.max(0, Math.min(20, N(f.delay))) : 1; f.leak = num(f.leak) ? Math.max(0, Math.min(1, N(f.leak))) : .1; f.ambient = num(f.ambient) ? N(f.ambient) : 10;
     f.unit = str(f.unit || '°C', 8); f.output = str(f.output || 'room temperature', 30); f.actuator = str(f.actuator || 'heater power', 30);
   } else if (k === 'analogy_map') {
-    // {source, target, maps:[[source part, target part, relation?]], breaks:[...]}
+    // {source, target, maps:[[source part, target part, relation?, depict?] | {a, b, rel, depict?}], breaks:[str | {text, depict?}]}
+    // depict = {source:{kind, params}, target:{kind, params}}: what to draw for each side when the row is selected
+    // (js/dio/prims/depict.js); without it the reader picks a depiction from the words. Breaks are kept whole (a cut
+    // sentence teaches nothing): a long one is shortened only at a sentence end.
+    const dep = d => { if (!d || typeof d !== 'object') return null; const s = normDepict(d.source), t = normDepict(d.target); return s || t ? { ...(s ? { source: s } : {}), ...(t ? { target: t } : {}) } : null; };
     f.source = str(f.source, 50); f.target = str(f.target, 50);
-    f.maps = arr(f.maps).slice(0, 7).map(m => Array.isArray(m) ? { a: str(m[0], 50), b: str(m[1], 50), rel: str(m[2] || '', 60) } : { a: str(m.a || m.source, 50), b: str(m.b || m.target, 50), rel: str(m.rel || m.relation || '', 60) }).filter(m => m.a && m.b);
-    f.breaks = arr(f.breaks).slice(0, 4).map(x => str(x, 140)).filter(Boolean);
+    f.maps = arr(f.maps).slice(0, 7).map(m => { const o = Array.isArray(m) ? { a: str(m[0], 60), b: str(m[1], 60), rel: str(m[2] || '', 60) } : { a: str(m && (m.a || m.source), 60), b: str(m && (m.b || m.target), 60), rel: str(m && (m.rel || m.relation) || '', 60) }; const d = dep(Array.isArray(m) ? m[3] : m && m.depict); if (d) o.depict = d; return o; }).filter(m => m.a && m.b);
+    const BD = arr(f.breakDepict), B = arr(f.breaks).slice(0, 4).map((x, i) => typeof x === 'string' ? { text: clipSentence(x, 320), depict: dep(BD[i]) } : x && typeof x === 'object' ? { text: clipSentence(x.text || x.break || '', 320), depict: dep(x.depict) || dep(BD[i]) } : { text: '' }).filter(x => x.text);
+    f.breaks = B.map(x => x.text); if (B.some(x => x.depict)) f.breakDepict = B.map(x => x.depict || null); else delete f.breakDepict;
     if (!f.source || !f.target) E.push('analogy_map needs "source" and "target"');
     if (f.maps.length < 2) E.push('analogy_map needs ≥ 2 "maps" ([source part, target part, relation])');
     if (!f.breaks.length) E.push('analogy_map needs "breaks": where the likeness stops holding (an analogy without its limits teaches a misconception)');

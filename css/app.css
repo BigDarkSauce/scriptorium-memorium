@@ -1304,3 +1304,27 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .ai-details[open] { padding-bottom: 10px; } .ai-details > .ai-reach { margin-bottom: 8px; }
 .ai-panel a, .ai-panel .linkbtn { font: inherit; color: var(--brass); background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: rgba(255,217,138,.45); text-underline-offset: 2px; cursor: pointer; }
 .ai-panel a:hover, .ai-panel .linkbtn:hover { color: var(--brass-hi); text-decoration-color: currentColor; }
+
+/* ==== FIGURES: analogy panel, "Picture it" illustrations, inline transfer card (js/dio/prims/analogy.js, depict.js,
+   js/room/diagrams.js flow, js/room/reveal.js renderTransfer) ==== */
+.an-panel { margin: 6px 0 2px; padding: 8px 10px 10px; border: 1px solid rgba(90,60,30,.22); border-radius: 10px; background: #fffaf0; display: grid; gap: 8px; }
+.an-panel[hidden] { display: none; }
+.an-panel.an-break { border-color: rgba(156,58,40,.45); background: rgba(156,58,40,.04); }
+.an-head { font-size: 14px; line-height: 1.4; } .an-head i { color: var(--iron-soft, #5b4532); }
+.an-head .an-arrow { color: var(--iron-soft, #5b4532); } .an-head.brk .an-x { color: var(--rubric); font-weight: 700; }
+.an-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.an-side { margin: 0; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.an-k { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; }
+.an-side.src .an-k { color: #8f733a; } .an-side.tgt .an-k { color: #2d5b8e; }
+.an-vig { border-radius: 8px; border: 1px solid rgba(90,60,30,.18); background: #fbf6ea; overflow: hidden; }
+.an-side.src .an-vig { border-color: rgba(143,115,58,.5); } .an-side.tgt .an-vig { border-color: rgba(45,91,142,.45); }
+.an-vig .dp-svg, .dp-svg { display: block; width: 100%; height: auto; }
+.an-words { margin: 0; font-size: 13.5px; line-height: 1.4; }
+@media (max-width: 520px) { .an-cols { grid-template-columns: 1fr; } }
+.prim-analogy_map .an-hit:focus-visible { outline: 2px solid var(--lapis); outline-offset: 1px; }
+.fig-host.illustrated { max-width: 640px; }
+.transfer-card { max-width: 68ch; padding: 10px 14px 12px; border-radius: 12px; border: 1px solid rgba(45,91,142,.4); background: linear-gradient(180deg, rgba(246,250,255,.9), rgba(236,242,250,.85)); display: grid; gap: 8px; }
+.transfer-card .tr-head { display: grid; gap: 3px; } .transfer-card .rv-kicker { color: #2d5b8e; }
+.transfer-card .tr-body { display: grid; gap: 8px; }
+.transfer-card.rv-right { border-color: rgba(63,125,110,.6); } .transfer-card.rv-surprise { border-color: rgba(156,58,40,.5); }
+/* ==== end FIGURES ==== */

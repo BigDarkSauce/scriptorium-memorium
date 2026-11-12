@@ -7,6 +7,7 @@
 //   figureSlots(step)         → [{slot, text, fig, small}]  every place in a step that needs a figure
 import { compile } from '../util.js';
 import { PRIMITIVES, PRIMITIVE_KINDS, validatePrimitive } from '../dio/domains.js';
+import { clipSentence } from '../dio/prims/spec.js';
 
 export const BASE_KINDS = ['flow', 'plot', 'distribution', 'bars', 'hist', 'scatter', 'boxplot', 'numberline', 'tree', 'venn', 'timeline', 'sketch', 'codetrace', 'table', 'contrast', 'pdf'];
 // the domain primitives (js/dio/domains.js, drawn by js/dio/prims/*.js): interactive figures of the explanatory compiler
@@ -48,11 +49,11 @@ export function validateFigure(spec) {
   if (!f) return { ok: false, errors: ['not an object'], fig: null };
   f.kind = String(f.kind || f.type || '').toLowerCase(); delete f.type;
   if (!FIGURE_KINDS.includes(f.kind)) return { ok: false, errors: [`unknown kind "${f.kind}"`], fig: null };
-  f.caption = str(f.caption || f.title || '', 220); if (!f.caption && f.kind !== 'pdf') E.push('no "caption"');
+  f.caption = clipSentence(f.caption || f.title || '', 320); if (!f.caption && f.kind !== 'pdf') E.push('no "caption"');
   if (f.title) f.title = str(f.title, 90);
   const k = f.kind;
   if (k === 'flow') {
-    f.nodes = arr(f.nodes).slice(0, 12).map((n, i) => typeof n === 'string' ? { id: 'n' + i, label: str(n, 60) } : { id: str(n.id || 'n' + i, 30), label: str(n.label || n.id, 60), ...(n.note ? { note: str(n.note, 60) } : {}) }).filter(n => n.label);
+    f.nodes = arr(f.nodes).slice(0, 12).map((n, i) => typeof n === 'string' ? { id: 'n' + i, label: clipSentence(n, 140) } : { id: str(n.id || 'n' + i, 30), label: clipSentence(n.label || n.id, 140), ...(n.note ? { note: clipSentence(n.note, 90) } : {}), ...(n.depict ? { depict: n.depict } : {}) }).filter(n => n.label);
     const ids = new Set(f.nodes.map(n => n.id));
     f.edges = arr(f.edges).map(e => Array.isArray(e) ? { from: e[0], to: e[1], label: e[2] } : e).filter(e => e && ids.has(String(e.from)) && ids.has(String(e.to))).slice(0, 24).map(e => ({ from: String(e.from), to: String(e.to), ...(e.label ? { label: str(e.label, 40) } : {}) }));
     if (f.nodes.length < 2) E.push('flow needs at least 2 nodes');
@@ -125,7 +126,7 @@ export function validateFigure(spec) {
     f.highlight = arr(f.highlight).filter(h => Array.isArray(h) && num(h[0]) && num(h[1]));
     if (!f.rows.length) E.push('table needs "rows"');
   } else if (k === 'contrast') {
-    const side = s => typeof s === 'string' ? { text: str(s, 200) } : s && s.text ? { title: str(s.title, 40), text: str(s.text, 200) } : null;
+    const side = s => typeof s === 'string' ? { text: clipSentence(s, 600) } : s && s.text ? { title: str(s.title, 40), text: clipSentence(s.text, 600), ...(s.icon ? { icon: s.icon } : {}) } : null;   /* a side's text is kept whole (cut only at a sentence end): a sentence that stops mid-way teaches nothing */
     f.wrong = side(f.wrong); f.right = side(f.right); if (!f.wrong || !f.right) E.push('contrast needs "wrong" and "right"');
   } else if (k === 'pdf') {
     f.id = str(f.id || f.figure, 40); if (!f.id) E.push('pdf needs the figure "id"');
@@ -161,11 +162,12 @@ export function setSlotFigure(st, slot, fig) {
 // Built only from what the step already says, so it never invents data: a chain of the paragraph's clauses (flow), the
 // step's code (codetrace), its table (bars or table), a wrong-vs-right card for a mistake, question → answer for a check.
 const clauses = t => String(t || '').replace(/\$[^$]*\$/g, m => m.slice(1, -1)).split(/(?<=[.;:!?])\s+|\s+(?:so|then|because|therefore|which|and then)\s+/i).map(s => s.replace(/[.;:]$/, '').trim()).filter(s => s.length > 3);
+const full = s => { s = String(s || '').trim(); return s && !/[.!?…)]$/.test(s) ? s + '.' : s; };
 const short = (s, n = 46) => { s = String(s || '').trim(); if (s.length <= n) return s; const c = s.slice(0, n); return c.slice(0, Math.max(c.lastIndexOf(' '), n * .6)) + '…'; };
 export function autoFigure(st, slot, text) {
   text = text || '';
   const cap = (s => s.charAt(0).toUpperCase() + s.slice(1))(short(String(text).replace(/\$[^$]*\$/g, m => m.slice(1, -1)), 120));
-  if (slot === 'misconception') { const c = clauses(text); return { kind: 'contrast', caption: 'The mistake, and what is true instead.', wrong: { title: 'Mistaken', text: short(c[0] || text, 140) }, right: { title: 'Instead', text: short(c.slice(1).join('. ') || (st.statement || ''), 160) }, auto: true }; }
+  if (slot === 'misconception') { const c = clauses(text); return { kind: 'contrast', caption: 'The mistake, and what is true instead.', wrong: { title: 'Mistaken', text: clipSentence(full(c[0] || text), 300) }, right: { title: 'Instead', text: clipSentence(full(c.slice(1).join('. ') || (st.statement || '')), 400) }, auto: true }; }
   if (slot === 'check') return { kind: 'flow', caption: 'From the question to its answer.', nodes: [{ id: 'q', label: short(st.check && st.check.q, 50) }, ...clauses(st.check && st.check.a).slice(0, 2).map((c, i) => ({ id: 'a' + i, label: short(c, 46) }))], dir: 'LR', auto: true };
   if (st.code && Array.isArray(st.code.lines) && st.code.lines.length && slot !== 'intuition') return { kind: 'codetrace', caption: 'The code, line by line.', lang: st.code.lang || 'r', lines: st.code.lines.slice(0, 8).map(l => ({ code: l.code || String(l), note: short(l.explain || l.note || '', 80) })), output: Array.isArray(st.code.output) ? st.code.output.slice(0, 4) : st.code.output ? String(st.code.output).split('\n').slice(0, 4) : [], auto: true };
   if (st.table && Array.isArray(st.table.rows) && st.table.rows.length >= 2) { const b = validateFigure({ kind: 'bars', caption: st.table.caption || 'The table as a chart.', table: st.table }); if (b.ok) return { ...b.fig, auto: true }; return { kind: 'table', caption: st.table.caption || 'The table.', columns: st.table.columns, rows: st.table.rows, auto: true }; }
@@ -173,4 +175,37 @@ export function autoFigure(st, slot, text) {
   const nodes = (c.length >= 2 ? c : [...(st.terms || []).map(t => String(t.term).replace(/\$/g, '')), ...(st.bodies || [])].slice(0, 4)).map((s, i) => ({ id: 'n' + i, label: short(s, 44) }));
   if (nodes.length < 2) nodes.push({ id: 'n9', label: short(st.title || 'this step', 44) }, { id: 'n10', label: short(st.opens || 'next question', 44) });
   return { kind: 'flow', caption: cap || 'The idea in steps.', nodes, dir: nodes.length > 3 ? 'TB' : 'LR', auto: true };
+}
+
+// ---------------------------------------------------------------- redundant node diagrams
+// A node diagram (flow, tree) that only puts the step's own words into boxes adds congestion, not meaning, when the step
+// already shows the same thing in an animation or a richer figure. redundantFigures(step, motions) → the Set of such
+// figure objects (the reader skips them; they stay in the data). A diagram is kept when it adds anything: a node or an
+// edge label whose words the step does not say, a number the text does not give, or when nothing richer covers it.
+export const isFlow = f => !!f && (f.kind || f.type) === 'flow';
+const STOP = new Set('the a an and or of to in on at by for with from as is are was were be been it its this that these those then than into onto over under each every one two only more most less very not no so which who what when where how why does do did has have had can will would may might per via about between through their there them they his her our your'.split(' '));
+const stem = w => w.replace(/(ies)$/, 'y').replace(/(ing|ed|es|s)$/, '').replace(/(.)\1$/, '$1');
+const toks = s => String(s || '').toLowerCase().replace(/\$[^$]*\$/g, m => ' ' + m.slice(1, -1) + ' ').split(/[^\p{L}\p{N}_]+/u).filter(w => w.length >= 3 && !STOP.has(w)).map(stem);
+const nums = s => (String(s || '').match(/\d+(?:[.,]\d+)?/g) || []).map(x => x.replace(',', '.'));
+const strings = (o, out = [], d = 0) => { if (d > 6 || o == null) return out; if (typeof o === 'string') out.push(o); else if (Array.isArray(o)) o.forEach(x => strings(x, out, d + 1)); else if (typeof o === 'object') for (const k in o) if (k !== 'kind' && k !== 'type' && k !== 'd' && k !== 'expr' && k !== 'f') strings(o[k], out, d + 1); return out; };
+function nodeTexts(f) { const k = f.kind || f.type; if (k === 'flow') return { nodes: (f.nodes || []).map(n => typeof n === 'string' ? n : [n.label || n.id, n.note].filter(Boolean).join(' ')), edges: (f.edges || []).map(e => Array.isArray(e) ? e[2] : e && e.label).filter(Boolean) };
+  if (k === 'tree') { const nodes = [], edges = []; const walk = (n, d) => { if (!n || d > 5) return; nodes.push(String(n.label || '')); if (n.edge) edges.push(String(n.edge)); (n.children || []).forEach(c => walk(c, d + 1)); }; walk(f.root, 0); return { nodes, edges }; }
+  return null; }
+export function redundantFigures(st, motions = []) {
+  const out = new Set(); if (!st) return out;
+  const slots = [...(Array.isArray(st.explain) ? st.explain.map(p => p && typeof p === 'object' ? [p.figure, p.text] : null) : []), [st.statementFigure, st.statement], [st.intuitionFigure, st.intuition], [st.misconceptionFigure, st.misconception]].filter(x => x && x[0]);
+  const stepText = [st.statement, ...(st.explain || []).map(p => typeof p === 'string' ? p : p && p.text), st.intuition, st.misconception, st.title].filter(Boolean).join(' ');
+  const T = new Set(toks(stepText)), N = new Set(nums(stepText));
+  // the richer pictures of this step: its animations and every figure that is not itself a node diagram or a card
+  const rich = [...motions, ...slots.map(x => x[0]).filter(f => !['flow', 'tree', 'contrast', 'table', 'pdf'].includes(f.kind || f.type))].map(m => new Set(toks(strings(m).join(' '))));
+  if (!rich.length) return out;
+  slots.forEach(([f]) => { const nt = nodeTexts(f); if (!nt || !nt.nodes.length) return;
+    const own = [...nt.nodes, ...nt.edges], all = new Set(toks(own.join(' ')));
+    if (!all.size || own.some(s => nums(s).some(n => !N.has(n)))) return;   /* a number the text does not give: new information */
+    const covered = s => { const w = toks(s); return !w.length || w.filter(x => T.has(x)).length / w.length >= .75; };
+    const missed = nt.nodes.filter(s => !covered(s)).length;
+    if (missed > (nt.nodes.length >= 4 ? 1 : 0) || nt.edges.some(e => !covered(e))) return;
+    const overlap = r => [...all].filter(x => r.has(x)).length / all.size;
+    if (rich.some(r => overlap(r) >= .4)) out.add(f); });
+  return out;
 }

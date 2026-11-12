@@ -92,7 +92,7 @@ export async function gateAndRepair(ctx, P, M, o = {}) {
   let G = qualityGate(A, sections, meta); const log = [{ round: 0, issues: G.issues.length, kinds: kinds(G) }]; let repaired = 0;
   for (let r = 1; o.auto !== false && r <= (o.rounds || 2); r++) {
     const bad = G.issues.filter(rewritable); if (!bad.length) break;
-    bad.forEach(i => { if (i.kind === 'numbers') { const st = A.chain.find(s => s.id === i.step); if (st) st.numFix = true; } });   // one numbers rewrite per step, ever
+    bad.forEach(i => { if (i.kind === 'numbers' || i.kind === 'unfinished') { const st = A.chain.find(s => s.id === i.step); if (st) st[i.kind === 'numbers' ? 'numFix' : 'endFix'] = true; } });   // one numbers rewrite per step, ever
     check(o.signal); o.onStatus && o.onStatus(`Quality check: rewriting ${[...new Set(bad.map(i => i.step))].join(', ')} (${[...new Set(bad.map(i => i.kind))].join(', ')})…`);
     const ans = await ask(repairPrompt({ book: bookName(ctx), chapter: P.title, A, issues: G.issues, sections }), { ...o, writing: 'Rewriting the steps' }, 'Repair these steps in any AI');
     const norm = ans && (ans.steps || ans.chain) ? normalizeChain({ chain: ans.steps || ans.chain }).chain : [];
