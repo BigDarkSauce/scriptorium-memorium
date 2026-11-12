@@ -1062,7 +1062,7 @@ sub, sup { font-family: var(--f-body); font-variant-numeric: lining-nums; font-s
 body:has(.title-ui) .sound-btn, body:has(.title-ui) .gfx-btn { z-index: 6; }
 .brand-btn { all: unset; cursor: pointer; } .brand-btn:hover .brand-title { color: var(--brass-hi); }
 /* ---------- the map (js/mapview.js) ---------- */
-.map-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(174px + env(safe-area-inset-top,0px)); width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); border: 0; cursor: pointer; z-index: 4; }
+.map-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(222px + env(safe-area-inset-top,0px));   /* below the AI button (174px), which covered it */ width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); border: 0; cursor: pointer; z-index: 40; }
 .map-btn.on { color: var(--brass-hi); box-shadow: inset 0 0 0 1px rgba(255,217,138,.5); }
 /* ---------- Get a scroll (js/share.js) ---------- */
 .getscroll { width: min(820px, 94vw); max-height: 86vh; display: grid; grid-template-rows: auto auto auto auto auto 1fr; gap: 10px; }
@@ -1089,7 +1089,8 @@ body.cine .map-btn, body.cine .map-card { opacity: 0 !important; pointer-events:
 .map-card { position: fixed; right: 68px; top: 132px; width: 316px; padding: 12px 14px 10px; border-radius: 14px; z-index: 30; }
 .map-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
 .map-tools { display: inline-flex; gap: 4px; align-items: center; }
-.map-fold { display: inline-grid; place-items: center; }
+.map-fold { display: inline-grid; place-items: center; } .map-fold svg { transition: transform .2s ease; }
+.map-card.folded { width: auto; min-width: 220px; padding: 8px 12px; cursor: pointer; } .map-card.folded > :not(.map-head) { display: none; } .map-card.folded .map-head { margin-bottom: 0; } .map-card.folded .map-fold svg { transform: rotate(180deg); }
 .map-head b { font-family: var(--f-display); font-size: 15px; color: var(--brass-hi); letter-spacing: .02em; line-height: 1.2; }
 .map-expand { font-size: 18px; width: 30px; height: 30px; }
 .map-hint { margin-top: 6px; }

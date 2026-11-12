@@ -65,8 +65,11 @@ export class MapView {
       else if (e.key === 'Escape' && this.full) { e.stopPropagation(); this.closeFull(); }
     };
     addEventListener('keydown', this.onKey, true);
+    try { this.folded = localStorage.getItem(key + '-fold') === '1'; } catch (e) { this.folded = false; } this.card.classList.toggle('folded', this.folded);
     let open = false; try { open = localStorage.getItem(key) === '1'; } catch (e) { } if (open) this.toggle(true);
   }
+  // folded: the minimap keeps its title bar (with the unfold arrow) and hides the plan; one click unfolds it
+  setFold(v) { this.folded = !!v; this.card.classList.toggle('folded', this.folded); try { localStorage.setItem(this.key + '-fold', this.folded ? '1' : '0'); } catch (e) { } this.sig = ''; this.update(1); const b = this.card.querySelector('.map-fold'); if (b) b.focus(); }
   toggle(on = this.card.hidden) { this.card.hidden = !on; this.btn.setAttribute('aria-expanded', String(on)); this.btn.classList.toggle('on', on); try { localStorage.setItem(this.key, on ? '1' : '0'); } catch (e) { } if (on) { this.sig = ''; this.update(1); } }
   // called by the place every frame; cheap when both maps are closed
   update(dt) {
@@ -89,7 +92,8 @@ export class MapView {
   drawMini(P) {
     const D = drawPlan(P, fitGeom(P, { w: 288, h: 230 }, .5), { badge: 15, dioBadge: 10 }); this.mini = D;
     D.groups.forEach(({ g, it }, i) => this.wire(g, it, i, true));
-    const head = el('div', { class: 'map-head' }, [el('b', { text: P.title }), el('span', { class: 'map-tools' }, [el('button', { class: 'ibtn map-expand', type: 'button', title: 'The full map, with every name (M)', 'aria-label': 'Open the full map', html: '⤢', onclick: () => this.openFull() }), el('button', { class: 'ibtn map-fold', type: 'button', title: 'Fold the minimap away (the map button brings it back; remembered)', 'aria-label': 'Fold the minimap', html: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', onclick: () => { this.toggle(false); this.btn.focus(); } })])]);
+    const head = el('div', { class: 'map-head' }, [el('b', { text: P.title }), el('span', { class: 'map-tools' }, [el('button', { class: 'ibtn map-expand', type: 'button', title: 'The full map, with every name (M)', 'aria-label': 'Open the full map', html: '⤢', onclick: () => this.openFull() }), el('button', { class: 'ibtn map-fold', type: 'button', title: this.folded ? 'Unfold the minimap' : 'Fold the minimap to its title bar (remembered)', 'aria-label': this.folded ? 'Unfold the minimap' : 'Fold the minimap', 'aria-expanded': String(!this.folded), html: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', onclick: e => { e.stopPropagation(); this.setFold(!this.folded); } })])]);
+    head.addEventListener('click', e => { if (this.folded && !e.target.closest('.map-expand')) this.setFold(false); });
     this.card.innerHTML = ''; this.card.append(head, D.svg, el('div', { class: 'map-hint dim small', text: `${P.items.length} ${P.kind === 'hall' ? 'bookcase' : 'scroll'}${P.items.length === 1 ? '' : 's'} · hover to name · M for the full map` }));
   }
   // ---------- the full map ----------
