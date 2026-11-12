@@ -73,21 +73,23 @@ export class Reader {
       // where the scroll sits (left / centre / right) and full screen; remembered in this browser
       el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
         el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
-      el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
+      el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up, analyse again', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up · Analyse again · Paste JSON', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
       // the transfer deck (reveal.js): rules uncovered earlier, back in new situations on their day
       this.revisitBtn = el('button', { class: 'ibtn dark tiny rv-pill', type: 'button', 'aria-label': 'Revisit: new situations for rules you uncovered', title: 'Revisit: rules you uncovered, in new situations', html: '◆<span class="rv-n"></span>', onclick: () => openDeck({ typeset, onClose: () => this.refreshRevisit() }) }),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
     this.refreshRevisit();
     this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
     if (this._dockKey) removeEventListener('keydown', this._dockKey);   // render() runs again after an analysis or a check: one F listener, not one per render
-    this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !(e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };
+    this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target.closest && e.target.closest('input,textarea,select,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };   /* Ctrl/Cmd+F stays the browser's find */
     addEventListener('keydown', this._dockKey);
     const body = el('div', { class: 'reader-body' }); this.body = body;
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
     if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }
     if (addReveals(P.analysis)) this.save();   /* an example scroll from before the Revelation Engine gets its loops (seeds-sources.js) */   // analysed, but the chain came back empty: nothing to unfold
-    const chain = this.renderChain(P.analysis); body.append(...(this._improving ? [this.improvingBar()] : []), this.analyseBar(true), chain, this.foldBar);
+    // an analysed scroll opens on its content: the authoring controls (depth, Re-analyse, Paste JSON) wait in the ⋯ menu
+    // (showAuthoring); a sealed one keeps its Analyse bar in view, its main action (renderEmpty)
+    const chain = this.renderChain(P.analysis); body.append(...(this._improving ? [this.improvingBar()] : []), ...(this._authoring ? [this.analyseBar(true)] : []), chain, this.foldBar);
   }
   // ---------- progressive unfolding ----------
   // A scroll is never shown whole: its content is cut into folds at natural points (docs/ARCHITECTURE.md, "Reader
@@ -177,10 +179,21 @@ export class Reader {
     todo.forEach(e => { e._ts = true; }); typeset(todo).then(() => drawArcs(wrap));
   }
   fillMenu(pop) {
-    const n = this.folds ? this.folds.length : 0; pop.innerHTML = '';
-    pop.append(el('div', { class: 'rm-kicker', text: n ? `Unrolled: fold ${this.shown} of ${n}` : this.part.analysis ? 'No steps to unfold' : 'Not analysed yet' }),
+    const n = this.folds ? this.folds.length : 0, A = this.part.analysis; pop.innerHTML = '';
+    pop.append(el('div', { class: 'rm-kicker', text: n ? `Unrolled: fold ${this.shown} of ${n}` : A ? 'No steps to unfold' : 'Not analysed yet' }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Unfold all', disabled: !n || this.shown >= n, onclick: () => { this.unfoldAll(); this.toggleMenu(false); } }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Roll up', disabled: !n || this.shown <= 1, onclick: () => { this.rollUp(); this.toggleMenu(false); } }));
+    // authoring, for an analysed scroll (a sealed one shows its Analyse bar in the sheet itself)
+    if (A && (A.chain || []).length) pop.append(el('div', { class: 'rm-sep', role: 'separator' }),
+      el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Analyse again…', disabled: !!this._improving, onclick: () => { this.toggleMenu(false); this.showAuthoring(); } }),
+      el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Paste JSON from another AI', onclick: () => { this.toggleMenu(false); this.pasteJSON(); } }));
+    if (A && !evidenceAvailable()) pop.append(el('p', { class: 'rm-note', text: 'Sources are checked against OpenAlex, Consensus, PubMed, SciSpace, Hugging Face or ClinicalTrials.gov when one is connected in claude.ai.' }));
+  }
+  // the authoring bar (depth, Re-analyse, Paste JSON) unfolded at the top of the sheet, from the ⋯ menu
+  showAuthoring() {
+    this._authoring = true; const b = this.body; if (!b) return; let bar = b.querySelector('.analyse-bar');
+    if (!bar) { bar = this.analyseBar(true); const imp = b.querySelector('.improving-bar'); if (imp) imp.after(bar); else b.prepend(bar); }
+    b.scrollTo({ top: 0, behavior: 'smooth' }); const f = bar.querySelector('select'); if (f) f.focus({ preventScroll: true });
   }
   toggleMenu(on) { const pop = this.el.querySelector('.reader-menu-pop'), b = this.el.querySelector('.reader-menu-btn'); if (!pop) return; on = on ?? pop.hidden; pop.hidden = !on; b.setAttribute('aria-expanded', String(on)); if (on) { this.fillMenu(pop); const f = pop.querySelector('button:not([disabled])'); if (f) f.focus(); } }
   renderEmpty() {
@@ -238,7 +251,7 @@ export class Reader {
     const stage = s => { this._improving = s; const k = this.el.querySelector('.improving-bar'); if (k) k.replaceWith(this.improvingBar()); };
     try {
       await analysePart(this.ctx(), P, { level: depth, n, force: true, onStatus: say, onStage: stage });
-      this._improving = null; this.save(); this.room.refreshStation(P); toast('Chain written'); this.keepPlace(() => this.render());
+      this._improving = null; this._authoring = false; this.save(); this.room.refreshStation(P); toast('Chain written'); this.keepPlace(() => this.render());
       if (evidenceAvailable() && collectSources(P.analysis).length) this.verify();
     } catch (e) {
       const shown = !st.isConnected; this._improving = null;
@@ -306,7 +319,11 @@ export class Reader {
   renderChain(A) {
     const wrap = el('div', { class: 'chain' });
     const arcs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); arcs.setAttribute('class', 'arcs'); wrap.append(arcs);
-    wrap.append(el('div', { class: 'chain-head' }, [el('h2', { html: mathHTML(A.title || this.part.title) }), A.summary ? el('p', { html: mathHTML(A.summary) }) : null, this.openHook(A), A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + mathHTML(A.question) }) : null, A.sourceNote ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    // the head: the title once (the reader's own header already names the part: a chain title that only repeats it is left
+    // out); a built-in example's note on how it was authored is for the developers, not the reader (book.example)
+    const same = (a, b) => mathText(String(a || '')).replace(/\s+/g, ' ').trim().toLowerCase() === mathText(String(b || '')).replace(/\s+/g, ' ').trim().toLowerCase();
+    wrap.append(el('div', { class: 'chain-head' }, [A.title && !same(A.title, this.part.title) ? el('h2', { html: mathHTML(A.title) }) : null, A.summary ? el('p', { html: mathHTML(A.summary) }) : null, this.openHook(A), A.question ? el('p', { class: 'part-q', html: '<b>The question of this part.</b> ' + mathHTML(A.question) }) : null, A.sourceNote && !this.room.book.example ? el('div', { class: 'srcnote', text: A.sourceNote }) : null]));
+    this._sameQ = st => st === (A.chain || [])[0] && A.question && same(st.answers, A.question);   // the first step's question, when it is the part's own (shown just above)
     wrap.append(this.evidenceBar(A)); const cov = this.renderCoverage(A); if (cov) wrap.append(cov); const qual = this.renderQuality(A); if (qual) wrap.append(qual); this.seen3D = new Map(); this._shownPdf = new Map();
     this._breaks = new Set(A.coverageReport ? A.coverageReport.threadBreaks || [] : []); this._numbers = new Map(((A.coverageReport && A.coverageReport.numbers && A.coverageReport.numbers.unmatched) || []).map(u => [u.step, u.values]));
     this._secTitle = new Map(((A.coverageReport && A.coverageReport.sections) || []).map(x => [x.id, x.title]));
@@ -390,7 +407,7 @@ export class Reader {
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
     art.append(el('div', { class: 'badge', text: KIND_ABBR[kind] || st.id }));
     { const h = this.stepHook(A, st), hc = h && renderHook(h, this.hookCtx(A, st.id, 'step')); if (hc) art.append(hc); }   /* a turning point's hook comes before its question */
-    if (st.answers) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: mathHTML(st.answers) })]));
+    if (st.answers && !(this._sameQ && this._sameQ(st))) art.append(el('div', { class: 'q-in' + (this._breaks && this._breaks.has(st.id) ? ' broken' : ''), title: this._breaks && this._breaks.has(st.id) ? 'The previous step opened a different question' : 'The question this step settles' }, [el('span', { class: 'q-mark', text: 'Q' }), el('span', { html: mathHTML(st.answers) })]));
     art.append(el('div', { class: 'meta' }, [el('span', { class: 'kind', text: st.id + ' · ' + kind }), el('h4', { html: mathHTML(st.title) }),
       st.section ? el('span', { class: 'sec-chip', title: (this._secTitle && this._secTitle.get(st.section)) || 'Subsection of the PDF', text: '§ ' + st.section }) : null,
       st.ref || (st.pages && st.pages.length) ? el('span', { class: 'ref', text: [st.ref, st.pages && st.pages.length && !/p\.\s*\d/.test(st.ref || '') ? 'p. ' + st.pages.join(', ') : ''].filter(Boolean).join(' · ') }) : null]));
@@ -565,7 +582,7 @@ export class Reader {
     const label = !all.length ? 'No sources cited yet.' : `${all.length} source${all.length > 1 ? 's' : ''} cited · ${ok} verified` + (bad ? ` · ${bad} not found` : '') + (todo ? ` · ${todo} unchecked` : '');
     const kids = [el('span', { class: 'ev-ic', text: '❦' }), el('span', { text: label })];
     if (evidenceAvailable() && todo) kids.push(el('button', { class: 'linkbtn', text: 'Verify against OpenAlex', onclick: () => this.verify(st) }));
-    if (!evidenceAvailable()) kids.push(el('span', { class: 'dim small', text: ' Connect OpenAlex, Consensus, PubMed, SciSpace, Hugging Face or ClinicalTrials.gov in claude.ai to ground and verify sources.' }));
+    // (how to connect a source search: in the ⋯ menu, fillMenu; it was a second grey paragraph on every scroll's first screen)
     kids.push(st); this.evBar = el('div', { class: 'evidence-bar' }, kids); return this.evBar;
   }
   async verify(st) {

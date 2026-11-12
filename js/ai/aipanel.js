@@ -13,19 +13,24 @@ const MODE_TEXT = {
   free: ['Free models only', 'No Claude at all: the pool of free models writes everything, the best free one first. When all are at their limits the job waits for the next reset instead of failing.'],
 };
 export function aiButton(app) {
-  const btn = el('button', { class: 'ai-btn glass', type: 'button', title: 'AI engine', 'aria-label': 'AI engine settings', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>' });
+  const btn = el('button', { class: 'ai-btn glass', type: 'button', 'aria-label': 'AI engine settings', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>' });
   btn.onclick = () => openAIPanel(app);
-  const sync = () => { btn.dataset.mode = FREE.mode(); btn.title = 'AI engine: ' + FREE.MODES[FREE.mode()]; };
+  const sync = () => { btn.dataset.mode = FREE.mode(); btn.setAttribute('aria-label', 'AI engine: ' + FREE.MODES[FREE.mode()]); };   /* the label shows on hover and focus (css: the round buttons' labels) */
   FREE.onSettings(sync); sync(); document.body.append(btn); return btn;
 }
+// the engine left at its default follows what is available (free.js autoMode): called once Claude's availability is known
+export function autoEngine() { try { return FREE.autoMode(claudeAvailable()); } catch (e) { return null; } }
 export function openAIPanel(app) {
   if (document.querySelector('.ai-panel')) return;
+  autoEngine();
   let S = FREE.settings(), reachState = null, offS = null; const close = () => { if (offS) offS(); veil.remove(); document.removeEventListener('keydown', esc); }, esc = e => { if (e.key === 'Escape') close(); };
   const modes = el('div', { class: 'ai-modes', role: 'radiogroup', 'aria-label': 'AI engine' });
+  // an engine this page cannot use is greyed with one line saying why (it stays choosable: Claude directs outside the app
+  // still works by pasting each request into any AI)
   const drawModes = () => { modes.innerHTML = ''; Object.keys(MODE_TEXT).forEach(k => { const [t, d] = MODE_TEXT[k], on = S.mode === k;
-    const warn = k !== 'free' && !claudeAvailable() ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Claude is only available inside the Claude app: here the free models do all of it.' : 'Claude is only available inside the Claude app: here each request is shown for you to paste into any AI.' })
-      : k !== 'claude' && inClaudeApp() && FREE.reachable && reachState === false ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the free-models extension (below): until it is installed, Claude does all of it.' : 'Needs the free-models extension (below).' }) : null;
-    modes.append(el('button', { type: 'button', role: 'radio', 'aria-checked': String(on), class: 'ai-mode' + (on ? ' on' : ''), onclick: () => { S = FREE.saveSettings({ mode: k }); drawModes(); drawProviders(); } }, [el('b', { text: t }), el('span', { text: d }), warn])); }); };
+    const na = k !== 'free' && !claudeAvailable(), warn = na ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the Claude app; here it is the same as free models only.' : 'Needs the Claude app; here each request is shown for you to paste into any AI.' })
+      : k !== 'claude' && inClaudeApp() && FREE.reachable && reachState === false ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the free-models extension (details below): until then Claude does all of it.' : 'Needs the free-models extension (details below).' }) : null;
+    modes.append(el('button', { type: 'button', role: 'radio', 'aria-checked': String(on), class: 'ai-mode' + (on ? ' on' : '') + (na ? ' na' : ''), onclick: () => { S = FREE.saveSettings({ mode: k, chosen: true, auto: false }); drawModes(); drawProviders(); } }, [el('b', { text: t }), el('span', { text: d }), warn])); }); };
   const plist = el('div', { class: 'ai-providers' }), out = el('div', { class: 'ai-test' });
   const use = FREE.usageToday();
   const drawProviders = () => { plist.innerHTML = ''; plist.hidden = S.mode === 'claude';
@@ -60,14 +65,18 @@ export function openAIPanel(app) {
   const veil = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide ai-panel', role: 'dialog', 'aria-label': 'AI engine' }, [
     el('div', { class: 'row between' }, [el('h3', { text: 'AI engine' }), el('button', { class: 'ibtn', type: 'button', 'aria-label': 'Close', text: '✕', onclick: close })]),
     modes, plist,
-    el('p', { class: 'dim small', text: 'Keys stay in this browser only and go only to the provider they belong to. Free tiers have limits per minute and per day; the router moves to the next free model, and when every one is busy it waits for the earliest reset. A model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no limit at all.' }),
     el('div', { class: 'row' }, [testBtn, stopBtn, forget]), out])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); }); document.addEventListener('keydown', esc);
   drawModes(); drawProviders(); document.body.append(veil);
   // how the free models are reached from here. Inside the Claude app the page may not contact outside addresses: the
   // Scriptorium free-models extension on this computer makes the requests for it (js/ai/bridge.js), so Claude and the
   // free models work together in the same window. Outside the app (the standalone page) they are called directly.
-  const reach = el('div', { class: 'ai-reach' }); modes.after(reach);
+  // the connection status, the extension and the note on keys and limits: one line until opened ("Details"); open by
+  // itself only when something here needs doing (inside the Claude app without the extension)
+  const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Connection, keys and limits' });
+  const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), reach,
+    el('p', { class: 'dim small', text: 'Keys stay in this browser only and go only to the provider they belong to. Free tiers have limits per minute and per day; the router moves to the next free model, and when every one is busy it waits for the earliest reset. A model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no limit at all.' })]);
+  modes.after(details);
   // the extension's file, saved through the Claude app (the bundle is published as base64 text: an artifact serves no
   // archives). It says what happened: saved, declined, or where to find the same file instead.
   const dlBtn = label => { const b = el('button', { class: 'btn small primary', type: 'button', text: label, onclick: async () => { b.disabled = true; const was = b.textContent; b.textContent = 'Preparing…';
@@ -95,6 +104,7 @@ export function openAIPanel(app) {
   // the keys kept on this computer: said only once the page has really read that file (the page must be allowed to)
   const vaultNote = () => { const sp = el('span', { text: '' }); bridgeVault('get').then(v => { if (v === null && !((bridgeInfo() || {}).tools || []).includes('vault_get')) return; sp.textContent = ' Your keys are also kept on this computer, so every new version of the app has them.'; }).catch(e => { sp.textContent = ' (Your keys could not be kept on this computer: ' + ((e && (e.code || e.message)) || e) + '. They stay in this browser.)'; }); return sp; };
   const drawReach = ok => { reachState = ok; reach.innerHTML = ''; drawModes();
+    sumT.textContent = ok ? '✓ Free models reachable from here' : inClaudeApp() ? 'Free models: the extension is needed' : 'Free models: not reachable from here'; sumT.className = ok ? 'ok' : 'warn'; if (!ok && inClaudeApp()) details.open = true;
     if (!inClaudeApp()) { reach.className = 'ai-reach' + (ok ? ' good' : '');
       reach.append(el('b', { text: !ok ? 'This page cannot reach the free models (offline?).' : FREE.via() === 'relay' ? '✓ Free models through this computer’s launcher' : 'Free models: called straight from this page.' }), FREE.via() === 'relay' ? ' (its AI relay: FreeLLMAPI, NVIDIA, GitHub Models and the rest all reachable).' : ' Open the app with “Launch Scriptorium.bat” for the AI relay (FreeLLMAPI and the providers a web page may not call).', ' Claude itself is only available inside the Claude app (with the Scriptorium extension the free models work there too).');
       if (FREE.via() === 'relay') { const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }

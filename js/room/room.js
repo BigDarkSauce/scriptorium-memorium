@@ -21,7 +21,7 @@ import { PAPER } from '../gfx/materialize.js';
 import { DioramaScene } from '../dio/scene.js';
 import { Reader, is3D, needsAuthoring } from './reader.js';
 import { bookBusy } from '../ai/pipeline.js';
-import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree, measureMath, canvasMath, mathText, mathHTML } from '../util.js';
+import { el, clamp, uid, toast, easeInOutQuint, easeOut, esc, confirmBox, disposeTree, measureMath, canvasMath, mathText, mathHTML, prefersCalm, announce, moreMenu } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // The part of a diorama's world a pedestal should show. The diorama's actors (the bodies it names and points at)
@@ -175,8 +175,15 @@ export class BookRoom {
       bounds: () => { const D = this.data.dims, c = (this.shell && this.shell.userData.baroque && this.shell.userData.baroque.caseDepth) || 0; return { minX: -D.w / 2 + c, maxX: D.w / 2 - c, minZ: -D.d / 2 + c, maxZ: D.d / 2 - c, h: D.h }; },
       obstacles: () => [...this.stations.values()].map(st => st.ped).filter(Boolean).map(o => st0(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]) });
     this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
-    this.onDown = e => { this.down = { x: e.clientX, y: e.clientY }; }; this.onUp = e => this.pointerUp(e); this.onMove = e => this.pointerMove(e);
-    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if ((e.key === 'v' || e.key === 'V') && !this.reader) this.nav.toggle(); }; this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
+    this.onDown = e => { this.down = { x: e.clientX, y: e.clientY }; if (this.kbFocus) this.kbClear(); }; this.onUp = e => this.pointerUp(e); this.onMove = e => this.pointerMove(e);
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return;
+      const mod = e.ctrlKey || e.metaKey || e.altKey; if (!mod) this.keys[e.key.toLowerCase()] = true;   // Ctrl+V, Cmd+F…: the browser's
+      if ((e.key === 'v' || e.key === 'V') && !mod && !this.reader) this.nav.toggle();
+      // [ / ]: from station to station in reading order (with a scroll open: the previous / next scroll); Enter reads it
+      const onCtl = e.target && e.target.closest && e.target.closest('[contenteditable], .modal-veil, .hud-menu, .reader-menu-pop');
+      if (!mod && !onCtl && !this.unfold && (e.key === '[' || e.key === ']')) { e.preventDefault(); this.kbStep(e.key === ']' ? 1 : -1); }
+      if (e.key === 'Enter' && !mod && this.kbFocus && !this.reader && !this.anim && !(e.target && e.target.closest && e.target.closest('button, a'))) { const p = this.data.parts.find(x => x.id === this.kbFocus); if (p) { e.preventDefault(); this.openPart(p); } }
+      if (e.key === 'Escape' && this.kbFocus && !this.reader) this.kbClear(); }; this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     this.gfx.canvas.addEventListener('pointerdown', this.onDown); this.gfx.canvas.addEventListener('pointerup', this.onUp); this.gfx.canvas.addEventListener('pointermove', this.onMove);
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     if (!this.data.parts.length) this.ingest();
@@ -203,21 +210,21 @@ export class BookRoom {
   // GPU resources (main.js calls this after the next place has rendered): the room, plus each pedestal model's own
   // off-screen environment (its world was moved onto the pedestal; lights, floor and sky stayed in ds.scene)
   disposeGPU() { const keep = this.app.mode && this.app.mode !== this ? this.app.mode.scene : null; const roots = [this.scene]; this.stations.forEach(s => s.bays.forEach(b => { if (b.ds) roots.push(b.ds.scene); })); disposeTree(roots, keep); }
-  // Opening view: the first scrolls (up to three) with their pedestals are the hero. The camera stands back from them
-  // and off to the side of their wall that has more room, looking back across at ~46°: the hero sits left or right of
-  // centre, its wall (with the next scrolls) recedes beside it, and the near corner's wall is distant background behind
-  // the hero instead of a close slab of bookcases filling a third of the frame.
+  // Opening view: the scroll to read first (the one last read in this room, else Part 1, at the left wall's front end:
+  // what the hint says) with its pedestal. The camera stands back from it, a step toward the front of the room, looking
+  // at it with the view turned a little along the reading direction (u), so the next scrolls recede beside it. (It used
+  // to frame the middle of the first three, which on a wide room put Part 3 in the centre and Part 1 out at the edge.)
   frameStart() {
-    const D = this.data.dims, first = (this.placed || []).slice(0, 3);
-    if (!first.length) { this.camera.position.set(0, 1.65, D.d / 2 - 1.2); this.controls.target.set(0, 1.5, -D.d / 2); this.controls.update(); return; }
-    // eye a little above standing height, looking slightly down: the line of sight over each pedestal's model meets the
-    // wall below the scroll's lower rod (SHEET_BOTTOM), so banners show whole with their pedestals in front
-    const t = V3(), n = V3(); first.forEach(({ slot }) => { t.add(slot.p.clone().addScaledVector(slot.n, .55)); n.add(slot.n); }); t.divideScalar(first.length).setY(1.62); n.normalize();
-    const tg = V3(n.z, 0, -n.x), m = 1.1, reach = d => { let r = Infinity; if (d.x > 1e-3) r = Math.min(r, (D.w / 2 - m - t.x) / d.x); if (d.x < -1e-3) r = Math.min(r, (-D.w / 2 + m - t.x) / d.x); if (d.z > 1e-3) r = Math.min(r, (D.d / 2 - m - t.z) / d.z); if (d.z < -1e-3) r = Math.min(r, (-D.d / 2 + m - t.z) / d.z); return r; };
-    const sg = reach(tg) >= reach(tg.clone().negate()) ? 1 : -1, back = clamp(Math.min(D.w, D.d) * .5, 3.2, 5.2), a = .8;
-    const p = t.clone().addScaledVector(n, back * Math.cos(a)).addScaledVector(tg, sg * back * Math.sin(a)).setY(1.95);
+    const D = this.data.dims, P = this.placed || [];
+    if (!P.length) { this.camera.position.set(0, 1.65, D.d / 2 - 1.2); this.controls.target.set(0, 1.5, -D.d / 2); this.controls.update(); return; }
+    let last = null; try { last = localStorage.getItem('scriptorium.lastPart.' + this.book.id); } catch (e) { }
+    const { slot } = P.find(x => x.part.id === last) || P[0], n = slot.n, u = V3(n.z, 0, -n.x), m = 1.1;
+    const reach = d => { let r = Infinity; const t = slot.p; if (d.x > 1e-3) r = Math.min(r, (D.w / 2 - m - t.x) / d.x); if (d.x < -1e-3) r = Math.min(r, (-D.w / 2 + m - t.x) / d.x); if (d.z > 1e-3) r = Math.min(r, (D.d / 2 - m - t.z) / d.z); if (d.z < -1e-3) r = Math.min(r, (-D.d / 2 + m - t.z) / d.z); return r; };
+    // eye a little above standing height, looking slightly down: the sheet whole above its pedestal's model
+    const t = slot.p.clone().addScaledVector(n, .55).setY(1.7), back = clamp(Math.min(D.w, D.d) * .45, 3.2, 4.6), side = clamp(reach(u.clone().negate()) - .2, 0, 1.3);
+    const p = t.clone().addScaledVector(n, back).addScaledVector(u, -side).setY(1.9);
     p.x = clamp(p.x, -D.w / 2 + m, D.w / 2 - m); p.z = clamp(p.z, -D.d / 2 + m, D.d / 2 - m);
-    this.camera.position.copy(p); this.controls.target.copy(t.clone().addScaledVector(tg, sg * back * .26)); this.controls.update();
+    this.camera.position.copy(p); this.controls.target.copy(t).addScaledVector(u, .7).setY(1.6); this.controls.update();
   }
   placeSpots(force) {
     if (!this.spots || !this.spots.length) return; const now = performance.now(); if (!force && now - this._spotT < 250) return; this._spotT = now;
@@ -493,13 +500,13 @@ export class BookRoom {
   buildUI() {
     const u = this.ui;
     u.append(el('div', { class: 'brand' }, [el('div', { class: 'brand-title', text: this.book.title }), el('div', { class: 'brand-sub', text: 'the room of this book' })]));
+    // as in the hall: the two everyday pills and one ⋯ for the title screen and import / export
+    this.more = moreMenu([{ text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() }, { text: 'Import / export', title: 'This room as plain JSON, the prompt pack, the whole library', onclick: () => this.app.portDialog(this.book.id) }], { label: 'More: main menu, import / export' });
     u.append(el('div', { class: 'hub-actions glass' }, [
       el('button', { class: 'btn', text: '‹ Library', onclick: () => this.app.openHub({ fromRoom: this.book.id }) }),
-      el('button', { class: 'btn', text: 'Room', onclick: () => this.togglePanel() }),
-      el('button', { class: 'btn', text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() }),
-      el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog(this.book.id) })]));
+      el('button', { class: 'btn', text: 'Room', onclick: () => this.togglePanel() }), this.more.wrap]));
     const touch = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
-    this.hint = el('div', { class: 'hint glass', text: touch ? 'Scrolls begin on the left wall · tap a scroll to read it · tap a model to enter its diorama' : 'Scrolls begin on the left wall · click a scroll to read it · click a model to enter its diorama · V: walk' }); u.append(this.hint);
+    this.hint = el('div', { class: 'hint glass', text: touch ? 'Scrolls begin on the left wall · tap a scroll to read it · tap a model to step into its diorama' : 'Scrolls begin on the left wall · click a scroll to read it · click a model to step into its diorama · [ ] next scroll · V: walk' }); u.append(this.hint);
     this.statusEl = el('div', { class: 'status-pill glass', hidden: true }); u.append(this.statusEl);
     this.panel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.panel);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
@@ -531,7 +538,7 @@ export class BookRoom {
     if (this.reader || this.anim) return; const o = this.pick(e); this.gfx.canvas.style.cursor = o ? 'pointer' : '';
     if (o) {
       const p = this.data.parts.find(x => x.id === o.station), st = this.stations.get(p.id), b = st && st.bays[o.bay], many = st && st.bays.length > 1;
-      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${mathHTML(b.spec.d.title || b.spec.st.title || 'Demo', 'label')} — enter the diorama` : 'Enter the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
+      const what = o.kind === 'pedestal' ? (b && b.spec ? (many ? `${o.bay + 1} · ${mathHTML(b.spec.d.title || b.spec.st.title || 'Demo', 'label')} — step into the diorama` : 'Step into the diorama') : 'No diorama yet: analyse the scroll') : (p.analysis ? 'Read the chain' : 'Open and analyse');
       this.tip.hidden = false; this.tip.innerHTML = `<b>${mathHTML(p.title, 'label')}</b><span>${what}</span>`; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`;
     } else if (this.doorAt()) { this.gfx.canvas.style.cursor = 'pointer'; this.tip.hidden = false; this.tip.innerHTML = '<b>The door</b><span>Back to the library hall</span>'; this.tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; }
     else this.tip.hidden = true;
@@ -543,15 +550,42 @@ export class BookRoom {
     const o = this.pick(e); if (!o) { if (this.doorAt() && !this.reader) this.app.walkThroughDoor(() => this.app.openHub({ fromRoom: this.book.id })); return; } const p = this.data.parts.find(x => x.id === o.station);
     if (o.kind === 'pedestal') this.enterPedestal(p, o.bay); else this.openPart(p);
   }
-  flyTo(pos, look, dur = 1.4, then) { if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, F: { p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: pos.clone(), q1: lookQ(pos, look) }, k: 0, dur, then }; this.controls.enabled = false; }
+  // calm motion (util.prefersCalm): no flight at all, a short fade (0.5 s) with the camera set down under it (anim.cut)
+  flyTo(pos, look, dur = 1.4, then, card = null) { this.endCine(); if (this.nav && this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); } const cut = prefersCalm(); this.anim = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: pos, t: look }, F: { p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: pos.clone(), q1: lookQ(pos, look) }, k: 0, dur: cut ? .5 : dur, then, cut, card: cut ? null : card }; this.controls.enabled = false; if (this.anim.card) this.startCine(); }
+  // Letterboxed arrival at a scroll: the interface steps away (body.cine), two bars close in from the top and bottom
+  // (scaleY), and over the flight's last 40 % a title card (Cinzel: "Part n" and its title) fades up; the reader then
+  // takes over as both fade. Never under calm motion (flyTo gives no card there). The bars and the card live outside #ui.
+  startCine() {
+    const B = this._lb || (this._lb = el('div', { class: 'lb-bars', 'aria-hidden': 'true' }, [el('i'), el('i')])), C = this._card || (this._card = el('div', { class: 'arrive-card', 'aria-hidden': 'true' }));
+    if (!B.isConnected) document.body.append(B, C); const a = this.anim.card; C.innerHTML = ''; C.append(el('div', { class: 'ac-k', text: a.kicker }), el('div', { class: 'ac-t', html: mathHTML(a.title, 'label') }));
+    document.body.classList.add('cine'); requestAnimationFrame(() => B.classList.add('on'));
+  }
+  endCine(hand) {
+    const B = this._lb, C = this._card; if (!B || !B.classList.contains('on')) return; document.body.classList.remove('cine');
+    const off = () => { B.classList.remove('on'); C.classList.remove('on'); }; if (hand) setTimeout(off, 380); else off();   // handing off: the reader is already unrolling under them
+  }
   openPart(p, instant) {
     const st = this.stations.get(p.id); if (!st) return; if (this.reader) { this._swapReader = true; try { this.reader.close(); } finally { this._swapReader = false; } }
+    if (this.kbFocus) { this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; }   // the keyboard's focus ring off while reading (kbFocus stays: [ / ] go on from here)
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
     const pos = c.clone().addScaledVector(n, 2.2).add(V3(0, -.2, 0)).addScaledVector(V3().crossVectors(n, V3(0, 1, 0)), -.55);
-    const open = () => { st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); this.app.route({ room: this.book.id, scroll: p.id }); this.app.rememberRoom(this.book.id, p.id); };
-    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open);
+    const open = () => { this.endCine(true); st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); this.app.route({ room: this.book.id, scroll: p.id }); this.app.rememberRoom(this.book.id, p.id); try { localStorage.setItem('scriptorium.lastPart.' + this.book.id, p.id); } catch (e) { } };
+    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open, { kicker: p.subOf ? 'Sub-scroll' : 'Part ' + (this.partIndex(p) + 1), title: p.title || 'Scroll' });
     this.hint.hidden = true; this.tip.hidden = true;
   }
+  // ---------- the keyboard's way round the room: [ and ] from station to station in reading order, Enter reads ----------
+  kbStep(d) {
+    const L = this.orderedParts().filter(p => this.stations.get(p.id)); if (!L.length) return;
+    let i = L.findIndex(p => p.id === this.kbFocus); if (this.reader) i = L.indexOf(this.reader.part);
+    i = i < 0 ? (d > 0 ? 0 : L.length - 1) : (i + d + L.length) % L.length; const p = L[i], st = this.stations.get(p.id); this.kbFocus = p.id; this.tip.hidden = true;
+    announce(`${p.subOf ? 'Sub-scroll' : 'Part ' + (this.partIndex(p) + 1)}, ${i + 1} of ${L.length}: ${mathText(p.title || 'Scroll')}.${this.reader ? '' : ' Enter reads it.'}`);
+    if (this.reader) { this.openPart(p); return; }   // reading: straight on to the next scroll
+    this.gfx.outline.enabled = true; this.gfx.outline.selectedObjects = [st.group];   // the selection outline (prewarmed) as the focus ring
+    const c = st.sheet.getWorldPosition(V3()), to = c.clone().addScaledVector(st.slot.n, 3.4).setY(1.75), look = c.clone().setY(1.3);
+    this.flyTo(to, look, flightDur(this.camera.position, this.camera.quaternion, to, lookQ(to, look))); if (this.anim) this.anim.ease = easeSine;
+    this.app.sfx && this.app.sfx.play('tick', { gain: .15 });
+  }
+  kbClear() { this.kbFocus = null; this.gfx.outline.enabled = false; this.gfx.outline.selectedObjects = []; }
   onReaderClosed(r) {
     if (this.reader === r) this.reader = null; this.stations.forEach(s => s.sheet.material.emissiveIntensity = 0); this.hint.hidden = false;
     // the address loses its scroll (unless another scroll replaces it, or the room is being left)
@@ -586,7 +620,10 @@ export class BookRoom {
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
-    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur); const e = (a.ease || easeInOutQuint)(a.k); this.controls.target.lerpVectors(a.from.t, a.to.t, e); flyPose(this.camera, a.F, e); if (a.k >= 1) { this.anim = null; this.nav.needsSync = true;   /* walking takes up the heading the flight ended on (it used to snap back to the one it had before) */ this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
+    if (this.anim) { const a = this.anim; a.k = Math.min(1, a.k + dt / a.dur);
+      if (a.cut) { const U = this.gfx.grade.uniforms.uFade; U.value = a.k < .4 ? a.k / .4 : a.k < .55 ? 1 : (1 - a.k) / .45; if (a.k >= .4 && !a.placed) { a.placed = true; this.controls.target.copy(a.to.t); flyPose(this.camera, a.F, 1); } if (a.k >= 1) U.value = 0; }   /* calm: fade, set down, fade back */
+      else { const e = (a.ease || easeInOutQuint)(a.k); this.controls.target.lerpVectors(a.from.t, a.to.t, e); flyPose(this.camera, a.F, e); if (a.card && a.k >= .6 && this._card && !this._card.classList.contains('on')) this._card.classList.add('on'); }
+      if (a.k >= 1) { this.anim = null; this.nav.needsSync = true;   /* walking takes up the heading the flight ended on (it used to snap back to the one it had before) */ this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update(); a.then && a.then(); } }
     else {
       this.nav.update(dt, !!this.reader || !!this.unfold || !!this.app.cine);
     }
@@ -609,7 +646,7 @@ export class BookRoom {
   }
   dispose() {
     if (this.map) { this.map.dispose(); this.map = null; }
-    if (this.disposed) return; this.disposed = true;
+    if (this.disposed) return; this.disposed = true; this.endCine(); if (this._lb) { this._lb.remove(); this._card.remove(); } if (this.more) this.more.dispose(); if (this.kbFocus) this.kbClear();
     if (this.app.ingest && this.app.ingest.closePDF && !bookBusy(this.book.id)) this.app.ingest.closePDF(this.book.id);   // its parsed PDF (pdf.js worker memory); a running analysis keeps it
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);

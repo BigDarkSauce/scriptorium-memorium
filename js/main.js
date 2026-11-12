@@ -5,7 +5,7 @@ import { BAKE } from './gfx/textures.js';
 import * as store from './store.js';
 import * as ingest from './ai/ingest.js';
 import { initAI } from './ai/claude.js';
-import { aiButton } from './ai/aipanel.js';
+import { aiButton, autoEngine } from './ai/aipanel.js';
 import { initEvidence } from './ai/evidence.js';
 import { Hub } from './hub/hub.js';
 import { BookRoom } from './room/room.js';
@@ -21,7 +21,7 @@ import { applyAxes } from './seeds-axes.js';
 import { DOMAIN_BOOK, DOMAIN_BOOK_VERSION } from './seeds-domains.js';
 import { sfx } from './audio.js';
 import { SCENE_SPEC, BUILTIN_TYPES, DIAGRAM_TYPES, CHAIN_FORMAT, chapterPrompt, authorPrompt, splitPrompt } from './ai/prompts.js';
-import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree } from './util.js';
+import { el, $, uid, toast, toastAction, sleep, clamp, disposeTree, prefersCalm } from './util.js';
 import { installBVH, BVH } from './gfx/bvh.js';
 import { parseHash, formatHash } from './route.js';
 import { preloadKit, kitStatus } from './hub/kit.js';
@@ -47,10 +47,11 @@ class App {
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
     this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0; this._navTok = 0; this._dels = new Map();
     this.gfx.onRestore = () => { toast('Graphics restored'); this.restoreMode(); };
-    initAI(); initEvidence();
+    const aiReady = initAI(); initEvidence();
     // the AI keys and choices: the newest kept copy (this browser, its IndexedDB, the extension's file on this computer),
-    // then FreeLLMAPI connected by itself where the extension finds it (js/ai/free.js)
-    import('./ai/free.js').then(F => F.restoreSettings().then(() => F.autoFreeLLMAPI())).catch(e => console.warn('ai settings', e));
+    // then FreeLLMAPI connected by itself where the extension finds it (js/ai/free.js); then an engine left at its default
+    // becomes the first one available here (aipanel.js autoEngine: after the restore, so a kept choice is read first)
+    import('./ai/free.js').then(F => F.restoreSettings().then(() => { aiReady.then(() => autoEngine()); return F.autoFreeLLMAPI(); })).catch(e => console.warn('ai settings', e));
     // sound: one speaker button, a soft click for every button, ambience per place
     this.sfx = sfx; document.body.append(sfx.button());
     this.qualityControl(); aiButton(this);   // the AI engine settings (js/ai/aipanel.js), under the graphics button
@@ -64,7 +65,7 @@ class App {
     let pref = 'auto'; try { pref = localStorage.getItem(KEY) || 'auto'; } catch (e) { }
     let byUser = false, autoSet = pref === 'auto';
     if (pref !== 'auto' && G.qualityLevels.includes(pref)) { byUser = true; G.setQuality(pref); byUser = false; }
-    const btn = el('button', { class: 'gfx-btn glass', type: 'button', title: 'Graphics quality', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5" stroke="currentColor" stroke-width="1.6"/></svg>' });
+    const btn = el('button', { class: 'gfx-btn glass', type: 'button', 'aria-label': 'Graphics quality', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5" stroke="currentColor" stroke-width="1.6"/></svg>' });
     const seg = el('div', { class: 'gfx-seg', role: 'radiogroup', 'aria-label': 'Graphics quality' });
     const note = el('p', { class: 'gfx-note' });
     const autoBtn = el('button', { class: 'btn small ghost', type: 'button', text: 'Auto' });
@@ -467,7 +468,7 @@ class App {
       const fade = async (a, b, ms) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / ms); g.value = a + (b - a) * k; if (k >= 1) return; await sleep(16); } };
       // a dissolve (title screen <-> library): the still covers the change, so the veil drops at once beneath it
       // the iris (title screen <-> library): shut from the edges in before anything is built; the change happens in black
-      const irisNext = this._irisNext && this.mode && !this.veilHold; this._irisNext = false;
+      const irisNext = this._irisNext && this.mode && !this.veilHold && !prefersCalm(); this._irisNext = false;   // calm motion: the plain fade below instead of the closing and opening iris
       if (irisNext) { const U = document.getElementById('ui'); if (U) { U.style.transition = 'opacity .5s ease'; U.style.opacity = '0'; } await this.iris(0, 1100); }
       const still = !irisNext && this._dissolveNext && this.mode && !this.veilHold ? await this.snapshot() : null; this._dissolveNext = false;
       const uiEl = document.getElementById('ui'); if (still && uiEl) uiEl.style.opacity = '0';   // the next place's buttons rise with the dissolve, not before it
@@ -587,7 +588,10 @@ class App {
     return this.switchMode(() => new DioramaView(this, spec, o));
   }
   loop() {
-    if (!this._inputHook) { this._inputHook = true; const mark = () => { this.lastInput = performance.now(); }; ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart'].forEach(k => addEventListener(k, mark, { passive: true, capture: true })); this.lastInput = performance.now(); }
+    if (!this._inputHook) { this._inputHook = true; const mark = () => { this.lastInput = performance.now(); if (this._hudIdle) { this._hudIdle = false; document.body.classList.remove('hud-idle'); } }; ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart'].forEach(k => addEventListener(k, mark, { passive: true, capture: true })); this.lastInput = performance.now(); }
+    // the walk panel and the hint fade after 6 s without input (the view is the room, not its controls) and come back with
+    // the first movement of the pointer or a key (css: body.hud-idle)
+    if (!this._hudIdle && performance.now() - this.lastInput > 6000) { this._hudIdle = true; document.body.classList.add('hud-idle'); }
     requestAnimationFrame(this._loopFn || (this._loopFn = () => this.loop()));   // one closure for the app's life, not one per frame
     const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
     if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)

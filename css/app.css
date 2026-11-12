@@ -61,7 +61,10 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 .brand { position: absolute; left: calc(var(--gut) + max(0px, env(safe-area-inset-left,0px))); top: calc(var(--gut) + env(safe-area-inset-top,0px)); pointer-events: none !important; text-shadow: 0 1px 2px rgba(0,0,0,.4), 0 0 16px rgba(0,0,0,.35); }
 .brand-title { font-family: var(--f-display); font-size: 23px; letter-spacing: .06em; color: var(--ink); }
 .brand-title::after { content: ""; display: block; height: 1px; margin-top: 8px; background: linear-gradient(90deg, rgba(255,217,138,.6), rgba(255,217,138,.18) 60%, transparent); }
-.brand-sub { margin-top: 6px; font-family: var(--f-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.brand-sub { margin-top: 6px; font-family: var(--f-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+/* a soft dark scrim behind the title: on the hall's bright stucco ceiling the subtitle measured ~1.5:1 */
+.brand { isolation: isolate; }
+.brand::before { content: ""; position: absolute; z-index: -1; inset: -26px -60px -22px -40px; pointer-events: none; background: radial-gradient(closest-side, rgba(12,8,4,.62), rgba(12,8,4,.38) 55%, rgba(12,8,4,0)); }
 .hub-actions { position: absolute; right: calc(var(--gut) + max(0px, env(safe-area-inset-right,0px))); top: calc(var(--gut) + env(safe-area-inset-top,0px)); display: flex; gap: 6px; padding: 5px; border-radius: 999px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 32px); }
 /* the hub/room hint: bottom left, in the space left of the walk panel (.nav-box, ~290 px wide); it wraps (balanced)
    instead of running under the panel or ending in an ellipsis. Phones: the panel stands above it, so it takes the full width. */
@@ -175,7 +178,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 @media (max-width: 760px) { .dio-panel { width: calc(100vw - 32px - 58px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)); max-height: calc(50% - 78px); }   /* clear of the sound and graphics buttons on the right */ .dio-reads { width: 200px; } .dio-reads .evlog { display: none; } .side-panel { width: calc(100vw - 32px); } .hub-actions .btn { padding: 6px 10px; font-size: 13px; } }
 
 /* ---------- reading scroll (parchment) ---------- */
-.reader { position: absolute; right: max(16px, env(safe-area-inset-right,0px)); top: calc(76px + env(safe-area-inset-top,0px)); bottom: calc(16px + env(safe-area-inset-bottom,0px)); width: min(720px, calc(100vw - 32px)); display: flex; flex-direction: column; filter: drop-shadow(0 24px 40px rgba(0,0,0,.65)); transform: translateY(24px) scaleY(.06); transform-origin: 50% 0; opacity: 0; transition: transform .9s var(--ease), opacity .4s; }
+.reader { position: absolute; right: max(30px, env(safe-area-inset-right,0px)); top: calc(76px + env(safe-area-inset-top,0px)); bottom: calc(16px + env(safe-area-inset-bottom,0px)); width: min(720px, calc(100vw - 60px));   /* 30 px: the rods reach 16 px past the sheet and their knobs 12 px more (they were cut by the window's edge) */ display: flex; flex-direction: column; filter: drop-shadow(0 24px 40px rgba(0,0,0,.65)); transform: translateY(24px) scaleY(.06); transform-origin: 50% 0; opacity: 0; transition: transform .9s var(--ease), opacity .4s; }
 .reader.in { transform: none; opacity: 1; }
 .reader .rod { height: 22px; margin: 0 -16px; border-radius: 11px; background: linear-gradient(180deg, #6b4526, #a87447 28%, #5a3720 60%, #2a170b); position: relative; z-index: 2; flex: none; }
 .reader .rod::before, .reader .rod::after { content: ""; position: absolute; top: -4px; width: 28px; height: 30px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #f3dc98, #c49a45 45%, #6e5120 80%); }
@@ -184,7 +187,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 .reader-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(90,60,30,.25); }
 .reader-head .kicker { font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--iron-soft); }
 .reader-head h2 { margin: 3px 0 0; font-family: var(--f-display); font-weight: 400; font-size: 24px; text-wrap: balance; }
-.reader-body { flex: 1; overflow: auto; padding: 14px 22px 30px; overscroll-behavior: contain; }
+.reader-body { flex: 1; overflow: auto; padding: 14px 22px 30px; overscroll-behavior: contain; font-size: 17px; }
 .reader .btn { color: var(--iron); border-color: rgba(90,60,30,.35); background: rgba(255,255,255,.35); }
 .reader .btn:hover { background: rgba(255,255,255,.6); border-color: var(--iron-soft); }
 .reader .btn.primary { background: linear-gradient(#335f91, #21406a); color: #f2ead6; border-color: #5a86b8; }
@@ -211,7 +214,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 .step .kind { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--iron-soft); }
 .step h4 { margin: 0; font-family: var(--f-italic); font-weight: 400; font-size: 18px; }
 .step .from { font-family: var(--f-mono); font-size: 12px; color: var(--iron-soft); } .step .from a { color: var(--lapis); cursor: pointer; text-decoration: underline dotted; }
-.stmt { margin: 0; line-height: 1.6; max-width: 68ch; }
+.stmt { margin: 0; line-height: 1.65; max-width: 68ch; }
 .disp { overflow-x: auto; overflow-y: hidden; }
 .deriv { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: d; }
 .deriv li { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 4px 8px; counter-increment: d; }
@@ -489,9 +492,9 @@ i { font-style: italic; }
 /* scroll reader placement: left / centre / right / full screen */
 .reader-dock { display: flex; gap: 4px; margin-left: auto; margin-right: 6px; }
 .reader-dock .ibtn[aria-pressed="true"] { background: rgba(60,40,20,.18); color: #5a3a12; }
-.reader.dock-left { right: auto; left: max(16px, env(safe-area-inset-left,0px)); }
+.reader.dock-left { right: auto; left: max(30px, env(safe-area-inset-left,0px)); }
 .reader.dock-center { right: auto; left: 50%; translate: -50% 0; }
-.reader.dock-full { left: max(12px, env(safe-area-inset-left,0px)); right: max(12px, env(safe-area-inset-right,0px)); width: auto; top: calc(64px + env(safe-area-inset-top,0px)); bottom: calc(10px + env(safe-area-inset-bottom,0px)); }
+.reader.dock-full { left: max(30px, env(safe-area-inset-left,0px)); right: max(30px, env(safe-area-inset-right,0px)); width: auto; top: calc(64px + env(safe-area-inset-top,0px)); bottom: calc(10px + env(safe-area-inset-bottom,0px)); }
 .reader.dock-full .reader-body { max-width: 1100px; margin: 0 auto; width: 100%; }
 @media (max-width: 760px) { .reader-dock [data-dock="left"], .reader-dock [data-dock="center"], .reader-dock [data-dock="right"] { display: none; } }
 /* ---- Explainer cues (js/dio/focus.js, js/dio/director.js; docs/research/explainer-animation.md S1–S6, S9) ----
@@ -1015,9 +1018,9 @@ button.rv-opt:hover { background: #fff; border-color: #b98a45; }
    rows with a figure, the showcases and tables break out wider, centred on the same axis */
 .reader.dock-full .reader-body { max-width: none; }
 .reader.dock-full .chain { max-width: 880px; margin: 0 auto; }
-.reader.dock-full .chain .step > *:not(.badge) { max-width: none; }
-.reader.dock-full .chain .step > .explain.has-fig, .reader.dock-full .chain .step > .demos, .reader.dock-full .chain .step > .src-table-wrap { width: min(1240px, calc(100vw - 140px)); position: relative; left: calc(50% - 23px); translate: -50% 0; }
-.reader.dock-full .chain-head, .reader.dock-full .refs { max-width: none; }
+.reader.dock-full .chain .step > *:not(.badge) { max-width: 72ch; }   /* text keeps a reading measure in the full window */
+.reader.dock-full .chain .step > .explain.has-fig, .reader.dock-full .chain .step > .demos, .reader.dock-full .chain .step > .src-table-wrap { width: min(1240px, calc(100vw - 140px)); max-width: none; position: relative; left: calc(50% - 23px); translate: -50% 0; }
+.reader.dock-full .chain-head, .reader.dock-full .refs { max-width: 72ch; }
 .reader.dock-full .chain .step { grid-template-columns: minmax(0, 1fr); }
 sub, sup { font-family: var(--f-body); font-variant-numeric: lining-nums; font-style: normal; }   /* the italic display face has old-style figures: a subscript 0 read as a ring (T₀ looked like T∘) */
 /* the diorama's opening hook in flight from the caption to the steps panel (engine.js flyHook) */
@@ -1063,7 +1066,12 @@ sub, sup { font-family: var(--f-body); font-variant-numeric: lining-nums; font-s
 .tt-cn { font: 11px var(--f-mono); color: rgba(246,236,214,.6); }
 .tt-prog { height: 2px; margin-top: 12px; background: rgba(255,255,255,.14); overflow: hidden; border-radius: 1px; } .tt-prog i { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: 0 50%; will-change: transform; background: linear-gradient(90deg, #b98a3c, #ffe6a8); }
 body:has(.title-ui) .sound-btn, body:has(.title-ui) .gfx-btn { z-index: 6; }
-.brand-btn { all: unset; cursor: pointer; } .brand-btn:hover .brand-title { color: var(--brass-hi); }
+/* the hall's title is a button (back to the title screen): only the button's own chrome is reset; .brand keeps its place,
+   and it takes the pointer (.brand is pointer-events: none for the rooms' plain title) */
+.brand-btn { appearance: none; -webkit-appearance: none; background: none; border: 0; margin: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: block; }
+#ui .brand.brand-btn { pointer-events: auto !important; }
+.brand-btn:hover .brand-title { color: var(--brass-hi); }
+.brand-btn:focus-visible { outline: 1.5px solid rgba(255,217,138,.85); outline-offset: 6px; border-radius: 6px; }
 /* ---------- the map (js/mapview.js) ---------- */
 .map-btn { position: fixed; right: calc(var(--gut, 16px) + env(safe-area-inset-right,0px)); top: calc(222px + env(safe-area-inset-top,0px));   /* below the AI button (174px), which covered it */ width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); border: 0; cursor: pointer; z-index: 40; }
 .map-btn.on { color: var(--brass-hi); box-shadow: inset 0 0 0 1px rgba(255,217,138,.5); }
@@ -1229,3 +1237,71 @@ body:has(.title-ui) .ai-btn { z-index: 6; }
 .gen-status { display: block; font-size: .85em; margin-top: .3em; }
 .gen-report { max-height: 60vh; overflow: auto; display: grid; gap: .7em; }
 .gen-att { border-left: 2px solid rgba(160, 120, 50, .5); padding-left: .6em; display: grid; gap: .2em; }
+/* ---------- wayfinding and calm (UX pass: the HUD's ⋯ menu, first-visit tips, the library noticing you, arrivals) ---------- */
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* the top bar's ⋯: the rarer actions in one small dark menu under it (util.js moreMenu) */
+.hud-more-wrap { position: relative; display: inline-flex; }
+.hud-more { min-width: 40px; padding-left: 12px; padding-right: 12px; font-size: 18px; line-height: 1; letter-spacing: .08em; }
+.hud-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 20; min-width: 210px; display: grid; padding: 6px; border-radius: 14px; background: rgba(22,17,12,.95); border: 1px solid rgba(255,217,138,.22); box-shadow: 0 18px 36px -14px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,250,240,.06); }
+.hud-menu[hidden] { display: none; }
+/* the round buttons down the right edge sit above #ui (fixed, z-index 40): they step aside while the menu is open */
+body:has(.hud-menu:not([hidden])) :is(.sound-btn, .gfx-btn, .ai-btn, .map-btn, .map-card) { opacity: 0 !important; pointer-events: none !important; }
+.hud-item { text-align: left; padding: 9px 12px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: 15px var(--f-body); cursor: pointer; white-space: nowrap; }
+.hud-item:hover, .hud-item:focus-visible { background: rgba(255,217,138,.12); color: var(--brass-hi); outline: none; }
+.hud-item + .hud-item { margin-top: 1px; }
+/* the hint: a first-visit tip carries a small brass star; a new text fades through instead of jumping */
+.hint { transition: opacity .26s ease; }
+.hint.swap { opacity: 0 !important; }
+.hint.tip { color: var(--ink); border-color: rgba(255,217,138,.3); }
+.hint.tip::before { content: "\2726"; color: var(--brass); margin-right: 8px; font-size: 11px; vertical-align: 1px; }
+/* the scroll the library offers on a first visit: a small label above it (hub.js placeCue) */
+.cue-label { position: absolute; left: 0; top: 0; padding: 5px 12px 6px; border-radius: 999px; background: rgba(22,17,12,.82); border: 1px solid rgba(255,217,138,.45); color: var(--brass-hi); font: italic 15px var(--f-italic); letter-spacing: .02em; white-space: nowrap; pointer-events: none !important; opacity: 0; visibility: hidden; transition: opacity .7s ease, visibility 0s linear .7s; }
+.cue-label::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 9px; height: 9px; margin-left: -5px; transform: rotate(45deg); background: rgba(22,17,12,.82); border: solid rgba(255,217,138,.45); border-width: 0 1px 1px 0; }
+.cue-label.on { opacity: 1; visibility: visible; transition: opacity .7s ease; }
+/* "the library notices you": the nearest scroll's name, engraved, low in the middle (hub.js showCaption) */
+.hall-caption { position: absolute; left: 50%; bottom: calc(108px + env(safe-area-inset-bottom,0px)); transform: translate(-50%, 6px); max-width: min(520px, calc(100vw - 2 * var(--gut))); display: grid; justify-items: center; gap: 2px; text-align: center; pointer-events: none !important; opacity: 0; visibility: hidden; transition: opacity .8s ease, transform .8s var(--ease), visibility 0s linear .8s; isolation: isolate; }
+.hall-caption.on:not(.clash) { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .8s ease, transform .8s var(--ease); }
+.hall-caption b { font: 400 21px "Cinzel", var(--f-display); letter-spacing: .08em; color: #f3dfae; text-shadow: 0 1px 0 rgba(0,0,0,.7), 0 0 14px rgba(0,0,0,.65), 0 0 28px rgba(0,0,0,.5); text-wrap: balance; overflow-wrap: anywhere; }
+.hall-caption .hc-k { font: 500 12px var(--f-mono); letter-spacing: .26em; text-transform: uppercase; color: rgba(255,217,138,.8); text-shadow: 0 0 10px rgba(0,0,0,.8); }
+.hall-caption::before { content: ""; position: absolute; z-index: -1; inset: -16px -50px; background: radial-gradient(closest-side, rgba(10,7,4,.5), rgba(10,7,4,0)); }
+/* the walk panel and the hint step back after 6 s without input (main.js), and return with the first input */
+.nav-box { transition: opacity .6s ease; }
+body.hud-idle .nav-box, body.hud-idle .hint:not(.tip) { opacity: 0; transition: opacity 1.4s ease; }
+body.hud-idle .nav-box:hover, body.hud-idle .nav-box:focus-within { opacity: 1; }
+/* the round icon buttons name themselves on hover and focus (from their aria-label), to their left */
+.sound-btn::after, .gfx-btn::after, .ai-btn::after, .map-btn::after { content: attr(aria-label); position: absolute; right: calc(100% + 10px); top: 50%; transform: translate(4px, -50%); padding: 5px 10px; border-radius: 9px; background: rgba(20,18,16,.94); border: 1px solid rgba(255,246,228,.12); color: var(--ink); font: 13px var(--f-body); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .18s ease, transform .18s ease; }
+.sound-btn:hover::after, .gfx-btn:hover::after, .ai-btn:hover::after, .map-btn:hover::after, .sound-btn:focus-visible::after, .gfx-btn:focus-visible::after, .ai-btn:focus-visible::after, .map-btn:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+.gfx-btn[aria-expanded="true"]::after, .map-btn.on:hover::after { opacity: 0; }
+body:has(.reader:not([hidden])) .sound-btn::after { right: auto; left: calc(100% + 10px); }   /* bottom-left while a scroll is open */
+.sound-btn:focus-visible, .gfx-btn:focus-visible, .ai-btn:focus-visible, .map-btn:focus-visible { outline: 1.5px solid rgba(255,217,138,.85); outline-offset: 3px; }
+/* letterboxed arrival at a scroll (room.js startCine): bars close in from top and bottom, the part's title card fades up */
+body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: none !important; }
+.room-ui > * { transition: opacity .45s ease; }
+.lb-bars { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+.lb-bars i { position: absolute; left: 0; right: 0; height: 11vh; background: #080604; transform: scaleY(0); transition: transform .7s cubic-bezier(.3,.7,.25,1); }
+.lb-bars i:first-child { top: 0; transform-origin: 50% 0; } .lb-bars i:last-child { bottom: 0; transform-origin: 50% 100%; }
+.lb-bars.on i { transform: scaleY(1); }
+.arrive-card { position: fixed; left: 50%; bottom: calc(11vh + 26px); z-index: 4; transform: translate(-50%, 8px); width: min(760px, calc(100vw - 64px)); text-align: center; pointer-events: none; opacity: 0; transition: opacity .55s ease, transform .9s var(--ease); }
+.arrive-card.on { opacity: 1; transform: translate(-50%, 0); }
+.ac-k { font: 500 12.5px var(--f-mono); letter-spacing: .34em; text-transform: uppercase; color: rgba(255,217,138,.85); text-shadow: 0 0 12px rgba(0,0,0,.9); }
+.ac-t { margin-top: 8px; font: 400 clamp(26px, 3.2vw, 42px)/1.15 "Cinzel", var(--f-display); letter-spacing: .06em; color: transparent; background: linear-gradient(180deg, #fff8e6, #f1d08a 55%, #c39446); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 2px 10px rgba(0,0,0,.85)); text-wrap: balance; }
+@media (prefers-reduced-motion: reduce) { .lb-bars, .arrive-card { display: none; } }
+/* the reading scroll: legible labels and larger controls */
+.reader-head .kicker, .reader .step .kind, .reader .sketch-card .kicker, .reader .sketch-empty .kicker, .reader .intuition b, .reader .miscon b, .reader .check b, .reader .src-head, .reader .part-q b, .reader .demo-purpose b, .reader .cov-table th, .reader .recap b, .reader .gw-k, .reader .f-use-k, .reader .gw-why b, .reader .gw-ex b, .reader .code-head .kind, .reader .code-int b, .reader .ex-answer b, .reader .hk-tag, .reader .rvl-tag, .reader .rv-lab, .reader .coverage > summary, .reader .step .ref, .reader .sec-chip, .reader .rm-kicker, .reader .evidence-bar { font-size: 12.5px; }
+.reader-dock .ibtn.tiny, .reader-head .reader-menu-btn.ibtn.tiny, .reader-head .rv-pill.ibtn.tiny { width: 32px; height: 32px; font-size: 15px; }
+.rm-sep { height: 1px; margin: 5px 6px; background: rgba(90,60,30,.2); }
+.rm-note { margin: 4px 8px 6px; max-width: 250px; font-size: 12.5px; line-height: 1.4; color: var(--iron-soft); }
+.reader-menu-pop { min-width: 230px; }
+/* the AI panel: an engine this page cannot use is greyed (still choosable); the status and the keys note behind Details;
+   one link style for every link and link-button in it */
+.ai-mode.na:not(.on) { opacity: .58; }
+.ai-mode.na:not(.on):hover { opacity: .8; }
+.ai-details { border-radius: 10px; border: 1px solid var(--glass-edge); background: rgba(0,0,0,.16); padding: 0 12px; }
+.ai-details > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px; padding: 9px 0; font-size: 13px; color: var(--ink-2); }
+.ai-details > summary::-webkit-details-marker { display: none; }
+.ai-details > summary .ok { color: #a9dca0; } .ai-details > summary .warn { color: #f0b48e; }
+.ai-details > summary .ai-more { margin-left: auto; font: 12.5px var(--f-mono); color: var(--brass); }
+.ai-details > summary .ai-more::after { content: " \25B8"; } .ai-details[open] > summary .ai-more::after { content: " \25BE"; }
+.ai-details[open] { padding-bottom: 10px; } .ai-details > .ai-reach { margin-bottom: 8px; }
+.ai-panel a, .ai-panel .linkbtn { font: inherit; color: var(--brass); background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: rgba(255,217,138,.45); text-underline-offset: 2px; cursor: pointer; }
+.ai-panel a:hover, .ai-panel .linkbtn:hover { color: var(--brass-hi); text-decoration-color: currentColor; }

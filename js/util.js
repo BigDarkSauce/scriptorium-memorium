@@ -78,6 +78,30 @@ export function compile(expr, vars) {
   return (...a) => { try { const v = f(...a); return typeof v === 'number' ? v : (typeof v === 'boolean' ? +v : NaN); } catch (e) { return NaN; } };
 }
 
+// Calm motion: the system's "reduce motion" or the reader's own Calm setting (localStorage 'scriptorium.view'). Camera
+// flights become short fades, the iris a plain fade, the walking head stops bobbing (vestibular comfort, WCAG 2.3.3).
+export function prefersCalm() { try { if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return true; const v = JSON.parse(localStorage.getItem('scriptorium.view') || '{}'); return v.motion === 'calm' || v.calm === true; } catch (e) { return false; } }
+// one polite live region for the 3D places (a scroll or station picked with [ / ]): screen readers hear its title
+let liveHost;
+export function announce(msg) { if (typeof document === 'undefined') return; if (!liveHost) { liveHost = el('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' }); document.body.append(liveHost); } liveHost.textContent = ''; setTimeout(() => { liveHost.textContent = String(msg || ''); }, 30); }
+// The HUD's "⋯" menu (hall and room): the rarer actions folded behind one button beside the main one, so the top bar holds
+// two or three pills instead of five. items: buttons ({ text, title, onclick }) or ready elements. Esc, a press outside,
+// or choosing an item closes it; arrows move between items. dispose() drops its one window listener.
+export function moreMenu(items, { label = 'More: library actions' } = {}) {
+  const pop = el('div', { class: 'hud-menu', role: 'menu', 'aria-label': label, hidden: true });
+  const btn = el('button', { class: 'btn hud-more', type: 'button', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false', text: '⋯' });
+  const set = on => { if (!on && pop.contains(document.activeElement)) document.activeElement.blur();   /* a hidden item keeps no focus (it held the keys: [ ] went to it) */
+    pop.hidden = !on; btn.setAttribute('aria-expanded', String(on)); if (on) { const f = pop.querySelector('button:not([disabled]):not([hidden])'); if (f) f.focus({ preventScroll: true }); } };
+  items.filter(Boolean).forEach(it => { const b = it instanceof Element ? it : el('button', { type: 'button', text: it.text, title: it.title, onclick: it.onclick }); b.className = 'hud-item'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', () => set(false)); pop.append(b); });
+  btn.onclick = e => { e.stopPropagation(); set(pop.hidden); };
+  const off = e => { if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) set(false); };
+  addEventListener('pointerdown', off, true);
+  pop.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); set(false); btn.focus(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); const L = [...pop.querySelectorAll('button:not([disabled]):not([hidden])')], i = L.indexOf(document.activeElement); const n = L[(i + (e.key === 'ArrowDown' ? 1 : -1) + L.length) % L.length]; if (n) n.focus(); }
+  });
+  return { wrap: el('div', { class: 'hud-more-wrap' }, [btn, pop]), btn, pop, close: () => set(false), dispose: () => removeEventListener('pointerdown', off, true) };
+}
 // Toasts (glass pills, bottom-centre)
 let toastHost;
 export function toast(msg, ms = 2800) {

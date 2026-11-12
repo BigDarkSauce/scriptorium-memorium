@@ -10,7 +10,7 @@
 //             little steering in the air; the landing bends the knees (a dip of up to 5 cm over ~0.3 s) with a footstep.
 // The walking speed is adjustable for both modes and remembered in this browser.
 import * as THREE from 'three';
-import { el, clamp } from './util.js';
+import { el, clamp, prefersCalm } from './util.js';
 import { sfx } from './audio.js';
 
 const KEY = 'scriptorium.view';
@@ -34,6 +34,10 @@ export class Navigator {
     this.jumpY = 0; this.vy = 0; this.air = false; this.dipT = -1; this.eyeY = EYE;
     this.onKey = e => { if (this.mode !== 'walk' || e.code !== 'Space' || (e.target && e.target.closest && e.target.closest('input,textarea,select'))) return; e.preventDefault(); if (!e.repeat && !this.busy) this.jumpReq = true; };
     addEventListener('keydown', this.onKey);
+    // keys held when the window loses focus (alt-tab while holding W) never send their keyup here: every held key is let go,
+    // or the view walked on by itself into a wall until W was pressed and released again
+    this.onBlur = e => { if (e.type === 'blur' || document.visibilityState === 'hidden') { for (const k in this.keys) this.keys[k] = false; this.drag = null; this.zoomTarget = 0; this.vel.set(0, 0, 0); } };
+    addEventListener('blur', this.onBlur); document.addEventListener('visibilitychange', this.onBlur);
     canvas.addEventListener('pointerdown', this.onDown); addEventListener('pointermove', this.onMove); addEventListener('pointerup', this.onUp);
     canvas.addEventListener('wheel', this.onWheel, { passive: false }); canvas.addEventListener('contextmenu', this.onCtx);
     this.ui = this.buildUI(); host.append(this.ui);
@@ -78,7 +82,9 @@ export class Navigator {
     if (this.mode === 'walk') {
       const p = T.p.copy(c.position).add(step); this.collide(p, B, .28); c.position.x = p.x; c.position.z = p.z;
       const v = this.air ? 0 : this.vel.length(); this.bobT += dt * (v > .05 ? 2 * Math.PI * (1.7 + v * .25) * .5 : 0);
-      const bob = v > .05 ? Math.sin(this.bobT * 2) * .018 * clamp(v / 1.4, 0, 1.6) : 0;
+      // calm motion (reduce motion / the Calm setting): no head bob and no landing dip; the eye glides level (read once a second)
+      if (!(this._calmT > 0)) { this._calm = prefersCalm(); this._calmT = 1; } this._calmT -= dt;
+      const bob = v > .05 && !this._calm ? Math.sin(this.bobT * 2) * .018 * clamp(v / 1.4, 0, 1.6) : 0;
       // a footstep each time the stride reaches its lowest point (soft on marble; louder when hurrying)
       const ph = Math.floor((this.bobT * 2 + Math.PI / 2) / (2 * Math.PI));   // one footstep per bob cycle (~2 per second at 1.4 m/s)
       if (v > .25 && ph !== this.stepPh) { this.stepPh = ph; sfx.play('step', { gain: clamp(v / 1.4, .4, 1.4), pitch: .9 + Math.random() * .2, x: .5 + (ph % 2 ? .08 : -.08) }); }
@@ -110,7 +116,7 @@ export class Navigator {
   }
   // the landing's knee dip: down and back up over 0.3 s (a quick bend, a slower rise)
   dip(dt) {
-    if (this.dipT < 0) return 0; this.dipT += dt; const k = this.dipT / .3; if (k >= 1) { this.dipT = -1; return 0; }
+    if (this.dipT < 0) return 0; if (this._calm) { this.dipT = -1; return 0; } this.dipT += dt; const k = this.dipT / .3; if (k >= 1) { this.dipT = -1; return 0; }
     return -this.dipA * Math.sin(Math.PI * Math.pow(k, .7));
   }
   // keep a body of radius r inside the room and out of furniture boxes (resolve along the shallowest axis)
@@ -124,6 +130,6 @@ export class Navigator {
   }
   dispose() {
     this.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
-    this.canvas.removeEventListener('wheel', this.onWheel); this.canvas.removeEventListener('contextmenu', this.onCtx); removeEventListener('keydown', this.onKey); this.ui.remove();
+    this.canvas.removeEventListener('wheel', this.onWheel); this.canvas.removeEventListener('contextmenu', this.onCtx); removeEventListener('keydown', this.onKey); removeEventListener('blur', this.onBlur); document.removeEventListener('visibilitychange', this.onBlur); this.ui.remove();
   }
 }
