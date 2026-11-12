@@ -503,3 +503,40 @@ Measured on the reader's laptop (AMD Radeon 610M, Direct3D 11 through ANGLE), no
   GitHub release, the key pages, open the app; every step asks), docs/SETUP-GUIDE.md, GitHub Pages and a release.
 - Tests: tools/test-bridge.mjs now 20 checks (vault, FreeLLMAPI detection with a fake install, key restore, auto-connect,
   ready-model discovery).
+
+## Round 21: pictures and speech, admitted only past a strict check; why FreeLLMAPI showed "not running"
+
+- **"FreeLLMAPI: not running" while it was running**: the Artifact's `mcp` capability lists, per server, the tools the
+  page may call; it still named only round 19's four (`bridge_info`, `http_*`), so the page's call to
+  `freellmapi_detect` (and to `vault_get` / `vault_set`) was refused, and the panel printed every failure as "not
+  running". Honest correction: round 20's "your keys are also kept on this computer" was therefore not true inside the
+  Claude app until now (they were kept in the browser's two stores only). Fixed three ways: the declaration names all
+  seven tools; the panel says why a look failed and, when the detector cannot answer, looks for the server itself
+  (running → "copy its unified key"); the "kept on this computer" line appears only after the file was really read.
+  The panel now also gives the counts: text models ready now, and the catalogue's total.
+- **Pictures and speech** (js/ai/media.js) through FreeLLMAPI's `/v1/images/generations`, `/v1/audio/speech` and
+  `/v1/audio/transcriptions`. Nothing generated reaches a scroll unless it passes:
+  - a picture: (0) a writer model decides whether the step can be shown truthfully as one picture with no writing in
+    it (a definition, an equation or a proof cannot: then nothing is drawn) and writes the brief (must show / must not
+    show / prompt); (1) pixels: ≥ 512 px a side, not blank, not washed out, not flat; (2) **two independent reviewers
+    of different model families** (Claude in the Claude app; free vision models) score faithful, accurate, clean (no
+    writing at all), coherent, helpful, style: admitted only if every reviewer gives accurate = 5, clean = 5 and the
+    rest ≥ 4 (the app decides from the scores, not a reviewer's own verdict); fewer than two reviewers → not admitted.
+    Up to three attempts, each brief rewritten against the reviewers' objections.
+  - a reading: formulas first written out as spoken words (and checked to hold no symbols); each piece (≤ 1,100
+    characters) must decode, be spoken at 1.6–4.2 words a second over its voiced span, be unclipped (< 0.2 % of
+    samples at full scale), hold no silence over 2 s, be loud enough, keep one voice (one provider) throughout, and be
+    **heard back** by a speech-to-text model with ≤ 8 % of words wrong (≤ 5 % over the reading) and within 15 % of the
+    script's length. Up to three tries a piece; one piece that never passes rejects the reading.
+  - Measured on the owner's FreeLLMAPI (12 Nov 2026): Speechify spoke a 19-word sentence in 3.9 s, 0 clipped
+    samples, longest pause 0.75 s, 2.0 words/s; Groq's whisper-large-v3-turbo heard it back word for word (0 %) in
+    0.3 s. Image generation failed there: the Cloudflare key had been entered as the token alone, and Workers AI needs
+    `account_id:token`.
+  - What passed is kept in IndexedDB (`media:image|speech:<part>:<step>`) with its full report (prompts, reviewers'
+    scores and descriptions, error rates), shown under the step as "AI-generated · checked" with the check one click
+    away; a rejected attempt shows its reasons and nothing is used.
+- **Extension 1.2.0**: binary answers (base64, in ≤ 1.5 MB slices per poll, ≤ 24 MB), binary uploads (`body_b64`),
+  and `media: 'image'` to fetch a picture a generator returned as a link (any https address, GET only, refused unless
+  the answer is an image). The launcher's relay has the same `?media=image` rule.
+- Tests: tools/test-media.mjs (29 checks: the word error rate and number words, the picture and audio thresholds, a
+  3 MB picture and an audio answer byte-exact through the real extension, uploads byte-exact, the new address rules).

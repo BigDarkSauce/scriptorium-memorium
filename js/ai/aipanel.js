@@ -4,7 +4,8 @@
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { claudeAvailable } from './claude.js';
-import { bridgeReady, bridgeInfo, inClaudeApp } from './bridge.js';
+import { bridgeReady, bridgeInfo, inClaudeApp, bridgeVault } from './bridge.js';
+import * as MEDIA from './media.js';
 
 const MODE_TEXT = {
   claude: ['Claude directs', 'Your Claude reads every chapter, plans and writes every scroll and diorama. The best quality; uses your Claude plan\'s limits.'],
@@ -76,14 +77,31 @@ export function openAIPanel(app) {
       else { const a = el('a', { href: URL.createObjectURL(new Blob([bytes])), download: 'Scriptorium free models.mcpb' }); document.body.append(a); a.click(); a.remove(); toast('If nothing was saved: the same file is in your Scriptorium Memorium folder, bridge\\Scriptorium free models.mcpb.', 9000); } }
     catch (e) { toast(e && e.code === 'declined' ? 'Not saved. The same file is in your Scriptorium Memorium folder: bridge\\Scriptorium free models.mcpb' : 'This view could not save it (' + ((e && (e.message || e.code)) || e) + '). The same file is in your Scriptorium Memorium folder: bridge\\Scriptorium free models.mcpb', 10000); }
     finally { b.disabled = false; b.textContent = was; } } }); return b; };
+  // FreeLLMAPI's line: connected (with how many models are ready now and in its catalogue), running but its key is
+  // needed, or not running; and when the page could not ask, why (never "not running" for a failure of the asking)
+  const fillFla = fl => { fl.textContent = 'FreeLLMAPI: looking…';
+    const again = () => el('button', { class: 'linkbtn', type: 'button', text: 'find it again', onclick: () => fillFla(fl) });
+    FREE.autoFreeLLMAPI().then(d => { fl.innerHTML = ''; S = FREE.settings(); drawProviders();
+      if (d && d.found) { const dash = el('a', { href: d.base.replace('/v1', '') + '/keys', target: '_blank', rel: 'noopener', text: 'its dashboard ↗' });
+        if (d.keyRejected) fl.append(el('b', { text: 'FreeLLMAPI is running' }), ` at ${d.base.replace('/v1', '')}, but it refuses the unified key this page holds: copy it again from `, dash, ' (Keys → Unified API key) into the FreeLLMAPI row below. ', again());
+        else if (!d.keyFound && !(S.keys.freellmapi || '').trim()) fl.append(el('b', { text: 'FreeLLMAPI is running' }), ` at ${d.base.replace('/v1', '')}; its unified key was not found${d.detectError ? ' (' + d.detectError + ')' : ''}: copy it from `, dash, ' (Keys → Unified API key) into the FreeLLMAPI row below. ', again());
+        else fl.append(el('b', { text: '✓ FreeLLMAPI connected' }), ` at ${d.base.replace('/v1', '')}: `, el('b', { text: `${d.readyModels ?? '?'} text models ready now` }), d.catalogModels ? ` (of ${d.catalogModels} in its catalogue; the rest open as you add keys in ` : ' (more open as you add keys in ', dash, '). ', again()); }
+      else if (d && d.error) fl.append('FreeLLMAPI: this page could not ask the extension (' + d.error + ') and found no server on ports 31415 or 3001. ', again());
+      else fl.append('FreeLLMAPI: not running on this computer. ', el('a', { href: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', target: '_blank', rel: 'noopener', text: 'Install it ↗' }), ' (the Windows .exe), open it once, then ', again(), '.');
+    }).catch(e => { fl.textContent = 'FreeLLMAPI: could not ask (' + ((e && (e.message || e.code)) || e) + ').'; }); };
+  // pictures and speech: possible from here, or what is missing
+  const mediaLine = () => { const p = el('p', { class: 'small ai-media' }, ['Pictures and speech: checking…']);
+    MEDIA.mediaStatus().then(m => { p.innerHTML = ''; if (m.ok) p.append(el('b', { text: '✓ Pictures and speech' }), ' through FreeLLMAPI, each admitted only after a strict check (two independent reviewers for a picture; a listen-back word check for speech): the Illustrate and Read aloud buttons on every step.'); else p.append(el('b', { text: 'Pictures and speech: ' }), m.why); }).catch(() => { p.textContent = ''; }); return p; };
+  // the keys kept on this computer: said only once the page has really read that file (the page must be allowed to)
+  const vaultNote = () => { const sp = el('span', { text: '' }); bridgeVault('get').then(v => { if (v === null && !((bridgeInfo() || {}).tools || []).includes('vault_get')) return; sp.textContent = ' Your keys are also kept on this computer, so every new version of the app has them.'; }).catch(e => { sp.textContent = ' (Your keys could not be kept on this computer: ' + ((e && (e.code || e.message)) || e) + '. They stay in this browser.)'; }); return sp; };
   const drawReach = ok => { reachState = ok; reach.innerHTML = ''; drawModes();
     if (!inClaudeApp()) { reach.className = 'ai-reach' + (ok ? ' good' : '');
       reach.append(el('b', { text: !ok ? 'This page cannot reach the free models (offline?).' : FREE.via() === 'relay' ? '✓ Free models through this computer’s launcher' : 'Free models: called straight from this page.' }), FREE.via() === 'relay' ? ' (its AI relay: FreeLLMAPI, NVIDIA, GitHub Models and the rest all reachable).' : ' Open the app with “Launch Scriptorium.bat” for the AI relay (FreeLLMAPI and the providers a web page may not call).', ' Claude itself is only available inside the Claude app (with the Scriptorium extension the free models work there too).');
-      if (FREE.via() === 'relay') { const fl = el('p', { class: 'small ai-fla' }, ['FreeLLMAPI: looking…']); reach.append(fl); FREE.autoFreeLLMAPI().then(d => { fl.innerHTML = ''; if (d && d.found) fl.append(el('b', { text: '✓ FreeLLMAPI connected' }), ` at ${d.base.replace('/v1', '')}: ${d.readyModels ?? '?'} models ready${d.keyFound ? '' : ' (paste its unified key in the FreeLLMAPI row below)'}.`); else fl.append('FreeLLMAPI: not running on this computer. ', el('a', { href: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', target: '_blank', rel: 'noopener', text: 'Install it ↗' })); S = FREE.settings(); drawProviders(); }).catch(() => { fl.textContent = 'FreeLLMAPI: could not ask.'; }); }
+      if (FREE.via() === 'relay') { const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
-    if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here. Your keys are also kept on this computer, so every new version of the app has them.`);
+    if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here.`, vaultNote());
       if (!(I.tools || []).includes('freellmapi_detect')) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.1) is ready: ' }), 'it keeps your keys on this computer and connects FreeLLMAPI by itself. ', dlBtn('Download the new one'), ' then double-click it (Claude Desktop replaces the old one).']));
-      else { const fl = el('p', { class: 'small ai-fla' }, ['FreeLLMAPI: looking…']); reach.append(fl); const show = d => { fl.innerHTML = ''; if (d && d.found) fl.append(el('b', { text: '✓ FreeLLMAPI connected' }), ` at ${d.base.replace('/v1', '')}: ${d.readyModels ?? '?'} models ready now${d.catalogModels ? ' of ' + d.catalogModels + ' in its catalogue' : ''}${d.keyFound ? '' : ' (its unified key was not found: paste it below, FreeLLMAPI row)'}. Add a free key per provider in its dashboard (Keys page) to open the rest: `, el('a', { href: d.base.replace('/v1', '') + '/', target: '_blank', rel: 'noopener', text: 'its dashboard ↗' })); else fl.append('FreeLLMAPI: not running on this computer. ', el('a', { href: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', target: '_blank', rel: 'noopener', text: 'Install it ↗' }), ' (the Windows .exe), open it once, then ', el('button', { class: 'linkbtn', type: 'button', text: 'find it again', onclick: () => { fl.textContent = 'FreeLLMAPI: looking…'; FREE.autoFreeLLMAPI().then(d2 => { show(d2); S = FREE.settings(); drawProviders(); }); } }), '.'); }; FREE.autoFreeLLMAPI().then(d => { show(d); S = FREE.settings(); drawProviders(); }).catch(() => show(null)); }
+      else { if (!MEDIA.bridgeBinaryOK()) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.2) is ready: ' }), 'it carries pictures and speech (checked before use). ', dlBtn('Download the new one'), ' then double-click it; Claude Desktop replaces the old one.'])); const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
     reach.className = 'ai-reach';
     const dl = dlBtn('Download the extension');

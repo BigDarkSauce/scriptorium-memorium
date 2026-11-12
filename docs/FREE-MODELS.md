@@ -79,8 +79,8 @@ MCP server that runs on your own computer inside Claude Desktop. An Artifact may
 capability, server `host:scriptorium-free`); the page hands it each free-model request, it makes the request with
 Node's own fetch (no browser rules: NVIDIA NIM, GitHub Models, SambaNova and Cloudflare are reachable too) and passes
 the answer back as it streams (`http_start`, then `http_poll` every few seconds, so a long answer never meets the
-app's ~130 s limit per call). It only calls LLM-shaped addresses (`https://…/models`, `…/chat/completions`) and
-servers on your own computer; its tools are read-only, so the app does not ask to confirm each request.
+app's ~130 s limit per call). It only calls LLM-shaped addresses (`https://…/models`, `…/chat/completions`),
+servers on your own computer and (1.2, GET only) a picture link whose answer is an image; its tools are read-only, so the app does not ask to confirm each request.
 
 | Where | Claude | Free models |
 |---|---|---|
@@ -97,6 +97,24 @@ The standalone page still works on its own (free models only):
 * or from GitHub: https://bigdarksauce.github.io/scriptorium-memorium/
 
 Each place keeps its own library in its browser storage: move it with **Import / export**.
+
+## Pictures and speech (js/ai/media.js), admitted only past a strict check
+
+Through FreeLLMAPI on your computer (its image, speech and transcription endpoints, the same unified key), each step of
+a scroll has **Illustrate (checked)** and **Read aloud (checked)**. A generated picture or reading is used only if it
+passes every check; otherwise the step keeps none, and **the check** shows why.
+
+| | The check | Admitted when |
+|---|---|---|
+| Picture | 0. can this step be pictured truthfully, with no writing? (a writer model; definitions, equations and proofs cannot) | suitable, with a brief: must show / must not show |
+| | 1. pixels | ≥ 512 px a side; not blank, washed out or flat |
+| | 2. two independent reviewers, different model families (Claude in the Claude app; free vision models) | each: accurate 5/5, clean (no writing) 5/5, faithful, coherent, helpful, style ≥ 4/5 |
+| Reading | 0. formulas written out as spoken words | no symbols left |
+| | 1. the audio | 1.6–4.2 words/s, < 0.2 % clipped, no silence > 2 s inside, loud enough, one voice throughout |
+| | 2. heard back by speech-to-text (Whisper) | ≤ 8 % words wrong per piece, ≤ 5 % over the reading, length within 15 % |
+
+Three attempts each (a picture's brief is rewritten against the reviewers' objections). Needs extension 1.2 inside the
+Claude app (it carries bytes), or the launcher's relay on your computer.
 
 ## The live test
 

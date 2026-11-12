@@ -15,6 +15,9 @@ export function initAI() {
   return ready;
 }
 export const claudeAvailable = () => !!SAMPLE;
+// Claude asked directly (the picture reviewer in js/ai/media.js): pictures go only where this page may send them
+export const claudeImageCount = () => (SAMPLE && LIMITS && LIMITS.images ? LIMITS.images.maxCount || 0 : 0);
+export async function claudeSample(prompt, opts) { await ready; if (!SAMPLE) throw { code: 'unavailable' }; return SAMPLE(prompt, opts); }
 export const engine = () => FREE.mode();
 export const aiAvailable = () => { const m = FREE.mode(); return m === 'claude' ? !!SAMPLE : m === 'hybrid' ? !!SAMPLE || FREE.hasAny() : FREE.hasAny(); };
 // pictures go with a request only where the engine that answers it can see them (the chapter's reading: Claude in the

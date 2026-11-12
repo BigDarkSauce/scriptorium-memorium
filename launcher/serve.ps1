@@ -32,8 +32,9 @@ $handler = {
       $b = [Text.Encoding]::UTF8.GetBytes(($o | ConvertTo-Json -Compress)); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
     }
     if ($p -eq '/__relay/fetch') {
-      $u = [Web.HttpUtility]::ParseQueryString($req.Url.Query)['u']; $x = $null
-      $ok = [Uri]::TryCreate($u, [UriKind]::Absolute, [ref]$x) -and ((($x.Host -in 'localhost', '127.0.0.1', '::1') -and $x.Scheme -match '^https?$') -or ($x.Scheme -eq 'https' -and $x.AbsolutePath -match '/(models|chat/completions)/?$'))
+      $qs = [Web.HttpUtility]::ParseQueryString($req.Url.Query); $u = $qs['u']; $media = $qs['media']; $x = $null
+      if ($media -and ($media -ne 'image' -or $req.HttpMethod -ne 'GET')) { $res.StatusCode = 403; return }
+      $ok = [Uri]::TryCreate($u, [UriKind]::Absolute, [ref]$x) -and ((($x.Host -in 'localhost', '127.0.0.1', '::1') -and $x.Scheme -match '^https?$') -or ($x.Scheme -eq 'https' -and ($media -eq 'image' -or $x.AbsolutePath -match '/(models|chat/completions)/?$')))
       if (-not $ok) { $res.StatusCode = 403; return }
       [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
       $out = [Net.HttpWebRequest]::Create($x); $out.Method = $req.HttpMethod; $out.Timeout = 600000; $out.ReadWriteTimeout = 600000; $out.AllowReadStreamBuffering = $false
@@ -42,6 +43,7 @@ $handler = {
       if ($req.ContentType) { $out.ContentType = $req.ContentType }
       if ($req.HasEntityBody) { $s = $out.GetRequestStream(); $req.InputStream.CopyTo($s); $s.Close() }
       try { $r = $out.GetResponse() } catch [Net.WebException] { $r = $_.Exception.Response; if (-not $r) { $res.StatusCode = 502; return } }
+      if ($media -eq 'image' -and -not ("$($r.ContentType)" -like 'image/*')) { $r.Close(); $res.StatusCode = 502; return }   # a picture link must answer with a picture
       $res.StatusCode = [int]$r.StatusCode; $res.SendChunked = $true
       if ($r.ContentType) { $res.ContentType = $r.ContentType }
       foreach ($h in 'Retry-After', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset', 'ratelimit-reset') { if ($r.Headers[$h]) { $res.AddHeader($h, $r.Headers[$h]) } }

@@ -62,6 +62,27 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
   return new Response(stream, { status: r.status >= 200 && r.status <= 599 && r.status !== 204 ? r.status : 502, headers: r.headers || {} });
 }
 
+// bytes through the bridge (1.2+): a generated image or spoken reading back, an audio file up (transcription). The
+// answer arrives whole (base64, in slices), then is handed over as an ordinary Response.
+const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = t => { const bin = atob(t), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; };
+export const bridgeBinary = () => !!(INFO && INFO.version && INFO.version.localeCompare('1.2.0', undefined, { numeric: true }) >= 0);
+export async function bridgeFetchBytes(url, { method = 'GET', headers = {}, body, signal, media } = {}) {
+  if (!(await bridgeReady())) throw new TypeError('bridge not available');
+  if (!bridgeBinary()) throw { code: 'old_bridge', message: 'the Scriptorium extension is older than 1.2: install the new one (AI panel → Download the extension)' };
+  const H = {}; new Headers(headers).forEach((v, k) => { H[k] = v; });
+  const a = { url, method, headers: H, binary: true, ...(media ? { media } : {}) };
+  if (body != null) { if (typeof body === 'string') a.body = body; else a.body_b64 = b64(new Uint8Array(body instanceof Blob ? await body.arrayBuffer() : body)); }
+  const { id } = await tool('http_start', a); let from = 0, text = '', r;
+  const stop = () => tool('http_cancel', { id }).catch(() => { }); if (signal) signal.addEventListener('abort', stop, { once: true });
+  try {
+    for (;;) { if (signal && signal.aborted) throw { code: 'cancelled' }; r = await tool('http_poll', { id, from, wait_ms: 20000, have_status: true }, signal); text += r.text || ''; from = r.next; if (r.done) break; }
+  } finally { if (signal) signal.removeEventListener('abort', stop); }
+  if (r.error && !(r.status > 0)) throw new TypeError('bridge: ' + r.error);
+  if (r.error) throw { code: 'network', message: r.error };
+  return new Response(r.encoding === 'base64' ? unb64(text) : text, { status: r.status >= 200 && r.status <= 599 && r.status !== 204 ? r.status : 502, headers: r.headers || {} });
+}
+
 // the AI settings kept on this computer (the vault), and FreeLLMAPI found on it (extension 1.1+)
 export async function bridgeVault(op, data) { if (!(await bridgeReady())) return null; if (!INFO || !(INFO.tools || []).includes('vault_get')) return null; return op === 'set' ? tool('vault_set', { data }) : tool('vault_get', {}); }
 export async function bridgeDetect() { if (!(await bridgeReady())) return null; if (!INFO || !(INFO.tools || []).includes('freellmapi_detect')) return { found: false, why: 'the extension is older than 1.1: install the new one' }; return tool('freellmapi_detect', {}); }

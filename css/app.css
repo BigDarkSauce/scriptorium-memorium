@@ -1215,3 +1215,14 @@ body:has(.title-ui) .ai-btn { z-index: 6; }
 .prep-note b::after { content: ''; display: block; width: 120px; height: 2px; margin: 10px auto 0; background: linear-gradient(90deg, transparent, #e8c47a, transparent); background-size: 200% 100%; animation: prep-sweep 1.4s linear infinite; }
 .prep-note span { font-size: 12.5px; color: rgba(233,220,188,.7); }
 @keyframes prep-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+/* pictures and speech admitted after the check (js/ai/media.js) */
+.step-media:empty { display: none; }
+.step-media { margin: .6em 0; display: grid; gap: .5em; }
+.gen-fig { margin: 0; }
+.gen-fig img { display: block; max-width: min(100%, 520px); border-radius: 4px; box-shadow: 0 1px 6px rgba(40, 25, 5, .35); cursor: zoom-in; }
+.gen-fig figcaption, .gen-audio { font-size: .82em; opacity: .85; }
+.gen-audio { display: flex; flex-wrap: wrap; align-items: center; gap: .4em; }
+.gen-tag { font-variant: small-caps; letter-spacing: .04em; border: 1px solid currentColor; border-radius: 3px; padding: 0 .35em; }
+.gen-status { display: block; font-size: .85em; margin-top: .3em; }
+.gen-report { max-height: 60vh; overflow: auto; display: grid; gap: .7em; }
+.gen-att { border-left: 2px solid rgba(160, 120, 50, .5); padding-left: .6em; display: grid; gap: .2em; }

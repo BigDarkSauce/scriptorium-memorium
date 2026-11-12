@@ -7,7 +7,8 @@ Cloudflare, SambaNova (no cross-origin answers). The page asks  GET /__relay/inf
 GET|POST /__relay/fetch?u=<url>  with the request's headers and body; the answer streams back as it arrives.
 
 It forwards only LLM-shaped addresses: https://.../models or .../chat/completions (any provider), and anything on this
-computer (localhost / 127.0.0.1), nothing else. It listens on localhost only.
+computer (localhost / 127.0.0.1), and (?media=image) a picture link an image generator returned, refused unless
+the answer is an image. Nothing else. It listens on localhost only.
 python launcher/serve.py [port]   (default 8000; the folder above launcher/ is served)
 """
 import http.server, json, os, socketserver, sys, urllib.request, urllib.error, urllib.parse, re
@@ -18,13 +19,15 @@ PASS_HEADERS = ('content-type', 'retry-after', 'x-ratelimit-reset-requests', 'x-
                 'ratelimit-reset', 'x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens')
 
 
-def allowed(u):
+def allowed(u, media=None):
     try:
         x = urllib.parse.urlsplit(u)
     except ValueError:
         return False
     if x.hostname in ('localhost', '127.0.0.1', '::1'):
         return x.scheme in ('http', 'https')
+    if media == 'image':  # a picture an image generator returned as a link: the answer must be an image (checked below)
+        return x.scheme == 'https'
     return x.scheme == 'https' and re.search(r'/(models|chat/completions)/?$', x.path) is not None
 
 
@@ -102,8 +105,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return True
         if q.path != '/__relay/fetch':
             return False
-        u = (urllib.parse.parse_qs(q.query).get('u') or [''])[0]
-        if not allowed(u):
+        qs = urllib.parse.parse_qs(q.query); u = (qs.get('u') or [''])[0]; media = (qs.get('media') or [None])[0]
+        if media not in (None, 'image') or (media and self.command != 'GET'):
+            self.send_error(403, 'Unknown media kind'); return True
+        if not allowed(u, media):
             self.send_error(403, 'The relay only forwards LLM API addresses'); return True
         n = int(self.headers.get('Content-Length') or 0)
         data = self.rfile.read(n) if n else None
@@ -115,6 +120,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             r = e
         except Exception as e:  # not reachable
             self.send_error(502, 'Not reachable: %s' % e); return True
+        if media == 'image' and not (r.headers.get('content-type') or '').lower().startswith('image/'):
+            self.send_error(502, 'That link is not an image'); return True
         self.send_response(r.status if hasattr(r, 'status') else r.code)
         for k, v in r.headers.items():
             if k.lower() in PASS_HEADERS:

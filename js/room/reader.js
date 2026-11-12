@@ -17,6 +17,7 @@ import { renderReveal, openDeck, stats as revealStats, normReveal } from './reve
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
 import { seedMotion } from '../seeds-motion.js';
+import * as MEDIA from '../ai/media.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
@@ -58,6 +59,7 @@ export class Reader {
   // opened from it is closed
   releaseFigures() { try { closeLecterns(); this.el.querySelectorAll('.fig.prim').forEach(b => b._prim && b._prim.dispose()); } catch (e) { console.warn(e); } }
   close() {
+    this.stopReading(); if (this._mediaJob) this._mediaJob.abort();
     this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
@@ -297,6 +299,50 @@ export class Reader {
       g.example ? el('p', { class: 'gw-ex', html: '<b>Example.</b> ' + prose(g.example) }) : null])));
     d.addEventListener('toggle', () => { if (d.open) typeset(d); }, true); return d;
   }
+  // ---- pictures and speech (js/ai/media.js): made on request, shown only once they passed the check
+  async fillMedia(st, slot) {
+    const [img, sp] = await Promise.all([MEDIA.kept(this.part, st, 'image'), MEDIA.kept(this.part, st, 'speech')]).catch(() => [null, null]);
+    slot.innerHTML = '';
+    if (img && img.blob) { const url = URL.createObjectURL(img.blob), A = img.report && img.report.admitted || {};
+      slot.append(el('figure', { class: 'gen-fig' }, [el('img', { src: url, alt: 'AI-generated illustration of ' + mathText(st.title || ''), loading: 'lazy', onclick: () => lightbox({ dataUrl: url, label: st.title, generated: true, caption: mathText(st.title || '') }) }),
+        el('figcaption', {}, [el('span', { class: 'gen-tag', text: 'AI-generated · checked' }), ` ${A.model || ''}${A.provider ? ' (' + A.provider + ')' : ''}; reviewed by ${(A.judges || []).join(' and ')}. `, this.reportLink(img.report), ' · ', el('button', { class: 'linkbtn', type: 'button', text: 'Remove', onclick: async () => { await MEDIA.drop(this.part, st, 'image'); this.fillMedia(st, slot); } })])])); }
+    if (sp && sp.blobs && sp.blobs.length) { const A = sp.report && sp.report.admitted || {}, b = el('button', { class: 'btn small', type: 'button', text: '▶ Listen' }); b.onclick = () => this.playReading(sp.blobs, b);
+      slot.append(el('div', { class: 'gen-audio' }, [b, el('span', { class: 'gen-tag', text: 'AI voice · checked' }), ` ${A.voice || ''}; heard back with ${((A.wer || 0) * 100).toFixed(1)} % of words wrong. `, this.reportLink(sp.report), ' · ', el('button', { class: 'linkbtn', type: 'button', text: 'Remove', onclick: async () => { this.stopReading(); await MEDIA.drop(this.part, st, 'speech'); this.fillMedia(st, slot); } })])); }
+  }
+  reportLink(R) { return el('button', { class: 'linkbtn', type: 'button', text: 'the check', onclick: () => this.showReport(R) }); }
+  showReport(R) {
+    if (!R) return; const box = el('div', { class: 'modal-veil', onclick: e => { if (e.target === box) box.remove(); } }), body = el('div', { class: 'gen-report' });
+    if (R.kind === 'image') {
+      body.append(el('p', { class: 'dim small', text: `Admitted only if ${R.rules.judges} reviewers of different model families each give ${R.rules.strict.join(' and ')} 5/5 and every other score at least ${R.rules.min}/5.` }));
+      if (R.unsuitable) body.append(el('p', { text: 'Not drawn: ' + R.unsuitable }));
+      (R.attempts || []).forEach((a, i) => body.append(el('div', { class: 'gen-att' }, [el('b', { text: `Attempt ${i + 1}: ${a.verdict || a.error || (a.technical && a.technical.length ? 'rejected: ' + a.technical.join('; ') : '')}` }), el('div', { class: 'small dim', text: 'Prompt: ' + (a.brief && a.brief.prompt || '') }),
+        ...(a.reviews || []).map(r => el('div', { class: 'small' }, [el('b', { text: r.judge + ': ' }), Object.entries(r.scores || {}).map(([k, v]) => k + ' ' + v).join(', '), r.describe ? ' — “' + r.describe + '”' : '', r.issues.length ? ' Issues: ' + r.issues.join('; ') : '']))])));
+    } else {
+      body.append(el('p', { class: 'dim small', text: `Admitted only if every piece is spoken at ${R.rules.wps[0]}–${R.rules.wps[1]} words a second, unclipped, without long silences, in one voice, and is heard back by a speech-to-text model with at most ${R.rules.werPiece * 100} % of words wrong (${R.rules.werAll * 100} % over the reading).${R.spokenScript ? ' Formulas were first written out as spoken words.' : ''}` }));
+      (R.pieces || []).forEach((p, i) => body.append(el('div', { class: 'gen-att' }, [el('b', { text: `Piece ${i + 1}` }), el('div', { class: 'small dim', text: p.text.slice(0, 240) + (p.text.length > 240 ? '…' : '') }),
+        ...p.tries.map((t, k) => el('div', { class: 'small' }, [`Try ${k + 1}: ${t.verdict || t.error || ''}`, t.wer != null ? ` · ${(t.wer * 100).toFixed(1)} % words wrong` : '', t.audio ? ` · ${t.audio.seconds} s, ${t.audio.wps} words/s` : '', t.listener ? ` · heard by ${t.listener}` : '']))])));
+    }
+    box.append(el('div', { class: 'modal glass wide' }, [el('h3', { text: R.kind === 'image' ? 'The picture check' : 'The reading check' }), body, el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Close', onclick: () => box.remove() })])])); document.body.append(box);
+  }
+  async makeMedia(kind, st, A, slot, btn) {
+    const st2 = btn.parentNode.querySelector('.gen-status') || btn.parentNode.appendChild(el('span', { class: 'status gen-status' }));
+    if (this._mediaJob) { this._mediaJob.abort(); return; }
+    const ctl = this._mediaJob = new AbortController(), was = btn.textContent; btn.textContent = 'Stop';
+    try {
+      const r = kind === 'image' ? await MEDIA.illustrate(st, A, { signal: ctl.signal, onStatus: t => { st2.textContent = t; } }) : await MEDIA.narrate(st, A, { signal: ctl.signal, onStatus: t => { st2.textContent = t; } });
+      await MEDIA.keep(this.part, st, kind, r); st2.textContent = kind === 'image' ? 'Picture admitted.' : 'Reading admitted.'; this.fillMedia(st, slot);
+    } catch (e) {
+      if (e && e.code === 'cancelled') st2.textContent = 'Stopped.';
+      else { st2.innerHTML = ''; st2.append((e && (e.message || errCopy(e))) || 'Failed.', ' '); if (e && e.report) st2.append(this.reportLink(e.report)); }
+    } finally { this._mediaJob = null; btn.textContent = was; }
+  }
+  playReading(blobs, b) {
+    if (this._audio && this._audio.btn === b) { this.stopReading(); return; } this.stopReading();
+    const urls = blobs.map(x => URL.createObjectURL(x)), a = new Audio(); let i = 0; this._audio = { a, btn: b, urls };
+    a.onended = () => { if (++i < urls.length) { a.src = urls[i]; a.play().catch(() => this.stopReading()); } else this.stopReading(); };
+    a.src = urls[0]; a.play().then(() => { b.textContent = '■ Stop'; }).catch(() => this.stopReading());
+  }
+  stopReading() { const A = this._audio; if (!A) return; this._audio = null; try { A.a.pause(); } catch (e) { } A.urls.forEach(u => URL.revokeObjectURL(u)); A.btn.textContent = '▶ Listen'; }
   hookKey(where) { return (this.part && this.part.id || 'part') + ':' + where; }
   hookCtx(A, at, where) { const T = new Map((A.chain || []).map(s => [s.id, s.id + ' ' + (s.title || '')])); return { key: this.hookKey(at), where, jump: id => this.jump(id), stepLabel: id => T.get(id) || id }; }
   stepHook(A, st) { const h = st.hook || seedHook(A && A.title, st.id); return h && normHook(h) ? h : null; }
@@ -345,6 +391,7 @@ export class Reader {
       const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
       art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); } } }), ans]));
     }
+    const mslot = el('div', { class: 'step-media' }); art.append(mslot); this.fillMedia(st, mslot);   /* a checked picture and reading, if any passed */
     const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
     if (st.bodies && st.bodies.length) art.append(el('div', { class: 'bodies' }, ['attached to', ...st.bodies.map(b => el('span', { class: 'chip', mathLabel: b }))]));
     const demos = el('div', { class: 'demos' });
@@ -352,7 +399,9 @@ export class Reader {
     demos.append(el('div', { class: 'step-tools' }, [
       el('button', { class: 'linkbtn', text: '+ showcase', onclick: () => this.addShowcase(st, demos) }),
       el('button', { class: 'linkbtn', text: 'More detail… → sub-scroll', title: 'Say what and where you need more detail; nothing is written until you do', onclick: () => this.moreDetail(st, A) }),
-      evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null]));
+      evidenceAvailable() ? el('button', { class: 'linkbtn', text: 'Find sources', onclick: () => this.findSources(st, srcBox) }) : null,
+      MEDIA.mediaUsable() ? el('button', { class: 'linkbtn', text: 'Illustrate (checked)', title: 'A picture from the free image models, admitted only if two independent reviewers find nothing wrong with it', onclick: e => this.makeMedia('image', st, A, mslot, e.target) }) : null,
+      MEDIA.mediaUsable() ? el('button', { class: 'linkbtn', text: 'Read aloud (checked)', title: 'A spoken reading from the free speech models, admitted only if it is heard back word for word', onclick: e => this.makeMedia('speech', st, A, mslot, e.target) }) : null]));
     art.append(demos);
     if (st.opens) art.append(el('div', { class: 'q-out', title: 'The question this step opens (the next step settles it)' }, [el('span', { class: 'q-mark', text: '→' }), el('span', { html: mathHTML(st.opens) })]));
     return art;
@@ -400,7 +449,7 @@ export class Reader {
         if (this._shownPdf) this._shownPdf.set(id, st.id);
         // the crop already shows the book's caption; repeat it only when the image is missing or was cut without it
         const capInCrop = f.dataUrl && f.caption && f.src !== 'caption-only';
-        const cap = el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), el('b', { text: ' ' + (f.label || id) + (f.caption && !capInCrop ? ' ' : '') }), capInCrop ? null : el('span', { text: String(f.caption || '').replace(/^(Figure|Fig\.?|Table)\s*[A-Z]?[\d.\-–]+[a-z]?\s*[.:\-–—|]?\s*/i, '') })]);
+        const cap = el('figcaption', {}, [el('span', { class: 'pdf-tag', text: f.generated ? 'AI-generated, checked' : 'From the PDF, p. ' + f.page }), el('b', { text: ' ' + (f.label || id) + (f.caption && !capInCrop ? ' ' : '') }), capInCrop ? null : el('span', { text: String(f.caption || '').replace(/^(Figure|Fig\.?|Table)\s*[A-Z]?[\d.\-–]+[a-z]?\s*[.:\-–—|]?\s*/i, '') })]);
         const fig = el('figure', { class: 'pdf-fig' + (f.dataUrl ? '' : ' noimg'), 'data-fig': id });
         if (f.dataUrl) { const img = el('img', { src: f.dataUrl, alt: (f.caption || f.label || 'Figure') + ' (from the PDF, page ' + f.page + ')', title: 'Click to enlarge', loading: 'lazy' }); img.onclick = () => lightbox(f); fig.append(img); }
         else fig.append(el('div', { class: 'pdf-fig-missing', text: 'The figure image is not stored in this browser (the PDF is needed to cut it out).' }));
@@ -612,7 +661,7 @@ function renderTable(T) {
 }
 function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(b || ''); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: (h.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' }); }
 function lightbox(f) {
-  const box = el('div', { class: 'modal-veil fig-lightbox', onclick: e => { if (e.target === box || e.target.tagName === 'BUTTON') box.remove(); } }, [el('figure', {}, [el('img', { src: f.dataUrl, alt: f.label || 'Figure' }), el('figcaption', {}, [el('span', { class: 'pdf-tag', text: 'From the PDF, p. ' + f.page }), ' ', el('span', { text: f.caption || f.label || '' })]), el('button', { class: 'btn small', text: 'Close' })])]);
+  const box = el('div', { class: 'modal-veil fig-lightbox', onclick: e => { if (e.target === box || e.target.tagName === 'BUTTON') box.remove(); } }, [el('figure', {}, [el('img', { src: f.dataUrl, alt: f.label || 'Figure' }), el('figcaption', {}, [el('span', { class: 'pdf-tag', text: f.generated ? 'AI-generated, checked' : 'From the PDF, p. ' + f.page }), ' ', el('span', { text: f.caption || f.label || '' })]), el('button', { class: 'btn small', text: 'Close' })])]);
   document.body.append(box);
 }
 export function drawArcs(wrap) {

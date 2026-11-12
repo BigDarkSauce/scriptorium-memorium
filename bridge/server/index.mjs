@@ -17,6 +17,9 @@
 //   vault_get                                     the AI settings kept on this computer (keys, choices) or null
 //   vault_set   {data}                            keeps them (~/.scriptorium/ai-settings.json): keys survive every new
 //                                                 version of the app and a cleared browser (the one tool that writes)
+//   http_start also takes body_b64 (a binary upload: the audio sent for transcription) and binary: true (the answer
+//   comes back base64: a generated image or a spoken reading); media: 'image' lets a GET fetch a picture a generator
+//   returned as a link (https, any path; refused unless the answer really is an image)            (1.2)
 //   freellmapi_detect                             finds FreeLLMAPI on this computer: its port (desktop app 31415, Docker
 //                                                 or npm 3001; its own config.json) and its unified key (read from its
 //                                                 local database, checked against the live server)
@@ -33,32 +36,44 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from '
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const VERSION = '1.1.0', NAME = 'scriptorium-free';
+const VERSION = '1.2.0', NAME = 'scriptorium-free';
 const jobs = new Map(); let seq = 0;
-const MAX_TEXT = 4e6, KEEP_MS = 10 * 60e3;
+const MAX_TEXT = 4e6, MAX_BIN = 24e6, SLICE = 1.5e6, KEEP_MS = 10 * 60e3;
 
-function allowed(u) {
+function allowed(u, media) {
   let x; try { x = new URL(u); } catch (e) { return 'not a URL'; }
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(x.hostname);
   if (local) return /^https?:$/.test(x.protocol) ? null : 'only http(s)';
   if (x.protocol !== 'https:') return 'only https outside this computer';
+  if (media === 'image') return null;   // a picture a generator returned as a link: checked to be an image when it arrives
   if (!/\/(models|chat\/completions)\/?$/.test(x.pathname)) return 'only /models and /chat/completions addresses';
   return null;
 }
 
-function start({ url, method = 'GET', headers = {}, body } = {}) {
-  const why = allowed(url); if (why) throw new Error('Refused: ' + why);
+function start({ url, method = 'GET', headers = {}, body, body_b64, binary = false, media } = {}) {
+  if (media && media !== 'image') throw new Error('Refused: unknown media kind');
+  if (media === 'image' && method !== 'GET') throw new Error('Refused: a picture link is only fetched');
+  const why = allowed(url, media); if (why) throw new Error('Refused: ' + why);
   const id = 'r' + (++seq) + '-' + Date.now().toString(36), ctl = new AbortController();
-  const J = { id, status: 0, headers: {}, text: '', done: false, error: null, at: Date.now(), ctl, waiters: [] };
+  const J = { id, status: 0, headers: {}, text: '', done: false, error: null, at: Date.now(), ctl, waiters: [], binary: !!binary || !!media };
   const wake = () => { const w = J.waiters.splice(0); w.forEach(f => f()); };
   jobs.set(id, J);
   (async () => {
     try {
       const h = { ...headers }; delete h.Origin; delete h.origin;
-      const r = await fetch(url, { method, headers: h, body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body), signal: ctl.signal });
-      J.status = r.status; r.headers.forEach((v, k) => { J.headers[k] = v; }); wake();
-      if (r.body) { const rd = r.body.getReader(), dec = new TextDecoder();
-        for (;;) { const { done, value } = await rd.read(); if (done) break; J.text += dec.decode(value, { stream: true }); if (J.text.length > MAX_TEXT) { ctl.abort(); throw new Error('answer too large'); } J.at = Date.now(); wake(); } J.text += dec.decode(); }
+      const b = body_b64 != null ? Buffer.from(String(body_b64), 'base64') : body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body);
+      const r = await fetch(url, { method, headers: h, body: b, signal: ctl.signal });
+      if (media === 'image' && r.ok && !/^image\//i.test(r.headers.get('content-type') || '')) { ctl.abort(); throw new Error('not an image'); }
+      J.status = r.status; r.headers.forEach((v, k) => { J.headers[k] = v; }); if (!J.binary || !r.ok) wake();
+      if (r.body) {
+        const rd = r.body.getReader();
+        if (J.binary && r.ok) {   // bytes: gathered whole, then handed over as base64 in slices
+          const parts = []; let n = 0;
+          for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); n += value.length; if (n > MAX_BIN) { ctl.abort(); throw new Error('answer too large'); } J.at = Date.now(); }
+          J.text = Buffer.concat(parts.map(p => Buffer.from(p))).toString('base64'); J.encoding = 'base64';
+        } else { const dec = new TextDecoder();
+          for (;;) { const { done, value } = await rd.read(); if (done) break; J.text += dec.decode(value, { stream: true }); if (J.text.length > MAX_TEXT) { ctl.abort(); throw new Error('answer too large'); } J.at = Date.now(); wake(); } J.text += dec.decode(); }
+      }
     } catch (e) { J.error = ctl.signal.aborted && !J.error ? (J.cancelled ? 'cancelled' : String(e && e.message || e)) : String(e && (e.cause && e.cause.code || e.message) || e); }
     J.done = true; J.at = Date.now(); wake();
   })();
@@ -68,8 +83,9 @@ async function poll({ id, from = 0, wait_ms = 15000, have_status = false } = {})
   const J = jobs.get(id); if (!J) throw new Error('No such request (it finished more than ten minutes ago, or the server restarted)');
   const ready = () => J.done || J.text.length > from || (!have_status && J.status > 0);   // the status alone is news the first time
   if (!ready()) await new Promise(res => { const t = setTimeout(res, Math.max(0, Math.min(20000, +wait_ms || 0))); J.waiters.push(() => { clearTimeout(t); res(); }); });
-  const out = { status: J.status, headers: J.headers, text: J.text.slice(from), next: J.text.length, done: J.done, error: J.error };
-  if (J.done && out.next >= J.text.length) J.at = Date.now();
+  const text = J.text.slice(from, from + SLICE), next = from + text.length;   // one MCP answer stays small; the page asks again
+  const out = { status: J.status, headers: J.headers, text, next, done: J.done && next >= J.text.length, error: J.error, ...(J.encoding ? { encoding: J.encoding } : {}) };
+  if (out.done) J.at = Date.now();
   return out;
 }
 function cancel({ id } = {}) { const J = jobs.get(id); if (J && !J.done) { J.cancelled = true; J.ctl.abort(); } jobs.delete(id); return { ok: true }; }
@@ -111,7 +127,7 @@ setInterval(() => { const now = Date.now(); for (const [k, J] of jobs) if (now -
 const RO = { readOnlyHint: true, openWorldHint: true };
 const TOOLS = [
   { name: 'bridge_info', description: 'Version of the Scriptorium free-model bridge and what it may call.', inputSchema: { type: 'object', properties: {} }, annotations: { ...RO, title: 'Bridge info' } },
-  { name: 'http_start', description: 'Start one request to an OpenAI-compatible LLM endpoint (https …/models or …/chat/completions, or a server on this computer). Returns {id}; read the answer with http_poll.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST'] }, headers: { type: 'object', additionalProperties: { type: 'string' } }, body: { type: 'string' } }, required: ['url'] }, annotations: { ...RO, title: 'Start an LLM request' } },
+  { name: 'http_start', description: 'Start one request to an OpenAI-compatible LLM endpoint (https …/models or …/chat/completions, or a server on this computer). Returns {id}; read the answer with http_poll.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST'] }, headers: { type: 'object', additionalProperties: { type: 'string' } }, body: { type: 'string' }, body_b64: { type: 'string', description: 'a binary body, base64' }, binary: { type: 'boolean', description: 'return the answer as base64 (images, audio)' }, media: { type: 'string', enum: ['image'], description: 'fetch a picture link a generator returned' } }, required: ['url'] }, annotations: { ...RO, title: 'Start an LLM request' } },
   { name: 'http_poll', description: 'The response of a request started with http_start so far: status, headers, the text from offset `from`, and whether it is done. Waits up to wait_ms (≤ 20000) for new text.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, from: { type: 'number' }, wait_ms: { type: 'number' }, have_status: { type: 'boolean' } }, required: ['id'] }, annotations: { ...RO, title: 'Read an LLM answer' } },
   { name: 'vault_get', description: 'The Scriptorium AI settings kept on this computer (keys and choices), or null.', inputSchema: { type: 'object', properties: {} }, annotations: { ...RO, openWorldHint: false, title: 'Read the kept AI settings' } },
   { name: 'vault_set', description: 'Keep the Scriptorium AI settings (keys and choices) on this computer, in ~/.scriptorium/ai-settings.json, so they survive new versions of the app and a cleared browser.', inputSchema: { type: 'object', properties: { data: { type: 'object' } }, required: ['data'] }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false, title: 'Keep the AI settings on this computer' } },
@@ -119,7 +135,7 @@ const TOOLS = [
   { name: 'http_cancel', description: 'Stop a request started with http_start.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, annotations: { ...RO, title: 'Stop an LLM request' } },
 ];
 const HANDLERS = {
-  bridge_info: () => ({ name: NAME, version: VERSION, node: process.version, calls: 'https …/models and …/chat/completions; anything on localhost', tools: TOOLS.map(t => t.name) }),
+  bridge_info: () => ({ name: NAME, version: VERSION, node: process.version, calls: 'https …/models and …/chat/completions; anything on localhost; picture links (images only)', tools: TOOLS.map(t => t.name) }),
   http_start: start, http_poll: poll, http_cancel: cancel, vault_get: vaultGet, vault_set: vaultSet, freellmapi_detect: freellmapiDetect,
 };
 

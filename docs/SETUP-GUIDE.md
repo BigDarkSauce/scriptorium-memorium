@@ -11,6 +11,7 @@ gets everything working, including free AI models with very large monthly allowa
 | Open it | https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie | double-click `Launch Scriptorium.bat` (or, without installing anything: https://bigdarksauce.github.io/scriptorium-memorium/) |
 | AI: Claude | yes (your Claude plan) | no (Claude lives in the Claude app) |
 | AI: free models | yes, with the **Scriptorium extension** (step 2) | yes, through the launcher's AI relay |
+| Pictures and speech (checked) | yes, extension 1.2 + FreeLLMAPI | yes, through the relay + FreeLLMAPI |
 | FreeLLMAPI (34 providers) | yes, found by itself through the extension | yes, found by itself through the relay |
 | Your library | kept in the Claude app's storage for the page | kept in your browser for http://localhost:8000 |
 
@@ -103,7 +104,17 @@ Beyond text, FreeLLMAPI routes images (`/v1/images/generations`), speech (`/v1/a
 | Video | none yet in FreeLLMAPI's catalogue |
 
 So the Cloudflare key is the single most useful one beyond text (Cloudflare → My Profile → API Tokens → Create token
-→ the "Workers AI" template; in FreeLLMAPI paste it as `account_id:token`, the account id is on the Workers AI page).
+→ the "Workers AI" template). In FreeLLMAPI it must be pasted as `account_id:token`: your **Account ID** (a 32-character
+hex string: Cloudflare dashboard → Workers AI, or the right-hand column of any domain's Overview), a colon, then the
+token. Pasted as the token alone it still shows "healthy", but every picture fails ("Could not route to
+/client/v4/accounts/…").
+
+Scriptorium uses them for **pictures** (Illustrate) and **readings** (Read aloud) on each step, and admits one only if
+it passes a strict check: a picture needs two independent reviewers (Claude and a free vision model, or two free ones
+of different families) to find no error, no writing and no rendering fault; a reading must be heard back by Whisper
+word for word (at most 5 % of words wrong) with clean audio. A rejected attempt shows its reasons; nothing is used.
+Pictures need: Cloudflare (images) and a vision model (Google). Readings need: a text-to-speech key (Speechify,
+Cloudflare, Google) and a speech-to-text key (Groq or Cloudflare).
 
 In Ireland (and the rest of the EEA, the UK and Switzerland): Google's Gemini API terms say apps made available to
 users there must use the paid tier; using your own free key for your own study is the ordinary case. Every other
@@ -137,7 +148,13 @@ them. Keys go only to the provider they belong to (or to FreeLLMAPI on your comp
 * **“This page cannot reach the free models”** in the Claude app: install the extension (step 2), then **Check again**.
 * **The extension is installed but not found**: Claude Desktop → Settings → Extensions → make sure it is enabled; quit
   and reopen Claude Desktop. The AI panel shows its version (1.1 or later finds FreeLLMAPI and keeps your keys).
-* **FreeLLMAPI not found**: open it from the Start menu (tray icon); the desktop app listens on port 31415.
+* **FreeLLMAPI not found**: open it from the Start menu (tray icon); the desktop app listens on port 31415. In the
+  Claude app the panel now says *why* a look failed; "running, but its unified key was not found" means: FreeLLMAPI's
+  dashboard → Keys → Unified API key → copy, then paste it in the AI panel's FreeLLMAPI row.
+* **How to be sure it is connected**: the AI panel shows "✓ FreeLLMAPI connected: N text models ready now (of M in its
+  catalogue)" and "✓ Pictures and speech". The **Test** button sends a real request through each provider.
+* **A picture or reading was "not admitted"**: press **the check** next to the message: every attempt, the reviewers'
+  scores and objections, or the words heard back. Usually another try, or another key (a second vision model) helps.
 * **Every free model is at its limit**: the status line says which one frees up next and when; add more keys (step 4).
 * **The first visit to a room takes a few seconds**: the graphics card compiles the room's materials once (“Preparing
   the room…”); later visits are quick.

@@ -28,6 +28,7 @@ import { bridgeReady, bridgeFetch, inClaudeApp, bridgeVault, bridgeDetect } from
 // every request goes through it (no browser rules: FreeLLMAPI, NVIDIA NIM, GitHub Models, Cloudflare all reachable).
 let RELAY = null; const relayP = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && typeof fetch === 'function' && !inClaudeApp())
   ? fetch(location.pathname || '/', { method: 'HEAD', cache: 'no-store' }).then(r => (RELAY = !!r.headers.get('x-scriptorium-relay'))).catch(() => (RELAY = false)) : Promise.resolve(RELAY = false);   /* the launcher marks every answer (a probe of a missing path would log a 404 on a plain server) */
+export const netReady = () => relayP;
 export const via = () => inClaudeApp() ? 'bridge' : RELAY ? 'relay' : 'direct';
 const net = async (url, init) => { if (!inClaudeApp()) await relayP; return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init); };
 
@@ -92,15 +93,28 @@ export async function restoreSettings() {
 // typed yourself is kept)
 export async function autoFreeLLMAPI() {
   await relayP; let d = null;
-  if (via() === 'bridge') { if (!(await bridgeReady())) return null; d = await bridgeDetect().catch(() => null); }
-  else if (via() === 'relay') d = await fetch('/__relay/freellmapi', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+  if (via() === 'bridge') { if (!(await bridgeReady())) return { found: false, error: 'the Scriptorium extension is not running' }; d = await bridgeDetect().catch(e => ({ found: false, error: (e && (e.code || e.message)) || String(e) })); }
+  else if (via() === 'relay') d = await fetch('/__relay/freellmapi', { cache: 'no-store' }).then(r => r.json()).catch(e => ({ found: false, error: String(e && e.message || e) }));
   else return null;
-  if (!d || !d.found) return d;
+  // the detector could not answer (e.g. this page was not allowed to call it): look for the server itself, so the panel
+  // tells "running, key needed" apart from "not running"
+  if (!d || (!d.found && d.error)) {
+    const S0 = settings(), bases = [...new Set([S0.bases.freellmapi, 'http://127.0.0.1:31415/v1', 'http://127.0.0.1:3001/v1'].filter(Boolean))];
+    for (const b of bases) { try { const r = await net(b + '/models', { signal: AbortSignal.timeout(4000) }); if (r.status === 200 || r.status === 401) { d = { found: true, base: b, key: null, keyFound: false, probed: true, detectError: d && d.error }; break; } } catch (e) { } }
+    if (!d || !d.found) return d || { found: false };
+  }
+  if (!d.found) return d;
   const S = settings(); const patch = {};
   if (!S.on.freellmapi) patch.on = { ...S.on, freellmapi: true };
   if ((S.bases.freellmapi || '') !== d.base && !S.bases.freellmapi) patch.bases = { ...S.bases, freellmapi: d.base };
   if (d.key && !(S.keys.freellmapi || '').trim()) patch.keys = { ...S.keys, freellmapi: d.key };
   if (Object.keys(patch).length) { saveSettings(patch); try { const c = read(MKEY, {}); delete c.freellmapi; write(MKEY, c); } catch (e) { } }
+  // the counts, with whichever key the page holds (found now, or pasted before)
+  const k = (settings().keys.freellmapi || '').trim();
+  if (k && (d.readyModels == null || d.catalogModels == null)) {
+    const n = async q => { try { const r = await net(d.base + '/models' + q, { headers: { Authorization: 'Bearer ' + k }, signal: AbortSignal.timeout(8000) }); if (r.status === 401 || r.status === 403) { d.keyRejected = true; return null; } const j = await r.json(); return Array.isArray(j.data) ? j.data.length : null; } catch (e) { return null; } };
+    d.readyModels = d.readyModels ?? await n('?execution_status=ready'); d.catalogModels = d.catalogModels ?? await n(''); d.keyFound = !d.keyRejected;
+  }
   return d;
 }
 const listeners = new Set(); export const onSettings = f => (listeners.add(f), () => listeners.delete(f));
