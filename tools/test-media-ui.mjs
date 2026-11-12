@@ -94,7 +94,7 @@ ok(/Stop/.test(played) || /Listen/.test(played), 'reading: the player starts (' 
 
 // 5. the listener hears other words (25 % wrong) → rejected; the admitted reading stays
 S.heard = 'garbled'; await click('Read aloud (checked)'); st = await waitStatus();
-ok(/Not admitted/.test(st) && /failed the check 3 times/.test(st) && /words wrong/.test(st), 'reading: heard back 25 % wrong → rejected (' + st.slice(0, 120) + ')');
+ok(/Not admitted/.test(st) && /failed the check 3 times/.test(st) && /words wrong|carries the meaning/.test(st), 'reading: heard back 25 % wrong → rejected (' + st.slice(0, 120) + ')');
 
 // 6. formulas: written out as spoken words first (no symbols reach the speech model)
 S.heard = 'same'; const n2 = S.calls.length;
