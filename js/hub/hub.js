@@ -865,7 +865,7 @@ export class Hub {
     this._hud = [...this.ui.children, ...document.querySelectorAll('.sound-btn, .gfx-btn, .ai-btn, .map-btn, .map-card, .ap-chip')].filter(e => e !== this.cueLabel && e !== this.caption && e !== this.tip && !e.hidden && e.offsetWidth).map(e => e.getBoundingClientRect());
     if (near !== this.near) { this.near = near; this.showCaption(near); }
     // the caption sits low in the middle; a narrow window where it would meet the hint or the walk panel leaves it out
-    if (this.caption.classList.contains('on')) { const c = this.caption.getBoundingClientRect(); this.caption.classList.toggle('clash', this._hud.some(b => c.left < b.right && c.right > b.left && c.top < b.bottom && c.bottom > b.top)); }
+    if (this.caption.classList.contains('on')) { const c = this.caption.getBoundingClientRect(); this.caption.classList.toggle('clash', this._hud.some(b => c.left < b.right && c.right > b.left && c.top < b.bottom && c.bottom > b.top)); if (!this.caption.classList.contains('clash')) this._hud.push(c); }   /* the cue's label keeps clear of the caption too */
   }
   // "The library notices you": the scroll nearest the eye names itself, engraved, low in the middle of the view, with a
   // quiet rustle of parchment (at most one every 2.5 s)
