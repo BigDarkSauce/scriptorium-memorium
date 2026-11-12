@@ -13,10 +13,11 @@ import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
 import { seedHook } from '../seeds-hooks.js';
-import { renderReveal, openDeck, stats as revealStats, normReveal, revealSpec, enrollCheck } from './reveal.js';
+import { renderReveal, renderTransfer, normReveal, revealSpec, enrollCheck } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
 import { seedMotion } from '../seeds-motion.js';
+import { redundantFigures, isFlow } from './figspec.js';
 import * as MEDIA from '../ai/media.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
@@ -74,10 +75,7 @@ export class Reader {
       el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
         el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
       el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up, analyse again', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up · Analyse again · Paste JSON', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
-      // the transfer deck (reveal.js): rules uncovered earlier, back in new situations on their day
-      this.revisitBtn = el('button', { class: 'ibtn dark tiny rv-pill', type: 'button', 'aria-label': 'Revisit: new situations for rules you uncovered', title: 'Revisit: rules you uncovered, in new situations', html: '◆<span class="rv-n"></span>', onclick: () => openDeck({ typeset, onClose: () => this.refreshRevisit() }) }),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
-    this.refreshRevisit();
     this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
     if (this._dockKey) removeEventListener('keydown', this._dockKey);   // render() runs again after an analysis or a check: one F listener, not one per render
     this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target.closest && e.target.closest('input,textarea,select,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };   /* Ctrl/Cmd+F stays the browser's find */
@@ -389,7 +387,6 @@ export class Reader {
   // the scroll's opening, BEFORE its question: the AI's hook, the example library's, or a partial revelation of the
   // scroll's own conclusion (true by construction)
   openHook(A) { const h = (A.hook && normHook(A.hook) ? A.hook : null) || seedHook(A.title, 'open') || fallbackHook(A); this._openHook = h; return h ? renderHook(h, this.hookCtx(A, 'open', 'open')) : null; }
-  refreshRevisit() { const b = this.revisitBtn; if (!b) return; revealStats().then(S => { const n = b.querySelector('.rv-n'); if (n) n.textContent = S.due ? ' ' + S.due : ''; b.classList.toggle('due', S.due > 0); b.hidden = !(S.loops || S.cards); }).catch(() => { }); }
   renderStep(st, wrap, A) {
     const kind = String(st.kind || 'result').toLowerCase(); this._curTerms = [...(Array.isArray(st.terms) ? st.terms : []), ...(st.bodies || []).map(b => { const m = String(b).match(/^(.*?)\s*·\s*(.+?)\s+(\S{1,4})$/); return m ? { term: m[3], meaning: m[1] + ' · ' + m[2] } : null; }).filter(Boolean)];   /* "bob · mass m" names the symbol m too */   /* the step's symbols: a figure's "m" is drawn as what m means (glyphs.js) */
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
@@ -404,14 +401,19 @@ export class Reader {
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => this.jump(id) })); }); art.append(f); }
     // predict BEFORE the statement and the explanation give it away: the card comes right after the step's question and
     // ends its fold (computeFolds), so the answer is one unfold further on
-    const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
+    // a node diagram that only restates words the step already says, beside an animation or a richer figure of the same
+    // terms, is not drawn (it stays in the data): figspec.js redundantFigures
+    this._redundant = redundantFigures(st, ['intuition', 'misconception'].map(k => st[k] ? st[k + 'Motion'] || seedMotion(A && A.title, st.id, k, st[k]) : null).filter(m => m && hasMotion(m)));
+    // "Try it in a new situation" (reveal.js renderTransfer): right after the step's analogy, else after its teaching boxes
+    const tr = renderTransfer(st, { partId: this.part.id, partTitle: this.part.title, typeset, sfx: this.app.sfx }); let trAt = !tr;
+    const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx });
     if (rv) art.append(rv);
     if (st.statement) art.append(el('p', { class: 'stmt', html: prose(st.statement) }));
     if (st.statementFigure) art.append(this.figure(st.statementFigure));
     // short attributed excerpts (≤ 40 words); a passage quoted before is a link, never a second copy
     (st.quote || []).filter(q => q && q.text).forEach(q => art.append(q.dupOf ? el('div', { class: 'quote-ref' }, ['Quoted in ', el('a', { text: q.dupOf, tabindex: 0, onclick: () => this.jump(q.dupOf) })]) : el('blockquote', { class: 'src-quote' }, [el('span', { html: '“' + mathHTML(q.text) + '”' }), el('cite', { text: ' — the PDF' + (q.ref ? ', ' + q.ref : '') })])));
     // the explanation: paragraphs in the step's own words, each text-heavy one with its figure
-    (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: prose(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); });
+    (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: prose(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); if (!trAt && p.figure && /analogy/.test(p.figure.kind || p.figure.type || '')) { art.append(tr); trAt = true; } });
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
     // each move's reason is folded behind "why?": the reader first tries to see it, then checks
     if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), ...(d.why ? whyToggle(d.why) : [])])); }); art.append(ol); }
@@ -427,14 +429,15 @@ export class Reader {
     // the teaching boxes: the paragraph, its animation (the event or process it describes, played out; js/room/motion.js),
     // then its static figure as the summary to keep
     ((this._payoffs && this._payoffs.get(st.id)) || []).forEach(P => { const e = renderPayoff(P.h, { key: P.key, where: P.where }); if (e) art.append(e); });   /* the hooks this step settles, paid here */
-    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), this.motion(A, st, 'intuition'), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
+    if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), this.motion(A, st, 'intuition'), st.intuitionFigure ? (isFlow(st.intuitionFigure) ? this.figure(st.intuitionFigure, false, { illustrate: true, world: st.intuition }) : this.figure(st.intuitionFigure, true)) : null]));
     if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), this.motion(A, st, 'misconception'), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
+    if (!trAt) { art.append(tr); trAt = true; }
     // "Check yourself" after the reading, unless the predict card above already asked this very question
     if (st.check && st.check.q && !(rv && (revealSpec(st) || {}).hook === st.check.q)) {
       // the check's figure may give the answer away: it is drawn only when the answer is revealed; looking at the answer
-      // puts the question in the spaced revisit deck (reveal.js enrollCheck)
+      // records the question in the ledger (reveal.js enrollCheck)
       const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
-      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); enrollCheck(this.part.id, this.part.title, st).then(() => this.refreshRevisit()).catch(() => { }); } } }), ans]));
+      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); enrollCheck(this.part.id, this.part.title, st).catch(() => { }); } } }), ans]));
     }
     const mslot = el('div', { class: 'step-media' }); art.append(mslot); this.fillMedia(st, mslot);   /* a checked picture and reading, if any passed */
     const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
@@ -459,9 +462,10 @@ export class Reader {
     const host = el('div', { class: 'mo-host' }), d = (st.demos || []).find(x => x && (Array.isArray(x.bodies) || DIO[x.type]));   /* a portal: the same process, stepped into in 3D */
     try { renderMotion(spec, host, { text: st[slot], label: slot === 'intuition' ? 'Picture it' : 'Common mistake', actions: d ? [{ label: '3D ▸', title: 'Step into this step’s diorama', on: () => this.openDiorama(d, st, null) }] : [] }); } catch (e) { console.warn('motion', e); return null; } return host;
   }
-  figure(spec, small = false) {
-    const host = el('div', { class: 'fig-host' + (small ? ' small' : '') }), terms = this._curTerms || [];
-    this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F, terms }); const cast = castStrip(spec, terms); if (cast) host.append(cast); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
+  figure(spec, small = false, opts = {}) {
+    if (this._redundant && this._redundant.has(spec)) return el('span', { class: 'fig-skip', hidden: true, title: 'A diagram that only restated the text, not drawn' });
+    const host = el('div', { class: 'fig-host' + (small ? ' small' : '') + (opts.illustrate ? ' illustrated' : '') }), terms = this._curTerms || [];
+    this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F, terms, ...opts }); const cast = castStrip(spec, terms); if (cast) host.append(cast); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
     return host;
   }
   // a worked example is worked through, not handed over: the problem, then one solution line per "Next step" (each a

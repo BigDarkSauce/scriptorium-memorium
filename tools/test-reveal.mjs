@@ -36,7 +36,7 @@ ok(revealIssues({ id: 'S1', reveal: { transfer: { q: 'new case?', options: [{ te
 ok(!revealIssues({ id: 'S1', reveal: { transfer: { q: 'new case?', options: [{ text: 'a', correct: true }, { text: 'b' }, { text: 'c' }] } } }).length, 'a three-option transfer passes');
 
 // ---- the options' order: shuffled per step, fixed for that step, a permutation; the answer tracked by identity ----
-const { shuffleOrder, revisitCard, enrollCheck, renderReveal, ledgerNow, dueTransfers, stats } = await import('../js/room/reveal.js');
+const RV = await import('../js/room/reveal.js'), { shuffleOrder, revisitCard, enrollCheck, renderReveal, ledgerNow, stats, renderTransfer, analogyFigure } = RV;
 { const a = shuffleOrder(4, 'p/S1'), b = shuffleOrder(4, 'p/S1'); ok(JSON.stringify(a) === JSON.stringify(b), 'the order is the same on every render of a step');
   ok([...a].sort().join() === '0,1,2,3', 'the order is a permutation');
   const pos = new Set(); for (let i = 1; i <= 40; i++) pos.add(shuffleOrder(3, 'part/S' + i).indexOf(1)); ok(pos.size === 3, 'the correct option (stored second) is shown in every position across steps'); }
@@ -70,7 +70,34 @@ ok(revisitCard({ id: 'S1' }, null) === null, 'no check, no transfer: no card');
 { await enrollCheck('pY', 'Rocks', { id: 'S2', title: 'Types of rock', check: { q: 'Name the three kinds?', a: 'Igneous, sedimentary, metamorphic.' } });
   const e = ledgerNow().e['pY/S2']; ok(e && e.tr && e.tr.recall && !e.t, 'a taxonomy step\'s check is enrolled when its answer is shown (not counted as a predicted loop)');
   const S0 = await stats(); ok(S0.cards >= 2 && S0.due === 0, 'the cards are counted, due tomorrow');
-  e.tr.due = Date.now() - 1; ledgerNow().e['pX/S7'].tr.due = Date.now() - 1; const D = await dueTransfers(); ok(D.length === 2 && D[0].e.part !== D[1].e.part, 'due recall cards come back, interleaved across scrolls');
   const { answerTransfer } = await import('../js/room/reveal.js'); answerTransfer('pY/S2', true); ok(e.tr.iv >= 2 && e.tr.due > Date.now() + 864e5, '"Good" spaces the card further'); answerTransfer('pY/S2', false); ok(e.tr.iv === 1, '"Again" brings it back tomorrow');
   const S1 = await stats(); ok(S1.transfers === 0, 'self-graded recall does not count as transfer accuracy'); }
+// ---- no Revisit window any more: its "new situations" live in the scroll, right after the step's analogy ----
+ok(!('openDeck' in RV) && !('dueTransfers' in RV), 'the Revisit deck (window and queue) is gone');
+ok(renderTransfer({ id: 'S1', title: 't' }, { partId: 'pZ' }) === null, 'a step without a transfer gets no "new situation" card');
+{ const st = { id: 'S3', title: 'Resistances in series', reveal: { rule: 'Resistances in series add.', boundary: { case: 'c' }, transfer: { q: 'Two heaters in series instead of one: the heat given off is…', options: [{ text: 'Twice as much.' }, { text: 'The same.' }, { text: 'Half as much.', correct: true, why: 'Half the current through twice the resistance.' }], why: 'Power I²R falls to a half.' } } };
+  const card = renderTransfer(st, { partId: 'pZ', partTitle: 'Circuits' }); await tick();
+  ok(card && card.classList.contains('transfer-card') && /new situation/i.test(card.textContent), 'the inline card is titled "Try it in a new situation"');
+  const shown = card.querySelectorAll('rv-opt'); ok(shown.length === 3 && shown.map(b => b.dataset.opt).join() === shuffleOrder(3, 'pZ/S3/transfer').join(), 'its options are shown in an order fixed for the step');
+  shown.find(b => /Half/.test(b.textContent)).click(); await tick(); await tick();
+  const e = ledgerNow().e['pZ/S3']; ok(e && e.ti && e.ti.ok === true && e.ti.p === 2, 'the answer is kept in the step\'s ledger entry, as the option itself');
+  ok(e.tr && !e.tr.recall && e.tr.hist.join() === '1' && e.tr.iv >= 2, 'a right answer counts as transfer accuracy and spaces the question');
+  ok(card.classList.contains('rv-right') && /Transferred/.test(card.textContent) && /Resistances in series add/.test(card.textContent), 'the verdict, the why and the rule are shown');
+  const again = renderTransfer(st, { partId: 'pZ', partTitle: 'Circuits' }); await tick(); await tick(); ok(again.querySelector('rv-opts').classList.contains('done'), 'on a new render the answered card stays answered');
+  again.querySelector('rv-again').click(); const w = again.querySelectorAll('rv-opt').find(b => /Twice/.test(b.textContent)); w.click(); await tick(); await tick();
+  ok(ledgerNow().e['pZ/S3'].ti.ok === false && ledgerNow().e['pZ/S3'].tr.iv === 1 && again.classList.contains('rv-surprise'), 'a wrong answer is recorded and the question comes back sooner');
+  const S2 = await stats(); ok(S2.transfers === 2 && S2.transferRight === 1, 'transfer accuracy counts both answers'); }
+{ const st = { id: 'S4', title: 'x', reveal: { transfer: { q: 'A new case?', why: 'Because the same rule applies.' } } };
+  const card = renderTransfer(st, { partId: 'pZ' }); await tick(); const b = card.querySelector('btn'); ok(b && /Show the answer/.test(b.textContent), 'a transfer without options asks to work it out first');
+  b.click(); await tick(); ok(/same rule applies/.test(card.textContent), 'then shows its answer'); }
+// a reveal's analogy is drawn as the selectable analogy map whenever it has two pairs and a limit
+{ const { validateFigure } = await import('../js/room/figspec.js');
+  const f = analogyFigure({ source: 'water in pipes', maps: [['pump', 'battery'], ['narrow pipe', 'resistor']], breaks: 'A cut pipe spills water; a cut wire spills nothing.' }, 'Circuits');
+  ok(f && validateFigure(f).ok && validateFigure(f).fig.breaks.length === 1, 'the reveal\'s analogy becomes a valid analogy_map');
+  ok(analogyFigure({ source: 's', maps: [['a', 'b']], breaks: 'x' }) === null, 'one pair is too thin to map: it stays a small table'); }
+// nothing a reader reads is cut in the middle of a sentence
+{ const long = 'First sentence of the mistake is here. ' + 'It makes the second one slower per collision than it seems. '.repeat(8);
+  const n = normReveal({ misconception: long, rule: 'no stop at all '.repeat(40) });
+  ok(/[.]$/.test(n.misconception) && n.misconception.length <= 400, 'a long misconception is shortened at a sentence end');
+  ok(n.rule === ('no stop at all '.repeat(40)).trim(), 'a text with no sentence end is kept whole, never cut mid-sentence'); }
 console.log(`test-reveal: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

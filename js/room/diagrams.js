@@ -5,6 +5,7 @@ import { validateFigure, isPrimitive } from './figspec.js';
 import { renderPrimitive } from '../dio/prims/index.js';
 import { isCodeCall } from './prose.js';
 import { glyphFor, drawGlyph } from './glyphs.js';
+import { pickDepict, mountDepict, normDepict } from '../dio/prims/depict.js';
 const TC = typeof Node !== 'undefined' ? Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') : null;
 export const SVG_TYPES=['plot','tangent','riemann','vectors','matrix','complex','unitcircle','fourier','distribution','parametric','phase','customsvg','figure'];
 export function SVGDEMO(spec,host,fail){
@@ -214,7 +215,7 @@ export function densityOf(f) {
   if (d === 'poisson') { const l = P.lambda; const pm = k => k < 0 ? 0 : Math.exp(k * Math.log(l) - l - lgamma(k + 1)); let hi = Math.ceil(l + 4 * Math.sqrt(l) + 3); return { cont: false, lo: 0, hi, f: pm, sample: () => { let k = 0, p = 1; const L = Math.exp(-l); do { k++; p *= Math.random(); } while (p > L); return k - 1; } }; }
   return { cont: true, lo: -1, hi: 1, f: () => 0 };
 }
-export function renderFigure(spec, host, { small = false, figStore = null, terms = null } = {}) {
+export function renderFigure(spec, host, { small = false, figStore = null, terms = null, illustrate = false, world = '' } = {}) {
   const NS = 'http://www.w3.org/2000/svg', V = validateFigure(spec), f = V.fig;
   const box = el('figure', { class: 'fig' + (small ? ' small' : '') + (f && f.kind ? ' fig-' + f.kind : '') }); host.append(box);
   if (!V.ok && !(f && f.kind === 'pdf')) { box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + V.errors.join('; ') })); return () => {}; }
@@ -227,7 +228,7 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
   }
   // the domain primitives of the explanatory compiler (js/dio/prims): interactive, step-controlled, drawn by their module
   if (isPrimitive(f.kind)) { let stop = () => {}; try { stop = renderPrimitive(f, box, { small }); } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + e.message })); return () => {}; } const c = capEl(); if (c) box.append(c); return stop; }
-  const W = small ? 340 : 600, H = f.kind === 'contrast' && !(f.wrong && f.wrong.icon) && !(f.right && f.right.icon) ? (() => { const z = small ? 10 : 11.5, m = Math.floor((((small ? 340 : 600) - 30) / 2 - 20) / (z * .53)), wr = t => { let n = 1, c = 0; for (const x of String(t).split(/\s+/)) { if (c && c + 1 + x.length > m) { n++; c = x.length; } else c += (c ? 1 : 0) + x.length; } return n; }, n = Math.max(...[f.wrong, f.right].map(sd => wr(sd && sd.text || ''))); return Math.round(Math.max(small ? 100 : 120, 62 + n * z * 1.3 + 14)); })() : small ? 190 : f.kind === 'codetrace' ? Math.max(170, 40 + f.lines.length * 22 + (f.output.length ? 16 + f.output.length * 16 : 0)) : f.kind === 'table' ? 36 + (f.rows.length + 1) * 22 : f.kind === 'contrast' ? 150 : f.kind === 'flow' && f.dir === 'TB' ? 70 + Math.min(6, f.nodes.length) * 58 : 300;
+  let W = small ? 340 : 600, H = f.kind === 'contrast' ? (f.wrong && f.wrong.icon || f.right && f.right.icon ? 64 : 0) + (() => { const z = small ? 11.5 : 13, m = Math.floor((((small ? 340 : 600) - 30) / 2 - 20) / (z * .53)), wr = t => { let n = 1, c = 0; for (const x of String(t).split(/\s+/)) { if (c && c + 1 + x.length > m) { n++; c = x.length; } else c += (c ? 1 : 0) + x.length; } return n; }, n = Math.max(...[f.wrong, f.right].map(sd => wr(sd && sd.text || ''))); return Math.round(Math.max(small ? 100 : 120, 62 + (n + .5) * z * 1.3 + 14)); })() : small ? 190 : f.kind === 'codetrace' ? Math.max(170, 40 + f.lines.length * 22 + (f.output.length ? 16 + f.output.length * 16 : 0)) : f.kind === 'table' ? 36 + (f.rows.length + 1) * 22 : f.kind === 'contrast' ? 150 : f.kind === 'flow' && f.dir === 'TB' ? 70 + Math.min(6, f.nodes.length) * 58 : 300;
   const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', f.alt || f.caption || f.kind);
   box.append(el('div', { class: 'fig-frame' }, [svg])); const c = capEl(); if (c) box.append(c);
   const fs = small ? 11.5 : 13;   /* legible at the width the reader draws them (was 10 / 11.5) */
@@ -297,25 +298,54 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
       let x = x0; pos = rows.map((r, i) => { const p = [x, y0 + 5 + .75 * rh]; x += ws[i]; return p; });
     } else { x0 = legendAt.x; y0 = legendAt.y; mk('rect', { x: x0, y: y0, width: w, height: rows.length * rh + 6, rx: 3, fill: 'rgba(251,246,234,.9)', stroke: FC.grid }, g); pos = rows.map((r, i) => [x0, y0 + 5 + (i + .75) * rh]); }
     rows.forEach((r, i) => { const [x, y] = pos[i]; if (r.dot) mk('circle', { cx: x + 12, cy: y - 3, r: 3.2, fill: r.c }, g); else mk('rect', { x: x + 6, y: y - 5, width: 12, height: 3, fill: r.c }, g); txt(x + 24, y, r.n, { 'font-size': fs - 1 }, g); }); rec = true; clampTxt = true; };
-  let draw = () => {}, loopT = 0, animated = false;
+  let draw = () => {}, loopT = 0, animated = false; const vigStops = [];
   const k = f.kind;
   if (k === 'flow') {
     const ids = f.nodes.map(n => n.id), indeg = new Map(ids.map(i => [i, 0])); f.edges.forEach(e => indeg.set(e.to, indeg.get(e.to) + 1));
     const layerOf = new Map(); const order = [...ids]; let changed = true, guard = 0; ids.forEach(i => layerOf.set(i, 0));
     while (changed && guard++ < 30) { changed = false; f.edges.forEach(e => { if (ids.indexOf(e.to) > ids.indexOf(e.from) || indeg.get(e.from) === 0) { const v = layerOf.get(e.from) + 1; if (v > layerOf.get(e.to) && v < 12) { layerOf.set(e.to, v); changed = true; } } }); }
     const L = Math.max(...layerOf.values()) + 1, cols = [...Array(L)].map(() => []); order.forEach(i => cols[layerOf.get(i)].push(i));
-    const LR = f.dir !== 'TB', pos = new Map(), nw = LR ? Math.min(150, (W - 20) / L - 22) : Math.min(260, W - 60), nh = LR ? 54 : 42;
-    cols.forEach((col, li) => col.forEach((id, j) => { const n = col.length; pos.set(id, LR ? { x: 10 + (li + .5) * (W - 20) / L, y: (j + .5) * H / n } : { x: (j + .5) * W / n, y: 10 + (li + .5) * (H - 20) / L }); }));
-    const nodeW = LR ? nw : Math.min(nw, W / Math.max(...cols.map(c => c.length)) - 18);
-    const edgePath = e => { const a = pos.get(e.from), b = pos.get(e.to); if (LR) { const x1 = a.x + nodeW / 2, x2 = b.x - nodeW / 2 - 2; return `M${x1} ${a.y} C${(x1 + x2) / 2} ${a.y} ${(x1 + x2) / 2} ${b.y} ${x2} ${b.y}`; } const y1 = a.y + nh / 2, y2 = b.y - nh / 2 - 2; return `M${a.x} ${y1} C${a.x} ${(y1 + y2) / 2} ${b.x} ${(y1 + y2) / 2} ${b.x} ${y2}`; };
+    const byId = new Map(f.nodes.map(n => [n.id, n])), lh = fs * 1.25, maxPer = Math.max(...cols.map(c => c.length));
+    // every node's words are set whole (never cut): its box grows to hold them
+    const labelLines = (n, w) => wrapText(n.label, Math.max(6, Math.floor((w - 12) / (fs * .53))));
+    const boxH = (n, w, min) => Math.max(min, labelLines(n, w).length * lh + 12 + (n.note ? fs : 0));
+    // "Picture it": a small illustration under every node (js/dio/prims/depict.js), a chain laid out in one or two rows
+    const ill = (illustrate || f.nodes.some(n => n.depict)) && f.illustrate !== false && L <= 5 && maxPer <= 2;
+    const pos = new Map(), size = new Map(); let LR = f.dir !== 'TB', vigs = [];
+    if (ill) {
+      W = 600; LR = true; const colW = (W - 20) / L, nw = Math.min(176, colW - 30), vw = nw, vh = Math.round(vw * .6);
+      const rowsH = [...Array(maxPer)].map((_, j) => Math.max(44, ...cols.map(c => c[j] ? boxH(byId.get(c[j]), nw, 44) : 0)));
+      let y = 10; const rowY = rowsH.map(h => { const y0 = y; y += h + 8 + vh + 18; return y0; });
+      cols.forEach((col, li) => col.forEach((id, j) => { const x = 10 + (li + .5) * colW, h = rowsH[j]; pos.set(id, { x, y: rowY[j] + h / 2 }); size.set(id, [nw, h]); vigs.push({ id, x: x - vw / 2, y: rowY[j] + h + 8, w: vw, h: vh }); }));
+      H = Math.ceil(y - 8);
+    } else {
+      let nw = LR ? Math.min(150, (W - 20) / L - 22) : Math.min(260, W - 60);
+      if (LR && nw < 84 && L >= 3) { LR = false; nw = Math.min(260, W - 60); }   /* a long chain in a narrow figure reads top to bottom, never in slivers of 3 letters */
+      if (LR) { const nodeW = nw, hs = cols.map(c => c.map(id => boxH(byId.get(id), nodeW, 54))); H = Math.max(H, ...hs.map(c => c.reduce((a, h) => a + h + 16, 0) + 4));
+        cols.forEach((col, li) => { const tot = hs[li].reduce((a, h) => a + h + 16, 0); let y = (H - tot) / 2 + 8; col.forEach((id, j) => { const h = hs[li][j]; pos.set(id, { x: 10 + (li + .5) * (W - 20) / L, y: y + h / 2 }); size.set(id, [nodeW, h]); y += h + 16; }); }); }
+      else { const nodeW = Math.min(nw, W / maxPer - 18), rh = cols.map(c => Math.max(42, ...c.map(id => boxH(byId.get(id), nodeW, 42)))); H = Math.max(small ? 120 : 160, 20 + rh.reduce((a, h) => a + h + 22, 0) - 6);
+        let y = 10 + Math.max(0, (H - 20 - (rh.reduce((a, h) => a + h + 22, 0) - 22)) / 2); cols.forEach((col, li) => { const n = col.length; col.forEach((id, j) => { pos.set(id, { x: (j + .5) * W / n, y: y + rh[li] / 2 }); size.set(id, [nodeW, rh[li]]); }); y += rh[li] + 22; }); }
+    }
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const edgePath = e => { const a = pos.get(e.from), b = pos.get(e.to), sa = size.get(e.from), sb = size.get(e.to);
+      if (LR) { if (Math.abs(a.y - b.y) < 1 || b.x > a.x + 4) { const x1 = a.x + sa[0] / 2, x2 = b.x - sb[0] / 2 - 2; return `M${x1} ${a.y} C${(x1 + x2) / 2} ${a.y} ${(x1 + x2) / 2} ${b.y} ${x2} ${b.y}`; } const y1 = a.y + (b.y > a.y ? sa[1] / 2 : -sa[1] / 2), y2 = b.y + (b.y > a.y ? -sb[1] / 2 - 2 : sb[1] / 2 + 2); return `M${a.x} ${y1} C${a.x} ${(y1 + y2) / 2} ${b.x} ${(y1 + y2) / 2} ${b.x} ${y2}`; }
+      const y1 = a.y + sa[1] / 2, y2 = b.y - sb[1] / 2 - 2; return `M${a.x} ${y1} C${a.x} ${(y1 + y2) / 2} ${b.x} ${(y1 + y2) / 2} ${b.x} ${y2}`; };
     const paths = [];
     draw = t => { clear();
       f.edges.forEach((e, i) => { const p = mk('path', { d: edgePath(e), fill: 'none', stroke: FC.soft, 'stroke-width': 1.4, 'marker-end': `url(#${arrowId})` }, layer); paths[i] = p; if (e.label) { const a = pos.get(e.from), b = pos.get(e.to); txt((a.x + b.x) / 2, (a.y + b.y) / 2 - 5, e.label, { 'text-anchor': 'middle', 'font-size': fs - 1, fill: FC.rubric, 'font-style': 'italic' }); } });
       const hot = t == null ? -1 : Math.floor(t / 1.1) % f.nodes.length;
-      f.nodes.forEach((n, i) => { const p = pos.get(n.id); mk('rect', { x: p.x - nodeW / 2, y: p.y - nh / 2, width: nodeW, height: nh, rx: 8, fill: i === hot ? '#f3e3b8' : '#fffaf0', stroke: i === hot ? FC.rubric : FC.lapis, 'stroke-width': i === hot ? 2 : 1.3 }, layer); multi(p.x, p.y + 3 - (n.note ? 6 : 0), n.label, Math.max(10, Math.floor(nodeW / (fs * .52))), { 'text-anchor': 'middle' }); if (n.note) txt(p.x, p.y + nh / 2 - 6, n.note, { 'text-anchor': 'middle', 'font-size': fs - 2, fill: FC.soft, 'font-style': 'italic' }); });
+      f.nodes.forEach((n, i) => { const p = pos.get(n.id), [w, h] = size.get(n.id); mk('rect', { x: p.x - w / 2, y: p.y - h / 2, width: w, height: h, rx: 8, fill: i === hot ? '#f3e3b8' : '#fffaf0', stroke: i === hot ? FC.rubric : FC.lapis, 'stroke-width': i === hot ? 2 : 1.3 }, layer);
+        const Ls = labelLines(n, w), y0 = p.y - (n.note ? fs * .5 : 0) - (Ls.length - 1) * lh / 2 + fs * .35; Ls.forEach((l, k) => txt(p.x, y0 + k * lh, l, { 'text-anchor': 'middle' }));
+        if (n.note) txt(p.x, p.y + h / 2 - 6, n.note, { 'text-anchor': 'middle', 'font-size': fs - 2, fill: FC.soft, 'font-style': 'italic' }); });
       if (t != null && f.edges.length) { const e = f.edges[Math.floor(t / 1.1) % f.edges.length], p = paths[f.edges.indexOf(e)]; if (p && p.getTotalLength) { try { const Lp = p.getTotalLength(), q = p.getPointAtLength(Lp * ((t % 1.1) / 1.1)); mk('circle', { cx: q.x, cy: q.y, r: 4.5, fill: FC.rubric }, layer); } catch (x) { } } }
     };
     animated = !!f.animate;
+    // the illustrations sit outside the redrawn layer, each a small stage of its own that plays only while in view
+    if (vigs.length) { box.classList.add('fig-illustrated'); const vg = document.createElementNS(NS, 'g'); vg.setAttribute('class', 'fig-vigs'); svg.append(vg);
+      const W0 = [world, f.caption, ...f.nodes.map(n => n.label)].join(' · ');
+      vigs.forEach(v => { const n = byId.get(v.id), spec = normDepict(n.depict) || pickDepict(n.label, { world: W0 }); const fr = document.createElementNS(NS, 'rect'); [['x', v.x], ['y', v.y], ['width', v.w], ['height', v.h], ['rx', 7], ['fill', '#fffdf6'], ['stroke', 'rgba(45,91,142,.28)']].forEach(([a, b]) => fr.setAttribute(a, b)); vg.append(fr);
+        const inner = document.createElementNS(NS, 'svg'); [['x', v.x + 2], ['y', v.y + 2], ['width', v.w - 4], ['height', v.h - 4], ['preserveAspectRatio', 'xMidYMid meet']].forEach(([a, b]) => inner.setAttribute(a, b)); vg.append(inner);
+        const stopV = mountDepict(inner, spec, { color: FC.lapis, labels: false, title: n.label, seed: n.label }); vigStops.push(stopV); }); }
   } else if (k === 'plot') {
     const pk = f.animate ? f.animate.param : null; const fns = f.curves.map(c => compile(c.expr, pk ? ['x', pk] : ['x']));
     let yr = f.y; if (!yr) { let lo = Infinity, hi = -Infinity; const pv = pk ? [f.animate.from, f.animate.to] : [0]; fns.forEach(fn => pv.forEach(a => { for (let i = 0; i <= 120; i++) { const y = fn(f.x[0] + (f.x[1] - f.x[0]) * i / 120, a); if (isFinite(y)) { lo = Math.min(lo, y); hi = Math.max(hi, y); } } })); f.points.forEach(p => { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }); if (!isFinite(lo)) { lo = -1; hi = 1; } const pad = (hi - lo || 1) * .1; yr = [lo - pad, hi + pad]; if (lo >= 0 && lo < (hi - lo) * .3) yr[0] = 0; }
@@ -419,13 +449,13 @@ export function renderFigure(spec, host, { small = false, figStore = null, terms
     draw = () => { clear(); const row = (cells, y, head, ri) => cells.forEach((c, j) => { const hl = !head && f.highlight.some(h => +h[0] === ri && +h[1] === j); mk('rect', { x: 6 + j * cw, y: y - 15, width: cw, height: 22, fill: head ? '#efe4c8' : hl ? 'rgba(156,58,40,.18)' : ri % 2 ? '#fbf6ea' : '#fffaf0', stroke: FC.grid }, layer); const gi = !head && j === 0 && cw >= 80 && rowPics && glyph(String(c), 16 + j * cw, y - 4, 13) ? 14 : 0; txt(10 + gi + j * cw, y, String(c).slice(0, Math.floor((cw - gi) / (fs * .55))), { 'font-weight': head ? 600 : 400, 'font-size': fs - 1 }); });
       if (f.columns.length) row(f.columns, 26, true, -1); f.rows.forEach((r, i) => row(r, 26 + (i + (f.columns.length ? 1 : 0)) * 22, false, i)); };
   } else if (k === 'contrast') {
-    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 });  const L = wrapText(side.text, Math.floor((w - 20) / (fs * (looksLikeCode(String(side.text)) ? .6 : .53))));   /* a code line is set in the wider mono face */ const cap = Math.max(1, Math.floor((H - 13 - 62) / (fs * 1.3)) + 1); if (L.length > cap) { L.length = cap; L[cap - 1] = L[cap - 1].replace(/[\s,;:.]*$/, '') + '…'; }   /* as many lines as the panel holds; a cut text ends in an ellipsis */ L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); { const id = side.icon ? glyphFor(side.text, side.icon) : null, free = H - 10 - (62 + L.length * fs * 1.3); if (id && free >= 46) glyph(side.text, x + w / 2, H - 10 - free / 2, Math.min(54, free - 12), side.icon, c); } }); };   /* a picture only when one is named for it (icon): a keyword guess here was decoration, and the animation above shows the process itself */
+    draw = () => { clear(); const w = (W - 30) / 2; [[f.wrong, 10, FC.rubric, '✗'], [f.right, 20 + w, FC.verd, '✓']].forEach(([side, x, c, mark]) => { mk('rect', { x, y: 10, width: w, height: H - 20, rx: 10, fill: c === FC.rubric ? 'rgba(156,58,40,.07)' : 'rgba(63,125,110,.09)', stroke: c, 'stroke-width': 1.4 }, layer); mk('circle', { cx: x + 22, cy: 32, r: 12, fill: c }, layer); txt(x + 22, 37, mark, { 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 700 }); if (side.title) txt(x + 42, 37, side.title, { fill: c, 'font-weight': 600 });  const L = wrapText(side.text, Math.floor((w - 20) / (fs * (looksLikeCode(String(side.text)) ? .6 : .53))));   /* a code line is set in the wider mono face */ /* the panel is as tall as the longer text needs (H above): every word is shown, never cut */ L.forEach((l, i) => txt(x + 14, 62 + i * fs * 1.3, l, { 'font-size': fs - .5 })); { const id = side.icon ? glyphFor(side.text, side.icon) : null, free = H - 10 - (62 + L.length * fs * 1.3); if (id && free >= 46) glyph(side.text, x + w / 2, H - 10 - free / 2, Math.min(54, free - 12), side.icon, c); } }); };   /* a picture only when one is named for it (icon): a keyword guess here was decoration, and the animation above shows the process itself */
   }
   // ---- run: a static drawing, or a loop (paused off screen, never with reduced motion unless asked)
   let raf = 0, alive = true, visible = true, t0 = performance.now(), playing = false;
   const io = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(es => { visible = es.some(e => e.isIntersecting); }) : null; if (io) io.observe(box);
   const loop = () => { if (!alive) return; if (!box.isConnected && t0 + 2000 < performance.now()) { stop(); return; } if (visible) { try { draw((performance.now() - t0) / 1000); } catch (e) { stop(); } } raf = requestAnimationFrame(loop); };
-  const stop = () => { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); };
+  const stop = () => { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); vigStops.forEach(v => v()); };
   try { draw(null); } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'fig-bad', text: 'This figure could not be drawn: ' + e.message })); return () => {}; }
   if (animated) {
     box.classList.add('animated');

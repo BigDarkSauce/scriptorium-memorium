@@ -263,31 +263,15 @@ export function renderMotion(spec, host, opts = {}) {
   const cap = el('figcaption', { class: 'mo-cap', 'aria-live': 'polite' }), beats = (Array.isArray(spec.beats) ? spec.beats : []).filter(b => Array.isArray(b) && b[1]).sort((a, b) => a[0] - b[0]);
   const playB = el('button', { class: 'mo-btn', type: 'button', 'aria-label': 'Pause', title: 'Pause', text: '❚❚' }), scrub = el('input', { class: 'mo-scrub', type: 'range', min: 0, max: 1000, value: 0, 'aria-label': 'Position in the animation' }), again = el('button', { class: 'mo-btn', type: 'button', 'aria-label': 'Play from the start', title: 'From the start', text: '↺' });
   const gifB = el('button', { class: 'mo-btn mo-gif', type: 'button', title: 'Save this animation as a GIF', text: 'GIF' });
-  // sonification: the quantity that changes is also heard (an auditory graph): a tone whose pitch follows a counter or a
-  // curve being drawn, or a click for every wall hit of a gas, so a rise in pressure is a denser crackle
-  const SP = spec.wrong ? spec.right : spec, srcN = (SP.items || []).find(it => it && it.m === 'num' && Array.isArray(it.k) && it.k.length > 1), srcC = !srcN && (SP.items || []).find(it => it && it.m === 'curve' && Array.isArray(it.k) && it.k.some(f => f[1] && 'draw' in f[1])), srcG = !srcN && !srcC && (SP.items || []).find(it => it && it.m === 'gas' && it.hits);
-  const sonic = false ? (() => {   /* sonification removed at the reader's request: graphs are silent */ let ac = null, osc = null, gn = null, on = false, lastT = 0;
-    const lo = srcN ? Math.min(...srcN.k.map(f => +f[1].v).filter(isFinite), +srcN.v || 0) : 0, hi = srcN ? Math.max(...srcN.k.map(f => +f[1].v).filter(isFinite), +srcN.v || 0) : 1;
-    const value = uu => { if (srcN) { const v = props(srcN, uu).v; return hi > lo ? (v - lo) / (hi - lo) : .5; } const p = props(srcC, uu), xr = p.xr || [0, 1], yr = p.yr || [0, 1], x = xr[0] + (xr[1] - xr[0]) * clamp(p.draw == null ? 1 : p.draw, 0, 1), f = srcC._f || compile(p.f || '0', ['x', 'p', 't']), y = f(x, p.p == null ? 1 : p.p, uu * dur); return clamp((y - yr[0]) / (yr[1] - yr[0]), 0, 1); };
-    const click = () => { const o = ac.createOscillator(), g2 = ac.createGain(); o.frequency.value = 900 + Math.random() * 500; g2.gain.setValueAtTime(.05, ac.currentTime); g2.gain.exponentialRampToValueAtTime(.0005, ac.currentTime + .03); o.connect(g2).connect(ac.destination); o.start(); o.stop(ac.currentTime + .035); };
-    return { toggle() { on = !on; if (on && !ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { on = false; return false; } } if (ac && ac.state === 'suspended') ac.resume();
-        if (on && !srcG && !osc) { osc = ac.createOscillator(); gn = ac.createGain(); osc.type = 'triangle'; gn.gain.value = 0; osc.connect(gn).connect(ac.destination); osc.start(); }
-        if (!on && gn) gn.gain.setTargetAtTime(0, ac.currentTime, .05); return on; },
-      tick(uu, live) { if (!on || !ac) return; if (osc) { gn.gain.setTargetAtTime(live ? .035 : 0, ac.currentTime, .05); if (live) osc.frequency.setTargetAtTime(220 * Math.pow(2, 2 * value(uu)), ac.currentTime, .04); }
-        if (srcG && live) { const S = srcG._sim, t = uu * dur; if (S && S.hits) { let n = 0; for (let i = S.hits.length - 1; i >= 0 && n < 6; i--) { const h = S.hits[i]; if (h[0] <= lastT) break; if (h[0] <= t && !h[3]) { click(); n++; } } } lastT = t; } },
-      stop() { on = false; if (osc) { try { osc.stop(); } catch (e) { /* already stopped */ } } if (ac) ac.close(); ac = null; osc = null; } }; })() : null;
-  const soundB = el('button', { class: 'mo-btn mo-sound', type: 'button', title: sonic ? 'Hear it: the changing quantity as sound' : '', text: '♪', hidden: !sonic, 'aria-pressed': 'false' });
-  soundB.onclick = () => { const on = sonic.toggle(); soundB.setAttribute('aria-pressed', String(!!on)); soundB.classList.toggle('on', !!on); };
   const ticks = el('div', { class: 'mo-ticks' }, beats.map(b => el('i', { style: `left:${clamp(b[0], 0, 1) * 100}%` })));
   const acts = (opts.actions || []).map(a => el('button', { class: 'mo-btn mo-act', type: 'button', title: a.title || '', text: a.label, onclick: a.on }));
-  wrap.append(el('div', { class: 'mo-stages' }, stages.map(s => s.box)), cap, el('div', { class: 'mo-bar' }, [playB, el('div', { class: 'mo-track' }, [ticks, scrub]), again, soundB, gifB, ...acts]));
+  wrap.append(el('div', { class: 'mo-stages' }, stages.map(s => s.box)), cap, el('div', { class: 'mo-bar' }, [playB, el('div', { class: 'mo-track' }, [ticks, scrub]), again, gifB, ...acts]));
   host.append(wrap);
   let u = 0, playing = false, last = 0, raf = 0, hold = 0, alive = true, visible = false, lastCap = null, goneAt = 0;
   const frame = uu => { u = clamp(uu, 0, 1); for (const s of stages) { s.svg.textContent = ''; s.C.g = s.svg; s.C.svg = s.svg; drawItems(s.C, s.P.items || [], u); }
     scrub.value = Math.round(u * 1000); let b = null; for (const x of beats) if (x[0] <= u + 1e-6) b = x; const t = b ? b[1] : ''; if (t !== lastCap) { lastCap = t; cap.textContent = ''; if (t) { try { svgMathHTML(cap, t); } catch (e) { cap.textContent = t; } cap.classList.remove('in'); void cap.offsetWidth; cap.classList.add('in'); } } };
-  const tick = now => { if (!alive) return; if (!wrap.isConnected) { goneAt = goneAt || now; if (now - goneAt > 3000) { alive = false; if (sonic) sonic.stop(); if (io) io.disconnect(); return; } } else goneAt = 0; const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
+  const tick = now => { if (!alive) return; if (!wrap.isConnected) { goneAt = goneAt || now; if (now - goneAt > 3000) { alive = false; if (io) io.disconnect(); return; } } else goneAt = 0; const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
     if (playing && visible) { if (u >= 1) { hold += dt; if (hold > (spec.hold || 1.6)) { hold = 0; frame(0); } } else frame(u + dt / dur); }
-    if (sonic) sonic.tick(u, playing && visible && u < 1);
     raf = requestAnimationFrame(tick); };
   const setPlay = on => { playing = on; playB.textContent = on ? '❚❚' : '▶'; playB.setAttribute('aria-label', on ? 'Pause' : 'Play'); playB.title = on ? 'Pause' : 'Play'; wrap.classList.toggle('paused', !on); };
   playB.onclick = () => { if (!playing && u >= 1) frame(0); setPlay(!playing); };
@@ -297,7 +281,7 @@ export function renderMotion(spec, host, opts = {}) {
   const io = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(es => { visible = es.some(e => e.isIntersecting); }, { threshold: .25 }) : null; if (io) io.observe(wrap); else visible = true;
   const calm = opts.calm != null ? opts.calm : prefersCalmMotion();
   frame(calm ? (spec.poster != null ? spec.poster : 1) : 0); setPlay(!calm); raf = requestAnimationFrame(tick);
-  return () => { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); if (sonic) sonic.stop(); };
+  return () => { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); };
 }
 function svgMathHTML(node, t) { node.textContent = t; }
 export function prefersCalmMotion() { try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return true; const v = JSON.parse(localStorage.getItem('scriptorium.view') || '{}'); return v.motion === 'calm' || v.calm === true; } catch (e) { return false; } }

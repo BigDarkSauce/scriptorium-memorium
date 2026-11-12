@@ -78,5 +78,37 @@ ok(!sceneFor(byKind('argument_map')[0]), 'an argument map has no 3D reading');
 // the planner: the domain picks the grammar
 { const g = domainGrammar(DOMAIN_BOOK.parts[4].analysis.chain[1]); eq(g.primitive, 'argument_map', 'planner: the Gettier step gets the argument map'); ok(g.sequence.length >= 5 && g.sequence[0].stage === 'curiosity', 'planner: a philosophy sequence of Owen stages'); }
 
+// ---- figures that show: the analogy's depictions, "Picture it" illustrations, no redundant node diagrams, no cut text
+{ const { normDepict, clipSentence, DEPICT_KINDS } = await import('../js/dio/prims/spec.js');
+  const { pickDepict, splitBreak } = await import('../js/dio/prims/depict.js');
+  const { validateFigure, redundantFigures } = await import('../js/room/figspec.js');
+  const { endsUnfinished, qualityGate } = await import('../js/ai/prompts.js');
+  ok(JSON.stringify(normDepict({ kind: 'barrier', params: { height: 7, focus: 'one', evil: '<x>' } })) === '{"kind":"barrier","params":{"height":1,"focus":"one"}}', 'a depiction is kept to known kinds, fields and ranges');
+  ok(normDepict({ kind: 'rocket' }) === null, 'an unknown depiction kind is dropped');
+  const P = (t, w, side) => pickDepict(t, { world: w, side });
+  ok(P('person in the crowd', 'crowd at a fence', 'source').kind === 'barrier' && P('person in the crowd', 'crowd at a fence').params.agent === 'person', 'a person in a crowd at a fence: people at a barrier');
+  ok(P('one A–B collision', 'A+B colliding', 'target').kind === 'collision', 'one collision: two particles meeting');
+  ok(P('higher temperature T', 'A+B colliding', 'target').kind === 'tail', 'a higher temperature among molecules: the energy tail grows');
+  ok(P('air temperature', 'a cricket chirps faster as its enzymes speed up').kind === 'thermometer' && P('chirp rate', '').kind === 'sound' && P('body temperature', 'a cricket').params.creature === 'cricket', 'Picture-it nodes: a thermometer, an organism warming, sound pulsing');
+  ok(['resistor', 'battery', 'voltage', 'gear train', 'market price falls', 'xyzzy'].every(t => DEPICT_KINDS.includes(P(t, '').kind)), 'every phrase gets a depiction (a labelled still when nothing matches)');
+  ok(P('xyzzy', '').kind === 'glyph' && P('xyzzy', '').params.label === 'xyzzy', 'the fallback is a still with its words, never empty');
+  const sb = splitBreak('People aim at the fence; molecules move at random in every direction.'); ok(sb && /aim/.test(sb[0]) && /random/.test(sb[1]), 'a break splits into what the source does and what the target does');
+  const A = validateFigure({ kind: 'analogy_map', caption: 'c', source: 'crowd at a fence', target: 'A+B colliding', maps: [{ a: 'fence height', b: 'activation energy', rel: 'threshold', depict: { source: { kind: 'barrier', params: { focus: 'barrier' } }, target: { kind: 'nope' } } }, ['running start', 'kinetic energy', 'decides success']], breaks: [{ text: 'People aim at the fence; molecules move at random.', depict: { source: 'barrier', target: { kind: 'agents', params: { mode: 'random' } } } }] });
+  ok(A.ok && A.fig.maps[0].depict.source.kind === 'barrier' && !A.fig.maps[0].depict.target && A.fig.breakDepict[0].target.params.mode === 'random', 'analogy_map keeps valid per-row and per-break depictions');
+  ok(JSON.stringify(validateFigure(A.fig).fig) === JSON.stringify(A.fig), 'analogy_map validation is stable (depictions survive a second pass)');
+  const long = 'A cut pipe spills water out onto the floor; a cut wire stops the current at once. ' + 'No charge pours out of the cut ends, and nothing leaks. '.repeat(4);
+  ok(/\.$/.test(validateFigure({ kind: 'analogy_map', caption: 'c', source: 's', target: 't', maps: [['a', 'b'], ['c', 'd']], breaks: [long] }).fig.breaks[0]), 'a long break is kept to whole sentences');
+  ok(clipSentence('no full stop anywhere in this long text', 10) === 'no full stop anywhere in this long text', 'a text without a sentence end is never cut');
+  const ct = validateFigure({ kind: 'contrast', caption: 'c', wrong: { title: 'W', text: 'x '.repeat(150) + 'slower per collision.' }, right: 'r' }).fig; ok(/slower per collision\.$/.test(ct.wrong.text), 'a contrast card keeps its whole sentence (was cut at 200 characters)');
+  // redundancy: a flow that only boxes the step's own words, beside an animation of the same thing, is not drawn
+  const st = { statement: 'Only collisions with energy above the activation energy react.', intuition: 'A crowd at a fence: only runners with a running start get over.', intuitionFigure: { kind: 'flow', caption: 'x', nodes: [{ id: 'a', label: 'crowd at the fence' }, { id: 'b', label: 'running start' }, { id: 'c', label: 'get over' }] } };
+  const mo = { beats: [[0, 'The crowd mills about at the fence.'], [.5, 'Only those with a running start get over.']], items: [] };
+  ok(redundantFigures(st, [mo]).has(st.intuitionFigure), 'a flow that restates the text beside its animation is redundant');
+  ok(!redundantFigures(st, []).size, 'without an animation or richer figure the flow is kept');
+  ok(!redundantFigures({ ...st, intuitionFigure: { ...st.intuitionFigure, nodes: [...st.intuitionFigure.nodes, { id: 'd', label: '2 in a billion collisions' }] } }, [mo]).size, 'a flow that adds a number the text does not give is kept');
+  // a sentence that stops mid-way is flagged once for a rewrite
+  ok(endsUnfinished('That a warmer cricket chirps slower per') && endsUnfinished('it trails off...') && !endsUnfinished('It ends well.') && !endsUnfinished('Its value is $x^2$'), 'unfinished sentences are recognised');
+  const G = qualityGate({ chain: [{ id: 'S1', section: '1', statement: 'A whole statement.', explain: [{ text: 'A whole paragraph that explains it in enough words to count as an explanation here.' }], misconception: 'That a warmer cricket chirps slower per' }] }, [], []);
+  ok(G.issues.some(i => i.kind === 'unfinished' && /misconception/.test(i.detail)), 'the quality gate asks for one rewrite of a cut-off misconception'); }
 console.log(`test-domains: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
