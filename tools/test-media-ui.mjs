@@ -56,7 +56,7 @@ ok(r1.status.ok && r1.usable, 'status: pictures and speech possible through the 
 
 // a scroll in a seeded room, its first step's tools
 const open = await page.evaluate(async () => { const W = window.__scriptorium; for (const b of W.lib.books) { await W.openRoom(b.id); const R = W.mode; for (const st of R.stations.values()) { if (!st.part.analysis || !(st.part.analysis.chain || []).length) continue; R.openPart(st.part, true); await new Promise(r => setTimeout(r, 300)); const rd = R.reader, step = rd.el.querySelector('.step'); const btns = [...step.querySelectorAll('.step-tools button')].map(b => b.textContent); window.__rd = rd; window.__st = st.part.analysis.chain.find(s => s.id === step.dataset.sid); window.__step = step; return { btns, part: st.part.title, sid: step.dataset.sid }; } } return null; });
-ok(open && open.btns.includes('Illustrate (checked)') && open.btns.includes('Read aloud (checked)'), `reader: Illustrate and Read aloud on a step (${open && open.part} / ${open && open.sid})`);
+ok(open && open.btns.includes('Illustrate (checked)') && !open.btns.includes('Read aloud (checked)') && !open.btns.includes('Find sources'), `reader: Illustrate on a step (no Read aloud, no Find sources) (${open && open.part} / ${open && open.sid})`);
 const click = label => page.evaluate(l => [...window.__step.querySelectorAll('.step-tools button')].find(b => b.textContent === l || b.textContent === 'Stop').click(), label);
 const waitStatus = () => page.waitForFunction(() => { const s = window.__step.querySelector('.gen-status'); return s && /admitted|Not admitted|Not illustrated|not|Failed|Stopped/i.test(s.textContent) && !/…$/.test(s.textContent); }, null, { timeout: 400000 }).catch(() => null).then(() => page.evaluate(() => { const s = window.__step.querySelector('.gen-status'); return s ? s.textContent : '(no status line)'; }));
 
@@ -83,23 +83,6 @@ const briefs = await page.evaluate(() => 0); void briefs;
 const n1 = S.calls.filter(c => c === '/v1/images/generations').length;
 const un = await page.evaluate(async () => { const M = await import('/js/ai/media.js'); try { await M.illustrate({ id: 'X', title: 'UNPICTURABLE definition', statement: 'A group is a set with an operation.' }, { title: 'Algebra' }); return 'admitted?'; } catch (e) { return e.code + ': ' + e.message; } });
 ok(/^unsuitable/.test(un) && S.calls.filter(c => c === '/v1/images/generations').length === n1, 'picture: a definition is judged unpicturable → nothing drawn (' + un + ')');
-
-// 4. speech heard back word for word → admitted, with its error rate; the player plays
-S.heard = 'same'; await click('Read aloud (checked)'); st = await waitStatus();
-ok(/Reading admitted/.test(st), 'reading: heard back word for word → admitted (' + st + ')');
-const au = await page.evaluate(() => { const a = window.__step.querySelector('.gen-audio'); return a && a.innerText; });
-ok(au && /AI voice · checked/.test(au) && /0\.0 % of words wrong/.test(au), 'reading: shown as "AI voice · checked", 0.0 % words wrong');
-const played = await page.evaluate(async () => { const b = window.__step.querySelector('.gen-audio button'); b.click(); await new Promise(r => setTimeout(r, 400)); const t = b.textContent; b.click(); return t; });
-ok(/Stop/.test(played) || /Listen/.test(played), 'reading: the player starts (' + played + ')');
-
-// 5. the listener hears other words (25 % wrong) → rejected; the admitted reading stays
-S.heard = 'garbled'; await click('Read aloud (checked)'); st = await waitStatus();
-ok(/Not admitted/.test(st) && /failed the check 3 times/.test(st) && /words wrong|carries the meaning/.test(st), 'reading: heard back 25 % wrong → rejected (' + st.slice(0, 120) + ')');
-
-// 6. formulas: written out as spoken words first (no symbols reach the speech model)
-S.heard = 'same'; const n2 = S.calls.length;
-const fm = await page.evaluate(async () => { const M = await import('/js/ai/media.js'); try { const r = await M.narrate({ id: 'F', title: 'The period', statement: 'For small swings $T = 2\\pi\\sqrt{L/g}$.' }, { title: 'Pendulum' }); return { ok: true, spoken: r.report.spokenScript, text: r.report.pieces[0].text }; } catch (e) { return { ok: false, e: e.message }; } });
-ok(fm.ok && fm.spoken && !/[\\$^_{}=]/.test(fm.text), 'reading: a formula is spoken as words ("' + (fm.text || fm.e || '').slice(0, 70) + '…")');
 
 ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close(); mock.close();

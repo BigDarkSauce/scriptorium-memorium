@@ -571,7 +571,7 @@ export class BookRoom {
     const n = st.slot.n, c = st.sheet.getWorldPosition(V3());
     const pos = c.clone().addScaledVector(n, 2.2).add(V3(0, -.2, 0)).addScaledVector(V3().crossVectors(n, V3(0, 1, 0)), -.55);
     const open = () => { this.endCine(true); st.sheet.material.emissiveIntensity = .15; this.app.sfx && this.app.sfx.play('unroll'); this.reader = new Reader(this.app, this, p); this.app.route({ room: this.book.id, scroll: p.id }); this.app.rememberRoom(this.book.id, p.id); try { localStorage.setItem('scriptorium.lastPart.' + this.book.id, p.id); } catch (e) { } };
-    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open, { kicker: p.subOf ? 'Sub-scroll' : 'Part ' + (this.partIndex(p) + 1), title: p.title || 'Scroll' });
+    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(c); this.controls.update(); open(); } else this.flyTo(pos, c, 1.3, open);   /* a plain flight and unroll (the letterboxed arrival was removed at the reader's request) */
     this.hint.hidden = true; this.tip.hidden = true;
   }
   // ---------- the keyboard's way round the room: [ and ] from station to station in reading order, Enter reads ----------

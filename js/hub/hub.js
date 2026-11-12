@@ -856,7 +856,7 @@ export class Hub {
   // screen boxes of the interface, which the cue's label keeps clear of
   sense() {
     const cam = this.camera, cp = cam.position, q = V3(), pr = V3(); let near = null, nd = NEAR_R * (this.nav.mode === 'walk' ? 1 : 1.25),   /* the overview's eye stands a little higher and further back */ cue = null, cd = Infinity; this._calm = prefersCalm();
-    const showCue = this.tipStage < TIPS.length && !this.build && !this.menu && !this.moveDlg;
+    const showCue = false;   /* the pulsing "Open a scroll" cue was removed at the reader's request (the staged tips stay) */
     this.scrollObjs.forEach(o => { if (o.userData.arrive != null || !o.parent) return; o.getWorldPosition(q); const d = q.distanceTo(cp);
       if (d < nd) { nd = d; near = o; }
       if (showCue && d < cd) { pr.copy(q).project(cam); if (pr.z < 1 && Math.abs(pr.x) < .8 && pr.y > -.7 && pr.y < .75) { cd = d; cue = o; } } });

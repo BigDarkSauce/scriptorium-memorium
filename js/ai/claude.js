@@ -9,6 +9,7 @@
 // docs/PROTOCOL.md. The prompts and the JSON formats are the same whichever engine answers.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
+import { startJob, currentJob, anyOf } from './activity.js';
 import { forFreeModels } from './prompts.js';
 let SAMPLE = null, LIMITS = null, ready;
 export function initAI() {
@@ -61,7 +62,16 @@ export function repairTruncatedJSON(s) {
 // minRank: the free models' strength floor (free.js ask; by default 80 for the director's requests, 55 for a worker's);
 // acceptTruncated: a free model's cut-off answer may be used when validate accepts it; fresh: skip the free cache.
 // A free model has no search tools: its prompt is stripped of the rules that ask for outside sources (forFreeModels).
-export async function askJSON(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
+// every request shows in the activity panel (js/ai/activity.js) with a Stop: inside the job that asked for it (an
+// analysis, a sub-scroll, a diorama), or as a small job of its own
+export async function askJSON(prompt, o = {}) {
+  const own = currentJob() ? null : startJob(o.label || 'AI request'), J = own || currentJob();
+  const signal = anyOf([o.signal, J.signal]), onStatus = t => { J.status(t); o.onStatus && o.onStatus(t); };
+  try { return await askJSON0(prompt, { ...o, signal, onStatus }); }
+  catch (e) { if (J.signal.aborted && !(e && e.code === 'cancelled')) throw { code: 'cancelled', message: 'Stopped.' }; throw e; }
+  finally { if (own) own.end(); }
+}
+async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
   await ready;
   const m = FREE.mode();
   const viaClaude = async () => {

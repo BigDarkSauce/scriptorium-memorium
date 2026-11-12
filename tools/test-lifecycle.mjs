@@ -50,6 +50,7 @@ const fakeSignal = () => { const L = new Set(); return { aborted: false, L, addE
 let sig = fakeSignal(), threw = false;
 try { await B.bridgeFetch('https://api.example/v1/chat/completions', { method: 'POST', body: '{}', signal: sig }); } catch (e) { threw = true; }
 await new Promise(r => realST(r, 10));
+await new Promise(r => setTimeout(r, 400));   // calls to the extension are queued and spaced (the app's rate limit)
 ok(threw && calls.includes('http_cancel'), 'bridge: a failing first poll cancels the upstream request');
 ok(sig.L.size === 0, 'bridge: and its abort listener is gone');
 mode = 'ok'; calls.length = 0; sig = fakeSignal();

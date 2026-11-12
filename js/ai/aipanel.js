@@ -98,9 +98,9 @@ export function openAIPanel(app) {
       else if (d && d.error) fl.append('FreeLLMAPI: this page could not ask the extension (' + d.error + ') and found no server on ports 31415 or 3001. ', again());
       else fl.append('FreeLLMAPI: not running on this computer. ', el('a', { href: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', target: '_blank', rel: 'noopener', text: 'Install it ↗' }), ' (the Windows .exe), open it once, then ', again(), '.');
     }).catch(e => { fl.textContent = 'FreeLLMAPI: could not ask (' + ((e && (e.message || e.code)) || e) + ').'; }); };
-  // pictures and speech: possible from here, or what is missing
-  const mediaLine = () => { const p = el('p', { class: 'small ai-media' }, ['Pictures and speech: checking…']);
-    MEDIA.mediaStatus().then(m => { p.innerHTML = ''; if (m.ok) p.append(el('b', { text: '✓ Pictures and speech' }), ' through FreeLLMAPI, each admitted only after a strict check (two independent reviewers for a picture; a listen-back word check for speech): the Illustrate and Read aloud buttons on every step.'); else p.append(el('b', { text: 'Pictures and speech: ' }), m.why); }).catch(() => { p.textContent = ''; }); return p; };
+  // pictures: possible from here, or what is missing
+  const mediaLine = () => { const p = el('p', { class: 'small ai-media' }, ['Pictures: checking…']);
+    MEDIA.mediaStatus().then(m => { p.innerHTML = ''; if (m.ok) p.append(el('b', { text: '✓ Pictures' }), ' through FreeLLMAPI, each admitted only after a strict check (two independent reviewers): the Illustrate button on every step.'); else p.append(el('b', { text: 'Pictures: ' }), m.why); }).catch(() => { p.textContent = ''; }); return p; };
   // the keys kept on this computer: said only once the page has really read that file (the page must be allowed to)
   const vaultNote = () => { const sp = el('span', { text: '' }); bridgeVault('get').then(v => { if (v === null && !((bridgeInfo() || {}).tools || []).includes('vault_get')) return; sp.textContent = ' Your keys are also kept on this computer, so every new version of the app has them.'; }).catch(e => { sp.textContent = ' (Your keys could not be kept on this computer: ' + ((e && (e.code || e.message)) || e) + '. They stay in this browser.)'; }); return sp; };
   const drawReach = ok => { reachState = ok; reach.innerHTML = ''; drawModes();
@@ -111,7 +111,7 @@ export function openAIPanel(app) {
       return; }
     if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here.`, vaultNote());
       if (!(I.tools || []).includes('freellmapi_detect')) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.1) is ready: ' }), 'it keeps your keys on this computer and connects FreeLLMAPI by itself. ', dlBtn('Download the new one'), ' then double-click it (Claude Desktop replaces the old one).']));
-      else { if (!MEDIA.bridgeBinaryOK()) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.2) is ready: ' }), 'it carries pictures and speech (checked before use). ', dlBtn('Download the new one'), ' then double-click it; Claude Desktop replaces the old one.'])); const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
+      else { if (!MEDIA.bridgeBinaryOK()) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.2) is ready: ' }), 'it carries pictures (checked before use). ', dlBtn('Download the new one'), ' then double-click it; Claude Desktop replaces the old one.'])); const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
     reach.className = 'ai-reach';
     const dl = dlBtn('Download the extension');

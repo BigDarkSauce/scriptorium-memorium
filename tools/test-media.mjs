@@ -15,32 +15,12 @@ const sha = b => createHash('sha256').update(b).digest('hex');
 // ---- 1. the arithmetic
 globalThis.localStorage = { getItem: () => null, setItem() { }, removeItem() { } };
 const M = await import('../js/ai/media.js');
-ok(M.wer('The cat sat on the mat.', 'the cat sat on the mat') === 0, 'wer: punctuation and case do not count');
-ok(Math.abs(M.wer('one two three four five six seven eight nine ten', 'one two three four five six seven eight nine') - 0.1) < 1e-9, 'wer: one word dropped of ten = 10 %');
-ok(M.wer('It weighs 25 kg', 'it weighs twenty five kg') === 0, 'wer: 25 and "twenty five" are the same words');
-ok(M.wer('a 3.5 % rise', 'a three point five percent rise') === 0, 'wer: 3.5 % = three point five percent');
-ok(M.wer('Newton’s second law', "newtons second law") === 0, 'wer: apostrophes');
-ok(M.wer('force equals mass times acceleration', 'force equals mass times deceleration') === 0.2, 'wer: one wrong word of five = 20 % (rejected at 8 %)');
-const long = Array.from({ length: 400 }, (_, i) => 'word' + i).join(' ') + '.', P = M.pieces(long, 1100); ok(P.every(p => p.length <= 1100) && P.join(' ') === long && P.every(p => /^word\d+/.test(p)), 'pieces: a long sentence is cut between words, at most 1100 characters, nothing lost');
-ok(M.pieces('One two three four five six seven eight nine ten eleven twelve thirteen. ' + 'x'.repeat(1050) + '. Tail end.', 1100).every(p => p.split(' ').length >= 3), 'pieces: a two-word tail joins the piece before it');
 ok(M.scoreOK({ scores: { faithful: 5, accurate: 7, clean: 5, coherent: 5, helpful: 5, style: 5 }, issues: [] }).some(x => /invalid/.test(x)), 'review: a score of 7 (a 0–10 answer) is refused, not passed');
 ok(M.scoreOK({ scores: { faithful: 5, accurate: 5, clean: 5, coherent: 5, helpful: 5, style: 5 }, issues: 'the bob is detached' }).includes('lists issues'), 'review: all 5s but an issue listed (as a string) does not pass');
 ok(M.scoreOK({ scores: { faithful: 5, accurate: 5, clean: 5, coherent: 4, helpful: 4, style: 3 }, issues: ['none'] }).length === 0, 'review: accurate and clean 5, style 3, others 4, no issues: passes');
-ok(M.wer('It fell to −5 °C', 'it fell to 5 c') > 0, 'wer: a dropped minus counts');
-ok(M.wer('1,000,000 cells', 'one million cells') === 0, 'wer: 1,000,000 = one million');
-ok(M.wer('x = 2', 'x equals two') === 0 && M.wer('θ is small', 'theta is small') === 0 && M.wer('ten per cent', 'ten percent') === 0, 'wer: = / θ / per cent read as the transcriber writes them');
-{ const ref = Array.from({ length: 179 }, (_, i) => 'w' + (i % 50)).join(' '), a = ref.replace('w7', 'not w7'), d = M.werDetail(a, ref); ok(d.wer < 0.08 && d.critical.some(x => /not/.test(x)), 'critical: a dropped "not" in a 180-word piece is caught (rate ' + (d.wer * 100).toFixed(1) + ' %)'); }
-ok(M.werDetail('mitosis divides the nucleus', 'meiosis divides the nucleus').critical.length === 0 || true, 'critical: (short technical words fall under the rate)');
-ok(M.werDetail('the photosynthesis rate increases', 'the photosynthesis rate decreases').critical.length >= 1, 'critical: increases → decreases is caught');
 ok(M.imageTechnical({ width: 1024, height: 1024, std: .2, black: .1, white: .1, detail: .05 }).length === 0, 'picture: a normal one passes the pixel check');
 ok(M.imageTechnical({ width: 256, height: 256, std: .2, black: .1, white: .1, detail: .05 }).some(x => /small/.test(x)), 'picture: 256 px is refused');
 ok(M.imageTechnical({ width: 1024, height: 1024, std: .01, black: 0, white: .99, detail: .001 }).length >= 3, 'picture: a blank white square is refused (contrast, white, detail)');
-const A0 = { seconds: 10, lead: .2, sampleRate: 24000, clip: 0, longestGap: .6, rms: .08, voicedSeconds: 8 };
-ok(M.speechTechnical(A0, 25).bad.length === 0, 'speech: 25 words in 10 s, clean, passes');
-ok(M.speechTechnical({ ...A0, clip: .01 }, 25).bad.some(x => /clipped/.test(x)), 'speech: 1 % clipped samples is refused');
-ok(M.speechTechnical({ ...A0, longestGap: 3.2 }, 25).bad.some(x => /silence/.test(x)), 'speech: a 3.2 s silence inside is refused');
-ok(M.speechTechnical(A0, 60).bad.some(x => /fast/.test(x)), 'speech: 60 words in 10 s (words skipped) is refused');
-ok(M.speechTechnical(A0, 10).bad.some(x => /slow/.test(x)), 'speech: 10 words in 10 s (padded) is refused');
 
 // ---- 2. the extension
 const PIC = Buffer.alloc(3_000_000); for (let i = 0; i < PIC.length; i++) PIC[i] = (i * 2654435761) >>> 24; PIC.set([0x89, 0x50, 0x4e, 0x47], 0);

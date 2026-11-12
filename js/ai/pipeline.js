@@ -11,6 +11,7 @@
 // through the copy/paste relay and the later stages run without AI: deterministic fixes, figures built from the steps,
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
 import { askJSON, aiAvailable, imageLimit, writer } from './claude.js';
+import { startJob, currentJob } from './activity.js';
 import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, rewritable, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
 import { classifyStep, autoPrimitive } from '../dio/domains.js';
 import { evidenceTools } from './evidence.js';
@@ -20,6 +21,7 @@ import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
 
 export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'done'];
+export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas' };
 const cancelled = () => ({ code: 'cancelled' });
 const check = signal => { if (signal && signal.aborted) throw cancelled(); };
 const C = o => JSON.parse(JSON.stringify(o));
@@ -192,6 +194,14 @@ export async function critiqueDemo(s, plan, o = {}) {
 }
 // Author one scene request in place: plan → full prompt (from the plan) → self-critique; then a simpler one; then a fallback.
 export async function authorDemo(ctx, st, d, o = {}) {
+  // asked on its own (the reader's "Build this diorama"): a job of its own in the activity panel; inside an analysis
+  // it is part of that job's "building the dioramas" stage
+  if (currentJob() && !o._own) return authorDemo0(ctx, st, d, o);
+  const J = startJob('Diorama “' + String(d.title || st.title || st.id).slice(0, 50) + '”', { stages: ['plan', 'author', 'check'], names: { plan: 'planning what it must show', author: 'writing the scene', check: 'checking it against the plan' }, signal: o.signal });
+  try { return await authorDemo0(ctx, st, d, { ...o, signal: J.signal, onStatus: t => { J.status(t); if (/^Authoring|^Retrying/.test(t)) J.stage('author'); else if (/critique|check/i.test(t)) J.stage('check'); o.onStatus && o.onStatus(t); } }); }
+  finally { J.end(); }
+}
+async function authorDemo0(ctx, st, d, o = {}) {
   const context = `${st.title}: ${st.statement || ''}${st.answers ? ' | the step answers: ' + st.answers : ''}${st.opens ? ' | and opens: ' + st.opens : ''}`;
   let fail = '';
   if (o.auto !== false && aiAvailable()) {
@@ -262,7 +272,12 @@ export const partBusy = (bookId, partId) => BUSY.has(bookId + '/' + partId);
 export const bookBusy = bookId => [...BUSY].some(k => k.startsWith(bookId + '/'));
 export async function analysePart(ctx, P, o = {}) {
   const key = busyKey(ctx, P); if (BUSY.has(key)) { const e = new Error('This part is already being analysed. Wait until that run finishes.'); e.code = 'busy'; throw e; }
-  BUSY.add(key); try { return await analyseOne(ctx, P, o); } finally { BUSY.delete(key); }
+  // the activity panel: a bar through the stages, the live status, and Stop (what is written so far is kept)
+  const J = startJob('Writing “' + String(P.title || 'this part').slice(0, 60) + '”', { stages: STAGES.slice(0, -1), names: STAGE_NAMES, signal: o.signal });
+  const say0 = o.onStatus, stg0 = o.onStage;
+  BUSY.add(key); let ok = false;
+  try { const r = await analyseOne(ctx, P, { ...o, signal: J.signal, onStatus: t => { J.status(t); say0 && say0(t); }, onStage: st => { J.stage(st); stg0 && stg0(st); } }); ok = true; return r; }
+  finally { BUSY.delete(key); J.end(ok ? 'Written: every stage done.' : J.signal.aborted ? 'Stopped: what was written is kept.' : 'Stopped by an error (the scroll says which).'); }
 }
 async function analyseOne(ctx, P, o) {
   const auto = o.auto != null ? o.auto : aiAvailable(), say = o.onStatus || (() => {}), stage = s => { P.job = { ...(P.job || {}), stage: s, level: o.level || (P.job && P.job.level) || 'complete', n: o.n || (P.job && P.job.n) || null, updated: Date.now() }; o.onStage && o.onStage(s); };

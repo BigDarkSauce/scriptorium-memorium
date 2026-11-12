@@ -16,18 +16,41 @@ let MCP = null, NAME = null, INFO = null, probe = null;
 
 async function mcp() { if (MCP) return MCP; try { if (window.claude && claude.use) MCP = await claude.use('mcp'); } catch (e) { MCP = null; } return MCP; }
 const payload = r => { const p = r && (r.payload !== undefined ? r.payload : r.structuredContent); if (typeof p === 'string') { try { return JSON.parse(p); } catch (e) { return p; } } return p; };
-async function tool(name, args, signal) { const M = await mcp(); if (!M || !NAME) throw { code: 'no_bridge' }; return payload(await M.callTool(NAME, name, args, signal ? { signal } : undefined)); }
+// THE APP'S LIMIT ON CALLS TO THE EXTENSION. The Claude app refuses calls past a rate ("Host tool rate limit
+// exceeded"): that refusal is the app's, not the provider's, so it must never count as a model failing. Calls are
+// therefore (1) queued, at most a few at once and spaced a little apart, and (2) on that refusal, retried after a
+// growing pause (up to ~40 s) instead of failing.
+const HOSTLIMIT = /host tool rate limit|rate.?limit|too many/i;
+let inFlight = 0, lastAt = 0; const waiting = [];
+const GAP = 120, MAXPAR = 4;
+function slot() { return new Promise(res => { const go = () => { const w = Math.max(0, lastAt + GAP - Date.now()); setTimeout(() => { lastAt = Date.now(); inFlight++; res(); }, w); }; if (inFlight < MAXPAR) go(); else waiting.push(go); }); }
+function free1() { inFlight--; const n = waiting.shift(); if (n) n(); }
+const nap = (ms, signal) => new Promise((res, rej) => { const t = setTimeout(res, ms); if (signal) signal.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('Aborted', 'AbortError')); }, { once: true }); });
+async function tool(name, args, signal) {
+  const M = await mcp(); if (!M || !NAME) throw { code: 'no_bridge' };
+  for (let k = 0; ; k++) {
+    await slot();
+    let r, err; try { r = await M.callTool(NAME, name, args, signal ? { signal } : undefined); } catch (e) { err = e; } finally { free1(); }
+    if (!err) return payload(r);
+    const msg = (err && (err.message || err.code)) || String(err);
+    if (k < 7 && !(signal && signal.aborted) && ((err && err.code === 'rate_limited') || HOSTLIMIT.test(msg))) { await nap(Math.min(40000, 1500 * 2 ** k), signal); continue; }
+    throw err;
+  }
+}
 
-// is the extension installed and running? (asked once; again after `fresh`, e.g. from the AI panel after installing)
+// is the extension installed and running? A "yes" is kept; a "no" is asked again after 15 s (the extension may have
+// been starting or restarting when the page loaded: a page must not stay without it for the whole visit)
+let probeAt = 0, probeOK = false;
 export function bridgeReady({ fresh = false } = {}) {
-  if (probe && !fresh) return probe;
+  if (probe && !fresh && (probeOK || Date.now() - probeAt < 15000)) return probe;
+  probeAt = Date.now();
   return (probe = (async () => {
-    const M = await mcp(); if (!M) return false;
+    const M = await mcp(); if (!M) return (probeOK = false);
     for (const n of HOST_NAMES) {
-      try { const r = payload(await M.callTool(n, 'bridge_info', {}, { signal: AbortSignal.timeout(12000) })); if (r && r.name === 'scriptorium-free') { NAME = n; INFO = r; return true; } }
+      try { const r = payload(await M.callTool(n, 'bridge_info', {}, { signal: AbortSignal.timeout(12000) })); if (r && r.name === 'scriptorium-free') { NAME = n; INFO = r; return (probeOK = true); } }
       catch (e) { /* server_not_connected: not installed, not running, or not inside the Claude app */ }
     }
-    NAME = null; return false;
+    NAME = null; return (probeOK = false);
   })());
 }
 export const bridgeInfo = () => INFO;
@@ -49,7 +72,7 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
     while (!r.done && !(r.status > 0)) { if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError'); r = await tool('http_poll', { id, from, wait_ms: 20000 }, signal); }
   } catch (e) { cancel(); throw e; }
   if (r.error && !(r.status > 0)) { end(); throw new TypeError('bridge: ' + r.error); }
-  const enc = new TextEncoder(); let first = r;
+  const enc = new TextEncoder(); let first = r, pulls = 0;
   const stream = new ReadableStream({
     async pull(ctl) {
       try {
@@ -57,7 +80,7 @@ export async function bridgeFetch(url, { method = 'GET', headers = {}, body, sig
           const x = first || await tool('http_poll', { id, from, wait_ms: 15000, have_status: true }, signal); first = null;
           if (x.text) { from = x.next; ctl.enqueue(enc.encode(x.text)); }
           if (x.done) { end(); if (x.error && x.error !== 'cancelled') ctl.error(new TypeError('bridge: ' + x.error)); else ctl.close(); return; }
-          if (x.text) return;   // one piece per pull: the reader decides the pace
+          if (x.text) { pulls++; if (pulls > 2) await nap(700, signal).catch(() => { }); return; }   // one piece per pull; after the first pieces, a short pause lets the next ones gather into one call
         }
       } catch (e) { cancel(); ctl.error(signal && signal.aborted ? new DOMException('Aborted', 'AbortError') : e); }
     },

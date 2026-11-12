@@ -245,7 +245,7 @@ const usable = v => v && typeof v === 'object' && (Array.isArray(v) ? v.length >
 export async function ask(prompt, o = {}) {
   const { signal, onText, onStatus, validate, images = [], minRank = 0 } = o, h = hash(prompt + '|' + images.length);
   if (!o.fresh) { const hit = await store.getGlobal('aic:' + h).catch(() => null); if (hit && hit.v && Date.now() - hit.at < 30 * 864e5 && (validate ? !validate(hit.v) : usable(hit.v))) { lastRoute.provider = hit.provider + ' (cached)'; lastRoute.model = hit.model; return hit.v; } }
-  const tried = new Set(), rateHits = new Map(); let lastErr = null, fixNote = null, waited = 0;
+  const tried = new Set(), rateHits = new Map(), failCode = new Map(); let lastErr = null, fixNote = null, waited = 0;
   for (let round = 0; ; round++) {
     if (signal && signal.aborted) throw { code: 'cancelled' };
     const all = (await candidates({ images: images.length })).filter(c => !tried.has(c.p.id + '|' + c.m)), strong = all.filter(c => c.rank >= minRank), weak = all.filter(c => c.rank < minRank);
@@ -258,7 +258,9 @@ export async function ask(prompt, o = {}) {
       if (!C.length && tried.size) { tried.clear(); if (round > 40) throw lastErr || { code: 'free_failed' }; continue; }   // every model tried once: start again (the budgets have moved on)
       if (!C.length) throw { code: 'free_none', message: 'No free provider is set up or reachable from here.' };
       if (o.exhausted) throw { code: 'free_exhausted', until: soonest };
-      const ms = Math.max(1000, soonest - Date.now()); onStatus && onStatus(`Every free model is at its limit; the next one free is ${why} in ${fmtWait(ms)}. Waiting (you can stop).`); o.onWait && o.onWait(ms, why);
+      const ms = Math.max(1000, soonest - Date.now()), codes = [...failCode.values()], nNet = codes.filter(c => c === 'network' || c === 'timeout' || c === 'server').length, nRate = codes.filter(c => c === 'rate').length;
+      // say what actually happened: a model that could not be reached is not "at its limit"
+      onStatus && onStatus(nNet && nNet >= nRate ? `No free model answered: ${nNet} could not be reached from here${nRate ? `, ${nRate} at their limit` : ''}${failCode.has('freellmapi') || [...failCode.keys()].some(k => k.startsWith('freellmapi|') && failCode.get(k) === 'network') ? ' (is FreeLLMAPI open? its tray icon)' : ''}. Trying again with ${why} in ${fmtWait(ms)} (you can stop).` : `Every free model is at its limit; the next one free is ${why} in ${fmtWait(ms)}. Waiting (you can stop).`); o.onWait && o.onWait(ms, why);
       const nap = Math.min(ms, 60000); waited += nap; await sleepAbortable(nap, signal); continue;
     }
     const { p, m } = pick, pin = est(prompt);
@@ -277,7 +279,7 @@ export async function ask(prompt, o = {}) {
       if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {
-      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; { const k = p.id + '|' + m, n = e.code === 'rate' ? (rateHits.get(k) || 0) + 1 : 0; if (n) rateHits.set(k, n); if (!(e.code === 'rate' && minRank > 0 && pick.rank >= minRank && n < 3)) tried.add(k); }   /* a strong model at its limit stays in play (its budget waits for the reset, above), until it has refused this request three times: then the next model, so a model that keeps answering 429 cannot hold the job forever */
+      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; failCode.set(p.id + '|' + m, e && e.code); { const k = p.id + '|' + m, n = e.code === 'rate' ? (rateHits.get(k) || 0) + 1 : 0; if (n) rateHits.set(k, n); if (!(e.code === 'rate' && minRank > 0 && pick.rank >= minRank && n < 3)) tried.add(k); }   /* a strong model at its limit stays in play (its budget waits for the reset, above), until it has refused this request three times: then the next model, so a model that keeps answering 429 cannot hold the job forever */
       if (e.code === 'rate') { const r = resetOf(e.res, e.body); cool(p, m, r.ms, r.day ? 'day' : 'min'); }
       else if (e.code === 'key') cool(p, m, 6 * 3600e3, 'key', true);
       else if (e.code === 'model') banModel(p, m, 864e5);
