@@ -630,9 +630,8 @@ export class Reader {
   }
   async writeDetail(st, A, R) {
     const request = [R.what ? 'THE READER ASKS: ' + R.what : 'THE READER ASKS for more detail on the parts named below.', R.where.length && !R.where.includes('the whole step') ? 'ON THESE PARTS OF THE STEP (expand only these; the rest of the step is understood): ' + R.where.join(' | ') : 'ON the whole step.'].join('\n');
-    toast('Writing a sub-scroll for ' + st.id + '…', 6000);
     try {
-      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain, request, deep: R.deep }), { tools: evidenceTools(), manualTitle: 'Expand this step in any AI' });
+      const sub = await askJSON(detailPrompt({ step: st, chain: A.chain, request, deep: R.deep }), { tools: evidenceTools(), manualTitle: 'Expand this step in any AI', label: 'Sub-scroll for ' + st.id + ': ' + String(R.what || st.title || '').slice(0, 40) });
       if (!sub || !Array.isArray(sub.chain)) throw { code: 'invalid_json' };
       if (R.deep) sub.deep = true;
       const part = { id: 'p-' + uid(), title: sub.title || (st.title + ' in detail'), subOf: this.part.id, fromStep: st.id, request: R, analysis: normalizeChain(sub) };
