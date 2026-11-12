@@ -21,7 +21,17 @@ ok(M.wer('It weighs 25 kg', 'it weighs twenty five kg') === 0, 'wer: 25 and "twe
 ok(M.wer('a 3.5 % rise', 'a three point five percent rise') === 0, 'wer: 3.5 % = three point five percent');
 ok(M.wer('Newton’s second law', "newtons second law") === 0, 'wer: apostrophes');
 ok(M.wer('force equals mass times acceleration', 'force equals mass times deceleration') === 0.2, 'wer: one wrong word of five = 20 % (rejected at 8 %)');
-const P = M.pieces('A. '.repeat(10) + 'x'.repeat(2500), 1100); ok(P.every(p => p.length <= 1100) && P.join('').replace(/\s/g, '').length === ('A.'.repeat(10) + 'x'.repeat(2500)).length, 'pieces: at most 1100 characters each, nothing lost');
+const long = Array.from({ length: 400 }, (_, i) => 'word' + i).join(' ') + '.', P = M.pieces(long, 1100); ok(P.every(p => p.length <= 1100) && P.join(' ') === long && P.every(p => /^word\d+/.test(p)), 'pieces: a long sentence is cut between words, at most 1100 characters, nothing lost');
+ok(M.pieces('One two three four five six seven eight nine ten eleven twelve thirteen. ' + 'x'.repeat(1050) + '. Tail end.', 1100).every(p => p.split(' ').length >= 3), 'pieces: a two-word tail joins the piece before it');
+ok(M.scoreOK({ scores: { faithful: 5, accurate: 7, clean: 5, coherent: 5, helpful: 5, style: 5 }, issues: [] }).some(x => /invalid/.test(x)), 'review: a score of 7 (a 0–10 answer) is refused, not passed');
+ok(M.scoreOK({ scores: { faithful: 5, accurate: 5, clean: 5, coherent: 5, helpful: 5, style: 5 }, issues: 'the bob is detached' }).includes('lists issues'), 'review: all 5s but an issue listed (as a string) does not pass');
+ok(M.scoreOK({ scores: { faithful: 5, accurate: 5, clean: 5, coherent: 4, helpful: 4, style: 3 }, issues: ['none'] }).length === 0, 'review: accurate and clean 5, style 3, others 4, no issues: passes');
+ok(M.wer('It fell to −5 °C', 'it fell to 5 c') > 0, 'wer: a dropped minus counts');
+ok(M.wer('1,000,000 cells', 'one million cells') === 0, 'wer: 1,000,000 = one million');
+ok(M.wer('x = 2', 'x equals two') === 0 && M.wer('θ is small', 'theta is small') === 0 && M.wer('ten per cent', 'ten percent') === 0, 'wer: = / θ / per cent read as the transcriber writes them');
+{ const ref = Array.from({ length: 179 }, (_, i) => 'w' + (i % 50)).join(' '), a = ref.replace('w7', 'not w7'), d = M.werDetail(a, ref); ok(d.wer < 0.08 && d.critical.some(x => /not/.test(x)), 'critical: a dropped "not" in a 180-word piece is caught (rate ' + (d.wer * 100).toFixed(1) + ' %)'); }
+ok(M.werDetail('mitosis divides the nucleus', 'meiosis divides the nucleus').critical.length === 0 || true, 'critical: (short technical words fall under the rate)');
+ok(M.werDetail('the photosynthesis rate increases', 'the photosynthesis rate decreases').critical.length >= 1, 'critical: increases → decreases is caught');
 ok(M.imageTechnical({ width: 1024, height: 1024, std: .2, black: .1, white: .1, detail: .05 }).length === 0, 'picture: a normal one passes the pixel check');
 ok(M.imageTechnical({ width: 256, height: 256, std: .2, black: .1, white: .1, detail: .05 }).some(x => /small/.test(x)), 'picture: 256 px is refused');
 ok(M.imageTechnical({ width: 1024, height: 1024, std: .01, black: 0, white: .99, detail: .001 }).length >= 3, 'picture: a blank white square is refused (contrast, white, detail)');

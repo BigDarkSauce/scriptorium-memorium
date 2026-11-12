@@ -15,7 +15,7 @@ import http.server, json, os, socketserver, sys, urllib.request, urllib.error, u
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERSION = '1.0.0'
-PASS_HEADERS = ('content-type', 'retry-after', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset',
+PASS_HEADERS = ('content-type', 'x-provider', 'x-model', 'retry-after', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset',
                 'ratelimit-reset', 'x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens')
 
 

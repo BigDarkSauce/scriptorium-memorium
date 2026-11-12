@@ -59,7 +59,7 @@ export class Reader {
   // opened from it is closed
   releaseFigures() { try { closeLecterns(); this.el.querySelectorAll('.fig.prim').forEach(b => b._prim && b._prim.dispose()); } catch (e) { console.warn(e); } }
   close() {
-    this.stopReading(); if (this._mediaJob) this._mediaJob.abort();
+    this.closed = true; this.stopReading(); Object.values(this._mediaJobs || {}).forEach(c => c && c.abort()); (this._mediaUrls || new Set()).forEach(u => URL.revokeObjectURL(u));
     this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   save() { this.room.save(); }
   bookName() { const b = this.room.book; return b.pdfTitle || b.title; }
@@ -302,8 +302,10 @@ export class Reader {
   // ---- pictures and speech (js/ai/media.js): made on request, shown only once they passed the check
   async fillMedia(st, slot) {
     const [img, sp] = await Promise.all([MEDIA.kept(this.part, st, 'image'), MEDIA.kept(this.part, st, 'speech')]).catch(() => [null, null]);
+    if (this.closed) return;
+    (slot._urls || []).forEach(u => URL.revokeObjectURL(u)); slot._urls = [];   /* the previous picture's address is freed */
     slot.innerHTML = '';
-    if (img && img.blob) { const url = URL.createObjectURL(img.blob), A = img.report && img.report.admitted || {};
+    if (img && img.blob) { const url = URL.createObjectURL(img.blob); slot._urls.push(url); (this._mediaUrls = this._mediaUrls || new Set()).add(url); const A = img.report && img.report.admitted || {};
       slot.append(el('figure', { class: 'gen-fig' }, [el('img', { src: url, alt: 'AI-generated illustration of ' + mathText(st.title || ''), loading: 'lazy', onclick: () => lightbox({ dataUrl: url, label: st.title, generated: true, caption: mathText(st.title || '') }) }),
         el('figcaption', {}, [el('span', { class: 'gen-tag', text: 'AI-generated · checked' }), ` ${A.model || ''}${A.provider ? ' (' + A.provider + ')' : ''}; reviewed by ${(A.judges || []).join(' and ')}. `, this.reportLink(img.report), ' · ', el('button', { class: 'linkbtn', type: 'button', text: 'Remove', onclick: async () => { await MEDIA.drop(this.part, st, 'image'); this.fillMedia(st, slot); } })])])); }
     if (sp && sp.blobs && sp.blobs.length) { const A = sp.report && sp.report.admitted || {}, b = el('button', { class: 'btn small', type: 'button', text: '▶ Listen' }); b.onclick = () => this.playReading(sp.blobs, b);
@@ -326,15 +328,16 @@ export class Reader {
   }
   async makeMedia(kind, st, A, slot, btn) {
     const st2 = btn.parentNode.querySelector('.gen-status') || btn.parentNode.appendChild(el('span', { class: 'status gen-status' }));
-    if (this._mediaJob) { this._mediaJob.abort(); return; }
-    const ctl = this._mediaJob = new AbortController(), was = btn.textContent; btn.textContent = 'Stop';
+    const jobs = this._mediaJobs = this._mediaJobs || {};   /* a picture and a reading can be made at the same time; the button stops its own */
+    if (jobs[kind]) { jobs[kind].abort(); return; }
+    const ctl = jobs[kind] = new AbortController(), was = btn.textContent; btn.textContent = 'Stop';
     try {
       const r = kind === 'image' ? await MEDIA.illustrate(st, A, { signal: ctl.signal, onStatus: t => { st2.textContent = t; } }) : await MEDIA.narrate(st, A, { signal: ctl.signal, onStatus: t => { st2.textContent = t; } });
-      await MEDIA.keep(this.part, st, kind, r); st2.textContent = kind === 'image' ? 'Picture admitted.' : 'Reading admitted.'; this.fillMedia(st, slot);
+      if (this.closed) return; await MEDIA.keep(this.part, st, kind, r); st2.textContent = kind === 'image' ? 'Picture admitted.' : 'Reading admitted.'; this.fillMedia(st, slot);
     } catch (e) {
       if (e && e.code === 'cancelled') st2.textContent = 'Stopped.';
       else { st2.innerHTML = ''; st2.append((e && (e.message || errCopy(e))) || 'Failed.', ' '); if (e && e.report) st2.append(this.reportLink(e.report)); }
-    } finally { this._mediaJob = null; btn.textContent = was; }
+    } finally { if (jobs[kind] === ctl) jobs[kind] = null; btn.textContent = was; }
   }
   playReading(blobs, b) {
     if (this._audio && this._audio.btn === b) { this.stopReading(); return; } this.stopReading();

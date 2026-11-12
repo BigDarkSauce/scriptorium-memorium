@@ -46,7 +46,7 @@ $handler = {
       if ($media -eq 'image' -and -not ("$($r.ContentType)" -like 'image/*')) { $r.Close(); $res.StatusCode = 502; return }   # a picture link must answer with a picture
       $res.StatusCode = [int]$r.StatusCode; $res.SendChunked = $true
       if ($r.ContentType) { $res.ContentType = $r.ContentType }
-      foreach ($h in 'Retry-After', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset', 'ratelimit-reset') { if ($r.Headers[$h]) { $res.AddHeader($h, $r.Headers[$h]) } }
+      foreach ($h in 'X-Provider', 'X-Model', 'Retry-After', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset', 'ratelimit-reset') { if ($r.Headers[$h]) { $res.AddHeader($h, $r.Headers[$h]) } }
       $in = $r.GetResponseStream(); $buf = New-Object byte[] 8192
       while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) { $res.OutputStream.Write($buf, 0, $n); $res.OutputStream.Flush() }
       $r.Close(); return
