@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { woodPlanks, plaster, woodGrain, rug, radialGlow, stone } from './textures.js';
 import { makeMaterial } from './materials.js';
 import { buildShape } from '../dio/builder.js';
-import { makeBaroqueShell } from './baroque.js';
+import { makeBaroqueShell, fitSunShadow } from './baroque.js';
 
 // style: 'library' | 'gallery' | 'baroque'. The baroque style (js/gfx/baroque.js) takes extra options:
 // palette 'rose'|'teal', floor 'diagonal'|'checker'|'cubes', gallery 'auto'|true|false, atlantes 'auto'|true|false,
@@ -60,7 +60,9 @@ function makeClassicShell({ w = 14, d = 12, h = 4.6, style = 'library', windowWa
   if (g.userData.window) {
     const W = g.userData.window.wall, n = new THREE.Vector3(Math.sin(W.r), 0, Math.cos(W.r)), p = new THREE.Vector3(...W.p);
     const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.copy(p).addScaledVector(n, -9).add(new THREE.Vector3(2.5, 6, 0)); sun.target.position.copy(p).addScaledVector(n, 4).setY(0);
-    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); const c = sun.shadow.camera; c.left = -w; c.right = w; c.top = h * 2; c.bottom = -h * 2; c.near = .5; c.far = 40; sun.shadow.bias = -.0003; sun.shadow.normalBias = .03; sun.shadow.radius = 4;
+    // the frustum fitted to the room (it was ±w by ±2h, twice the room: half the map's texels spent outside it), and
+    // with the finer texels a smaller normal offset (baroque.js fitSunShadow)
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); { const tx = fitSunShadow(sun, new THREE.Box3(new THREE.Vector3(-w / 2 - .4, -.2, -d / 2 - .4), new THREE.Vector3(w / 2 + .4, h + .5, d / 2 + .4))), c = sun.shadow.camera; sun.shadow.normalBias = Math.max(.015, 2 * tx); sun.shadow.bias = -Math.min(.0006, .01 / Math.max(1, c.far - c.near)); } sun.shadow.radius = 4;
     lights.add(sun, sun.target); g.userData.sun = sun;
   }
   const lampSpots = [[-w / 2 + 1.2, d / 2 - 1.2], [w / 2 - 1.2, d / 2 - 1.2], [0, 0]];
