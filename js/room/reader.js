@@ -15,6 +15,7 @@ import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
 import { seedHook } from '../seeds-hooks.js';
 import { renderReveal, openDeck, stats as revealStats, normReveal, revealSpec, enrollCheck } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
+import { fitAll } from './textfit.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
 import { seedMotion } from '../seeds-motion.js';
 import * as MEDIA from '../ai/media.js';
@@ -34,19 +35,56 @@ export const is3D = d => d && (d.type === 'scene' || Array.isArray(d.bodies) || 
 export const needsAuthoring = d => d && d.type === 'scene' && !Array.isArray(d.bodies);
 // prose with code and maths in it (js/room/prose.js): TeX spans first, then R / Python tokens as <code>, the rest typeset
 export { prose };
+// the reader's text zoom (A− / A+, Ctrl/Cmd + + − 0, Ctrl + wheel): 85 %–180 %, remembered in this browser
+const ZOOM_MIN = .85, ZOOM_MAX = 1.8, ZOOM_STEPS = [.85, .9, 1, 1.1, 1.2, 1.35, 1.5, 1.65, 1.8];
+const loadZoom = () => { try { const z = +localStorage.getItem('scriptorium.readerZoom'); return z ? clamp(z, ZOOM_MIN, ZOOM_MAX) : 1; } catch (e) { return 1; } };
 const KIND_ABBR = { definition: 'DEF', axiom: 'AX', postulate: 'POST', lemma: 'LEM', theorem: 'THM', result: 'RES', derivation: '⇒', formula: 'EQ', example: 'EX', remark: 'REM' };
 
 export class Reader {
   constructor(app, roomView, part) {
     this.app = app; this.room = roomView; this.part = part;
-    this.el = el('section', { class: 'reader' }); app.ui.append(this.el);
+    this.el = el('section', { class: 'reader', tabindex: '-1' }); app.ui.append(this.el);
+    this.zoom = loadZoom(); this.el.style.setProperty('--rz', String(this.zoom));
     requestAnimationFrame(() => this.el.classList.add('in'));
     this.render();
+    // figure text stays readable (js/room/textfit.js): laid out again whenever something is drawn, unrolled or resized
+    this._mo = new MutationObserver(() => this.scheduleFit()); this._mo.observe(this.el, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });
+    if (typeof ResizeObserver !== 'undefined') { this._ro = new ResizeObserver(() => this.scheduleFit()); this._ro.observe(this.el); }
+    // text zoom from the keyboard while the scroll has the focus (or the pointer), and Ctrl + wheel over the sheet
+    this.onZoomKey = e => { if (!(e.ctrlKey || e.metaKey) || e.altKey || document.querySelector('.modal-veil')) return; const inside = (document.activeElement && this.el.contains(document.activeElement)) || this.el.matches(':hover'); if (!inside) return;
+      const k = e.key; if (k === '+' || k === '=' || k === 'Add') { e.preventDefault(); this.zoomStep(1); } else if (k === '-' || k === '_' || k === 'Subtract') { e.preventDefault(); this.zoomStep(-1); } else if (k === '0') { e.preventDefault(); this.setZoom(1); } };
+    addEventListener('keydown', this.onZoomKey);
+    this.el.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); this._wheelAcc = (this._wheelAcc || 0) + e.deltaY; if (Math.abs(this._wheelAcc) >= 40) { this.zoomStep(this._wheelAcc < 0 ? 1 : -1); this._wheelAcc = 0; } }, { passive: false });
     // Esc closes the ⋯ menu first when it is open (whatever holds the focus: on a one-fold scroll both items are disabled and
     // the focus stays on ⋯), and the scroll only when no menu is open
     this.onKey = e => { if (e.key !== 'Escape' || document.querySelector('.modal-veil')) return; if (this.menuOpen()) { e.preventDefault(); this.toggleMenu(false); const b = this.el.querySelector('.reader-menu-btn'); if (b) b.focus(); return; } this.close(); }; addEventListener('keydown', this.onKey);
     // a press anywhere outside the menu and its ⋯ button closes the menu
     this.onDown = e => { if (!this.menuOpen()) return; const m = this.el.querySelector('.reader-menu'); if (m && e.target && m.contains(e.target)) return; this.toggleMenu(false); }; addEventListener('pointerdown', this.onDown, true);
+  }
+  // ---------- text zoom ----------
+  setZoom(z) {
+    z = Math.round(clamp(z, ZOOM_MIN, ZOOM_MAX) * 100) / 100; if (z === this.zoom) return; this.zoom = z;
+    try { localStorage.setItem('scriptorium.readerZoom', String(z)); } catch (e) { }
+    this.keepPlace(() => this.el.style.setProperty('--rz', String(z))); this.syncZoomUI(); this.scheduleFit(0);
+    const wrap = this.el.querySelector('.chain'); if (wrap) requestAnimationFrame(() => drawArcs(wrap));
+  }
+  zoomStep(d) { const z = this.zoom, S = ZOOM_STEPS; const i = d > 0 ? S.findIndex(s => s > z + .001) : S.length - 1 - [...S].reverse().findIndex(s => s < z - .001); if (i >= 0 && i < S.length) this.setZoom(S[i]); }
+  syncZoomUI() {
+    const g = this._zoomG; if (!g) return; const z = this.zoom;
+    g.querySelector('.rz-out').disabled = z <= ZOOM_MIN + .001; g.querySelector('.rz-in').disabled = z >= ZOOM_MAX - .001;
+    const v = g.querySelector('.rz-val'); v.textContent = Math.round(z * 100) + '%'; v.disabled = Math.abs(z - 1) < .001;
+  }
+  zoomUI() {
+    const g = this._zoomG = el('div', { class: 'reader-zoom', role: 'group', 'aria-label': 'Text size' }, [
+      el('button', { class: 'ibtn dark tiny rz-out', type: 'button', 'aria-label': 'Smaller text', title: 'Smaller text (Ctrl −)', html: '<span class="rz-a">A</span><span class="rz-s">−</span>', onclick: () => this.zoomStep(-1) }),
+      el('button', { class: 'rz-val', type: 'button', 'aria-label': 'Text size; press to reset to 100%', title: 'Reset the text size (Ctrl 0)', onclick: () => this.setZoom(1) }),
+      el('button', { class: 'ibtn dark tiny rz-in', type: 'button', 'aria-label': 'Larger text', title: 'Larger text (Ctrl +, or Ctrl + wheel)', html: '<span class="rz-a">A</span><span class="rz-s">+</span>', onclick: () => this.zoomStep(1) })]);
+    return g;
+  }
+  // the figure-text pass runs once the sheet has stopped moving (a scaled sheet would measure wrong)
+  scheduleFit(delay = 120) {
+    if (this.closed) return; clearTimeout(this._fitT);
+    this._fitT = setTimeout(() => { if (this.closed || !this.el.isConnected) return; const tf = getComputedStyle(this.el).transform; if (!this.el.classList.contains('in') || (tf && tf !== 'none')) { this.scheduleFit(300); return; } fitAll(this.body, this.zoom); }, delay);
   }
   menuOpen() { const pop = this.el.querySelector('.reader-menu-pop'); return !!(pop && !pop.hidden); }
   dock(mode, initial) {
@@ -60,7 +98,7 @@ export class Reader {
   releaseFigures() { try { closeLecterns(); this.el.querySelectorAll('.fig.prim').forEach(b => b._prim && b._prim.dispose()); } catch (e) { console.warn(e); } }
   close() {
     this.closed = true; Object.values(this._mediaJobs || {}).forEach(c => c && c.abort()); (this._mediaUrls || new Set()).forEach(u => URL.revokeObjectURL(u));
-    this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
+    this.releaseFigures(); if (this._dockKey) { removeEventListener('keydown', this._dockKey); this._dockKey = null; } removeEventListener('keydown', this.onZoomKey); clearTimeout(this._fitT); if (this._mo) this._mo.disconnect(); if (this._ro) this._ro.disconnect(); this.el.classList.remove('in'); removeEventListener('keydown', this.onKey); removeEventListener('pointerdown', this.onDown, true); setTimeout(() => this.el.remove(), 500); this.room.onReaderClosed(this); }
   // saves go to whichever room of this book is live now (a long analysis may end after the room was left and entered
   // again, or with no room open: then only this part is written into the stored room); pipeline.js roomCtx
   save() { if (!this.room.disposed && this.app.mode === this.room) { this.room.save(); return; } this.ctx().save(this.part); }
@@ -73,11 +111,12 @@ export class Reader {
       // where the scroll sits (left / centre / right) and full screen; remembered in this browser
       el('div', { class: 'reader-dock', role: 'group', 'aria-label': 'Scroll position' }, [['left', '⇤', 'Dock left'], ['center', '↔', 'Centre'], ['right', '⇥', 'Dock right'], ['full', '⛶', 'Full screen (F)']].map(([k, t, l]) =>
         el('button', { class: 'ibtn dark tiny', 'data-dock': k, 'aria-label': l, title: l, text: t, onclick: () => this.dock(this.dockMode === k && k === 'full' ? this.lastDock || 'right' : k) }))),
+      this.zoomUI(),
       el('div', { class: 'reader-menu' }, [el('button', { class: 'ibtn dark tiny reader-menu-btn', type: 'button', 'aria-label': 'Scroll menu: unfold all, roll up, analyse again', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Unfold all · Roll up · Analyse again · Paste JSON', text: '⋯', onclick: () => this.toggleMenu() }), el('div', { class: 'reader-menu-pop', role: 'menu', hidden: true, onkeydown: e => { if (e.key === 'Escape') { e.stopPropagation(); this.toggleMenu(false); this.el.querySelector('.reader-menu-btn').focus(); } } })]),
       // the transfer deck (reveal.js): rules uncovered earlier, back in new situations on their day
       this.revisitBtn = el('button', { class: 'ibtn dark tiny rv-pill', type: 'button', 'aria-label': 'Revisit: new situations for rules you uncovered', title: 'Revisit: rules you uncovered, in new situations', html: '◆<span class="rv-n"></span>', onclick: () => openDeck({ typeset, onClose: () => this.refreshRevisit() }) }),
       el('button', { class: 'ibtn dark', 'aria-label': 'Close the scroll', title: 'Close (Esc)', text: '✕', onclick: () => this.close() })]);
-    this.refreshRevisit();
+    this.refreshRevisit(); this.syncZoomUI();
     this.dock((() => { try { return localStorage.getItem('scriptorium.readerDock') || 'right'; } catch (e) { return 'right'; } })(), true);
     if (this._dockKey) removeEventListener('keydown', this._dockKey);   // render() runs again after an analysis or a check: one F listener, not one per render
     this._dockKey = e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target.closest && e.target.closest('input,textarea,select,[contenteditable]'))) this.dock(this.dockMode === 'full' ? this.lastDock || 'right' : 'full'); };   /* Ctrl/Cmd+F stays the browser's find */
@@ -148,7 +187,8 @@ export class Reader {
       bar.append(go, el('div', { class: 'fold-dots', 'aria-hidden': 'true' }, this.folds.map((_, i) => el('i', { class: i < k ? 'on' : '' }))));
     } else bar.append(...[el('div', { class: 'unroll end' }, [el('span', { class: 'unroll-rod', 'aria-hidden': 'true' }), el('span', { class: 'unroll-label' }, [el('b', { text: 'The whole scroll is open' }), el('span', { class: 'unroll-prog', text: `${n} fold${n > 1 ? 's' : ''}` })])]), n > 1 ? el('button', { class: 'linkbtn roll-up', type: 'button', text: 'Roll it up again', onclick: () => this.rollUp() }) : null].filter(Boolean));   /* (append(null) would print the word "null" under a one-fold scroll's bar) */
     const mi = this.el.querySelector('.reader-menu-pop'); if (mi) this.fillMenu(mi);
-    this.typesetShown();
+    this.typesetShown(); this.scheduleFit(animate ? 1200 : 120);
+    { const a = wrap.querySelector('.arcs'); if (a) a.setAttribute('height', 0); }   // the old arcs never hold the sheet open past its last fold
     if (!animate) { requestAnimationFrame(() => drawArcs(wrap)); return; }
     // the sheet unrolls: the new part is uncovered from the old bottom edge down while the rod rolls down with it
     const dh = Math.max(0, wrap.offsetHeight - prevH), calm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -728,7 +768,9 @@ function lightbox(f) {
   document.body.append(box);
 }
 export function drawArcs(wrap) {
-  const svg = wrap.querySelector('.arcs'); if (!svg) return; svg.innerHTML = ''; svg.setAttribute('height', wrap.scrollHeight);
+  // measured with the old arcs out of the way: their own height counted in scrollHeight would keep a rolled-up sheet as
+  // long as it once was (a blank tail to scroll into)
+  const svg = wrap.querySelector('.arcs'); if (!svg) return; svg.innerHTML = ''; svg.setAttribute('height', 0); svg.setAttribute('height', wrap.offsetHeight);
   const pos = {}; wrap.querySelectorAll('.step:not(.unf-hidden)').forEach(a => { pos[a.dataset.sid] = a.offsetTop + 27; });
   const NS = 'http://www.w3.org/2000/svg'; const defs = document.createElementNS(NS, 'defs'); defs.innerHTML = '<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#9c3a28"/></marker>'; svg.append(defs);
   [...wrap.querySelectorAll('.step:not(.unf-hidden)')].forEach((a, k) => { const f = a.querySelector('.from'); if (!f) return; [...f.querySelectorAll('a')].forEach((ln, j) => { const y0 = pos[ln.textContent], y1 = pos[a.dataset.sid]; if (y0 == null || y1 == null) return; const depth = 6 + ((k + j) % 4) * 3.5; const p = document.createElementNS(NS, 'path'); p.setAttribute('d', `M 18 ${y0} C ${depth - 6} ${y0}, ${depth - 6} ${y1}, 16 ${y1 - 1}`); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'rgba(156,58,40,.55)'); p.setAttribute('stroke-width', '1.3'); p.setAttribute('marker-end', 'url(#ah)'); svg.append(p); }); });

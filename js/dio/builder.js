@@ -6,8 +6,8 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { makeMaterial, thinGlass } from '../gfx/materials.js';
 import { aaaMaterial, AAA } from '../gfx/aaa.js';
 import { alignUV, relief } from '../gfx/proc.js';
-import { canvasTex, labelTex } from '../gfx/textures.js';
-import { compile, mulberry, makeNoise } from '../util.js';
+import { canvasTex } from '../gfx/textures.js';
+import { compile, mulberry, makeNoise, measureMath, canvasMath } from '../util.js';
 import { buildTree, treeForest, speciesOf } from './trees.js';
 import { bakeField, buildTerrain, buildPeak, setField, getField } from '../gfx/terrain.js';
 import { grassField, flowerField, reedField } from '../gfx/grass.js';
@@ -25,6 +25,52 @@ function mesh(geo, mat, cast = true) { const m = new THREE.Mesh(geo, mat); m.cas
 export const SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule', 'plane', 'disc', 'ring', 'extrude', 'lathe', 'tube', 'spring', 'arrow', 'text', 'group',
   'tree', 'pine', 'bush', 'oak', 'birch', 'cherry', 'forest', 'house', 'tower', 'mountain', 'rock', 'cloud', 'water', 'terrain', 'table', 'lamp', 'beaker', 'flask', 'testtube', 'molecule', 'cell', 'planet', 'star', 'gear', 'magnet', 'battery', 'coin', 'die', 'person', 'bars', 'surface', 'curve', 'grid', 'axes', 'sign', 'glasscase', 'particles', 'book', 'scale', 'pulley', 'boat', 'car', 'peak', 'grassField', 'flowers', 'reeds', 'lake', 'river', 'waterfall', 'cloudVolume', 'soilBlock', 'rockScatter', 'cabin', 'jetty', 'hills', 'vitrine'];
 
+// ---- object labels in the scene (shape "text" / "sign") ----
+// The same look as the name pins the diorama introduces its bodies with (css .pin-name): a dark pill with a brass rim and
+// light ink, so a label never sits as dark letters on a dark floor or pale ones on a pale wall. It is unlit (no shadow,
+// dusk or tone mapping dims it), a free label turns to face the camera (readable from any side, even when the author laid
+// it flat on the ground) and it never shrinks below LABEL_MIN_PX on screen however far away it is. An author's colour
+// tints the rim, and the ink too when it is light enough to read on the dark ground.
+const LABEL_MIN_PX = 16, LABEL_GROUND = 'rgba(20,17,14,.9)', LABEL_INK = '#fbf3df', LABEL_RIM = '#ffd98a';
+const lum = c => { const v = [c.r, c.g, c.b]; return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };   // linear-light luminance (THREE.Color is linear)
+function labelColours(tint) {
+  let col = null; try { if (tint) col = new THREE.Color(String(tint)); } catch (e) { col = null; }
+  if (!col) return { ink: LABEL_INK, rim: LABEL_RIM };
+  const hex = '#' + col.getHexString(), L = lum(col);   // ground ≈ 0.006 linear: contrast (L + .05) / .056 ≥ 7 needs L ≥ .34
+  return { ink: L >= .34 ? hex : LABEL_INK, rim: L >= .12 ? hex : LABEL_RIM };
+}
+function labelTexture(txt, tint) {
+  const { ink, rim } = labelColours(tint), H = 128, fs = 64, font = `italic 600 ${fs}px "IM Fell English", Palatino, Georgia, serif`;
+  const probe = document.createElement('canvas').getContext('2d'); probe.font = font;
+  const tw = Math.min(1900, Math.ceil(measureMath(probe, txt))), W = Math.max(H * 1.6, tw + H * .9);
+  const tex = canvasTex(null, Math.ceil(W), H, g => {
+    const r = H / 2 - 6, x0 = 5, y0 = 5, x1 = W - 5, y1 = H - 5;
+    g.beginPath(); g.moveTo(x0 + r, y0); g.lineTo(x1 - r, y0); g.arc(x1 - r, y0 + r, r, -Math.PI / 2, Math.PI / 2); g.lineTo(x0 + r, y1); g.arc(x0 + r, y0 + r, r, Math.PI / 2, Math.PI * 1.5); g.closePath();
+    g.fillStyle = LABEL_GROUND; g.fill(); g.lineWidth = 5; g.strokeStyle = rim; g.globalAlpha = .85; g.stroke(); g.globalAlpha = 1;
+    g.fillStyle = ink; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; canvasMath(g, txt, W / 2, H / 2 + 3, W - H * .7);
+  }, { aniso: 4 });
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return { tex, aspect: W / H };
+}
+export function textLabel(txt, { h = .5, w = null, tint = null, billboard = true } = {}) {
+  const { tex, aspect } = labelTexture(txt, tint); h = Math.max(.12, h);
+  const geo = new THREE.PlaneGeometry(1, 1); if (billboard) geo.translate(0, .5, 0);   // a free label stands on its point (never half sunk in the floor)
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: .02, side: THREE.DoubleSide, toneMapped: false, fog: false, depthWrite: false });
+  const m = new THREE.Mesh(geo, mat); m.castShadow = false; m.receiveShadow = false; m.renderOrder = 30; m.userData.isLabel = true; if (billboard) m.frustumCulled = false;
+  const W0 = w && !billboard ? Math.max(w, h * aspect) : h * aspect; m.scale.set(W0, w && !billboard ? Math.max(h, W0 / aspect) : h, 1); m.userData.base = m.scale.clone();
+  if (!billboard) return m;
+  const pq = new THREE.Quaternion(), wp = new THREE.Vector3(), ws = new THREE.Vector3(), sz = new THREE.Vector2();
+  m.onBeforeRender = (renderer, scene, cam) => {
+    const par = m.parent; if (!par) return;
+    par.getWorldQuaternion(pq); m.quaternion.copy(pq.invert().multiply(cam.quaternion));
+    // at least LABEL_MIN_PX tall on screen: a perspective camera's pixels per world unit at this distance
+    m.scale.copy(m.userData.base); m.updateMatrixWorld(); m.getWorldPosition(wp); par.getWorldScale(ws);
+    const rt = renderer.getRenderTarget(), Hpx = rt ? rt.height : renderer.getSize(sz).y;
+    if (cam.isPerspectiveCamera && Hpx) { const d = Math.max(1e-3, wp.distanceTo(cam.position)), px = m.userData.base.y * Math.abs(ws.y || 1) / (2 * d * Math.tan(cam.fov * Math.PI / 360)) * Hpx; if (px < LABEL_MIN_PX) m.scale.multiplyScalar(LABEL_MIN_PX / px); }
+    m.updateMatrixWorld();
+  };
+  return m;
+}
 export function buildShape(shape = {}, matSpec, ctx = {}) {
   const k = String(shape.kind || 'box').toLowerCase(), F = () => getField(ctx);
   const mat = () => makeMaterial(matSpec || {});
@@ -66,11 +112,13 @@ export function buildShape(shape = {}, matSpec, ctx = {}) {
       const m2 = mesh(new THREE.ConeGeometry(r * 3, hl, 24), m1.material); m2.position.y = L - hl / 2; g.add(m1, m2); return g;
     }
     case 'text': case 'sign': {
-      const txt = String(shape.text || 'Label'), w = num(shape.w, Math.max(1, txt.length * .22)), h = num(shape.h, .5);
-      const tex = labelTex(txt, { w: 1024, h: Math.round(1024 * h / w), bg: k === 'sign' ? '#1a120b' : 'rgba(0,0,0,0)', border: k === 'sign' ? '#8f733a' : null, fg: shape.color || '#f2e2b8', font: '600 120px "IM Fell English SC", Georgia, serif' });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: k !== 'sign', roughness: .7, side: THREE.DoubleSide }));
-      if (k === 'sign') { const post = mesh(new THREE.CylinderGeometry(.04, .04, num(shape.post, 1), 8), makeMaterial('darkwood')); post.position.y = -num(shape.post, 1) / 2 - h / 2; g.add(post); }
-      g.add(m); return g;
+      // a name written into the scene ("High wall") reads like the diorama's own name pins: a plaque (textLabel)
+      const txt = String(shape.text || 'Label'), h = num(shape.h, .5);
+      if (k === 'sign') {
+        const w = num(shape.w, Math.max(1, txt.length * .22)), m = textLabel(txt, { h, w, tint: shape.color, billboard: false });
+        const post = mesh(new THREE.CylinderGeometry(.04, .04, num(shape.post, 1), 8), makeMaterial('darkwood')); post.position.y = -num(shape.post, 1) / 2 - h / 2; g.add(post); g.add(m); return g;
+      }
+      g.add(textLabel(txt, { h, tint: shape.color })); return g;
     }
     case 'group': return g;
     // believable trees (js/dio/trees.js): bent tapered trunk + branches in AAA bark, displaced leaf clumps fringed by

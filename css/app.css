@@ -178,7 +178,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 @media (max-width: 760px) { .dio-panel { width: calc(100vw - 32px - 58px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)); max-height: calc(50% - 78px); }   /* clear of the sound and graphics buttons on the right */ .dio-reads { width: 200px; } .dio-reads .evlog { display: none; } .side-panel { width: calc(100vw - 32px); } .hub-actions .btn { padding: 6px 10px; font-size: 13px; } }
 
 /* ---------- reading scroll (parchment) ---------- */
-.reader { position: absolute; right: max(30px, env(safe-area-inset-right,0px)); top: calc(76px + env(safe-area-inset-top,0px)); bottom: calc(16px + env(safe-area-inset-bottom,0px)); width: min(720px, calc(100vw - 60px));   /* 30 px: the rods reach 16 px past the sheet and their knobs 12 px more (they were cut by the window's edge) */ display: flex; flex-direction: column; filter: drop-shadow(0 24px 40px rgba(0,0,0,.65)); transform: translateY(24px) scaleY(.06); transform-origin: 50% 0; opacity: 0; transition: transform .9s var(--ease), opacity .4s; }
+.reader { position: absolute; right: max(30px, env(safe-area-inset-right,0px)); top: calc(76px + env(safe-area-inset-top,0px)); bottom: auto; max-height: calc(100% - 92px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));   /* the sheet is as long as what is unrolled (the lower rod sits right under the last fold), at most the window */ width: min(720px, calc(100vw - 60px));   /* 30 px: the rods reach 16 px past the sheet and their knobs 12 px more (they were cut by the window's edge) */ display: flex; flex-direction: column; filter: drop-shadow(0 24px 40px rgba(0,0,0,.65)); transform: translateY(24px) scaleY(.06); transform-origin: 50% 0; opacity: 0; transition: transform .9s var(--ease), opacity .4s; }
 .reader.in { transform: none; opacity: 1; }
 .reader .rod { height: 22px; margin: 0 -16px; border-radius: 11px; background: linear-gradient(180deg, #6b4526, #a87447 28%, #5a3720 60%, #2a170b); position: relative; z-index: 2; flex: none; }
 .reader .rod::before, .reader .rod::after { content: ""; position: absolute; top: -4px; width: 28px; height: 30px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #f3dc98, #c49a45 45%, #6e5120 80%); }
@@ -187,7 +187,7 @@ body.cine .hub-ui > *:not(.tooltip), body.cine .sound-btn, body.cine .gfx-btn, b
 .reader-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(90,60,30,.25); }
 .reader-head .kicker { font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--iron-soft); }
 .reader-head h2 { margin: 3px 0 0; font-family: var(--f-display); font-weight: 400; font-size: 24px; text-wrap: balance; }
-.reader-body { flex: 1; overflow: auto; padding: 14px 22px 30px; overscroll-behavior: contain; font-size: 17px; }
+.reader-body { flex: 0 1 auto; min-height: 0; overflow: auto; padding: 14px 22px 6px; overscroll-behavior: contain; font-size: 17px; }
 .reader .btn { color: var(--iron); border-color: rgba(90,60,30,.35); background: rgba(255,255,255,.35); }
 .reader .btn:hover { background: rgba(255,255,255,.6); border-color: var(--iron-soft); }
 .reader .btn.primary { background: linear-gradient(#335f91, #21406a); color: #f2ead6; border-color: #5a86b8; }
@@ -494,7 +494,7 @@ i { font-style: italic; }
 .reader-dock .ibtn[aria-pressed="true"] { background: rgba(60,40,20,.18); color: #5a3a12; }
 .reader.dock-left { right: auto; left: max(30px, env(safe-area-inset-left,0px)); }
 .reader.dock-center { right: auto; left: 50%; translate: -50% 0; }
-.reader.dock-full { left: max(30px, env(safe-area-inset-left,0px)); right: max(30px, env(safe-area-inset-right,0px)); width: auto; top: calc(64px + env(safe-area-inset-top,0px)); bottom: calc(10px + env(safe-area-inset-bottom,0px)); }
+.reader.dock-full { left: max(30px, env(safe-area-inset-left,0px)); right: max(30px, env(safe-area-inset-right,0px)); width: auto; top: calc(64px + env(safe-area-inset-top,0px)); bottom: auto; max-height: calc(100% - 74px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); }
 .reader.dock-full .reader-body { max-width: 1100px; margin: 0 auto; width: 100%; }
 @media (max-width: 760px) { .reader-dock [data-dock="left"], .reader-dock [data-dock="center"], .reader-dock [data-dock="right"] { display: none; } }
 /* ---- Explainer cues (js/dio/focus.js, js/dio/director.js; docs/research/explainer-animation.md S1–S6, S9) ----
@@ -1304,3 +1304,27 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .ai-details[open] { padding-bottom: 10px; } .ai-details > .ai-reach { margin-bottom: 8px; }
 .ai-panel a, .ai-panel .linkbtn { font: inherit; color: var(--brass); background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: rgba(255,217,138,.45); text-underline-offset: 2px; cursor: pointer; }
 .ai-panel a:hover, .ai-panel .linkbtn:hover { color: var(--brass-hi); text-decoration-color: currentColor; }
+/* the reading scroll's text zoom (A− 100% A+; Ctrl/Cmd + + − 0; Ctrl + wheel): the sheet's content is zoomed as a whole
+   (layout reflows to the sheet's width); SVG figure text grows with it in js/room/textfit.js */
+.reader:focus { outline: none; }
+.reader-body > * { zoom: var(--rz, 1); }
+.reader-zoom { display: flex; align-items: center; gap: 2px; margin-right: 6px; }
+.reader-zoom .ibtn.tiny { width: 32px; height: 32px; font: 600 15px var(--f-display); line-height: 1; }
+.reader-zoom .ibtn.tiny { display: inline-flex; flex-direction: row; align-items: baseline; justify-content: center; gap: 1px; }
+.reader-zoom .rz-s { font: 600 12px var(--f-mono); }
+.rz-out .rz-a { font-size: 13px; } .rz-in .rz-a { font-size: 17px; }
+.reader-zoom .ibtn:disabled { opacity: .38; cursor: default; }
+.rz-val { min-width: 42px; height: 28px; padding: 0 4px; border: 0; border-radius: 6px; background: none; color: var(--iron-soft); font: 12.5px var(--f-mono); cursor: pointer; }
+.rz-val:hover:not(:disabled) { background: rgba(60,40,20,.12); color: var(--iron); }
+.rz-val:disabled { cursor: default; }
+@media (max-width: 560px) { .rz-val { display: none; } }
+/* figure text in the scroll: a label moved off another is tied back to its place by a thin leader (textfit.js) */
+.reader svg .fit-leader { stroke: rgba(90,60,30,.6); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; pointer-events: none; fill: none; }
+/* unrolling is unrolling: the sheet ends right after the last fold read, and the scroll's own lower rod is the roll
+   (it moves down as each fold is unrolled); no second rod in the middle of the sheet, no blank parchment under it */
+.reader .fold-bar .unroll-rod, .reader .fold-bar .unroll-sheet { display: none; }
+.reader .fold-bar { margin-top: 10px; padding-bottom: 2px; border-top: 1px dashed rgba(90,60,30,.28); }
+.reader .unroll { min-height: 0; padding: 8px 0 2px; }
+.reader .unroll-label { margin-top: 0; }
+.reader .unroll.end { min-height: 0; } .reader .unroll.end .unroll-label { margin-top: 0; }
+.reader .unroll:hover .unroll-label b, .reader .unroll:focus-visible .unroll-label b { text-decoration: underline; text-underline-offset: 3px; }
