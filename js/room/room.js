@@ -126,11 +126,11 @@ function visibleBox(root, frame) {
 function miniEmblem(title) {
   const g = new THREE.Group(); g.name = 'emblem';
   const scroll = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .26, 20), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 }));
-  scroll.rotation.z = Math.PI / 2; scroll.position.set(0, .035, .05); scroll.castShadow = true; g.add(scroll);
+  scroll.rotation.z = Math.PI / 2; scroll.position.set(0, .035, .05); g.add(scroll);   /* (it turns with the card: no shadow, see update) */
   const seal = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .008, 18), new THREE.MeshStandardMaterial({ color: 0x9c3a28, roughness: .45 })); seal.rotation.x = Math.PI / 2; seal.position.set(0, .035, .089); g.add(seal);
   const tex = labelTex(String(title).slice(0, 40), { w: 512, h: 256, bg: '#f3f0e8', fg: '#2a1e15', border: '#8f733a', font: '600 54px "IM Fell English SC", Georgia, serif' });
   const card = new THREE.Mesh(new THREE.PlaneGeometry(.22, .11), new THREE.MeshStandardMaterial({ map: tex, roughness: .9, side: THREE.DoubleSide }));
-  card.position.set(0, .085, -.04); card.rotation.x = -.25; card.castShadow = true; g.add(card);
+  card.position.set(0, .085, -.04); card.rotation.x = -.25; g.add(card);
   return g;
 }
 // a pedestal's walk-collision box: its plinth only (the turning models must not move the box)
@@ -301,7 +301,7 @@ export class BookRoom {
     try { sh = makeRoomShell({ w: D.w, d: D.d, h: D.h, style: 'baroque', windowWall: 'none', palette: 'teal', floor: 'cubes', ceiling: this.ceiling(), avoid: (this.slots || []).map(s => s.p), cases: 'walnut', niches: (this.placed || []).map(x => x.slot.p), fast }); }
     catch (e) { console.error(e); if (!fast) toast('Could not build the room at this size'); return false; }
     if (this.shell) { this.scene.remove(this.shell); this.trash([this.shell]); }
-    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); this.doorInfo = sh.userData.baroque && sh.userData.baroque.door; if (!fast) this.probeDirty = true; return true;
+    this.shell = sh; sh.userData.dims = { w: D.w, d: D.d, h: D.h }; this.scene.add(sh); this.doorPick = doorPick(this.scene, sh, this.doorPick); this.doorInfo = sh.userData.baroque && sh.userData.baroque.door; if (!fast) this.probeDirty = true; this.shadowsDirty = true; return true;
     // daylight-free gallery: a few warm spots on the scrolls are added per station
   }
   // the painted domes follow the subject (js/gfx/ceilings.js): the reader's choice, else the bookcase, else the titles
@@ -315,12 +315,12 @@ export class BookRoom {
     // dozens of lights; the pool follows the scrolls nearest the viewer (a spot only reaches 6 m anyway)
     const n = Math.min(SPOTS, this.stations.size); while ((this.spots || []).length > n) this.spots.pop().removeFromParent(); this.spots = this.spots || [];
     while (this.spots.length < n) { const L = new THREE.SpotLight(0xffd8a0, 26, 6, .5, .7, 2); this.scene.add(L); this.spots.push(L); }
-    this._spotT = -1; this.placeSpots(true); this.probeDirty = true;
+    this._spotT = -1; this.placeSpots(true); this.probeDirty = true; this.shadowsDirty = true;
   }
   // a probe at eye height in the middle of the room (no windows here: chandeliers, sconces and the scroll spots light it);
   // pedestals and the hall's stairs darken the floor at their feet
   captureProbe() {
-    this.probeDirty = false; const D = this.data.dims, sh = this.shell; if (!sh) return;
+    this.probeDirty = false; this.shadowsDirty = true; const D = this.data.dims, sh = this.shell; if (!sh) return;
     const info = sh.userData.baroque || {}, L = sh.userData.lights;
     enrich(this.shell); this.stations.forEach(st => { if (st.ped) enrich(st.ped); });
     const feet = footprints([...this.stations.values()].map(st => st.ped).filter(Boolean)).concat((info.obstacles || []).map(q => new THREE.Vector4(q.x, q.z, q.r * .75, q.r * .75)));
@@ -416,7 +416,7 @@ export class BookRoom {
     const gone = [...bay.mini.children]; if (bay.ds) { gone.push(bay.ds.scene); bay.ds = null; } bay.mini.clear(); if (gone.length) this.trash(gone);
     const ps = bay.spec;
     if (!ps) { // a closed scroll lying on the pedestal
-      const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .4, 24), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 })); r.rotation.z = Math.PI / 2; r.position.y = .05; r.castShadow = true; bay.mini.add(r); return;
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .4, 24), new THREE.MeshStandardMaterial({ map: parchment('pedscroll', 128, 128), roughness: .8 })); r.rotation.z = Math.PI / 2; r.position.y = .05; bay.mini.add(r); this.shadowsDirty = true; return;
     }
     let ds = null;
     try {
@@ -427,7 +427,7 @@ export class BookRoom {
       ghosts.forEach(gm => w.add(gm));   // they count in the fit
       const fit = fitBox(w, ds);
       if (!fit.n) throw new Error('nothing to show');
-      w.traverse(o => { if (o.isMesh) { o.castShadow = !o.userData.ghost; } if (o.isLight) o.visible = false; if (o.isPoints) o.visible = false; });
+      w.traverse(o => { if (o.isMesh) { o.castShadow = false; } if (o.isLight) o.visible = false; if (o.isPoints) o.visible = false; });   // the maquettes turn: a shadow of theirs would need the shadow map redrawn every frame (update)
       fit.hide.forEach(o => { o.visible = false; });
       // lines and sprites reaching well outside the model's box (field lines, guides, labels) are left out too
       const grow = fit.box.clone().expandByScalar(Math.max(fit.rXZ, fit.h) * .15), wb = new THREE.Box3(), winv = w.matrixWorld.clone().invert();
@@ -441,7 +441,7 @@ export class BookRoom {
       bay.mini.add(w);
       // never past its area: the model turns, so its farthest visible point from the turning axis must lie inside r
       const vb = visibleBox(w, bay.mini); if (!vb.isEmpty()) { const ext = Math.max(...[vb.min.x, vb.max.x].flatMap(x => [vb.min.z, vb.max.z].map(z => Math.hypot(x, z)))); if (ext > bay.area.r) { const f = bay.area.r / ext; s *= f; w.scale.setScalar(s); w.position.set(w.position.x * f, -fit.box.min.y * s + .004, w.position.z * f); } }
-      bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length, shown: fit.n, ghosts: ghosts.length };
+      bay.ds = ds; bay.fit = { s, rXZ: fit.rXZ, h: fit.h, hidden: fit.hide.length, shown: fit.n, ghosts: ghosts.length }; this.shadowsDirty = true;
     } catch (e) {
       // last resort, never an empty card: an emblem (a sealed scroll with the demo's title on a small easel)
       console.warn('mini', ps.d && (ps.d.title || ps.d.type), e && e.message);
@@ -482,7 +482,7 @@ export class BookRoom {
     if (d0) this.shell.scale.set(D.w / d0.w, D.h / d0.h, D.d / d0.d);
     this.layout(true);
     this.stations.forEach(st => { const x = this.placed.find(q => q.part === st.part); st.group.visible = !!x; if (x) { st.slot = x.slot; st.group.position.copy(x.slot.p); st.group.lookAt(x.slot.p.clone().add(x.slot.n)); } });
-    (this.spots || []).forEach(L => { L.target = L; }); this.placeSpots(true);
+    (this.spots || []).forEach(L => { L.target = L; }); this.placeSpots(true); this.shadowsDirty = true;
     clearTimeout(this._rzT); this._rzT = setTimeout(() => { this._rzT = null; if (!this.disposed) this.buildShell(true); }, 150);
   }
   addPart(part, after) {
@@ -574,10 +574,15 @@ export class BookRoom {
   // ---------- frame ----------
   // frame budget (main.js loop): under an open scroll the room is a backdrop (20 frames a second); at rest and untouched
   // for 5 s, 30; moving, unfolding or flying, every frame
-  renderFps(idleMs) { if (this.anim || this.unfold) return 60; if (this.reader) return 20; return idleMs < 5000 ? 60 : 30; }
+  renderFps(idleMs) { if (this.anim || this.unfold || this._focusing) return 60; if (this.reader) return 20; return idleMs < 5000 ? 60 : 30; }
   update(dt, t) {
     if (this.map) this.map.update(dt);
-    { const sm = this.gfx.renderer.shadowMap; sm.autoUpdate = false; this._shF = (this._shF || 0) + 1; if (this.anim || this.unfold || this._shF % (this.reader ? 8 : 3) === 0) sm.needsUpdate = true; }   /* the room's shadows: only the turning card models move them, slowly */
+    // the room's shadow maps, as the hall's (hub.js): redrawn only when something that casts may have changed (a flight
+    // or an unfold, the shell or the stations rebuilt, a maquette swapped, the probe recaptured, a top-level object
+    // added or removed), never on a timer: the turning maquettes cast no shadow (buildMini), so a still room has nothing
+    // to redraw (it was every 3rd frame, for ever)
+    { const sm = this.gfx.renderer.shadowMap, n = this.scene.children.length; sm.autoUpdate = false; if (n !== this._shN) { this._shN = n; this.shadowsDirty = true; }
+      if (this.shadowsDirty !== false || this.anim || this.unfold) { sm.needsUpdate = true; this.shadowsDirty = false; } }
     if ((this.probeDirty || this.probe.stale()) && !this.unfold && !this.probe.busy) this.captureProbe();
     this.probe.step();
     this.ao.update();
@@ -586,6 +591,11 @@ export class BookRoom {
       this.nav.update(dt, !!this.reader || !!this.unfold || !!this.app.cine);
     }
     this.placeSpots();
+    // focus pull: an open scroll draws the eye to itself, the room behind it going soft at the top and bottom of the frame
+    // (the grade's tilt blur, uTilt 0 -> 1 over 0.6 s, eased; back when it closes). The look's own tilt is the rest value.
+    { const u = this.gfx.grade.uniforms.uTilt, want = this.reader && !this.unfold ? 1 : 0; if (this._focusK == null) { this._focusK = 0; this._tilt0 = this.scene.userData.look.tilt ?? 0; }
+      const k = this._focusK; this._focusing = k !== want;
+      if (this._focusing) { this._focusK = want > k ? Math.min(1, k + dt / .6) : Math.max(0, k - dt / .6); const e = easeInOutQuint(this._focusK); u.value = this._tilt0 + (1 - this._tilt0) * e; } }
     // card models turn slowly; the chosen one unfolds (grows, lifts, glows) before the dive
     this.stations.forEach(s => s.bays.forEach(b => { b.mini.rotation.y += dt * .15; }));
     if (this.unfold) {

@@ -57,6 +57,17 @@ function plasterMat(tone, key, amp, o = {}) {
   return surface(m, { macro: [.45, .06, .04], detail: [5.3, .45], wallAO: !!o.wallAO });
 }
 const MATS = new Map();
+// The sun's orthographic shadow camera fitted to a box (the room, in the light's parent frame): the box's eight corners
+// seen from the light give the frustum's sides and depth range, plus a margin. A square of half the box's diagonal on
+// every side (the old fit) spent about half the 2048² map outside the room, so texels were twice as coarse and the
+// normal offset needed against acne was large enough to lift shadows off their casters (peter-panning).
+export function fitSunShadow(sun, box, margin = .3) {
+  const c = sun.shadow.camera, m = new THREE.Matrix4().lookAt(sun.position, sun.target.position, new THREE.Vector3(0, 1, 0)).setPosition(sun.position).invert(), p = new THREE.Vector3();
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < 8; i++) { p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).applyMatrix4(m); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+  c.left = x0 - margin; c.right = x1 + margin; c.bottom = y0 - margin; c.top = y1 + margin; c.near = Math.max(.1, -z1 - margin); c.far = -z0 + margin; c.updateProjectionMatrix();
+  return Math.max(c.right - c.left, c.top - c.bottom) / sun.shadow.mapSize.x;   // the texel size, metres
+}
 export function bmat(name) {
   if (MATS.has(name)) return MATS.get(name);
   let m;
@@ -976,11 +987,18 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
     const W = walls.find(x => x.name === windowWall), n = V(Math.sin(W.r), 0, Math.cos(W.r)), t = V(Math.cos(W.r), 0, -Math.sin(W.r));
     const el = THREE.MathUtils.degToRad(33), az = THREE.MathUtils.degToRad(24);
     const dir = n.clone().multiplyScalar(Math.cos(el) * Math.cos(az)).addScaledVector(t, Math.cos(el) * Math.sin(az)).add(V(0, -Math.sin(el), 0)).normalize();
-    const R = .5 * Math.hypot(w, d, h) + 1, D0 = 40;
+    const D0 = 40;
     // late-morning sun (~4800 K: warm-white, not orange); the candles stay at ~2000 K, the skylight in the probe is cool
     const sun = new THREE.DirectionalLight(0xffe6c8, 4.6); sun.position.copy(dir).multiplyScalar(-D0).add(V(0, h * .35, 0)); sun.target.position.set(0, h * .35, 0);
-    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); const c = sun.shadow.camera; c.left = -R; c.right = R; c.top = R; c.bottom = -R; c.near = D0 - R - 2; c.far = D0 + R + 2; c.updateProjectionMatrix();
-    sun.shadow.bias = -.0004; sun.shadow.normalBias = .035; sun.shadow.radius = 3;
+    // the frustum fits the room's box (walls 0.6 m thick outside, the domes' rise above), not the sphere around it (the
+    // library hall: 23.5 x 18.7 m instead of 24.8 square, depth 22 m instead of 29); the normal offset is two texels of
+    // the 2048 map (2.3 cm in the hall, was 3.5: less lift-off at the casters' feet) and never under 1.5 cm, so with the
+    // map at 1024 on 'low' (tier.js) it is still a full texel (acne is worse than a little peter-panning); the depth bias
+    // stays ~1 cm over the shorter range
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    { const top = h + Math.max(0, ...domes.map(D => D.rise || 0)) + .3, tx = fitSunShadow(sun, new THREE.Box3(V(-w / 2 - .6, -.2, -d / 2 - .6), V(w / 2 + .6, top, d / 2 + .6)));
+      const c = sun.shadow.camera; sun.shadow.normalBias = Math.max(.015, 2 * tx); sun.shadow.bias = -Math.min(.0006, .01 / Math.max(1, c.far - c.near)); }
+    sun.shadow.radius = 3;
     lights.add(sun, sun.target); g.userData.sun = sun;
     const fill = new THREE.DirectionalLight(0xe6ecff, .3); /* skylight from the windows: cool */ fill.position.copy(n).multiplyScalar(-10).add(V(0, h, 0)); fill.target.position.set(0, 1, 0); lights.add(fill, fill.target);
     // shafts
@@ -993,6 +1011,30 @@ export function makeBaroqueShell({ w = 14, d = 12, h = 6, windowWall = 'back', d
       [[0, 1], [1, 2], [2, 3], [3, 0]].forEach(([a, b]) => { [[Wp[a], 0, 1], [Wp[b], 1, 1], [Fp[b], 1, 0], [Wp[a], 0, 1], [Fp[b], 1, 0], [Fp[a], 0, 0]].forEach(([p, u, v]) => { sp.push(...p); su.push(u, v); }); });
     });
     if (sp.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); geo.computeVertexNormals(); geo.applyMatrix4(M); const sh = new THREE.Mesh(geo, bmat('shaft')); sh.name = 'sun-shafts'; sh.renderOrder = 5; sh.userData.noProbe = true; sh.userData.noAO = true; sh.castShadow = false; sh.receiveShadow = false; g.add(sh); }
+    // dust in the sunlight: ~300 motes inside the shafts' volumes (each a point between a window's opening and where its
+    // light meets the floor), drifting a few centimetres on slow incommensurate sines in the vertex shader (one draw, no
+    // per-frame work but a time uniform), twinkling as they turn, additive. Still under prefers-reduced-motion or the
+    // app's Calm setting. Left out of the probe and the AO (noProbe, noAO); a fast preview leaves it out.
+    if (sp.length && !fast) {
+      const R = rng(1789), N = 300, pos = new Float32Array(N * 3), ph = new Float32Array(N * 4), q = V();
+      for (let i = 0; i < N; i++) {
+        const o = W.wins[Math.floor(R() * W.wins.length)], x0 = o.c - o.rr * .85, x1 = o.c + o.rr * .85, y0 = o.sill + .05, y1 = o.spring + o.rr * .5, maxT = (d - .4) / Math.max(.05, dl.z);
+        const x = x0 + (x1 - x0) * R(), y = y0 + (y1 - y0) * R(), tt = Math.min(y / -dl.y, maxT) * (.04 + .92 * R());
+        q.set(x + dl.x * tt, y + dl.y * tt, -.05 + dl.z * tt).applyMatrix4(M); pos.set([q.x, q.y, q.z], i * 3); ph.set([R(), R(), R(), .5 + R()], i * 4);
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aPh', new THREE.BufferAttribute(ph, 4));
+      const calm = (() => { try { const v = JSON.parse(localStorage.getItem('scriptorium.view') || '{}'); return v.motion === 'calm' || v.calm === true; } catch (e) { return false; } })(), RM = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+      const U = { uTime: { value: 0 }, uH: { value: 800 }, uCol: { value: new THREE.Color(1, .9, .74).multiplyScalar(.9) } };
+      const mat = new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+        vertexShader: `uniform float uTime,uH;attribute vec4 aPh;varying float vA;
+          void main(){vec3 p=position+vec3(sin(uTime*.13+aPh.x*6.283),sin(uTime*.07+aPh.y*6.283)*.6,sin(uTime*.11+aPh.z*6.283))*.07*aPh.w;
+          vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;
+          float s=.011*aPh.w*projectionMatrix[1][1]*uH*.5/max(.1,-mv.z);vA=(.45+.55*pow(.5+.5*sin(uTime*(.6+aPh.w)+aPh.x*40.),3.))*clamp(s/1.5,0.,1.);gl_PointSize=clamp(s,1.5,7.);}`,
+        fragmentShader: `uniform vec3 uCol;varying float vA;void main(){float r=length(gl_PointCoord-.5);float a=smoothstep(.5,.15,r)*vA;if(a<.004)discard;gl_FragColor=vec4(uCol*a,1.);}` });
+      const motes = new THREE.Points(geo, mat); motes.name = 'sun-motes'; motes.renderOrder = 6; motes.frustumCulled = false; motes.userData.noProbe = true; motes.userData.noAO = true;
+      const sz = new THREE.Vector2(); motes.onBeforeRender = r => { r.getDrawingBufferSize(sz); U.uH.value = sz.y; if (!calm && !(RM && RM.matches)) U.uTime.value = performance.now() * .001; };
+      g.add(motes);
+    }
   }
   // ---- merge everything ----
   A.build(g, { name: 'shell-' }).forEach(m => { if (/^gilt|^eggdart/.test(m.material.userData.bmat)) m.castShadow = false; });

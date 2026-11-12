@@ -142,7 +142,7 @@ export function makeTunnel(door, len = 34) {
   // every frame it is drawn: the gallery's frame for the shader, and the flow (by the wall clock)
   let v = 0, last = 0;
   const tick = () => { const now = performance.now() / 1000, dt = last ? Math.min(.1, now - last) : 0; last = now; U.uFlow.value += v * dt; flow.position.z = U.uFlow.value % (BAY * 2); g.updateMatrixWorld(); U.uInv.value.copy(g.matrixWorld).invert(); };
-  let lastFrame = -1; g.traverse(o => { if (o.isMesh) o.onBeforeRender = (r, sc) => { if (r.info.render.frame !== lastFrame) { lastFrame = r.info.render.frame; tick(); const wb = sc && sc.userData.look && sc.userData.look.wb, gn = (wb && (Array.isArray(wb) ? wb : wb.gain)) || [.84, 1.45, 3.4]; U.uComp.value.set(Math.pow(1 / (gn[0] || 1), .75), Math.pow(1 / (gn[1] || 1), .75), Math.pow(1 / (gn[2] || 1), .75));   /* not all the way: a trace of the grade's coolness keeps the marble ivory, not ochre */ } }; });   // once a frame, before the first of its meshes is drawn
+  let lastFrame = -1; g.traverse(o => { if (o.isMesh) o.onBeforeRender = (r, sc) => { if (r.info.render.frame !== lastFrame) { lastFrame = r.info.render.frame; tick(); const wb = sc && sc.userData.look && sc.userData.look.wb, gn = (wb && (Array.isArray(wb) ? wb : wb.gain)) || [.88, 1.39, 2.27]; U.uComp.value.set(Math.pow(1 / (gn[0] || 1), .75), Math.pow(1 / (gn[1] || 1), .75), Math.pow(1 / (gn[2] || 1), .75));   /* not all the way: a trace of the grade's coolness keeps the marble ivory, not ochre */ } }; });   // once a frame, before the first of its meshes is drawn
   g.userData.tunnel = { U, setFlow: x => { v = x; }, get flow() { return v; }, setGlow: k => { U.uGlow.value = k; }, len, throat, tick };
   return g;
 }

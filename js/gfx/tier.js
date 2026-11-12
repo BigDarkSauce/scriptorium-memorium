@@ -35,7 +35,7 @@ export function withAllLights(scene, fn) {
 export function tame(scene, on) {
   if (!scene) return; const fill = [];
   scene.traverse(o => {
-    if (o.isMesh || o.isPoints) for (const m of [].concat(o.material || [])) tameMaterial(m, on);
+    if (o.isMesh || o.isPoints) { const M = o.material; if (Array.isArray(M)) for (const m of M) tameMaterial(m, on); else tameMaterial(M, on); }
     if (o.isLight) fill.push(o);
   });
   // lights: decided over the scene as a whole
@@ -58,6 +58,13 @@ export function tame(scene, on) {
   }
   scene.userData.tamed = on;
 }
+// Has anything been added to a tamed scene that tame() has not seen (a material or a light without its mark)? One
+// traverse with a callback made once: nothing allocated, so renderer.js can ask every 30 frames and run the full pass
+// (which builds arrays and sorts lights) only when the answer is yes.
+let _seen = false;
+const _probe = o => { if (_seen) return; if (o.isMesh || o.isPoints) { const M = o.material; if (Array.isArray(M)) { for (let i = 0; i < M.length; i++) if (M[i] && !M[i].userData[SAVE]) { _seen = true; return; } } else if (M && !M.userData[SAVE]) { _seen = true; return; } }
+  if (o.isLight && !o.isAmbientLight && !o.isHemisphereLight && !o.userData.tameFill && o.userData[SAVE] === undefined) _seen = true; };
+export function untamed(scene) { _seen = false; if (scene) scene.traverse(_probe); return _seen; }
 function tameMaterial(m, on) {
   if (!m) return; const s = m.userData[SAVE];
   if (on) {

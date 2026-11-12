@@ -23,7 +23,7 @@ export class Navigator {
   constructor({ camera, controls, canvas, keys, bounds, obstacles, host, orbitFov }) {
     Object.assign(this, { camera, controls, canvas, keys, bounds, obstacles: obstacles || (() => []) });
     const P = load(); this.speed = +P.walkSpeed || 1.4; this.mode = P.navMode === 'walk' ? 'walk' : 'orbit';
-    this.orbitFov = orbitFov || camera.fov; this.vel = V3(); this.yaw = 0; this.pitch = 0; this.bobT = 0; this.zoom = 0; this.zoomTarget = 0; this.needsSync = true;
+    this.orbitFov = orbitFov || camera.fov; this.vel = V3(); this.yaw = this.yawS = 0; this.pitch = this.pitchS = 0; this.bobT = 0; this.zoom = 0; this.zoomTarget = 0; this.needsSync = true;
     // first-person look: drag with the left button turns the head; right button held = look closely
     this.onDown = e => { if (this.mode !== 'walk') return; if (e.button === 2) { this.zoomTarget = 1; return; } this.drag = { x: e.clientX, y: e.clientY, yaw: this.yaw, pitch: this.pitch }; };
     this.onMove = e => { if (!this.drag || this.mode !== 'walk' || this.busy) return; const k = .0042 * (this.camera.fov / FOV_WALK); this.yaw = this.drag.yaw - (e.clientX - this.drag.x) * k; this.pitch = clamp(this.drag.pitch - (e.clientY - this.drag.y) * k, -1.35, 1.35); };
@@ -61,7 +61,7 @@ export class Navigator {
   // walking view snapping it on in the first free frame (the sudden zoom at the end of every arrival).
   lensFov() { return this.mode === 'walk' ? FOV_WALK - this.zoom * 38 : this.orbitFov; }
   canvasCursor() { this.canvas.style.cursor = this.mode === 'walk' ? 'grab' : ''; }
-  syncFromCamera() { const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ'); this.yaw = e.y; this.pitch = clamp(e.x, -1.35, 1.35); this.needsSync = false; }
+  syncFromCamera() { const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ'); this.yaw = this.yawS = e.y; this.pitch = this.pitchS = clamp(e.x, -1.35, 1.35); this.needsSync = false; }
   toggle() { this.setMode(this.mode === 'walk' ? 'orbit' : 'walk'); }
   // busy: an animation owns the camera (opening a scroll, flying to a station, reading)
   update(dt, busy) {
@@ -87,7 +87,11 @@ export class Navigator {
       c.position.y = this.eyeY + this.jumpY + this.dip(dt);
       this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 6);
       const fov = FOV_WALK - this.zoom * 38; if (Math.abs(c.fov - fov) > .01) { c.fov = fov; c.updateProjectionMatrix(); }
-      c.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      // the head follows the drag through a short exponential lag (time constant 40 ms): pointer events arrive unevenly
+      // (several in one frame, none in the next), and applied raw the view stepped; this keeps it responsive yet smooth
+      const a = 1 - Math.exp(-dt * 25); this.yawS += (this.yaw - this.yawS) * a; this.pitchS += (this.pitch - this.pitchS) * a;
+      if (Math.abs(this.yaw - this.yawS) < 1e-5) this.yawS = this.yaw; if (Math.abs(this.pitch - this.pitchS) < 1e-5) this.pitchS = this.pitch;
+      c.rotation.set(this.pitchS, this.yawS, 0, 'YXZ');
     } else {
       if (step.lengthSq() > 0) { c.position.add(step); this.controls.target.add(step); }
       this.controls.update();
