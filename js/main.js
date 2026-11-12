@@ -28,7 +28,7 @@ import { preloadKit, kitStatus } from './hub/kit.js';
 import { caseLayout, caseTierOrder, hangSlots } from './hub/props.js';
 import { lookQ, flyPose, flightDur, easeSine } from './camfly.js';
 import { TitleScreen } from './title.js';
-import { openGetScroll, openVisibility, republishLater } from './share.js';
+import { openGetScroll, openVisibility, republishLater, cancelRepublish, unpublishBook } from './share.js';
 import { choosePlace } from './room/addpdf.js';
 // the lens of the tunnel between two places: the place left eases to it while it runs into the light, the place entered
 // starts with it and eases to its own (nav.lensFov) on the way up the bore, so the cut between them keeps one lens
@@ -45,7 +45,7 @@ class App {
   constructor() {
     this.canvas = $('#scene'); this.ui = $('#ui'); this.store = store; this.ingest = ingest;
     try { this.gfx = new Gfx(this.canvas); } catch (e) { this.fatal('WebGL is not available in this browser: ' + e.message); throw e; }
-    this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0;
+    this.mode = null; this.last = performance.now(); this.t = 0; this.trash = []; this._swTok = 0; this._navTok = 0; this._dels = new Map();
     this.gfx.onRestore = () => { toast('Graphics restored'); this.restoreMode(); };
     initAI(); initEvidence();
     // the AI keys and choices: the newest kept copy (this browser, its IndexedDB, the extension's file on this computer),
@@ -130,10 +130,10 @@ class App {
     return S;
   }
   slotMeta(patch) { const m = this.slots.find(x => x.id === this.slotId); if (!m) return; Object.assign(m, patch); clearTimeout(this._slotT); this._slotT = setTimeout(() => store.setGlobal('slots', this.slots), 400); }
-  async switchSlot(id) { if (id === this.slotId) return; store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id); await this.loadLibrary(); }
+  async switchSlot(id) { if (id === this.slotId) return; await this.flushDeletes(); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id); await this.loadLibrary(); }
   async createSlot(name, examples = true) {
     const id = 's' + uid().replace(/[^a-z0-9]/gi, '').slice(0, 10), m = { id, name: String(name || 'A new scriptorium').slice(0, 60), created: Date.now(), played: Date.now() };
-    this.slots.push(m); await store.setGlobal('slots', this.slots); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id);
+    this.slots.push(m); await store.setGlobal('slots', this.slots); await this.flushDeletes(); store.flushSaves(); store.useSlot(id); this.slotId = id; await store.setGlobal('lastSlot', id);
     await this.loadLibrary({ empty: !examples }); this.saveLib();
     this._arrive = { enter: true }; this._irisNext = true; return this.openHub();
   }
@@ -412,16 +412,22 @@ class App {
     this.lib.books.splice(i, 1); const last = this.lib.lastRoom && this.lib.lastRoom.book === id ? this.lib.lastRoom : null; if (last) delete this.lib.lastRoom;
     if (b.example) this.lib.dismissedSeeds = [...new Set([...(this.lib.dismissedSeeds || []), b.title])];   /* a built-in book the owner deleted is never added back (ensureDomainBook) */
     this.saveLib();
-    store.lsSet(PENDING_DEL, [...new Set([...store.lsGet(PENDING_DEL, []), id])]);
+    const slot = this.slotId, pk = this.pendKey(slot);   // the undo and the purge belong to this slot's library
+    store.lsSet(pk, [...new Set([...store.lsGet(pk, []), id])]);
+    if (b.visibility === 'public') store.lsSet(pk + ':pub', [...new Set([...store.lsGet(pk + ':pub', []), id])]);   /* unpublished at the purge, even after a reload */
     if (this.mode instanceof Hub) this.mode.dropScroll(id, b.shelf);
-    const timer = setTimeout(() => this.purgeBook(id), UNDO_MS);
-    toastAction(`“${b.title}” was deleted`, 'Undo', () => { clearTimeout(timer); this.restoreBook(b, i, last); }, UNDO_MS);
+    const timer = setTimeout(() => { this._dels.delete(id); this.purgeBook(id); }, UNDO_MS); this._dels.set(id, timer);
+    toastAction(`“${b.title}” was deleted`, 'Undo', () => { if (this.slotId !== slot || !this._dels.has(id)) { toast('Too late to undo: that scriptorium was left'); return; } clearTimeout(timer); this._dels.delete(id); this.restoreBook(b, i, last); }, UNDO_MS);
     return true;
   }
+  // the localStorage list of this slot's books waiting to be purged (the main slot keeps the original key)
+  pendKey(slot = this.slotId) { return slot && slot !== 'main' ? PENDING_DEL + ':' + slot : PENDING_DEL; }
+  // leaving a slot: its deletes waiting for their undo window are carried out now, in that slot's storage
+  async flushDeletes() { const ids = [...this._dels.keys()]; this._dels.forEach(t => clearTimeout(t)); this._dels.clear(); for (const id of ids) await this.purgeBook(id); }
   restoreBook(b, i, last) {
     if (this.lib.books.some(x => x.id === b.id)) return;
     if (b.example && Array.isArray(this.lib.dismissedSeeds)) this.lib.dismissedSeeds = this.lib.dismissedSeeds.filter(t => t !== b.title);
-    store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== b.id));
+    store.lsSet(this.pendKey(), store.lsGet(this.pendKey(), []).filter(x => x !== b.id)); store.lsSet(this.pendKey() + ':pub', store.lsGet(this.pendKey() + ':pub', []).filter(x => x !== b.id));
     if (!this.lib.shelves.some(s => s.id === b.shelf)) b.shelf = this.firstShelf().id;   // its bookcase went meanwhile
     this.lib.books.splice(Math.min(i, this.lib.books.length), 0, b); if (last && !this.lib.lastRoom) this.lib.lastRoom = last;
     if (this.mode instanceof Hub) this.mode.restoreScroll(b);   // back in its place (the nearest free one if that was taken meanwhile)
@@ -429,16 +435,22 @@ class App {
   }
   async purgeBook(id) {
     if (this.lib.books.some(b => b.id === id)) return;
-    const own = k => k === 'pdf:' + id || k === 'room:' + id || k === 'job:' + id || k.startsWith('sections:' + id + ':') || k.startsWith('figs:' + id + ':');
+    const pk = this.pendKey(), own = k => k === 'pdf:' + id || k === 'room:' + id || k === 'job:' + id || k.startsWith('sections:' + id + ':') || k.startsWith('figs:' + id + ':');
+    // a shared book leaves the shared shelf too (and a pending re-upload is dropped)
+    cancelRepublish(id);
+    if ((store.lsGet(pk + ':pub', []) || []).includes(id)) { try { await unpublishBook(id); store.lsSet(pk + ':pub', store.lsGet(pk + ':pub', []).filter(x => x !== id)); } catch (e) { console.warn('unpublish', e); } }
+    // its parts' AI pictures and readings (global keys media:<kind>:<partId>:<stepId>, several MB each)
+    let partIds = new Set(); try { const R = await store.get('room:' + id); partIds = new Set(((R && R.parts) || []).map(p => p.id).filter(Boolean)); } catch (e) { }
     try { for (const k of await store.keys()) { if (this.lib.books.some(b => b.id === id)) return; /* restored meanwhile: keep the rest */ if (own(String(k))) await store.del(k); } } catch (e) { console.warn(e); return; }
-    store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id));
+    if (partIds.size) { try { for (const k of await store.globalKeys('media:')) if (partIds.has(String(k).split(':')[2])) await store.delGlobal(k); } catch (e) { console.warn(e); } }
+    store.lsSet(pk, store.lsGet(pk, []).filter(x => x !== id));
   }
-  sweepDeleted() { const ids = store.lsGet(PENDING_DEL, []); if (!Array.isArray(ids)) return store.lsSet(PENDING_DEL, []); ids.forEach(id => this.lib.books.some(b => b.id === id) ? store.lsSet(PENDING_DEL, store.lsGet(PENDING_DEL, []).filter(x => x !== id)) : this.purgeBook(id)); }
+  sweepDeleted() { const pk = this.pendKey(), ids = store.lsGet(pk, []); if (!Array.isArray(ids)) return store.lsSet(pk, []); ids.forEach(id => this.lib.books.some(b => b.id === id) ? store.lsSet(pk, store.lsGet(pk, []).filter(x => x !== id)) : this.purgeBook(id)); }
   // ---------- modes, with a warm fade between them ----------
   // Switches run one at a time (a second request while one is fading waits, and only the latest waiting one runs),
   // so a double click or an exit pressed during a fade never leaves two modes alive.
   switchMode(make) {
-    const tok = ++this._swTok;
+    const tok = ++this._swTok; this._navTok++;   // a place asked for later wins over a room still loading (openRoom)
     const run = () => tok === this._swTok ? this._switch(make) : null;
     return (this._sw = (this._sw || Promise.resolve()).then(run, run));
   }
@@ -551,7 +563,9 @@ class App {
   async openRoom(bookId, opts = {}) {
     const book = this.lib.books.find(b => b.id === bookId); if (!book) return this.openHub();
     this.route({ room: bookId, scroll: opts.openPart || null }); this.rememberRoom(bookId, opts.openPart);
+    const nav = ++this._navTok;   // Back (or any other place) chosen while the room loads: that one stands
     const P = this._pre; this._pre = null; const data = P && P.id === bookId && Date.now() - P.at < 20000 ? await P.p.catch(() => this.loadRoom(bookId)) : await this.loadRoom(bookId);   /* read ahead while a scroll flew (prefetchRoom) */
+    if (nav !== this._navTok) return;
     // a scroll the room no longer has (a stale link, a re-split book) leaves the address (replaced, not a new entry) and
     // the door's memory
     if (opts.openPart && !(data.parts || []).some(p => p.id === opts.openPart)) {
@@ -775,7 +789,7 @@ Return {"format":"scriptorium-room/1","book":{"title":str,"pages":n},"room":{"pa
   }
   async download(name, text) {
     try { const d = window.claude && await claude.use('downloads'); if (d) { await d.save({ filename: name, data: text }); return; } } catch (e) { if (e && e.code === 'declined') return; }
-    try { const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: name }); document.body.append(a); a.click(); a.remove(); } catch (e) { toast('Download blocked here: use Copy instead'); }
+    try { const u = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = el('a', { href: u, download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); } catch (e) { toast('Download blocked here: use Copy instead'); }
   }
 }
 // "+ Add PDF scroll" (and "+ Add PDF here" on a bookcase) open the guided dialog: place, pages, breakdown, analysis

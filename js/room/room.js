@@ -226,9 +226,11 @@ export class BookRoom {
   }
   partIndex(p) { return this.data.parts.filter(x => !x.subOf).indexOf(p); }
   // ---------- ingestion: split the PDF into parts (outline → headings → contents page → windows) ----------
-  async ingest() {
-    if (!this.book.hasPdf) { this.status('This book has no PDF attached. Import a room JSON or add parts with AI.'); return; }
-    const blob = await this.app.store.get('pdf:' + this.book.id); if (blob && this.app.ingest.keyPDF) this.app.ingest.keyPDF(blob, this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return; }
+  // the room's parts are replaced only once the split has succeeded (a re-split that fails keeps every scroll);
+  // `merge(parts)` may carry analyses over first. Returns true when the parts were replaced.
+  async ingest(merge) {
+    if (!this.book.hasPdf) { this.status('This book has no PDF attached. Import a room JSON or add parts with AI.'); return false; }
+    const blob = await this.app.store.get('pdf:' + this.book.id); if (blob && this.app.ingest.keyPDF) this.app.ingest.keyPDF(blob, this.book.id); if (!blob) { this.status('The PDF for this book is not stored in this browser.'); return false; }
     this.status('Finding the chapters…');
     try {
       const r = await this.app.ingest.splitBook(blob, { onProgress: k => this.status('Finding the chapters… ' + Math.round(k * 100) + '%') });
@@ -237,10 +239,13 @@ export class BookRoom {
       const ft = this.app.ingest.fileTitle ? this.app.ingest.fileTitle(blob) : '';
       if (r.title && r.title !== this.book.title && (!ft || this.book.title === ft)) { this.book.title = r.title; const bt = this.ui.querySelector('.brand-title'); if (bt) bt.textContent = r.title; }
       this.app.saveLib();
-      this.data.parts = r.parts.map(p => ({ id: 'p-' + uid(), ...p })); this.data.splitMethod = r.method; this.save();
+      const parts = r.parts.map(p => ({ id: 'p-' + uid(), ...p })); if (merge) merge(parts);
+      this.data.parts = parts; this.data.splitMethod = r.method; this.save();
+      if (this.disposed) return true;   // the room was left during the split: its parts are stored, nothing is built
       this.status(`${r.parts.length} parts found (${{ outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows' }[r.method]}).`, 4000);
       this.layout(); this.buildShell(); this.buildStations(); if (!this.reader && !this.anim && this.nav && this.nav.mode !== 'walk') this.frameStart();
-    } catch (e) { this.status('Could not read the PDF: ' + e.message); }
+      return true;
+    } catch (e) { if (!this.disposed) this.status('Could not read the PDF: ' + e.message); return false; }
   }
   status(msg, ms) { this.statusEl.textContent = msg; this.statusEl.hidden = !msg; clearTimeout(this._st); if (ms) this._st = setTimeout(() => { this.statusEl.hidden = true; }, ms); }
   // ---------- layout along the walls, starting at the left wall ----------
@@ -302,6 +307,7 @@ export class BookRoom {
   // the painted domes follow the subject (js/gfx/ceilings.js): the reader's choice, else the bookcase, else the titles
   ceiling() { const sh = this.app.lib && this.app.lib.shelves.find(x => x.id === this.book.shelf); return ceilingTheme(this.data.ceiling, sh ? sh.name : '', [this.book.title, ...(this.data.parts || []).slice(0, 12).map(p => p.title)].join(' ')); }
   buildStations() {
+    if (this.disposed) return;
     const old = []; this.stations.forEach(s => { s.group.removeFromParent(); old.push(s.group); s.bays.forEach(b => { if (b.ds) old.push(b.ds.scene); }); }); this.stations.clear(); if (old.length) this.trash(old);
     if (this.shell && this.shell.userData.setCases) this.shell.userData.setCases({ niches: this.placed.map(x => x.slot.p) }); // no-op when unchanged
     this.placed.forEach(({ part, slot }, i) => this.makeStation(part, slot, i));
@@ -462,6 +468,7 @@ export class BookRoom {
     });
   }
   refreshStation(part) {
+    if (this.disposed) return;   // an analysis that ends after the room was left: the live room (if any) is refreshed instead
     const st = this.stations.get(part.id); if (!st) { this.layout(); this.buildStations(); return; }
     // a different number of demos changes the plinth's footprint: lay the floor out again so nothing overlaps
     { const i = this.orderedParts().indexOf(part), f0 = this.footprints && this.footprints[i], f1 = plinthDims(this.pedestalSpecs(part).length), R = f0 && (Math.abs(f0.x1 - f0.x0) + Math.abs(f0.z1 - f0.z0)), want = f1.Wf + f1.Df;
@@ -507,7 +514,7 @@ export class BookRoom {
     P.append(el('h4', { text: `Scrolls · ${done} of ${parts.length} analysed` }));
     const list = el('ol', { class: 'part-list' }); parts.forEach(p => list.append(el('li', { class: (p.analysis ? 'done ' : '') + (p.subOf ? 'sub' : ''), onclick: () => this.openPart(p) }, [el('span', { text: p.title }), p.startPage ? el('small', { text: ` ${p.startPage}–${p.endPage}` }) : null]))); P.append(list);
     P.append(el('div', { class: 'row wrap' }, [
-      el('button', { class: 'btn small', text: 'Re-split the PDF', onclick: async () => { if (await confirmBox('Find the chapters again? Analysed scrolls are kept only if their titles match.', 'Re-split')) { const old = this.data.parts; this.data.parts = []; await this.ingest(); this.data.parts.forEach(p => { const o = old.find(x => x.title === p.title); if (o && o.analysis) p.analysis = o.analysis; }); this.save(); this.layout(); this.buildStations(); } } }),
+      this.book.hasPdf ? el('button', { class: 'btn small', text: 'Re-split the PDF', onclick: async () => { if (await confirmBox('Find the chapters again? Analysed scrolls are kept only if their titles match.', 'Re-split')) { const old = this.data.parts; await this.ingest(parts => parts.forEach(p => { const o = old.find(x => x.title === p.title); if (o && o.analysis) p.analysis = o.analysis; })); } } }) : null,
       el('button', { class: 'btn small', text: '+ Empty scroll', onclick: () => { const p = { id: 'p-' + uid(), title: 'New scroll', summary: '' }; this.data.parts.push(p); this.save(); this.layout(); this.buildShell(); this.buildStations(); this.togglePanel(); this.togglePanel(); } })]));
   }
   // ---------- interaction ----------
@@ -597,6 +604,6 @@ export class BookRoom {
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); this.gfx.canvas.removeEventListener('pointerup', this.onUp); this.gfx.canvas.removeEventListener('pointermove', this.onMove);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.ao.dispose(); const pr = this.probe; this.app.retire ? this.app.retire(() => pr.dispose()) : pr.dispose();
-    this.gfx.renderer.shadowMap.autoUpdate = true; this.nav.dispose(); this.controls.dispose(); if (this.reader) { this.reader.releaseFigures(); this.reader.el.remove(); removeEventListener('keydown', this.reader.onKey); if (this.reader._dockKey) { removeEventListener('keydown', this.reader._dockKey); this.reader._dockKey = null; } } this.ui.remove(); this.gfx.canvas.style.cursor = '';
+    this.gfx.renderer.shadowMap.autoUpdate = true; this.nav.dispose(); this.controls.dispose(); if (this.reader) { const r = this.reader; r.close(); r.el.remove(); }   /* its listeners, reading aloud and media jobs end with it */ this.ui.remove(); this.gfx.canvas.style.cursor = '';
   }
 }
