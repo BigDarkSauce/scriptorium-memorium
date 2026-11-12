@@ -55,7 +55,7 @@ export class MapView {
   //   label, sub, icon, dios: [{ name, icon, x, z }] }] }   (rot: the way the footprint faces into the room, about y)
   constructor(host, { provider, camera, onPick, onIcon = null, onSymbols = null, key = 'sm-map-open' }) {
     Object.assign(this, { provider, camera, onPick, onIcon, onSymbols, key, host });
-    this.btn = el('button', { class: 'map-btn glass', type: 'button', title: 'Minimap: show or fold it (the full map: M)', 'aria-label': 'Minimap', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>', onclick: () => this.toggle() });
+    this.btn = el('button', { class: 'map-btn glass', type: 'button', 'aria-label': 'Minimap (M: the full map)', 'aria-expanded': 'false', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>', onclick: () => this.toggle() });
     this.card = el('aside', { class: 'map-card glass', 'aria-label': 'Minimap', hidden: true });
     this.tip = el('div', { class: 'map-tip', hidden: true, role: 'tooltip' });
     host.append(this.btn, this.card); document.body.append(this.tip); this.sig = ''; this.t = 0;

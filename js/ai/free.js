@@ -70,7 +70,15 @@ const SKEY = 'sm-ai', UKEY = 'sm-ai-use';
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
 export const MODES = { claude: 'Claude directs', hybrid: 'Claude + free models', free: 'Free models only' };
-export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'claude', keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: s.on || {} }; }
+// chosen: the reader picked the engine in the AI panel; auto: the engine was set by autoMode (what is available here)
+export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'claude', chosen: !!s.chosen, auto: !!s.auto, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: s.on || {} }; }
+// The default engine is the first one available here: Claude inside the Claude app, else the free models. A choice the
+// reader made is never changed: one made in the panel (chosen), or, from before this flag, any engine other than the old
+// default ('claude') that autoMode did not set itself.
+export function autoMode(claudeOK) {
+  const S = settings(); if (S.chosen || (S.mode !== 'claude' && !S.auto)) return S.mode;
+  const want = claudeOK ? 'claude' : 'free'; if (S.mode !== want) saveSettings({ mode: want, auto: true }); return want;
+}
 export function saveSettings(patch, { quiet = false } = {}) { const s = { ...settings(), ...patch, at: Date.now() }; write(SKEY, s); persist(s); if (!quiet) listeners.forEach(f => { try { f(s); } catch (e) { } }); return s; }
 // Keys and choices survive every new version of the app: kept in this browser (localStorage), mirrored in its
 // IndexedDB, and (with the Scriptorium extension) in a file on this computer (~/.scriptorium/ai-settings.json). At start

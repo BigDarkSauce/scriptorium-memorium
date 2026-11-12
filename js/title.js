@@ -40,7 +40,9 @@ export class TitleScreen {
     this.ready = showcase(app).then(L => { this.items = L; if (!this.disposed) this.next(true); });
   }
   get scene() { return this.ds ? this.ds.scene : this._scene; }
-  framing() { return !this.ds; }   // main.js waits under the veil until the first diorama stands
+  // main.js does not wait under the veil for the first diorama any more: the heading and the menu show at once over the
+  // title's dark, and the diorama rises out of it behind them once it is built (next(true): dim 1, then the rise)
+  framing() { return false; }
   // ---------- the showcase ----------
   // A change of diorama is a fade through black. From three quarters of its shot the diorama, still moving, darkens
   // slowly (the grade's uDim, the edges a little ahead of the centre) until the screen is black; nothing is ever frozen
@@ -52,7 +54,7 @@ export class TitleScreen {
   async next(first) {
     if (!this.items.length || this.disposed || this.preparing) return; this.preparing = true; const dim = this.gfx.grade.uniforms.uDim;
     try {
-      if (!first) dim.value = 1;
+      dim.value = 1;   // (the first one too: it comes up out of the dark behind the menu)
       let ds = null, tries = this.items.length;
       while (!ds && tries-- > 0 && !this.disposed) {
         this.i = (this.i + 1) % this.items.length; const it = this.items[this.i];
@@ -65,7 +67,7 @@ export class TitleScreen {
       if (first) this.gfx.setView(ds.scene, this.camera); else this.gfx.swapScene(ds.scene, this.camera);
       performance.mark('sm:t-warm0'); if (this.gfx.prewarm) { try { await Promise.race([this.gfx.prewarm(ds.scene, this.camera), sleep(2500)]); } catch (e) { } } performance.measure('sm:t-warm', 'sm:t-warm0');
       performance.mark('sm:t-frames0'); for (let f = 0; f < 6 && !this.disposed; f++) { await frames(1); try { ds.step(1 / 30); this.pose(); } catch (e) { } } performance.measure('sm:t-frames', 'sm:t-frames0');
-      this.shot.t = 0; if (!first) this.rise = { t: 0, dur: RISE };
+      this.shot.t = 0; this.rise = { t: 0, dur: RISE };
       setTimeout(() => this.ui && this.ui.classList.remove('busy'), first ? 0 : 700);
       if (old) this.app.retire(() => { try { old.dispose(); } catch (e) { disposeTree(old.scene); } });
       if (!this.disposed) this.caption(this.items[this.i], first);
@@ -116,7 +118,7 @@ export class TitleScreen {
       el('header', { class: 'tt-head' }, [el('div', { class: 'tt-kicker', text: 'A library of living knowledge' }), el('h1', { class: 'tt-title' }, [el('span', { text: 'Scriptorium' }), el('span', { text: 'Memorialium' })]), el('div', { class: 'tt-rule' })]),
       menu, this.panel, el('div', { class: 'tt-saved', text: 'Everything is saved as you go, in this browser' }),
       el('div', { class: 'tt-capbox' }, [this.cap, el('div', { class: 'tt-prog' }, [this.prog])]));
-    const show = () => { if (this.disposed) return; if (this.app.switching) return setTimeout(show, 60); this.ui.classList.add('in'); }; setTimeout(show, 60);
+    setTimeout(() => { if (!this.disposed) this.ui.classList.add('in'); }, 60);   // at once: the menu never waits for the showcase
   }
   caption(it, first) {
     this.cap.classList.remove('show'); void this.cap.offsetWidth;

@@ -12,7 +12,7 @@ import { makeRoomShell, doorPick, doorHit } from '../gfx/roomshell.js';
 import { makeBookcase, makeScroll, makeSheet, slotPos, setRestTiers, SHELF_KINDS, poseScroll, setChains, chainItems, hangSlots, caseTierOrder, hangLimits, hangDrop, hangX, tierSpan, ghostScroll, METALS, HANG, slotAt, SCROLL_L, armchair, readingDesk, displayColumn, readingTable, bench, globeStand, runner, quietShadows, lightPool } from './props.js';
 import { Navigator } from '../nav.js';
 import { RoomProbe, RoomAO, bindRoom, footprints, enrich } from '../gfx/surfaces.js';
-import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML } from '../util.js';
+import { el, clamp, uid, toast, promptBox, confirmBox, easeInOutQuint, easeOut, ease, esc, disposeTree, mathHTML, mathText, prefersCalm, announce, moreMenu } from '../util.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const TOUCH = () => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
@@ -21,6 +21,14 @@ const HINTS = {
   look: () => TOUCH() ? 'Drag to look · pinch to zoom · tap a scroll to open it · long-press it for options' : 'Drag to look · WASD walks (Shift: faster) · V: first person · click a scroll to open it · right-click it for options',
   build: () => TOUCH() ? 'Tap a bookcase to select it · drag it along the floor · drag a scroll to another place' : 'Click a bookcase to select it · drag it along the floor · drag a scroll to another place on any shelf'
 };
+// The first minutes: one short tip at a time, each replaced once it has been done (look → walk → open), instead of one
+// line naming every control at once; then the full reference line above. Kept in this browser (TIPS_KEY: the stage reached).
+const TIPS_KEY = 'scriptorium.hallTips', TIPS = [
+  () => TOUCH() ? 'Drag to look round the hall · pinch to come closer' : 'Drag to look round the hall',
+  () => 'W A S D to walk (Shift: faster) · V: walk at eye height',
+  () => TOUCH() ? 'Tap the glowing scroll to open it · long-press a scroll for its options' : 'Click the glowing scroll to open it · [ and ] step through the scrolls, Enter opens'];
+const tipStage = () => { try { return clamp(+localStorage.getItem(TIPS_KEY) || 0, 0, TIPS.length); } catch (e) { return TIPS.length; } };
+const NEAR_R = 2.5;   // "the library notices you": the nearest scroll within this many metres of the eye warms and names itself
 // case-frame bounds (inv: the bookcase's inverse world matrix) of the visible meshes under root that pass keep()
 const _bm = new THREE.Matrix4();
 export function localBox(root, inv, keep = () => true) {
@@ -65,7 +73,17 @@ export class Hub {
       bounds: () => { const c = this.caseDepth(); return { minX: -this.lib.hub.w / 2 + c, maxX: this.lib.hub.w / 2 - c, minZ: -this.lib.hub.d / 2 + c, maxZ: this.lib.hub.d / 2 - c, h: this.lib.hub.h }; },
       obstacles: () => this.obstacles() });
     this._obsFn = () => [...this.shelfObjs.values(), ...(this.furn ? this.furn.children.filter(o => o.visible) : []), ...(this.solids || [])].map(o => new THREE.Box3().setFromObject(o)).concat([...(((this.shell && this.shell.userData.baroque && this.shell.userData.baroque.obstacles) || []).map(q => new THREE.Box3(new THREE.Vector3(q.x - q.r, 0, q.z - q.r), new THREE.Vector3(q.x + q.r, 1.8, q.z + q.r))))]);
-    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return; this.keys[e.key.toLowerCase()] = true; if (e.key === 'v' || e.key === 'V') this.nav.toggle(); if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else if (this.menu) this.closeMenu(); else if (this.moveDlg) this.closeMove(); else { if (this.sdrag) this.endScrollDrag(false); this.selectShelf(null); } } if (e.key === 'Delete' || e.key === 'Backspace') { if (this.menu && this.menuBook) { e.preventDefault(); this.deleteScroll(this.menuBook); } else if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); } };
+    this.onKeyD = e => { if (e.target && e.target.closest && e.target.closest('input,textarea,select')) return;
+      const mod = e.ctrlKey || e.metaKey || e.altKey;   // Ctrl+V, Cmd+F…: the browser's, never a walk toggle or a held key
+      if (!mod) this.keys[e.key.toLowerCase()] = true;
+      if (!mod && /^(w|a|s|d|arrow(up|down|left|right))$/i.test(e.key)) this.tipDone(1);
+      if ((e.key === 'v' || e.key === 'V') && !mod) { this.nav.toggle(); this.tipDone(1); }
+      // [ / ]: step through the scrolls (an outline marks the one chosen, its title is announced); Enter opens it
+      const onCtl = e.target && e.target.closest && e.target.closest('button, a, [contenteditable], .modal-veil'), inDlg = e.target && e.target.closest && e.target.closest('.modal-veil, .hud-menu, .scroll-menu, [contenteditable]');
+      if (!mod && !inDlg && !this.build && !this.opening && (e.key === '[' || e.key === ']')) { e.preventDefault(); this.kbStep(e.key === ']' ? 1 : -1); }
+      if (e.key === 'Enter' && !mod && !onCtl && this.kbFocus && !this.opening && !this.menu) { const sc = this.scrollObjs.get(this.kbFocus); if (sc) { e.preventDefault(); this.openScroll(sc); } }
+      if (e.key === 'Escape' && this.kbFocus && !this.opening) { this.kbClear(); return; }
+      if (e.key === 'Escape') { if (this.opening) this.cancelOpening(); else if (this.menu) this.closeMenu(); else if (this.moveDlg) this.closeMove(); else { if (this.sdrag) this.endScrollDrag(false); this.selectShelf(null); } } if (e.key === 'Delete' || e.key === 'Backspace') { if (this.menu && this.menuBook) { e.preventDefault(); this.deleteScroll(this.menuBook); } else if (e.key === 'Delete' && this.selShelf && this.build) this.deleteShelf(this.selShelf); } };
     this.onKeyU = e => { this.keys[e.key.toLowerCase()] = false; };
     addEventListener('keydown', this.onKeyD); addEventListener('keyup', this.onKeyU);
     this.onDown = e => this.pointerDown(e); this.onMove = e => this.pointerMove(e); this.onUp = e => this.pointerUp(e);
@@ -268,24 +286,43 @@ export class Hub {
   buildUI() {
     const u = this.ui;
     u.append(el('button', { class: 'brand brand-btn', type: 'button', title: 'Back to the title screen (your scriptoria)', onclick: () => this.app.openTitle() }, [el('div', { class: 'brand-title', text: 'Scriptorium Memorialium' }), el('div', { class: 'brand-sub', text: (this.app.slots && (this.app.slots.find(x => x.id === this.app.slotId) || {}).name) || 'your library' })]));
-    this.buildBtn = el('button', { class: 'btn', text: 'Arrange library', onclick: () => this.toggleBuild() });
+    // the top bar: the main action, Get scroll, and one ⋯ for the rarer ones (arranging, the title screen, import / export);
+    // while arranging, "Done arranging" stands in the bar itself so the way out is never hidden in a menu
+    this.buildBtn = el('button', { type: 'button', text: 'Arrange library', onclick: () => this.toggleBuild() });
     const add = el('button', { class: 'btn primary', text: '+ Add PDF scroll', onclick: () => this.pickPDF() });
     const get = el('button', { class: 'btn', text: 'Get scroll', title: 'Scrolls other readers have made visible: search them by tag and keep a copy', onclick: () => this.app.getScroll() });
-    const more = el('button', { class: 'btn ghost', text: 'Import / export', onclick: () => this.app.portDialog() });
-    const menuBtn = el('button', { class: 'btn', text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() });
-    u.append(el('div', { class: 'hub-actions glass' }, [add, get, this.buildBtn, menuBtn, more]));
+    this.doneBtn = el('button', { class: 'btn on', type: 'button', text: 'Done arranging', hidden: true, onclick: () => this.toggleBuild(false) });
+    this.more = moreMenu([this.buildBtn, { text: 'Main menu', title: 'The title screen: continue, your scriptoria, a new one', onclick: () => this.app.openTitle() }, { text: 'Import / export', title: 'Plain JSON: the prompt pack, a room, the whole library', onclick: () => this.app.portDialog() }], { label: 'More: arrange, main menu, import / export' });
+    u.append(el('div', { class: 'hub-actions glass' }, [add, get, this.doneBtn, this.more.wrap]));
     // the map of the hall: bookcases, their names, how many scrolls and about what (mapview.js)
     this.map = new MapView(u, { camera: this.camera, provider: () => this.mapPlan(), onIcon: it => { const sh = this.lib.shelves.find(x => x.id === it.id); if (sh) this.chooseShelfIcon(sh); }, onSymbols: () => this.chooseShelfIcon(null), onPick: it => { const so = this.shelfObjs.get(it.id); if (!so) return; const p = so.getWorldPosition(V3()); p.y = 1.5; const n = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())); this.frameAt(p, n); } });
-    this.hint = el('div', { class: 'hint glass', text: HINTS.look() }); u.append(this.hint);
+    this.hint = el('div', { class: 'hint glass' }); u.append(this.hint); this.tipStage = tipStage(); this.restHint();
+    // the scroll the library offers on a first visit (cueAt) and the engraved name of the scroll nearest the eye (noticeAt)
+    this.cueLabel = el('div', { class: 'cue-label', 'aria-hidden': 'true' }, [el('span', { text: 'Open a scroll' })]); u.append(this.cueLabel);
+    this.caption = el('div', { class: 'hall-caption', 'aria-hidden': 'true' }); u.append(this.caption);
     this.tip = el('div', { class: 'tooltip', hidden: true }); u.append(this.tip);
     this.buildPanel = el('aside', { class: 'side-panel glass', hidden: true }); u.append(this.buildPanel);
     this.fileIn = el('input', { type: 'file', accept: 'application/pdf', multiple: true, hidden: true }); u.append(this.fileIn);
     this.fileIn.onchange = () => { const files = [...this.fileIn.files]; this.fileIn.value = ''; return this.addFiles(files); };
   }
   toggleBuild(on = !this.build) {
-    this.build = on; this.buildBtn.classList.toggle('on', on); this.buildBtn.textContent = on ? 'Done arranging' : 'Arrange library';
-    this.buildPanel.hidden = !on; this.hint.textContent = on ? HINTS.build() : HINTS.look();
+    this.build = on; this.buildBtn.textContent = on ? 'Done arranging' : 'Arrange library'; this.doneBtn.hidden = !on; if (on) this.kbClear();
+    this.buildPanel.hidden = !on; this.restHint();
     if (!on) this.selectShelf(null); this.renderBuildPanel();
+  }
+  // the hint at rest: arranging, a first-visit tip, or the full reference line. A changed text fades through (.swap).
+  restHint() {
+    const t = this.build ? HINTS.build() : this.tipStage < TIPS.length ? TIPS[this.tipStage]() : HINTS.look(), h = this.hint;
+    h.classList.toggle('tip', !this.build && this.tipStage < TIPS.length); if (h.textContent === t) return;
+    if (!h.textContent || prefersCalm()) { h.textContent = t; return; }
+    h.classList.add('swap'); clearTimeout(this._hintT); this._hintT = setTimeout(() => { h.textContent = t; h.classList.remove('swap'); }, 260);
+  }
+  // a tip done: the next one (touch screens have no keys: the walking tip is passed over)
+  tipDone(k) {
+    if (this.tipStage !== k && !(k === TIPS.length && this.tipStage < k)) return;
+    this.tipStage = k + 1; if (this.tipStage === 1 && TOUCH()) this.tipStage = 2; if (k === TIPS.length) this.tipStage = TIPS.length;
+    try { localStorage.setItem(TIPS_KEY, String(this.tipStage)); } catch (e) { }
+    if (!this.opening) this.restHint();
   }
   renderBuildPanel() {
     const P = this.buildPanel, R = this.lib.hub; P.innerHTML = '';
@@ -510,7 +547,7 @@ export class Hub {
     const a1 = p.clone().add(V3(0, -.28, 0)), inB = q => q.x >= B.minX + .1 && q.x <= B.maxX - .1 && q.z >= B.minZ + .1 && q.z <= B.maxZ - .1;
     if (!walk && !inB(a1)) { let lo = 0, hi = 1; const d = a1.clone().sub(to), q = V3(); for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; q.copy(to).addScaledVector(d, m); if (inB(q)) lo = m; else hi = m; } a1.copy(to).addScaledVector(d, Math.max(.05, lo)); }
     const far = this.camera.position.distanceTo(to);
-    const q1 = lookQ(to, a1); this.camTween = { t: 0, dur: flightDur(this.camera.position, this.camera.quaternion, to, q1), p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: to, q1, a1, walk, lift: walk ? 0 : Math.min(.9, far * .07) };   /* longer ways and larger turns take longer; the overview arcs up a little on long ones */
+    const q1 = lookQ(to, a1); this.camTween = { t: 0, dur: prefersCalm() ? .05 : flightDur(this.camera.position, this.camera.quaternion, to, q1) /* calm motion: a cut */, p0: this.camera.position.clone(), q0: this.camera.quaternion.clone(), p1: to, q1, a1, walk, lift: walk ? 0 : Math.min(.9, far * .07) };   /* longer ways and larger turns take longer; the overview arcs up a little on long ones */
   }
   stepCamTween(dt) {
     const T = this.camTween; T.t += dt; const k = easeSine(Math.min(1, T.t / T.dur));
@@ -552,6 +589,7 @@ export class Hub {
   scrollAt(e) { if (e.target !== this.gfx.canvas) return null; const h = this.pick(e, [...this.scrollObjs.values()])[0]; return (h && this.ownerOf(h.object, 'scroll')) || null; }
   pointerDown(e) {
     if (this.opening) return; this.down = { x: e.clientX, y: e.clientY }; if (e.button === 2) this.rdown = { x: e.clientX, y: e.clientY };
+    if (this.kbFocus) this.kbClear();   // the pointer takes over from the keyboard's choice
     clearTimeout(this._lpT); this._lpFired = false;
     if (e.pointerType && e.pointerType !== 'mouse') { const id = this.bookAt(e); if (id) this._lpT = setTimeout(() => { if (!this.down || this.opening) return; this._lpFired = true; if (this.sdrag) this.endScrollDrag(false); this.openMenu(id, this.down.x, this.down.y); }, 550); }
     if (e.button !== 0) return;
@@ -563,6 +601,7 @@ export class Hub {
   }
   pointerMove(e) {
     if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 8) clearTimeout(this._lpT);
+    if (this.down && this.tipStage === 0 && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 40) this.tipDone(0);   // looked round: the next tip
     if (this.sdrag) { this.dragScroll(e); return; }
     if (this.opening || !e.target || e.target !== this.gfx.canvas) { if (!this.dragging) { this.tip.hidden = true; } }
     if (this.dragging) {
@@ -574,7 +613,7 @@ export class Hub {
     }
     if (e.target !== this.gfx.canvas || this.build || this.menu) return;
     const sc = this.scrollAt(e);
-    if (sc !== this.hover) { if (this.hover) this.hover.userData.paper.emissiveIntensity = 0; this.hover = sc; if (sc) sc.userData.paper.emissiveIntensity = .25; this.gfx.canvas.style.cursor = sc ? 'pointer' : ''; }
+    if (sc !== this.hover) { this.hover = sc; this.gfx.canvas.style.cursor = sc ? 'pointer' : ''; }   /* its warm glow: glowScrolls */
     if (sc) {
       const b = this.lib.books.find(x => x.id === sc.userData.bookId); this.tip.hidden = false;
       const st = b.hang ? `hanging on ${METALS[b.hang.metal in METALS ? b.hang.metal : 'brass'].label.toLowerCase()} chains · ` : '';
@@ -705,6 +744,7 @@ export class Hub {
     this.closeMenu(); this.closeMove(); this.dropGhost(); this.camTween = null; if (this.sdrag) this.endScrollDrag(false);
     this.opening = { sc, b, t: 0 }; this.controls.enabled = false; this.tip.hidden = true; this.highlight(null); this.gfx.canvas.style.cursor = '';
     if (this.hover) { this.hover.userData.paper.emissiveIntensity = 0; this.hover = null; }
+    this.kbFocus = null; this.unlight(); this.cueLabel.classList.remove('on'); this.caption.classList.remove('on'); this.tipDone(TIPS.length);   /* a scroll opened: the first-visit cue and tips are done */
     const wp = sc.getWorldPosition(V3()), so = sc.parent, outward = V3(0, 0, 1).applyQuaternion(so.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
     if (this.nav.mode === 'walk') { const f = V3(); this.camera.getWorldDirection(f); this.controls.target.copy(this.camera.position).addScaledVector(f, 1.6); }
     const O = this.opening; O.from = { p: this.camera.position.clone(), t: this.controls.target.clone() }; O.so = so; O.slotP = sc.position.clone(); O.slotQ = sc.quaternion.clone();
@@ -765,7 +805,7 @@ export class Hub {
     sc.remove(O.sheet); this.trash([O.sheet]); O.light.intensity = 0; this.scene.add(O.light);   /* back to the hall, dark (never removed: the light count stays the same) */
     sc.userData.paper.emissiveIntensity = 0; this.gfx.bloom.strength = this.scene.userData.look.bloom;
     this.opening = null; this.controls.enabled = this.nav.mode !== 'walk'; if (this.controls.enabled) this.controls.update();
-    this.hint.textContent = this.build ? HINTS.build() : HINTS.look(); document.body.classList.remove('cine'); this.shadowsDirty = true;
+    this.restHint(); document.body.classList.remove('cine'); this.shadowsDirty = true;
   }
   // the unroll's light at strength e (0..1): a faint glow in the sheet, the halo behind it, the back light, a touch of bloom
   glowAt(O, e) {
@@ -796,6 +836,66 @@ export class Hub {
     this.gfx.grade.uniforms.uFade.value = ease(clamp((k4 - .25) / .75, 0, 1));
     if (k4 >= 1 && !O.done) { O.done = true; this.app.openRoom(O.b.id, { fromHub: true }); }
   }
+  // ---------- the scrolls' warm light: the pointer, the first-visit cue, the scroll nearest the eye ----------
+  // One place sets every scroll's glow (its paper's emissive), eased, each frame: the scroll under the pointer (.25), the
+  // one chosen with [ / ] (.2), the one the library offers on a first visit (a slow breath between .07 and .2, steady under
+  // calm motion) and the one within NEAR_R of the eye (.12). The opening owns its scroll's light (glowAt): none of this
+  // runs while a scroll opens.
+  unlight() { if (this._lit) this._lit.forEach((v, o) => { o.userData.paper.emissiveIntensity = 0; }); this._lit = new Map(); }
+  glowScrolls(dt) {
+    const L = this._lit || (this._lit = new Map()), want = new Map(), t = this._gt = (this._gt || 0) + dt, live = o => o && o.parent;
+    if (live(this.near)) want.set(this.near, .12);
+    if (live(this.cue)) want.set(this.cue, this._calm ? .16 : .07 + .13 * (.5 + .5 * Math.sin(t * 2.4)));
+    const kb = this.kbFocus && this.scrollObjs.get(this.kbFocus); if (live(kb)) want.set(kb, .2);
+    if (live(this.hover)) want.set(this.hover, .25);
+    want.forEach((v, o) => { if (!L.has(o)) L.set(o, o.userData.paper.emissiveIntensity || 0); });
+    const a = Math.min(1, dt * 8);
+    L.forEach((v, o) => { if (!o.parent) { L.delete(o); return; } const w = want.get(o) || 0, n = Math.abs(w - v) < .003 ? w : v + (w - v) * a; o.userData.paper.emissiveIntensity = n; if (!n && !want.has(o)) L.delete(o); else L.set(o, n); });
+  }
+  // every 0.4 s: the scroll nearest the eye (within NEAR_R) and, on a first visit, the nearest one in view (the cue); the
+  // screen boxes of the interface, which the cue's label keeps clear of
+  sense() {
+    const cam = this.camera, cp = cam.position, q = V3(), pr = V3(); let near = null, nd = NEAR_R * (this.nav.mode === 'walk' ? 1 : 1.25),   /* the overview's eye stands a little higher and further back */ cue = null, cd = Infinity; this._calm = prefersCalm();
+    const showCue = this.tipStage < TIPS.length && !this.build && !this.menu && !this.moveDlg;
+    this.scrollObjs.forEach(o => { if (o.userData.arrive != null || !o.parent) return; o.getWorldPosition(q); const d = q.distanceTo(cp);
+      if (d < nd) { nd = d; near = o; }
+      if (showCue && d < cd) { pr.copy(q).project(cam); if (pr.z < 1 && Math.abs(pr.x) < .8 && pr.y > -.7 && pr.y < .75) { cd = d; cue = o; } } });
+    if (this.build || this.menu) near = null;
+    this.cue = cue;
+    this._hud = [...this.ui.children, ...document.querySelectorAll('.sound-btn, .gfx-btn, .ai-btn, .map-btn, .map-card, .ap-chip')].filter(e => e !== this.cueLabel && e !== this.caption && e !== this.tip && !e.hidden && e.offsetWidth).map(e => e.getBoundingClientRect());
+    if (near !== this.near) { this.near = near; this.showCaption(near); }
+    // the caption sits low in the middle; a narrow window where it would meet the hint or the walk panel leaves it out
+    if (this.caption.classList.contains('on')) { const c = this.caption.getBoundingClientRect(); this.caption.classList.toggle('clash', this._hud.some(b => c.left < b.right && c.right > b.left && c.top < b.bottom && c.bottom > b.top)); if (!this.caption.classList.contains('clash')) this._hud.push(c); }   /* the cue's label keeps clear of the caption too */
+  }
+  // "The library notices you": the scroll nearest the eye names itself, engraved, low in the middle of the view, with a
+  // quiet rustle of parchment (at most one every 2.5 s)
+  showCaption(o) {
+    const C = this.caption, b = o && this.lib.books.find(x => x.id === o.userData.bookId);
+    if (!b) { C.classList.remove('on'); return; }
+    C.innerHTML = `<span class="hc-k">${esc(this.caseName(b.shelf))}</span><b>${mathHTML(b.title, 'label')}</b>`; C.classList.remove('clash'); C.classList.add('on');
+    const now = performance.now(); if (now - (this._rustleT || 0) > 2500) { this._rustleT = now; this.sfx('paper', { gain: .08 }); }
+  }
+  // the cue's floating label "Open a scroll", just above its scroll; left out wherever it would cover the interface
+  placeCue() {
+    const E = this.cueLabel, o = this.cue; let on = !!(o && o.parent) && !this.app.cine && !this.camTween && this.hover !== o;
+    if (on) {
+      const p = o.getWorldPosition(V3()); p.y += .16; p.project(this.camera); const r = this.gfx.canvas.getBoundingClientRect(), x = r.left + (p.x * .5 + .5) * r.width, y = r.top + (-p.y * .5 + .5) * r.height;
+      const w = E.offsetWidth || 120, h = E.offsetHeight || 28, R = [x - w / 2 - 8, y - h - 18, x + w / 2 + 8, y + 4];
+      on = p.z < 1 && R[0] > 0 && R[2] < innerWidth && R[1] > 0 && !(this._hud || []).some(b => R[0] < b.right && R[2] > b.left && R[1] < b.bottom && R[3] > b.top);
+      if (on) E.style.transform = `translate(${Math.round(x - w / 2)}px, ${Math.round(y - h - 10)}px)`;
+    }
+    E.classList.toggle('on', on);
+  }
+  // ---------- the keyboard's way through the scrolls: [ and ] (bookcase by bookcase, top row first), Enter opens ----------
+  kbList() { const si = new Map(this.lib.shelves.map((s, i) => [s.id, i])); return this.lib.books.filter(b => this.scrollObjs.get(b.id) && si.has(b.shelf)).sort((a, b) => (si.get(a.shelf) - si.get(b.shelf)) || ((b.tier || 0) - (a.tier || 0)) || ((a.slot || 0) - (b.slot || 0))); }
+  kbStep(d) {
+    const L = this.kbList(); if (!L.length) return; let i = L.findIndex(b => b.id === this.kbFocus); i = i < 0 ? (d > 0 ? 0 : L.length - 1) : (i + d + L.length) % L.length;
+    const b = L[i], o = this.scrollObjs.get(b.id), so = o.parent; this.kbFocus = b.id; this.closeMenu(); this.tip.hidden = true;
+    this.highlight(o);   // the selection outline (renderer.js, prewarmed) is the focus ring
+    so.updateMatrixWorld(true); this.frameAt(o.getWorldPosition(V3()), V3(0, 0, 1).transformDirection(so.matrixWorld).setY(0).normalize());
+    announce(`Scroll ${i + 1} of ${L.length}: ${mathText(b.title)}, on ${this.caseName(b.shelf)}. Enter opens it.`); this.sfx('tick', { gain: .15 });
+  }
+  kbClear() { this.kbFocus = null; this.highlight(this.build && this.selShelf ? this.shelfObjs.get(this.selShelf) : null); }
   // ---------- frame ----------
   // ---------- the hall's reflections and contact occlusion (surfaces.js) ----------
   // A probe at eye height in the middle of the hall, windows at their HDR radiance; the furniture and bookcase
@@ -821,6 +921,8 @@ export class Hub {
     if (this.shadowsDirty !== false || this.opening || this.dragging || this._arriving) { sm.needsUpdate = true; this.shadowsDirty = false; }
     if (this.opening) { this.stepOpening(dt); return; }
     if (this.camTween) this.stepCamTween(dt);
+    this._senseT = (this._senseT || 0) - dt; if (this._senseT <= 0) { this._senseT = .4; this.sense(); }
+    this.glowScrolls(dt); this.placeCue();
     if (this.ghost && this.ghost.visible) { this._gT = (this._gT || 0) + dt; this.ghost.userData.mat.opacity = .24 + .1 * Math.sin(this._gT * 4); }
     // walking (overview or first person) — see js/nav.js
     this.nav.update(dt, !!this.dragging || !!this.sdrag || !!this.camTween || !!this.app.cine);   /* the app's camera moves own the camera too */
@@ -830,7 +932,7 @@ export class Hub {
   }
   dispose() {
     if (this.map) { this.map.dispose(); this.map = null; }
-    if (this.disposed) return; this.disposed = true; document.body.classList.remove('cine');
+    if (this.disposed) return; this.disposed = true; document.body.classList.remove('cine'); if (this.more) this.more.dispose(); clearTimeout(this._hintT);
     removeEventListener('keydown', this.onKeyD); removeEventListener('keyup', this.onKeyU);
     this.gfx.canvas.removeEventListener('pointerdown', this.onDown); removeEventListener('pointermove', this.onMove); removeEventListener('pointerup', this.onUp);
     this.gfx.canvas.removeEventListener('contextmenu', this.onCtx, true); removeEventListener('pointerdown', this.onDocDown, true); clearTimeout(this._lpT);
