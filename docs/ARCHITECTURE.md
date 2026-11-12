@@ -510,9 +510,13 @@ Measured on the reader's laptop (AMD Radeon 610M, Direct3D 11 through ANGLE), no
   page may call; it still named only round 19's four (`bridge_info`, `http_*`), so the page's call to
   `freellmapi_detect` (and to `vault_get` / `vault_set`) was refused, and the panel printed every failure as "not
   running". Honest correction: round 20's "your keys are also kept on this computer" was therefore not true inside the
-  Claude app until now (they were kept in the browser's two stores only). Fixed three ways: the declaration names all
-  seven tools; the panel says why a look failed and, when the detector cannot answer, looks for the server itself
-  (running → "copy its unified key"); the "kept on this computer" line appears only after the file was really read.
+  Claude app (they were kept in the browser's two stores only). The declaration cannot be widened from a cloud session
+  (the platform: "a cloud session or chat can't add the local tool … publish that change from a local session"), so
+  the page now works without those three tools: the panel says why a look failed and, when the detector cannot
+  answer, finds the server itself through `http_start` (running → "copy its unified key into the FreeLLMAPI row"; one
+  paste, then kept in the browser's two stores); the "kept on this computer" line appears only after that file was
+  really read, otherwise it says the keys stay in this browser. Publishing once from a local Claude Code session with
+  the seven tools declared turns the automatic key lookup and the computer-side copy on.
   The panel now also gives the counts: text models ready now, and the catalogue's total.
 - **Pictures and speech** (js/ai/media.js) through FreeLLMAPI's `/v1/images/generations`, `/v1/audio/speech` and
   `/v1/audio/transcriptions`. Nothing generated reaches a scroll unless it passes:

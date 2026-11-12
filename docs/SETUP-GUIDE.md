@@ -151,6 +151,9 @@ them. Keys go only to the provider they belong to (or to FreeLLMAPI on your comp
 * **FreeLLMAPI not found**: open it from the Start menu (tray icon); the desktop app listens on port 31415. In the
   Claude app the panel now says *why* a look failed; "running, but its unified key was not found" means: FreeLLMAPI's
   dashboard → Keys → Unified API key → copy, then paste it in the AI panel's FreeLLMAPI row.
+* **Inside the Claude app, paste FreeLLMAPI's unified key once**: FreeLLMAPI dashboard → Models → **Copy API key** (or
+  Keys → Unified API key), then Scriptorium → AI panel → FreeLLMAPI row → key. (The page may not read FreeLLMAPI's
+  files itself there; the launcher on your computer finds the key by itself.)
 * **How to be sure it is connected**: the AI panel shows "✓ FreeLLMAPI connected: N text models ready now (of M in its
   catalogue)" and "✓ Pictures and speech". The **Test** button sends a real request through each provider.
 * **A picture or reading was "not admitted"**: press **the check** next to the message: every attempt, the reviewers'
