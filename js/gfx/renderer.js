@@ -41,24 +41,24 @@ class MeterPass extends Pass {
 }
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { envScene } from './proc.js';
-import { tame, classifyGpu } from './tier.js';
+import { tame, untamed, classifyGpu } from './tier.js';
 import { AAA, initAAA, detectQuality, setQuality as setAAAQuality, prebake, rebakeAll, AtmospherePass, aaaFrame, QUALITY } from './aaa.js';
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uIris: { value: 2 }, uDim: { value: 0 }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: .32 }, uGrain: { value: .035 }, uWarm: { value: .02 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Color(1, .97, .9) }, uIris: { value: 2 }, uDim: { value: 0 }, uContrast: { value: 1 }, uSat: { value: 1 }, uLift: { value: 0 }, uTilt: { value: 0 }, uTiltR: { value: 2.2 }, uPunch: { value: .3 }, uWBMid: { value: 0 }, uWBHi: { value: 0 }, uRes: { value: new THREE.Vector2(1280, 800) } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uIris,uDim,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec3 uWB;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float uTime,uVignette,uGrain,uWarm,uFade,uIris,uDim,uContrast,uSat,uLift,uTilt,uTiltR,uPunch,uWBMid,uWBHi;uniform vec2 uRes;uniform vec3 uFadeColor;varying vec2 vUv;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
   void main(){vec4 c=texture2D(tDiffuse,vUv);vec2 d=vUv-.5;
   if(uTilt>0.){float b=uTilt*smoothstep(.16,.5,abs(vUv.y-.46))*uTiltR*uRes.y/800.;if(b>.05){vec3 s=c.rgb;for(int i=0;i<8;i++){float a=float(i)*.785+.39;s+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*b/uRes).rgb;}c.rgb=s/9.;}}
   if(uPunch>0.){vec3 pc=pow(max(c.rgb,0.),vec3(1.+.3*uPunch))*(1.+.1*uPunch);float pl=dot(pc,vec3(.2126,.7152,.0722));c.rgb=max(pl+(pc-pl)*(1.+.25*uPunch),0.);}
   float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,uSat);
   c.rgb=clamp(c.rgb+uLift,0.,1.);c.rgb=mix(c.rgb,c.rgb*c.rgb*(3.-2.*c.rgb),clamp((uContrast-1.)*2.5,0.,1.));
-  if(uWB!=vec3(1.)||uWBMid>0.||uWBHi>0.){c.rgb=pow(pow(c.rgb,vec3(2.2))*uWB,vec3(1./2.2));float wl=dot(c.rgb,vec3(.2126,.7152,.0722));
+  if(uWBMid>0.||uWBHi>0.){float wl=dot(c.rgb,vec3(.2126,.7152,.0722));
     c.rgb*=1.+uWBHi*pow(clamp((wl-.45)/.55,0.,1.),2.)*vec3(-.04,0.,.08);c.b+=uWBMid*clamp(wl*(1.-wl)*4.,0.,1.);c.rgb=clamp(c.rgb,0.,1.);}
   float v=1.-uVignette*smoothstep(.25,.85,length(d*vec2(1.15,1.)));
   c.rgb*=v;c.rgb+=vec3(uWarm,uWarm*.4,-uWarm*.6)*(1.-length(d));
-  float g=(h(vUv*vec2(1920.,1080.)+fract(uTime*7.))-.5)*uGrain;c.rgb+=g;
+  float gk=dot(clamp(c.rgb,0.,1.),vec3(.2126,.7152,.0722)),g=(h(gl_FragCoord.xy+vec2(fract(uTime*7.31)*97.3,fract(uTime*5.73)*61.7))-.5)*uGrain*4.*gk*(1.-gk);c.rgb+=g;   /* film grain per device pixel (vUv times a constant, shifted by one offset on both axes, slid the same pattern diagonally), two unrelated offsets so each frame's grain is new; strongest in the mid-tones, none in black or white, as on film */
   c.rgb=mix(c.rgb,uFadeColor,uFade);
   if(uIris<1.6){float asp=uRes.x/max(uRes.y,1.),ir=length(d*vec2(asp,1.))/(.5*length(vec2(asp,1.)));c.rgb*=1.-smoothstep(uIris-.3,uIris,ir);}   /* the iris: dark from the edges in (App.iris) */
   if(uDim>0.){float e=smoothstep(.2,.75,length(d*vec2(1.15,1.)));c.rgb*=1.-clamp(uDim*(1.+.45*e)-.45*e*uDim*uDim,0.,1.);}   /* a slow fade to black, the edges a little ahead of the centre (title showcase) */
@@ -111,7 +111,14 @@ export class Gfx {
     this.outline.visibleEdgeColor.set('#ffd98a'); this.outline.hiddenEdgeColor.set('#7a5a20'); this.outline.enabled = false;
     c.addPass(this.outline);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), .32, .55, .86); c.addPass(this.bloom);
-    c.addPass(new OutputPass());
+    // white balance in scene-linear light, just before tone mapping (inside the OutputPass: no extra full-screen pass).
+    // It was a display-referred gain in the grade, after tone mapping: the house gains [.84, 1.45, 3.4] pushed every
+    // tone-mapped white past 1 in green and blue, which clipped to a cyan cast on plaster, marble and paper. Here the
+    // gains are normalised to unit luminance (uWBGain) and the luminance they carried goes into the exposure (wbLum,
+    // _frame), so mid-tones come out as they did and highlights are rolled off by the tone curve instead of clipped.
+    { const out = this.output = new OutputPass(); out.uniforms.uWBGain = { value: new THREE.Vector3(1, 1, 1) }; this.wbLum = 1;
+      out.material.fragmentShader = out.material.fragmentShader.replace('uniform sampler2D tDiffuse;', 'uniform sampler2D tDiffuse;\nuniform vec3 uWBGain;').replace('gl_FragColor = texture2D( tDiffuse, vUv );', 'gl_FragColor = texture2D( tDiffuse, vUv ); gl_FragColor.rgb *= uWBGain;');
+      c.addPass(out); }
     // SMAA after tone mapping (display-referred, where edges have their final contrast): it finishes the lines MSAA
     // leaves broken (thin gilt against dark wood) and the specular crawl on fluted pilasters
     this.smaa = new SMAAPass(2, 2); c.addPass(this.smaa);
@@ -148,8 +155,10 @@ export class Gfx {
   applyLook(L = {}) {
     const u = this.grade.uniforms; u.uContrast.value = L.contrast ?? 1; u.uSat.value = L.sat ?? 1; u.uLift.value = L.lift ?? 0;
     u.uVignette.value = L.vignette ?? .32; u.uPunch.value = L.punch ?? .3; u.uTiltR.value = L.tiltRadius ?? 2.2; u.uTilt.value = L.tilt ?? 0; u.uGrain.value = L.grain ?? .035; u.uWarm.value = L.warm ?? .02;
-    // white balance (display-referred, von Kries in linear light): wb = [r, g, b] gains or {gain, mid (blue lift in the midtones), hi (cooler highlights)}
-    const wb = Array.isArray(L.wb) ? { gain: L.wb } : (L.wb || {}), wg = wb.gain || [1, 1, 1]; u.uWB.value.set(wg[0] ?? 1, wg[1] ?? 1, wg[2] ?? 1); u.uWBMid.value = wb.mid ?? 0; u.uWBHi.value = wb.hi ?? 0;   // tiltRadius: miniature look, blur radius (px at 800 px height) at the frame's top and bottom
+    // white balance (von Kries, scene-linear, before tone mapping: see the OutputPass above): wb = [r, g, b] gains or
+    // {gain, mid (blue lift in the midtones), hi (cooler highlights): these two stay display-referred, in the grade}
+    const wb = Array.isArray(L.wb) ? { gain: L.wb } : (L.wb || {}), wg = wb.gain || [1, 1, 1], gr = wg[0] ?? 1, gg = wg[1] ?? 1, gb = wg[2] ?? 1, wl = Math.max(1e-3, .2126 * gr + .7152 * gg + .0722 * gb);
+    this.output.uniforms.uWBGain.value.set(gr / wl, gg / wl, gb / wl); this.wbLum = wl; u.uWBMid.value = wb.mid ?? 0; u.uWBHi.value = wb.hi ?? 0;   // tiltRadius: miniature look, blur radius (px at 800 px height) at the frame's top and bottom
     if (L.exposure != null) this.renderer.toneMappingExposure = L.exposure;
     if (L.bloom != null) this.bloom.strength = L.bloom;
     this.bloom.threshold = L.bloomThreshold ?? .86; this.bloom.radius = L.bloomRadius ?? .55;
@@ -160,8 +169,12 @@ export class Gfx {
   // compensates with its own envMapIntensity); bloom only on real highlights (flames, windows); a little contrast.
   static get HOUSE() {
     // wb: the room probes (candles, late-morning sun, gilt and scagliola bounce) cast the halls orange (mean blue 67 → 43);
-    // these linear gains bring plaster and marble back to a warm white (hall: plaster B/R .31 → ~.6, floor marble .50 → ~.95)
-    return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping, wb: { gain: [.84, 1.45, 3.4], mid: 0, hi: 0 } };
+    // these linear gains bring plaster and marble back to a warm white (hall: plaster B/R .31 → ~.6, floor marble .50 → ~.95).
+    // They act in scene-linear light now (before the tone curve, normalised to unit luminance: applyLook); the old display-
+    // space gains [.84, 1.45, 3.4] were also shaped by the Neutral curve's toe (a constant subtracted from all channels,
+    // multiplied by 3.4 in blue), so these were refitted to the old pictures (least squares over the unclipped pixels of
+    // the hall and a room): the same warm mid-tones, and whites that roll off instead of clipping to cyan.
+    return { punch: .15, contrast: 1.06, sat: 1.05, lift: 0, vignette: .3, grain: .022, warm: .012, exposure: 1.35, bloom: .2, bloomThreshold: 1.6, bloomRadius: .4, toneMapping: THREE.NeutralToneMapping, wb: { gain: [.88, 1.39, 2.27], mid: 0, hi: 0 } };
   }
   setView(scene, camera) { this._smReset();
     this.scene = scene; this.camera = camera; this.applyLook(scene.userData.look);
@@ -181,9 +194,10 @@ export class Gfx {
   }
   // Adaptive resolution: keep frames under ~22 ms. One-off stalls (shader compiles, a mode being built, a tab coming
   // back from the background) are not frame cost and are left out of the average.
-  resetAdapt() { this._acc = 0; this._n = 0; this._skip = 8; this._gpuSkip = 1; if (this._gpuT) this._gpuT.ms.length = 0; }
+  resetAdapt() { this._acc = 0; this._n = 0; this._max = 0; this._skip = 8; this._gpuSkip = 1; if (this._gpuT) this._gpuT.ms.length = 0; }
   adapt(dtMs) {
-    if (!(dtMs > 0) || this._gpuT) return;   // with the GPU timer, pollGpu() decides (from the GPU's own time) if (this._skip > 0) { this._skip--; return; }
+    if (!(dtMs > 0) || this._gpuT) return;   // with the GPU timer, pollGpu() decides (from the GPU's own time)
+    if (this._skip > 0) { this._skip--; return; }   // (resetAdapt's grace frames: this guard once sat inside the comment above, so it never ran)
     // A scene that draws at one frame a second must be lightened at once, not after minutes: frames used to be counted
     // as at most 100 ms each with a 2 s window, so at 1 fps a window took 20 s and the step-down several windows, and
     // the scene looked frozen. Now four slow frames in a row (each over 150 ms; a single stall from a compile or a
@@ -193,11 +207,14 @@ export class Gfx {
     this._slowRun = dtMs > 150 ? (this._slowRun || 0) + 1 : 0;
     if (this._slowRun >= 4) { this._slowRun = 0; this._acc = 0; this._n = 0; this.frameMs = dtMs; this._skip = 3; if (this.dpr > this.minDpr) { this.dpr = this.minDpr; this.resize(); } this.msaa(2);
       if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } this.onSevere && this.onSevere(q, dtMs); } return; }
-    this._acc += Math.min(dtMs, 100); this._n++;
+    this._acc += Math.min(dtMs, 100); this._n++; this._max = Math.max(this._max || 0, dtMs);
     if (this._acc > 2000) {
-      const avg = this._acc / this._n; this._acc = 0; this._n = 0; this.frameMs = avg;
-      if (avg > 24 && this.dpr > this.minDpr) { this.dpr = Math.max(this.minDpr, this.dpr - .1); this.resize(); }
-      else if (avg < 13 && this.dpr < this.maxDpr && !this.moving) { this.dpr = Math.min(this.maxDpr, this.dpr + .1); this.resize(); }
+      const avg = this._acc / this._n, mx = this._max; this._acc = 0; this._n = 0; this._max = 0; this.frameMs = avg;
+      // up: with vsync a 60 Hz display never averages under 16.7 ms (the old "under 13" could never fire, so the resolution
+      // only ever went down); a window at the refresh rate with no frame over 20 ms (none missed) has headroom.
+      // Steps of 0.2: every step reallocates every composer target, so fewer, larger steps cost fewer hitches.
+      if (avg > 24 && this.dpr > this.minDpr) { this.dpr = Math.max(this.minDpr, this.dpr - .2); this.resize(); }
+      else if (avg < 17.5 && mx <= 20 && this.dpr < this.maxDpr && !this.moving) { this.dpr = Math.min(this.maxDpr, this.dpr + .2); this.resize(); }
       // still too slow at the resolution floor for two windows in a row: one quality level down, remembered per GPU
       this._slow = avg > 30 && this.dpr <= this.minDpr ? this._slow + 1 : 0;
       if (this._slow >= 2 && this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._slow = 0; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
@@ -206,10 +223,11 @@ export class Gfx {
   // ---- the GPU governor: decisions from the GPU's own time per frame (where the timer extension exists) ----
   // A frame's GPU time is what the scene costs; the time between frames also holds the page's own work and the
   // browser's, which made the old governor (below) both late and blind to a scene that holds 30-40 fps on a weak GPU.
-  // Budget: 13 ms of GPU per frame (60 fps with room for the rest). Every 1.5 s, from the median of the window:
-  //   over 17 ms: one quality level down at once (taming the scene at 'low'); at 'low', the resolution down a step;
-  //   under 6.5 ms for three windows running: the resolution up a step, then (never past what the GPU was classed as,
-  //   and never after this session has had to step down) the quality up a level.
+  // Every 1.5 s, from the median of the window:
+  //   over 18 ms (two windows; one if over 28): multisampling 4 -> 2, else the resolution down a step, else (standing
+  //   still) one quality level down (taming the scene at 'low');
+  //   under 8 ms for four windows running, 8 s after the last step: the reverse (the quality up a level, never past what
+  //   the GPU was classed as nor after this session has had to step down; else the resolution up; else 4x again).
   pollGpu() {
     const T = this._gpuT, gl = T.gl; if (!T.pend.length) return;
     const disjoint = gl.getParameter(T.ext.GPU_DISJOINT_EXT);
@@ -222,17 +240,22 @@ export class Gfx {
     // a steady picture first: a change of resolution or of the bloom is itself a visible jump, so the governor waits for
     // agreement (two slow windows, 3 s; or one very slow) before stepping down, for four fast windows and 8 s of calm
     // before stepping up, never steps up while the camera moves (walking costs more than standing: it would only step
-    // down again), and never switches the bloom off and on. At the floor it trades multisampling (4x -> 2x) before
-    // anything else: far less visible than a coarser picture.
+    // down again), and never switches the bloom off and on.
     const now2 = performance.now(), calm = now2 - (this._lastStep || 0) > 8000;
-    if (med > 18) { this._fast = 0; this._slowW = (this._slowW || 0) + 1; if (this._slowW < 2 && med < 28) return; this._slowW = 0; this._downs = (this._downs || 0) + 1; this._lastStep = now2;
-      if (this.quality !== 'low') { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); this._gpuSkip = 1; try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
-      else if (!this.fixedRes && this.dpr > this.minDpr + .01) { this.dpr = Math.max(this.minDpr, this.dpr - .1); this.resize(); this._gpuSkip = 1; }
-      else if (this.msaa() > 2) { this.msaa(2); this._gpuSkip = 1; }
+    // Down, cheapest-to-change first: multisampling 4 -> 2 (two targets reallocated, barely visible), then the resolution,
+    // and only then the quality level, which is a recompile storm (the shadow type, every material's program, the tamed
+    // lights, the AAA defines): never while walking (it hitched mid-stride), and main.js holds the frames until the new
+    // programs are linked (Gfx.pending, _qGate). Up is the same ladder in reverse.
+    if (med > 18) { this._fast = 0; this._slowW = (this._slowW || 0) + 1; if (this._slowW < 2 && med < 28) return;
+      const step = () => { this._slowW = 0; this._downs = (this._downs || 0) + 1; this._lastStep = now2; this._gpuSkip = 1; };
+      if (this.msaa() > 2) { this.msaa(2); step(); }
+      else if (!this.fixedRes && this.dpr > this.minDpr + .01) { this.dpr = Math.max(this.minDpr, this.dpr - .2); this.resize(); step(); }
+      else if (this.quality !== 'low' && !this.moving) { const q = this.quality === 'high' ? 'medium' : 'low'; this.setQuality(q); step(); try { localStorage.setItem('sm-gfx-history', JSON.stringify({ gpu: this.gpu, down: q })); } catch (e) { } }
     } else if (med < 8) { this._slowW = 0; this._fast = (this._fast || 0) + 1; if (this._fast < 4 || !calm || this.moving) return; this._fast = 0; this._lastStep = now2;
-      if (this.msaa() < 4 && this.dpr >= this.minDpr) this.msaa(4);
-      else if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .1); this.resize(); this._gpuSkip = 1; }
-      else if (!this._downs) { const cap = this.gpuClass || 'high', order = ['low', 'medium', 'high'], i = order.indexOf(this.quality); if (i < order.indexOf(cap)) { this.setQuality(order[i + 1]); this._gpuSkip = 1; } }
+      const cap = this.gpuClass || 'high', order = ['low', 'medium', 'high'], i = order.indexOf(this.quality);
+      if (!this._downs && i < order.indexOf(cap)) { this.setQuality(order[i + 1]); this._gpuSkip = 1; }
+      else if (!this.fixedRes && this.dpr < this.maxDpr) { this.dpr = Math.min(this.maxDpr, this.dpr + .2); this.resize(); this._gpuSkip = 1; }
+      else if (this.msaa() < 4) this.msaa(4);
     } else { this._fast = 0; this._slowW = 0; }
   }
   // the composer's multisampling (4 by default; 2 when a weak GPU is at its resolution floor)
@@ -246,11 +269,24 @@ export class Gfx {
   setQuality(q) {
     if (!QUALITY[q]) return AAA.quality; setAAAQuality(q); this.atmos.configure(AAA.Q); this.warmAtmos();
     const st = q === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; if (this.renderer.shadowMap.type !== st) { this.renderer.shadowMap.type = st; if (this.scene) this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
-    this._gpuWin = []; this.onQuality && this.onQuality(q); return q;
+    // main.js holds the frames (draws none) until the programs this level needs are linked: a frame drawn before would
+    // link them on this thread, the whole recompile in one long stall; the GPU process links them in parallel meanwhile
+    this._qGate = performance.now(); this._gpuWin = []; this.onQuality && this.onQuality(q); return q;
   }
   get qualityLevels() { return Object.keys(QUALITY); }
   // compile the atmosphere programs for the target they really draw into (a linear composer buffer, not the screen)
   warmAtmos() { const r = this.renderer, prev = r.getRenderTarget(); try { r.setRenderTarget(this.composer.writeBuffer); this.atmos.warm(r); } catch (e) { console.warn(e); } finally { r.setRenderTarget(prev); } }
+  // The selection outline's programs, compiled ahead (KHR_parallel_shader_compile: in the GPU process, no wait here). The
+  // first shelf picked in the hall compiled them on the spot (the depth and mask overrides, edge, two blurs, overlay,
+  // copy: a visible hitch). A throwaway scene holds one plain and one instanced mesh (the hall's books are instanced) per
+  // override material and one quad per pass material; compiled for a linear target, as the pass draws them. Once.
+  warmOutline() {
+    if (this._outlineWarm) return; this._outlineWarm = true; const O = this.outline, r = this.renderer, prev = r.getRenderTarget();
+    const s = new THREE.Scene(), cam = new THREE.PerspectiveCamera(), geo = new THREE.PlaneGeometry(1, 1);
+    for (const m of [O.depthMaterial, O.prepareMaskMaterial]) { s.add(new THREE.Mesh(geo, m), new THREE.InstancedMesh(geo, m, 1)); const ic = new THREE.InstancedMesh(geo, m, 1); ic.setColorAt(0, new THREE.Color()); s.add(ic); }   // plain, instanced, instanced with colours: three variants of each
+    for (const m of [O.edgeDetectionMaterial, O.separableBlurMaterial1, O.separableBlurMaterial2, O.overlayMaterial, O.materialCopy]) if (m) s.add(new THREE.Mesh(geo, m));
+    try { r.setRenderTarget(this.composer.readBuffer); r.compile(s, cam); } catch (e) { console.warn(e); } finally { r.setRenderTarget(prev); s.traverse(o => { if (o.isInstancedMesh) o.dispose(); }); geo.dispose(); }
+  }
   // bounded caches that fill over idle time (one baked AAA surface per kind and quality) - leak checks subtract these
   cachedTextures() { return AAA.bakes.size; }
   // Precompile every program a scene will need across its states (sketch → real), without rendering:
@@ -339,8 +375,9 @@ export class Gfx {
     this.atmos.enabled = !!(A && k > .001 && AAA.Q.god > 0 && this.camera);
     if (this.atmos.enabled) this.atmos.update(this.camera, A, k, t);
     // 'low' tames the scene (tier.js): glass that refracts, fill lights, soft shadows; checked again every 30 frames
-    // for what was added since (every object is marked once, so the pass is cheap)
-    if (sc) { const low = AAA.quality === 'low'; if (sc.userData.tamed !== low || (low && ++this._tameTick % 30 === 0)) tame(sc, low); }
+    // for what was added since: an allocation-free look for unmarked materials and lights (untamed), the full pass only
+    // when it finds one (it ran in full every 30 frames, arrays and a light sort each time)
+    if (sc) { const low = AAA.quality === 'low'; if (sc.userData.tamed !== low || (low && ++this._tameTick % 30 === 0 && untamed(sc))) tame(sc, low); }
     // 'low': shadows of a moving scene drawn every other frame (where the place has not taken the shadow updates over
     // itself, as the hall does: it redraws them only when something changed). Measured: 4 of the storm glass's 17 ms.
     { const sm = this.renderer.shadowMap, low = AAA.quality === 'low';
@@ -349,8 +386,10 @@ export class Gfx {
     // the GPU's own time for the frame (EXT_disjoint_timer_query_webgl2): read a few frames later, never waited for
     const T = this._gpuT; let q = null; if (T && !T.busy) { q = T.gl.createQuery(); T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q); T.busy = true; }
     // eye adaptation (MeterPass): the place's own exposure times eyeK, which drifts toward a calm interior level
-    { const M = this.meter; if (M && M.mean != null) { const err = Math.max(-1.2, Math.min(1.2, Math.log2(.14 / Math.max(.004, M.mean)))), tau = this.eyeFast ? .25 : 1.6; this.eyeK = Math.max(.8, Math.min(1.6, this.eyeK * Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)))); M.mean *= Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)); } }   /* the estimate follows the exposure until the next reading (no overshoot from a reading 250 ms old) */
-    const r0 = this.renderer, baseExp = r0.toneMappingExposure; r0.toneMappingExposure = baseExp * this.eyeK;
+    // (the meter reads after the white balance, whose luminance is in the exposure: its target scales with it, so the
+    // calm level is what it was when the balance came after the meter)
+    { const M = this.meter; if (M && M.mean != null) { const err = Math.max(-1.2, Math.min(1.2, Math.log2(.14 * this.wbLum / Math.max(.004, M.mean)))), tau = this.eyeFast ? .25 : 1.6; this.eyeK = Math.max(.8, Math.min(1.6, this.eyeK * Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)))); M.mean *= Math.pow(2, err * Math.min(1, Math.max(0, dt) / tau)); } }   /* the estimate follows the exposure until the next reading (no overshoot from a reading 250 ms old) */
+    const r0 = this.renderer, baseExp = r0.toneMappingExposure; r0.toneMappingExposure = baseExp * this.eyeK * this.wbLum;
     try { this.composer.render(dt); } finally { r0.toneMappingExposure = baseExp; }
     if (q) { T.gl.endQuery(T.ext.TIME_ELAPSED_EXT); T.pend.push(q); T.busy = false; } if (T) this.pollGpu();
     // a still of this frame for a dissolve (App.snapshot): read now, in the task that drew it, while the buffer still holds it

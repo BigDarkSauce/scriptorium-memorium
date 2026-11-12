@@ -108,6 +108,9 @@ class App {
     // the veil ("lighting the lamps…") lifts only now: the place has its final reflections, compiled programs and a few
     // drawn frames behind it (_switch), so it never shows a provisional look first
     document.body.classList.add('ready'); mark('sm:ready');
+    // the selection outline (a shelf picked in the hall, an object in the diorama editor) compiles its programs once the
+    // place is up and the page idle, not on the first pick (renderer.js warmOutline)
+    (window.requestIdleCallback || setTimeout)(() => { try { this.gfx.warmOutline(); } catch (e) { console.warn(e); } }, { timeout: 4000 });
   }
   // ---------- the library of the current slot: read, seeded when new, migrated ----------
   async loadLibrary({ empty = false } = {}) {
@@ -571,7 +574,7 @@ class App {
   }
   loop() {
     if (!this._inputHook) { this._inputHook = true; const mark = () => { this.lastInput = performance.now(); }; ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart'].forEach(k => addEventListener(k, mark, { passive: true, capture: true })); this.lastInput = performance.now(); }
-    requestAnimationFrame(() => this.loop());
+    requestAnimationFrame(this._loopFn || (this._loopFn = () => this.loop()));   // one closure for the app's life, not one per frame
     const now = performance.now(), raw = now - this.last, dt = Math.min(.05, raw / 1000); this.last = now; this.t += dt;
     if (this.gfx.lost) return;   // WebGL context lost: wait for it to come back (renderer.js)
     this.loopDt = raw / 1000;   // the wall-clock frame time (dt is capped at 50 ms): timed transitions (a cut's dip) read it, so a slow frame never stretches them
@@ -583,15 +586,25 @@ class App {
     // a frame budget per place (docs/ARCHITECTURE.md, "Frame budget"): a still hall or room, or a room under an open
     // scroll, is drawn at a lower rate (the state still updates every frame); any input brings the full rate back at once
     if (!this.veilHold) {
-      const cam = this.gfx.camera; let moved = false; if (cam) { const k = this._camK || (this._camK = new Float64Array(7)), v = [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w]; for (let i = 0; i < 7; i++) if (Math.abs(v[i] - k[i]) > 1e-5) { moved = true; k[i] = v[i]; } }   /* a moving camera is always drawn every frame */
+      const cam = this.gfx.camera, moved = !!cam && this.camMoved(cam);   /* a moving camera is always drawn every frame */
       this.gfx.eyeFast = !!this.switching; this.gfx.moving = moved || (this._movedT && now - this._movedT < 1500); if (moved) this._movedT = now;   /* the governor never sharpens while you walk (renderer.js pollGpu) */
       const fps = !moved && this.mode && this.mode.renderFps ? this.mode.renderFps(now - (this.lastInput || 0)) : 60; this._rAcc = (this._rAcc || 0) + raw;
       // under the veil a frame whose programs are still compiling is not drawn: drawing it would wait for them on this
       // thread (seconds with a cold shader cache); the GPU process links them meanwhile (Gfx.pending)
-      const gate = this.switching && this.mode && this.mode.scene && this.mode.camera ? this.gfx.pending(this.mode.scene, this.mode.camera) : 0; this._gateN = gate;
+      // the same after the governor changes the quality level (renderer.js setQuality, _qGate): the old frame stays on
+      // screen while the new programs link, for at most 4 s
+      const qg = this.gfx._qGate && now - this.gfx._qGate < 4000;
+      const gate = (this.switching || qg) && this.mode && this.mode.scene && this.mode.camera ? this.gfx.pending(this.mode.scene, this.mode.camera) : 0; this._gateN = gate; if (!gate && this.gfx._qGate) this.gfx._qGate = 0;
       if (!gate && (fps >= 60 || this._rAcc >= 1000 / fps - 4)) { const full = fps >= 60 && this._lastFps >= 60; if (full) this.gfx.adapt(this._rAcc); else this.gfx.resetAdapt(); this._lastFps = fps; this._rAcc = 0; this.gfx.render(dt, this.t); this.flushTrash(); }
     }
     if (!this._firstFrame) { this._firstFrame = true; try { performance.mark('sm:first-frame'); } catch (e) { } }
+  }
+  // has the camera moved since the last frame (position or orientation beyond 1e-5)? Called every frame, so it allocates
+  // nothing (it built a 7-element array and a closure per frame: garbage the collector paid for in stalls)
+  camMoved(c) {
+    const k = this._camK || (this._camK = new Float64Array(7)), P = c.position, Q = c.quaternion, e = 1e-5;
+    if (Math.abs(P.x - k[0]) <= e && Math.abs(P.y - k[1]) <= e && Math.abs(P.z - k[2]) <= e && Math.abs(Q.x - k[3]) <= e && Math.abs(Q.y - k[4]) <= e && Math.abs(Q.z - k[5]) <= e && Math.abs(Q.w - k[6]) <= e) return false;
+    k[0] = P.x; k[1] = P.y; k[2] = P.z; k[3] = Q.x; k[4] = Q.y; k[5] = Q.z; k[6] = Q.w; return true;
   }
   // the context came back: environments are rebuilt by the renderer; reopen the current place so every render target is fresh
   async restoreMode() {
