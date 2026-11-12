@@ -57,9 +57,9 @@ export function revealSpec(st) {
   const opts = r && r.predict && Array.isArray(r.predict.options) ? r.predict.options.filter(o => o && o.text).slice(0, 5) : null;
   return {
     type, hook, options: opts && opts.length >= 2 && opts.some(o => o.correct) ? opts : null,
-    answer: (r && r.answer) || (st.check && st.check.a) || '', rule: (r && r.rule) || '', boundary: r && r.boundary && r.boundary.case ? r.boundary : null,
+    answer: (r && r.answer) || (st.check && hook === st.check.q && st.check.a) || '', rule: (r && r.rule) || '', boundary: r && r.boundary && r.boundary.case ? r.boundary : null,
     misconception: (r && r.misconception) || st.misconception || '', transfer: r && r.transfer && r.transfer.q ? r.transfer : null,
-    analogy: r && r.analogy && r.analogy.source ? r.analogy : null, figure: (st.check && st.check.figure) || null,
+    analogy: r && r.analogy && r.analogy.source ? r.analogy : null, figure: (st.check && st.check.figure && hook === st.check.q) ? st.check.figure : null,   /* the check's figure goes with the check's question (shown on its own below the reading otherwise) */
   };
 }
 // an AI's (or an import's) reveal, kept to known fields and plain strings (normalizeChain, reader.js)
@@ -79,7 +79,32 @@ export function revealIssues(st) {
   const out = []; if (r.rule && !(r.boundary && r.boundary.case)) out.push(`${st.id}: the rule "${String(r.rule).slice(0, 60)}" has no boundary case`);
   if (r.predict && Array.isArray(r.predict.options) && !r.predict.options.some(o => o && o.correct)) out.push(`${st.id}: no prediction option is marked correct`);
   if (r.transfer && Array.isArray(r.transfer.options) && r.transfer.options.length && !r.transfer.options.some(o => o && o.correct)) out.push(`${st.id}: the transfer question has no correct option`);
+  if (r.transfer && Array.isArray(r.transfer.options) && r.transfer.options.length && r.transfer.options.length < 3) out.push(`${st.id}: the transfer question needs at least 3 options (with 2, a guess is right half the time)`);
   return out;
+}
+// The options are shown in an order of their own: a model (and the schema's example) tends to put the right answer in
+// the same place every time. The order is fixed per step (seeded by its id), so it does not change on a re-render, and
+// the answer is tracked by the option's original position (its identity), never by where it is shown.
+const seedOf = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h; };
+export function shuffleOrder(n, seed) {
+  const order = [...Array(n).keys()]; let x = seedOf(String(seed)) || 1;
+  const rnd = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  return order;   // order[k] = the original index of the option shown k-th
+}
+// The spaced card a step leaves in the revisit deck: its transfer question when it has one, else its "Check yourself"
+// (question and answer: free recall, graded by the reader with Again / Good), so every step with a check is spaced.
+export function revisitCard(st, R = revealSpec(st)) {
+  const due = Date.now() + DAY;
+  if (R && R.transfer) return { due, iv: 1, n: 0, hist: [], q: R.transfer.q, options: R.transfer.options || null, why: R.transfer.why || '', rule: R.rule || '' };
+  const q = (st && st.check && st.check.q) || (R && R.answer && R.hook) || '', a = (st && st.check && st.check.q ? st.check.a : R && R.answer) || '';
+  return q && a ? { due, iv: 1, n: 0, hist: [], q, a, recall: true, rule: (R && R.rule) || '' } : null;
+}
+// a "Check yourself" opened outside the predict loop (a taxonomy, a chronology) enters the schedule all the same
+export async function enrollCheck(partId, partTitle, st) {
+  await loadLedger(); const id = partId + '/' + st.id, e = ledger.e[id] || {};
+  if (e.tr) return e; const tr = revisitCard(st, null); if (!tr) return e;
+  ledger.e[id] = Object.assign(e, { tr, title: st.title || '', part: partTitle || '' }); save(); return ledger.e[id];
 }
 
 // ---- the loop, in the reader ----
@@ -91,12 +116,13 @@ export function renderReveal(st, ctx) {
   const head = el('div', { class: 'rvl-head' }, [el('span', { class: 'rv-kicker', text: 'Predict, then unfold' }), el('div', { class: 'rv-hook', html: prose(R.hook) })]);
   card.append(head);
   const body = el('div', { class: 'rv-body' }); card.append(body);
-  let pick = null, conf = null, free = '';
+  let pick = null, conf = null, free = '';   // pick: the ORIGINAL index of the chosen option (shown in `order`)
+  const order = R.options ? shuffleOrder(R.options.length, id) : [];
   const commitBtn = el('button', { class: 'btn primary small', type: 'button', text: 'Commit my prediction', disabled: true });
   const ready = () => { commitBtn.disabled = !((R.options ? pick != null : free.trim().length >= 2) && conf != null); };
   const ask = () => {
     body.innerHTML = '';
-    if (R.options) body.append(el('div', { class: 'rv-opts', role: 'radiogroup', 'aria-label': 'Your prediction' }, R.options.map((o, i) => el('button', { class: 'rv-opt', type: 'button', role: 'radio', 'aria-checked': 'false', html: '<i>' + String.fromCharCode(65 + i) + '</i> ' + prose(o.text), onclick: e => { pick = i; body.querySelectorAll('.rv-opt').forEach((b, j) => b.setAttribute('aria-checked', String(j === i))); ready(); } }))));
+    if (R.options) body.append(el('div', { class: 'rv-opts', role: 'radiogroup', 'aria-label': 'Your prediction' }, order.map((i, k) => el('button', { class: 'rv-opt', type: 'button', role: 'radio', 'aria-checked': 'false', 'data-opt': String(i), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(R.options[i].text), onclick: e => { pick = i; body.querySelectorAll('.rv-opt').forEach(b => b.setAttribute('aria-checked', String(b.dataset.opt === String(i)))); ready(); } }))));
     else { const ta = el('textarea', { class: 'rv-free', rows: 2, placeholder: 'What do you expect, and why? One line is enough.', 'aria-label': 'Your prediction' }); ta.oninput = () => { free = ta.value; ready(); }; body.append(ta); }
     body.append(el('div', { class: 'rv-conf', role: 'radiogroup', 'aria-label': 'How sure are you?' }, [el('span', { class: 'dim small', text: 'How sure?' }), ...CONF.map(([k, t], i) => el('button', { class: 'rv-c', type: 'button', role: 'radio', 'aria-checked': 'false', text: t, onclick: () => { conf = i; body.querySelectorAll('.rv-c').forEach((b, j) => b.setAttribute('aria-checked', String(j === i))); ready(); } }))]),
       el('div', { class: 'rv-actions' }, [commitBtn, el('button', { class: 'linkbtn', type: 'button', text: 'No idea yet: show me', onclick: () => { conf = -1; done(true); } })]));
@@ -106,7 +132,7 @@ export function renderReveal(st, ctx) {
     await loadLedger();
     const ok = skipped ? null : R.options ? !!R.options[pick].correct : null;
     const e = ledger.e[id] = Object.assign(ledger.e[id] || {}, { t: Date.now(), p: skipped ? null : R.options ? pick : free.slice(0, 400), c: conf, ok, title: st.title || '', part: ctx.partTitle || '' });
-    if (R.transfer && !e.tr) e.tr = { due: Date.now() + DAY, iv: 1, n: 0, hist: [], q: R.transfer.q, options: R.transfer.options || null, why: R.transfer.why || '', rule: R.rule || '' };
+    if (!e.tr) { const tr = revisitCard(st, R); if (tr) e.tr = tr; }
     session(); save(); show(e, true);
   };
   const show = (e, fresh) => {
@@ -114,7 +140,7 @@ export function renderReveal(st, ctx) {
     const hyper = e.ok === false && e.c === 2, surprise = e.ok === false;
     card.classList.toggle('rv-surprise', surprise); card.classList.toggle('rv-hyper', hyper); card.classList.toggle('rv-right', e.ok === true);
     head.querySelector('.rv-kicker').textContent = e.ok === true ? 'Your model predicted it' : hyper ? 'You were certain, and it went the other way' : surprise ? 'Not what you expected' : e.p != null ? 'Compare with what you wrote' : 'Revealed';
-    if (R.options) body.append(el('div', { class: 'rv-opts done' }, R.options.map((o, i) => el('div', { class: 'rv-opt' + (o.correct ? ' right' : '') + (i === e.p && !o.correct ? ' wrong' : '') + (i === e.p ? ' picked' : ''), html: '<i>' + String.fromCharCode(65 + i) + '</i> ' + prose(o.text) + (o.why && (o.correct || i === e.p) ? `<span class="rv-why">${prose(o.why)}</span>` : '') }))));
+    if (R.options) body.append(el('div', { class: 'rv-opts done' }, order.map((i, k) => { const o = R.options[i]; return el('div', { class: 'rv-opt' + (o.correct ? ' right' : '') + (i === e.p && !o.correct ? ' wrong' : '') + (i === e.p ? ' picked' : ''), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(o.text) + (o.why && (o.correct || i === e.p) ? `<span class="rv-why">${prose(o.why)}</span>` : '') }); })));
     else if (typeof e.p === 'string' && e.p) body.append(el('div', { class: 'rv-yours' }, [el('span', { class: 'dim small', text: 'You wrote: ' }), el('q', { text: e.p })]));
     if (R.answer) body.append(el('div', { class: 'rv-answer', html: prose(R.answer) }));
     if (R.figure && ctx.figure) body.append(ctx.figure(R.figure));
@@ -129,7 +155,7 @@ export function renderReveal(st, ctx) {
     const ex = el('textarea', { class: 'rv-free', rows: 2, placeholder: 'Why is it so? Say it back in one line (it stays with this step).', 'aria-label': 'Your explanation', text: e.why || '' });
     ex.onchange = () => { e.why = ex.value.slice(0, 600); save(); };
     body.append(el('details', { class: 'rv-explain', open: !!e.why }, [el('summary', { text: e.why ? 'Your explanation' : 'Explain it back (optional)' }), ex]));
-    if (e.tr) body.append(el('div', { class: 'rv-next dim small', html: `A new situation that uses this rule will come back ${dueText(e.tr.due)}, mixed with other scrolls'. That, not this screen, is the real test.` }));
+    if (e.tr) body.append(el('div', { class: 'rv-next dim small', html: e.tr.recall ? `This question comes back ${dueText(e.tr.due)}, mixed with other scrolls', to answer from memory. Recalling it then, not reading it now, is what makes it stay.` : `A new situation that uses this rule will come back ${dueText(e.tr.due)}, mixed with other scrolls'. That, not this screen, is the real test.` }));
     body.append(el('button', { class: 'linkbtn rv-again', type: 'button', text: 'Predict again', onclick: () => { card.classList.remove('revealed', 'rv-surprise', 'rv-hyper', 'rv-right'); head.querySelector('.rv-kicker').textContent = 'Predict, then unfold'; pick = conf = null; free = ''; ask(); } }));
     ctx.typeset && ctx.typeset(card);
     if (fresh) {
@@ -163,8 +189,8 @@ export async function dueTransfers(now = Date.now()) {
   return mixed;
 }
 export async function stats() {
-  await loadLedger(); const E = Object.values(ledger.e), H = E.flatMap(e => (e.tr && e.tr.hist) || []);
-  return { loops: E.filter(e => e.t).length, predicted: E.filter(e => e.ok != null).length, rightFirst: E.filter(e => e.ok === true).length, transfers: H.length, transferRight: H.filter(Boolean).length, due: E.filter(e => e.tr && e.tr.due <= Date.now()).length };
+  await loadLedger(); const E = Object.values(ledger.e), H = E.flatMap(e => (e.tr && !e.tr.recall && e.tr.hist) || []);   /* transfer accuracy counts transfer questions only, not self-graded recall */
+  return { loops: E.filter(e => e.t).length, cards: E.filter(e => e.tr).length, predicted: E.filter(e => e.ok != null).length, rightFirst: E.filter(e => e.ok === true).length, transfers: H.length, transferRight: H.filter(Boolean).length, due: E.filter(e => e.tr && e.tr.due <= Date.now()).length };
 }
 export function answerTransfer(id, correct) {
   const e = ledger && ledger.e[id]; if (!e || !e.tr) return; const T = e.tr; T.n++; T.hist.push(correct ? 1 : 0); T.hist = T.hist.slice(-12);
@@ -178,16 +204,23 @@ export async function openDeck(ctx = {}) {
   const acc = S.transfers ? Math.round(100 * S.transferRight / S.transfers) + ' %' : '—';
   box.append(el('div', { class: 'rv-deck-head' }, [el('h3', { text: 'Revisit: new situations' }), el('button', { class: 'ibtn', 'aria-label': 'Close', text: '×', onclick: close })]),
     el('div', { class: 'rv-stats' }, [stat(S.loops, 'models built'), stat(acc, 'transfer, first try'), stat(S.due, 'due now')]),
-    el('p', { class: 'dim small', text: 'Each question puts a rule you uncovered into a situation you have not seen. Getting these right is what understanding means here; they come back further apart each time you do.' }));
+    el('p', { class: 'dim small', text: 'Each question puts a rule you uncovered into a situation you have not seen; a step’s “Check yourself” comes back to answer from memory. Getting these right is what understanding means here; they come back further apart each time you do.' }));
   const list = el('div', { class: 'rv-deck-list' }); box.append(list);
-  if (!items.length) list.append(el('p', { class: 'rv-empty', text: S.loops ? 'Nothing is due. The next ones come back on their own day.' : 'Predict in a scroll\'s "Predict, then unfold" cards: each rule you uncover comes back here later, in a new situation.' }));
+  if (!items.length) list.append(el('p', { class: 'rv-empty', text: S.loops || S.cards ? 'Nothing is due. The next ones come back on their own day.' : 'Predict in a scroll\'s "Predict, then unfold" cards: each rule you uncover comes back here later, in a new situation.' }));
   items.slice(0, 8).forEach(({ id, e }) => {
     const T = e.tr, row = el('div', { class: 'rv-item' }, [el('div', { class: 'rv-from dim small', text: e.part + ' · ' + e.title }), el('div', { class: 'rv-hook', html: prose(T.q) })]);
-    const finish = ok => { answerTransfer(id, ok); row.classList.add(ok ? 'rv-right' : 'rv-surprise'); row.append(el('div', { class: 'rv-answer', html: (ok ? '<b>Transferred.</b> ' : '<b>Not yet.</b> ') + prose(T.why || '') + (T.rule ? `<div class="rv-rule"><span class="rvl-tag">The rule</span> ${prose(T.rule)}</div>` : '') + `<div class="dim small">Back ${dueText(T.due)}.</div>` })); ctx.typeset && ctx.typeset(row); };
-    if (Array.isArray(T.options) && T.options.length) row.append(el('div', { class: 'rv-opts' }, T.options.map((o, i) => el('button', { class: 'rv-opt', type: 'button', html: '<i>' + String.fromCharCode(65 + i) + '</i> ' + prose(o.text), onclick: ev => { row.querySelectorAll('.rv-opt').forEach((b, j) => { b.disabled = true; if (T.options[j].correct) b.classList.add('right'); }); if (!o.correct) ev.currentTarget.classList.add('wrong'); finish(!!o.correct); } }))));
+    const finish = ok => { answerTransfer(id, ok); row.classList.add(ok ? 'rv-right' : 'rv-surprise'); row.append(el('div', { class: 'rv-answer', html: (T.recall ? '' : (ok ? '<b>Transferred.</b> ' : '<b>Not yet.</b> ') + prose(T.why || '')) + (T.rule ? `<div class="rv-rule"><span class="rvl-tag">The rule</span> ${prose(T.rule)}</div>` : '') + `<div class="dim small">Back ${dueText(T.due)}.</div>` })); ctx.typeset && ctx.typeset(row); };
+    // free recall (a step's "Check yourself"): answer from memory, then look, then say honestly how it went
+    if (T.recall) { const acts = el('div', { class: 'rv-actions' }); const show = el('button', { class: 'btn small', type: 'button', text: 'Show the answer', onclick: () => { show.remove(); row.insertBefore(el('div', { class: 'rv-answer', html: prose(T.a || '') }), acts); ctx.typeset && ctx.typeset(row);
+      const grade = ok => () => { acts.remove(); finish(ok); };
+      acts.append(el('span', { class: 'dim small', text: 'Did you recall it? ' }), el('button', { class: 'btn ghost small', type: 'button', text: 'Again', title: 'I did not recall it: back tomorrow', onclick: grade(false) }), el('button', { class: 'btn small', type: 'button', text: 'Good', title: 'I recalled it: back later', onclick: grade(true) }));
+      const g = acts.querySelector('button:last-child'); g && g.focus(); } });
+      acts.append(show); row.append(el('p', { class: 'dim small', text: 'Answer it in your head (or aloud) first.' }), acts); list.append(row); return; }
+    if (Array.isArray(T.options) && T.options.length) row.append(el('div', { class: 'rv-opts' }, shuffleOrder(T.options.length, id).map((i, k) => { const o = T.options[i]; return el('button', { class: 'rv-opt', type: 'button', 'data-opt': String(i), html: '<i>' + String.fromCharCode(65 + k) + '</i> ' + prose(o.text), onclick: ev => { row.querySelectorAll('.rv-opt').forEach(b => { b.disabled = true; if (T.options[+b.dataset.opt].correct) b.classList.add('right'); }); if (!o.correct) ev.currentTarget.classList.add('wrong'); finish(!!o.correct); } }); })));
     else row.append(el('div', { class: 'rv-actions' }, [el('button', { class: 'btn small', type: 'button', text: 'I could apply it', onclick: ev => { ev.target.parentNode.remove(); finish(true); } }), el('button', { class: 'btn ghost small', type: 'button', text: 'I could not', onclick: ev => { ev.target.parentNode.remove(); finish(false); } })]));
     list.append(row);
   });
   document.body.append(veil); ctx.typeset && ctx.typeset(box); const f = box.querySelector('button.rv-opt, .rv-actions button'); f && f.focus();
+  return box;
 }
 const stat = (v, t) => el('div', { class: 'rv-stat' }, [el('b', { text: String(v) }), el('span', { text: t })]);
