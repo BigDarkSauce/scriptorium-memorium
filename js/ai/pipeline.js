@@ -11,7 +11,7 @@
 // through the copy/paste relay and the later stages run without AI: deterministic fixes, figures built from the steps,
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
 import { askJSON, aiAvailable, imageLimit, writer } from './claude.js';
-import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, REWRITE_KINDS, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
+import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, rewritable, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
 import { classifyStep, autoPrimitive } from '../dio/domains.js';
 import { evidenceTools } from './evidence.js';
 import { partKey, cached } from '../store.js';
@@ -47,7 +47,7 @@ export async function material(ctx, part, { onStatus } = {}) {
 
 // ---------------------------------------------------------------- the stages
 async function ask(prompt, o, title) {
-  return askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, manualTitle: title });
+  return askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated, fresh: !!(o.fresh || o.force), manualTitle: title });
 }
 // stage 1: one structured call for the whole part
 export async function writeChain(ctx, P, M, o) {
@@ -58,7 +58,9 @@ export async function writeChain(ctx, P, M, o) {
   const meta = ctx.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
   const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', deep: !!o.deep, n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
   o.onStatus && o.onStatus(writer('director') + ' ' + (writer('director') === 'Claude' ? 'is' : 'are') + ' reading and planning. Long parts can take a minute or two.');
-  const A = await ask(prompt, { ...o, images, writing: 'Writing the chain', role: 'director', validate: v => v && Array.isArray(v.chain) && v.chain.length ? null : 'the answer has no "chain" array of steps' }, 'Analyse "' + P.title + '" in any AI');
+  // a chain cut off by the output limit is kept when at least two complete steps came back: the coverage check and its
+  // follow-ups (stage 2) write what is missing, which costs less than asking for the whole chain again
+  const A = await ask(prompt, { ...o, images, writing: 'Writing the chain', role: 'director', acceptTruncated: true, validate: v => !(v && Array.isArray(v.chain) && v.chain.length) ? 'the answer has no "chain" array of steps' : v._truncated && v.chain.length < 2 ? 'the answer was cut off before two complete steps' : null }, 'Analyse "' + P.title + '" in any AI');
   if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
   if (A._truncated && A.chain.length > 1) A.chain.pop();
   const N = normalizeChain(A); delete N._truncated; N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n; if (o.deep) N.deep = true;
@@ -87,7 +89,8 @@ export async function gateAndRepair(ctx, P, M, o = {}) {
   const A = P.analysis, sections = M.sections || [], meta = (M.figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, bbox: f.bbox }));
   let G = qualityGate(A, sections, meta); const log = [{ round: 0, issues: G.issues.length, kinds: kinds(G) }]; let repaired = 0;
   for (let r = 1; o.auto !== false && r <= (o.rounds || 2); r++) {
-    const bad = G.issues.filter(i => REWRITE_KINDS.includes(i.kind) && i.step); if (!bad.length) break;
+    const bad = G.issues.filter(rewritable); if (!bad.length) break;
+    bad.forEach(i => { if (i.kind === 'numbers') { const st = A.chain.find(s => s.id === i.step); if (st) st.numFix = true; } });   // one numbers rewrite per step, ever
     check(o.signal); o.onStatus && o.onStatus(`Quality check: rewriting ${[...new Set(bad.map(i => i.step))].join(', ')} (${[...new Set(bad.map(i => i.kind))].join(', ')})…`);
     const ans = await ask(repairPrompt({ book: bookName(ctx), chapter: P.title, A, issues: G.issues, sections }), { ...o, writing: 'Rewriting the steps' }, 'Repair these steps in any AI');
     const norm = ans && (ans.steps || ans.chain) ? normalizeChain({ chain: ans.steps || ans.chain }).chain : [];
@@ -268,8 +271,11 @@ async function analyseOne(ctx, P, o) {
   if (P.analysis && !P.job) P.job = { stage: 'coverage' };   // a chain written before stages existed (or pasted): check it, do not rewrite it
   const done = s => P.job && STAGES.indexOf(P.job.stage) > STAGES.indexOf(s);
   const M = await material(ctx, P, { onStatus: say }); check(o.signal);
-  if (!P.analysis || P.job.stage === 'chain') { stage('chain'); P.analysis = await writeChain(ctx, P, M, { ...o, onStatus: say }); stage('coverage'); save(); }
-  if (!done('coverage')) { check(o.signal); await coverageFill(ctx, P, M, { ...o, auto, onStatus: say }); stage('gate'); save(); }
+  // progressive: the scroll is readable as soon as the chain is written, and again once its gaps are filled (the reader
+  // re-renders on refresh while later stages keep improving it); figures and dioramas arrive with the final refresh
+  const show = () => { if (ctx.refresh) { try { ctx.refresh(P); } catch (e) { console.warn('refresh', e); } } };
+  if (!P.analysis || P.job.stage === 'chain') { stage('chain'); P.analysis = await writeChain(ctx, P, M, { ...o, onStatus: say }); stage('coverage'); save(); show(); }
+  if (!done('coverage')) { check(o.signal); await coverageFill(ctx, P, M, { ...o, auto, onStatus: say }); stage('gate'); save(); show(); }
   if (!done('gate')) { check(o.signal); await gateAndRepair(ctx, P, M, { ...o, auto, onStatus: say }); stage('figures'); save(); }
   if (!done('figures')) { check(o.signal); await completeFigures(ctx, P, { ...o, auto, onStatus: say }); stage('dioramas'); save(); }
   if (!done('dioramas')) { check(o.signal); if (o.dioramas !== false) await buildDioramas(ctx, P, M, { ...o, auto, onStatus: say }); stage('done'); save(); }

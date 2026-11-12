@@ -228,15 +228,23 @@ export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,
 // with the problem named once to the same model first). o.onWait(ms, why) when everything is busy; o.exhausted: throw
 // { code: 'free_exhausted' } instead of waiting (the hybrid mode then asks Claude).
+// o.minRank: the models tried first (a chapter's chain needs a strong writer: 80; a single step 55); weaker ones only
+// when no model that strong is set up, all of them failed this request, or all are busy for longer than a minute and a
+// half. o.acceptTruncated: an answer cut off by the output limit is kept when its complete part passes o.validate (the
+// caller fills the rest). o.fresh: the cache is not read (a forced re-analysis); a good answer is still stored.
+// Only an answer that passed o.validate (or, with no validate, a non-empty object or array) is cached.
+const usable = v => v && typeof v === 'object' && (Array.isArray(v) ? v.length > 0 : Object.keys(v).filter(k => k !== '_truncated').length > 0);
 export async function ask(prompt, o = {}) {
-  const { signal, onText, onStatus, validate, images = [] } = o, h = hash(prompt + '|' + images.length);
-  const hit = await store.getGlobal('aic:' + h).catch(() => null); if (hit && hit.v && Date.now() - hit.at < 30 * 864e5) { lastRoute.provider = hit.provider + ' (cached)'; lastRoute.model = hit.model; return hit.v; }
+  const { signal, onText, onStatus, validate, images = [], minRank = 0 } = o, h = hash(prompt + '|' + images.length);
+  if (!o.fresh) { const hit = await store.getGlobal('aic:' + h).catch(() => null); if (hit && hit.v && Date.now() - hit.at < 30 * 864e5 && (validate ? !validate(hit.v) : usable(hit.v))) { lastRoute.provider = hit.provider + ' (cached)'; lastRoute.model = hit.model; return hit.v; } }
   const tried = new Set(); let lastErr = null, fixNote = null;
   for (let round = 0; ; round++) {
     if (signal && signal.aborted) throw { code: 'cancelled' };
-    const C = (await candidates({ images: images.length })).filter(c => !tried.has(c.p.id + '|' + c.m));
+    const all = (await candidates({ images: images.length })).filter(c => !tried.has(c.p.id + '|' + c.m)), strong = all.filter(c => c.rank >= minRank), weak = all.filter(c => c.rank < minRank);
+    const C = strong.length ? strong : all;   // nothing strong enough left (none set up, or each tried once): the rest
     let pick = null, soonest = Infinity, why = '';
     for (const c of C) { const b = budget(c.p, c.m); if (b.ok) { pick = c; break; } if (b.until < soonest) { soonest = b.until; why = c.p.name + ' · ' + c.m; } }
+    if (!pick && strong.length && weak.length && soonest - Date.now() > 90000) { pick = weak.find(c => budget(c.p, c.m).ok) || null; if (pick) onStatus && onStatus(`The strongest free models are busy for ${fmtWait(soonest - Date.now())}: a lighter one takes this.`); }
     if (!pick) {
       if (!C.length && tried.size) { tried.clear(); if (round > 40) throw lastErr || { code: 'free_failed' }; continue; }   // every model tried once: start again (the budgets have moved on)
       if (!C.length) throw { code: 'free_none', message: 'No free provider is set up or reachable from here.' };
@@ -251,13 +259,16 @@ export async function ask(prompt, o = {}) {
       const r = await call(p, m, fixNote ? prompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : prompt, { images, signal, onText, onThink: n => onStatus && onStatus(`${p.name} · ${m} is thinking… ${n.toLocaleString()} characters of reasoning`) });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
       let v; try { v = parseJSONLoose(r.text); } catch (e) { lastBad.push({ at: Date.now(), provider: p.id, model: m, finish: r.finish, text: r.text.slice(0, 1500) + (r.text.length > 1500 ? ' … ' + r.text.slice(-500) : '') }); if (lastBad.length > 6) lastBad.shift(); throw { code: 'invalid_json' }; }
-      if (r.finish === 'length' || (v && v._truncated)) throw { code: 'truncated' };
-      const bad = validate ? validate(v) : null; if (bad) { if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
+      const cut = r.finish === 'length' || !!(v && v._truncated);
+      // a cut-off answer: its complete elements are kept (parseJSONLoose) when the caller can use them and its check passes
+      if (cut && !(o.acceptTruncated && validate && v && typeof v === 'object')) throw { code: 'truncated' };
+      if (cut && v && typeof v === 'object') v._truncated = true;
+      const bad = validate ? validate(v) : null; if (bad) { if (cut) throw { code: 'truncated', message: bad }; if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
       fixNote = null; lastRoute.provider = p.name; lastRoute.model = m;
-      store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });
+      if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {
-      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; tried.add(p.id + '|' + m);
+      if (e && e.code === 'cancelled') throw e; lastErr = e; fixNote = null; if (!(e.code === 'rate' && minRank > 0 && pick.rank >= minRank)) tried.add(p.id + '|' + m);   /* a strong model at its limit stays in play: its budget waits for the reset (above) */
       if (e.code === 'rate') { const r = resetOf(e.res, e.body); cool(p, m, r.ms, r.day ? 'day' : 'min'); }
       else if (e.code === 'key') cool(p, m, 6 * 3600e3, 'key', true);
       else if (e.code === 'model') banModel(p, m, 864e5);
