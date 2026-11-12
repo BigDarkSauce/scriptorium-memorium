@@ -13,7 +13,7 @@ import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
 import { seedHook } from '../seeds-hooks.js';
-import { renderReveal, openDeck, stats as revealStats, normReveal } from './reveal.js';
+import { renderReveal, openDeck, stats as revealStats, normReveal, revealSpec, enrollCheck } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
 import { seedMotion } from '../seeds-motion.js';
@@ -87,7 +87,7 @@ export class Reader {
     if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
     if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }
     if (addReveals(P.analysis)) this.save();   /* an example scroll from before the Revelation Engine gets its loops (seeds-sources.js) */   // analysed, but the chain came back empty: nothing to unfold
-    const chain = this.renderChain(P.analysis); body.append(this.analyseBar(true), chain, this.foldBar);
+    const chain = this.renderChain(P.analysis); body.append(...(this._improving ? [this.improvingBar()] : []), this.analyseBar(true), chain, this.foldBar);
   }
   // ---------- progressive unfolding ----------
   // A scroll is never shown whole: its content is cut into folds at natural points (docs/ARCHITECTURE.md, "Reader
@@ -112,15 +112,16 @@ export class Reader {
         const cls = k.classList[0] || '';
         if (HEAD.test(cls) || (cur && cur.idx === 0 && cls === 'fig-host' && cur.els[cur.els.length - 1].classList.contains('stmt'))) { if (!cur || cur.idx !== 0) { cur = { els: [], w: 1, art: c, idx: 0, head: true }; units.push(cur); } cur.els.push(k); continue; }
         if (GLUE.test(cls) && cur) { cur.els.push(k); continue; }
-        cur = { els: [k], w: weigh(k), art: c, idx: ++idx }; units.push(cur);
+        cur = { els: [k], w: weigh(k), art: c, idx: ++idx, reveal: cls === 'reveal-card' }; units.push(cur);
       }
     }
     if (pre.length) { if (units.length) units[0].els.unshift(...pre); else units.push({ els: pre, w: 1, art: null, idx: 0 }); }
-    const FOLD_W = 4.5, folds = []; let f = null;
+    // a "Predict, then unfold" card ends its fold: the statement and explanation that answer it are one unfold further on
+    const FOLD_W = 4.5, folds = []; let f = null, afterReveal = false;
     units.forEach(u => {
-      const brk = f && f.w > 0 && ((u.head && f.w >= FOLD_W * .6) || (u.idx >= 2 || u.head || !u.art) && f.w + u.w > FOLD_W);
+      const brk = f && f.w > 0 && (afterReveal || (u.head && f.w >= FOLD_W * .6) || (u.idx >= 2 || u.head || !u.art) && f.w + u.w > FOLD_W);
       if (!f || brk) { f = { units: [], w: 0 }; folds.push(f); }
-      f.units.push(u); f.w += u.w;
+      f.units.push(u); f.w += u.w; afterReveal = !!u.reveal;
     });
     return folds;
   }
@@ -201,22 +202,50 @@ export class Reader {
     const n = el('input', { type: 'number', class: 'field small num', min: 3, max: 80, value: 16, hidden: true, 'aria-label': 'Number of steps' });
     depth.onchange = () => { n.hidden = depth.value !== 'exact'; };
     const st = el('div', { class: 'status' });
-    const go = el('button', { class: 'btn primary small', text: label || (compact ? 'Re-analyse' : 'Analyse this part'), onclick: () => this.analyse(depth.value, +n.value, st, go) });
+    const go = el('button', { class: 'btn primary small', text: label || (compact ? 'Re-analyse' : 'Analyse this part'), disabled: !!this._improving, onclick: () => this.analyse(depth.value, +n.value, st, go) });
     const pasted = el('button', { class: 'btn small', text: 'Paste JSON from another AI', onclick: () => this.pasteJSON() });
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
   // ---------- the analysis pipeline (docs/PROTOCOL.md, "Recipe for any AI"; js/ai/pipeline.js) ----------
   // chain → coverage follow-ups → quality gate with targeted repairs → figures → dioramas per subsection. Nothing stored
   // is ever recomputed or re-asked; an interrupted run resumes at the stage it reached.
-  ctx() { const room = this.room, c = roomCtx(this.app, room.book.id); return Object.assign(c, { book: room.book, data: room.data }); }
+  // saves go to the room that is live now (re-entered rooms included); each refresh also rebuilds this open scroll
+  ctx() { const room = this.room, c = roomCtx(this.app, room.book.id), r0 = c.refresh; return Object.assign(c, { book: room.book, data: room.data, refresh: p => { if (r0) r0(p); this.liveRefresh(p); } }); }
   async material(st) { return pipeMaterial(this.ctx(), this.part, { onStatus: t => { if (st) st.textContent = t; } }); }
+  // Progressive reading: the pipeline refreshes after the chain and after its gaps are filled; while an analysis started
+  // here is still running (this._improving = its stage) the scroll is rebuilt in place, with a slim "still improving"
+  // bar, keeping the reader's place (the step at the top of the view stays there). Never while a field has the focus.
+  liveRefresh(p) {
+    if (this.closed || !this._improving || (p && p.id !== this.part.id) || (p && p.job && p.job.stage === 'done')) return;
+    const a = document.activeElement; if (a && this.el.contains(a) && a.matches && a.matches('textarea, input, select')) { if (!this._refreshWait) { this._refreshWait = true; a.addEventListener('blur', () => { this._refreshWait = false; this.liveRefresh(this.part); }, { once: true }); } return; }
+    this.keepPlace(() => { this.el.querySelectorAll('.fig.prim').forEach(b => { try { b._prim && b._prim.dispose(); } catch (e) { } }); this.render(); });
+  }
+  keepPlace(fn) {
+    const b = this.body, top0 = b ? b.scrollTop : 0; let sid = null, off = 0;
+    if (b && b.isConnected) { const T = b.getBoundingClientRect().top; for (const s of b.querySelectorAll('.chain > .step[data-sid]:not(.unf-hidden)')) { const r = s.getBoundingClientRect(); if (r.bottom > T + 4) { sid = s.dataset.sid; off = r.top - T; break; } } }
+    fn();
+    const A = this.part.analysis, ren = A && A.renumbered && A.renumbered !== this._lastRen ? A.renumbered : {}; this._lastRen = A && A.renumbered;   /* gap steps renumber the chain once */
+    const nb = this.body; if (!nb) return; const s = sid && nb.querySelector(`.chain > .step[data-sid="${CSS.escape(ren[sid] || sid)}"]`);
+    if (s && !s.classList.contains('unf-hidden')) nb.scrollTop += s.getBoundingClientRect().top - nb.getBoundingClientRect().top - off; else nb.scrollTop = top0;
+  }
+  improvingBar() {
+    const L = { chain: 'writing the chain', coverage: 'checking coverage and writing the missing steps', gate: 'quality check and repairs', figures: 'drawing the figures', dioramas: 'building the dioramas' };
+    return el('div', { class: 'improving-bar' }, [el('span', { class: 'improving-k', role: 'status', text: 'Still improving: ' + (L[this._improving] || this._improving) + '…' }), el('span', { class: 'improving-msg', 'aria-hidden': 'true', text: this._improvingMsg || '' })]);
+  }
   async analyse(depth, n, st, go) {
-    const P = this.part; go.disabled = true;
+    const P = this.part; go.disabled = true; this._improving = 'chain'; this._improvingMsg = ''; this._lastRen = null;
+    const say = t => { this._improvingMsg = t; if (st.isConnected) st.textContent = t; const m = this.el.querySelector('.improving-msg'); if (m) m.textContent = t; };
+    const stage = s => { this._improving = s; const k = this.el.querySelector('.improving-bar'); if (k) k.replaceWith(this.improvingBar()); };
     try {
-      await analysePart(this.ctx(), P, { level: depth, n, force: true, onStatus: t => { st.textContent = t; } });
-      this.save(); this.room.refreshStation(P); toast('Chain written'); this.render();
+      await analysePart(this.ctx(), P, { level: depth, n, force: true, onStatus: say, onStage: stage });
+      this._improving = null; this.save(); this.room.refreshStation(P); toast('Chain written'); this.keepPlace(() => this.render());
       if (evidenceAvailable() && collectSources(P.analysis).length) this.verify();
-    } catch (e) { go.disabled = false; st.textContent = errCopy(e); }
+    } catch (e) {
+      const shown = !st.isConnected; this._improving = null;
+      if (shown && !this.closed) this.keepPlace(() => this.render());   // the scroll was already readable: drop the bar, say what stopped
+      const s2 = st.isConnected ? st : this.el.querySelector('.analyse-bar .status'), g2 = go.isConnected ? go : this.el.querySelector('.analyse-bar .btn.primary');
+      if (g2) g2.disabled = false; if (s2) s2.textContent = errCopy(e);
+    }
   }
   // verify coverage; with auto, write what is missing in as few calls as possible (≤ 100k characters of text each)
   async checkAndFill(st, M, { auto = true, rounds = 2 } = {}) {
@@ -355,7 +384,7 @@ export class Reader {
   // the scroll's opening, BEFORE its question: the AI's hook, the example library's, or a partial revelation of the
   // scroll's own conclusion (true by construction)
   openHook(A) { const h = (A.hook && normHook(A.hook) ? A.hook : null) || seedHook(A.title, 'open') || fallbackHook(A); this._openHook = h; return h ? renderHook(h, this.hookCtx(A, 'open', 'open')) : null; }
-  refreshRevisit() { const b = this.revisitBtn; if (!b) return; revealStats().then(S => { const n = b.querySelector('.rv-n'); if (n) n.textContent = S.due ? ' ' + S.due : ''; b.classList.toggle('due', S.due > 0); b.hidden = !S.loops; }).catch(() => { }); }
+  refreshRevisit() { const b = this.revisitBtn; if (!b) return; revealStats().then(S => { const n = b.querySelector('.rv-n'); if (n) n.textContent = S.due ? ' ' + S.due : ''; b.classList.toggle('due', S.due > 0); b.hidden = !(S.loops || S.cards); }).catch(() => { }); }
   renderStep(st, wrap, A) {
     const kind = String(st.kind || 'result').toLowerCase(); this._curTerms = [...(Array.isArray(st.terms) ? st.terms : []), ...(st.bodies || []).map(b => { const m = String(b).match(/^(.*?)\s*·\s*(.+?)\s+(\S{1,4})$/); return m ? { term: m[3], meaning: m[1] + ' · ' + m[2] } : null; }).filter(Boolean)];   /* "bob · mass m" names the symbol m too */   /* the step's symbols: a figure's "m" is drawn as what m means (glyphs.js) */
     const art = el('article', { class: 'step k-' + kind, 'data-sid': st.id });
@@ -368,6 +397,10 @@ export class Reader {
     if (st.recap) art.append(el('p', { class: 'recap', html: '<b>Where we are.</b> ' + prose(st.recap) }));
     if (st.groundwork && st.groundwork.length) art.append(this.groundwork(st.groundwork));   /* the foundations, before the step uses them */
     if (st.from && st.from.length) { const f = el('div', { class: 'from' }, ['follows from ']); st.from.forEach((id, i) => { if (i) f.append(', '); f.append(el('a', { text: id, tabindex: 0, onclick: () => this.jump(id) })); }); art.append(f); }
+    // predict BEFORE the statement and the explanation give it away: the card comes right after the step's question and
+    // ends its fold (computeFolds), so the answer is one unfold further on
+    const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
+    if (rv) art.append(rv);
     if (st.statement) art.append(el('p', { class: 'stmt', html: prose(st.statement) }));
     if (st.statementFigure) art.append(this.figure(st.statementFigure));
     // short attributed excerpts (≤ 40 words); a passage quoted before is a link, never a second copy
@@ -375,7 +408,8 @@ export class Reader {
     // the explanation: paragraphs in the step's own words, each text-heavy one with its figure
     (st.explain || []).forEach(p => { const t = typeof p === 'string' ? p : p && p.text; if (!t) return; const row = el('div', { class: 'explain' + (p.figure ? ' has-fig' : '') }, [el('p', { html: prose(t) })]); if (p.figure) row.append(this.figure(p.figure)); art.append(row); });
     if (st.math) art.append(el('div', { class: 'disp', html: '\\[' + esc(st.math) + '\\]' }));
-    if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), d.why ? el('div', { class: 'why', html: esc(d.why) }) : null])); }); art.append(ol); }
+    // each move's reason is folded behind "why?": the reader first tries to see it, then checks
+    if (st.derivation && st.derivation.length) { const ol = el('ol', { class: 'deriv' }); st.derivation.forEach(d => { const ex = typeof d === 'string' ? d : d.expr; ol.append(el('li', {}, [el('div', { class: 'ex', html: '\\[' + esc(ex) + '\\]' }), ...(d.why ? whyToggle(d.why) : [])])); }); art.append(ol); }
     if (st.use) art.append(el('div', { class: 'f-use' }, [el('b', { class: 'f-use-k', text: 'What this formula is for' }), el('dl', {}, [['answers', 'It answers'], ['symbols', 'Its symbols'], ['holds', 'When it holds'], ['example', 'A worked number'], ['check', 'A sanity check']].filter(([k]) => st.use[k]).flatMap(([k, t]) => [el('dt', { text: t }), el('dd', { html: prose(st.use[k]) })]))]));
     if (st.code && Array.isArray(st.code.lines) && st.code.lines.length) art.append(renderCode(st.code));
     (st.examples || []).forEach(x => art.append(this.renderExample(x)));
@@ -390,12 +424,12 @@ export class Reader {
     ((this._payoffs && this._payoffs.get(st.id)) || []).forEach(P => { const e = renderPayoff(P.h, { key: P.key, where: P.where }); if (e) art.append(e); });   /* the hooks this step settles, paid here */
     if (st.intuition) art.append(el('div', { class: 'intuition box-fig' }, [el('p', { html: '<b>Picture it.</b> ' + prose(st.intuition) }), this.motion(A, st, 'intuition'), st.intuitionFigure ? this.figure(st.intuitionFigure, true) : null]));
     if (st.misconception) art.append(el('div', { class: 'miscon box-fig' }, [el('p', { html: '<b>Common mistake.</b> ' + prose(st.misconception) }), this.motion(A, st, 'misconception'), st.misconceptionFigure ? this.figure(st.misconceptionFigure, true) : null]));
-    const rv = renderReveal(st, { partId: this.part.id, partTitle: this.part.title, figure: f => this.figure(f, true), typeset, sfx: this.app.sfx, onReveal: () => this.refreshRevisit() });
-    if (rv) art.append(rv);
-    else if (st.check && st.check.q) {
-      // the check's figure may give the answer away: it is drawn only when the answer is revealed
+    // "Check yourself" after the reading, unless the predict card above already asked this very question
+    if (st.check && st.check.q && !(rv && (revealSpec(st) || {}).hook === st.check.q)) {
+      // the check's figure may give the answer away: it is drawn only when the answer is revealed; looking at the answer
+      // puts the question in the spaced revisit deck (reveal.js enrollCheck)
       const ans = el('div', { class: 'ans', hidden: true }, [el('div', { html: prose(st.check.a || '') })]); let drawn = false;
-      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); } } }), ans]));
+      art.append(el('div', { class: 'check' }, [el('div', { html: '<b>Check yourself.</b> ' + prose(st.check.q) }), el('button', { class: 'linkbtn', text: 'Show the answer', onclick: e => { ans.hidden = !ans.hidden; e.target.textContent = ans.hidden ? 'Show the answer' : 'Hide the answer'; if (!ans.hidden) { if (!drawn && st.check.figure) { ans.append(this.figure(st.check.figure, true)); drawn = true; } typeset(ans); enrollCheck(this.part.id, this.part.title, st).then(() => this.refreshRevisit()).catch(() => { }); } } }), ans]));
     }
     const mslot = el('div', { class: 'step-media' }); art.append(mslot); this.fillMedia(st, mslot);   /* a checked picture and reading, if any passed */
     const srcBox = el('div', { class: 'sources' }); this.fillSources(st, srcBox); art.append(srcBox);
@@ -425,13 +459,26 @@ export class Reader {
     this.figureStore().then(F => { if (spec && spec.kind === 'pdf') { const first = this._shownPdf && this._shownPdf.get(spec.id); if (first) { host.append(el('div', { class: 'fig-refs' }, [el('span', { class: 'chip' }, [`${spec.id} — shown in `, el('a', { text: first, tabindex: 0, onclick: () => this.jump(first) })])])); return; } if (this._shownPdf) this._shownPdf.set(spec.id, host.closest('[data-sid]') ? host.closest('[data-sid]').dataset.sid : 'above'); } try { renderFigure(spec, host, { small, figStore: F, terms }); const cast = castStrip(spec, terms); if (cast) host.append(cast); } catch (e) { host.append(el('p', { class: 'err', text: e.message })); } });
     return host;
   }
+  // a worked example is worked through, not handed over: the problem, then one solution line per "Next step" (each a
+  // chance to predict the move first), the answer after the last line; "Show all" opens it at once
   renderExample(x) {
     if (!x) return null; const added = x.origin === 'added';
+    const sol = Array.isArray(x.solution) ? x.solution.filter(y => y && (y.text || y.math)) : [];
+    const lis = sol.map(y => el('li', { hidden: true }, [y.text ? el('span', { html: prose(y.text) }) : null, y.math ? el('div', { class: 'ex', html: '\\[' + esc(y.math) + '\\]' }) : null]));
+    const ans = x.answer ? el('p', { class: 'ex-answer', tabindex: '-1', hidden: !!lis.length, html: '<b>Answer.</b> ' + prose(x.answer) }) : null;
+    const solEl = lis.length ? el('ol', { class: 'ex-sol', tabindex: '-1' }, lis) : null; let ctl = null;
+    if (lis.length) {
+      let k = 0; const next = el('button', { class: 'btn small ex-next', type: 'button' }), all = el('button', { class: 'linkbtn ex-all', type: 'button', text: 'Show all' });
+      const upd = () => { lis.forEach((li, i) => { li.hidden = i >= k; }); const fin = k >= lis.length; if (ans) ans.hidden = !fin; ctl.hidden = fin; next.textContent = k ? `Next step (${k + 1} of ${lis.length})` : `Show the first step (of ${lis.length})`; };
+      const open = (m, focusNext) => { const was = k; k = Math.min(lis.length, m); upd(); const fresh = lis.slice(was, k).concat(k >= lis.length && ans ? [ans] : []); if (fresh.length) typeset(fresh); if (k >= lis.length) (ans || solEl).focus({ preventScroll: true }); else if (focusNext) next.focus({ preventScroll: true }); };
+      next.onclick = () => open(k + 1, true); all.onclick = () => open(lis.length, false);
+      ctl = el('div', { class: 'row ex-ctl' }, [next, all]); upd();
+    }
     return el('div', { class: 'example-card' + (added ? ' added' : '') }, [
       el('div', { class: 'ex-head' }, [added ? el('span', { class: 'extra-badge', text: 'Added from outside the PDF' }) : el('span', { class: 'pdf-tag', text: 'From the PDF' + (x.ref ? ' · ' + x.ref : '') }), el('b', { html: ' ' + mathHTML(x.title || 'Worked example') })]),
       x.problem ? el('p', { class: 'ex-problem', html: prose(x.problem) }) : null,
-      Array.isArray(x.solution) && x.solution.length ? el('ol', { class: 'ex-sol' }, x.solution.map(y => el('li', {}, [y && y.text ? el('span', { html: prose(y.text) }) : null, y && y.math ? el('div', { class: 'ex', html: '\\[' + esc(y.math) + '\\]' }) : null]))) : null,
-      x.answer ? el('p', { class: 'ex-answer', html: '<b>Answer.</b> ' + prose(x.answer) }) : null,
+      solEl, ctl,
+      ans,
       added ? (x.source ? el('div', { class: 'extra-src' }, ['Source: ', renderSource(x.source)]) : el('div', { class: 'err', text: 'No source given for this added example.' })) : null]);
   }
   // the quality gate's report: what was repaired, what the app fixed itself, what is still open
@@ -652,6 +699,12 @@ function normExtra(e) {
   return arr.filter(x => x && (x.what || x.source)).slice(0, 8).map(x => ({ what: String(x.what || ''), source: x.source ? (typeof x.source === 'string' ? { title: x.source } : normSources([x.source])[0] || null) : null }));
 }
 // code explained line by line: each source line beside what it does, then the printed output and what it means
+// a derivation move's reason, folded: a "why?" button (keyboard: Tab, Enter) that opens and closes it
+function whyToggle(why) {
+  const w = el('div', { class: 'why', hidden: true, html: esc(why) });
+  const b = el('button', { class: 'linkbtn why-btn', type: 'button', 'aria-expanded': 'false', text: 'why?', onclick: () => { w.hidden = !w.hidden; b.setAttribute('aria-expanded', String(!w.hidden)); b.textContent = w.hidden ? 'why?' : 'hide why'; } });
+  return [b, w];
+}
 function renderCode(c) {
   const t = el('table', { class: 'code-lines' }, [el('tbody', {}, c.lines.map((l, i) => el('tr', {}, [el('td', { class: 'ln', text: String(i + 1) }), el('td', { class: 'cl' }, [el('code', { text: (l && l.code) || String(l || '') })]), el('td', { class: 'ce', html: prose((l && l.explain) || '') })])))]);
   const out = Array.isArray(c.output) ? c.output : c.output ? String(c.output).split('\n') : [];

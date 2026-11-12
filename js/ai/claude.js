@@ -9,6 +9,7 @@
 // docs/PROTOCOL.md. The prompts and the JSON formats are the same whichever engine answers.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
+import { forFreeModels } from './prompts.js';
 let SAMPLE = null, LIMITS = null, ready;
 export function initAI() {
   ready = (async () => { try { if (window.claude && claude.use) { SAMPLE = await claude.use('sample'); if (SAMPLE) LIMITS = await SAMPLE.limits().catch(() => null); } } catch (e) { } })();
@@ -57,7 +58,10 @@ export function repairTruncatedJSON(s) {
 }
 // Ask for JSON. onText streams progress; onStatus says which engine and model is at work, and any wait. role: 'director'
 // or 'worker' (see the top). validate(v) → null | what is wrong: a free model's answer that fails it goes to the next.
-export async function askJSON(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI' } = {}) {
+// minRank: the free models' strength floor (free.js ask; by default 80 for the director's requests, 55 for a worker's);
+// acceptTruncated: a free model's cut-off answer may be used when validate accepts it; fresh: skip the free cache.
+// A free model has no search tools: its prompt is stripped of the rules that ask for outside sources (forFreeModels).
+export async function askJSON(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
   await ready;
   const m = FREE.mode();
   const viaClaude = async () => {
@@ -68,7 +72,7 @@ export async function askJSON(prompt, { onText, onTool, onStatus, images, signal
     const { text, truncated } = await SAMPLE(prompt, opts);
     const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
   };
-  const viaFree = exhausted => FREE.ask(prompt, { images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted });
+  const viaFree = exhausted => FREE.ask(forFreeModels(prompt), { images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
   if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
   if (m === 'free' || !SAMPLE) { if (!FREE.hasAny()) return manualRelay(prompt, manualTitle); return viaFree(false); }
   // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other

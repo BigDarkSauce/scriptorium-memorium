@@ -8,7 +8,8 @@ globalThis.document = { createElement: () => ({ style: {}, children: [], append(
 globalThis.location = { origin: 'http://test' }; globalThis.requestAnimationFrame = f => setTimeout(f, 0);
 
 let claudeMode = 'ok', claudeCalls = 0;
-const SAMPLE = async (prompt, o) => { claudeCalls++; if (claudeMode === 'rate') throw { code: 'rate_limited' }; return { text: JSON.stringify({ by: 'claude', chain: [{ id: 'S1' }] }) }; };
+let claudePrompt = '', freePrompt = '';
+const SAMPLE = async (prompt, o) => { claudeCalls++; claudePrompt = prompt; if (claudeMode === 'rate') throw { code: 'rate_limited' }; return { text: JSON.stringify({ by: 'claude', chain: [{ id: 'S1' }] }) }; };
 SAMPLE.limits = async () => ({ images: { maxCount: 5 } });
 // inside the Claude app the free providers are reached through the free-models extension (js/ai/bridge.js): an
 // in-process stand-in for it serves the scripted providers below (tools/test-bridge.mjs runs the real one)
@@ -29,11 +30,13 @@ const sse = (obj, raw) => new Response(new ReadableStream({ start(c) { const e =
 globalThis.fetch = async (url, o = {}) => {
   fetches++; const u = String(url);
   if (u.endsWith('/models')) { if (u.includes('ovh')) return Response.json({ data: [{ id: 'gpt-oss-120b' }, { id: 'Meta-Llama-3_3-70B-Instruct' }, { id: 'bge-m3' }] }); if (u.includes('groq')) return Response.json({ data: [{ id: 'openai/gpt-oss-120b' }, { id: 'llama-3.3-70b-versatile' }] }); return new Response('no', { status: 404 }); }
-  const body = JSON.parse(o.body), who = (u.includes('ovh') ? 'ovh' : u.includes('groq') ? 'groq' : 'x') + '|' + body.model, s = script[who] || 'ok';
+  const body = JSON.parse(o.body); freePrompt = body.messages[1].content; const who = (u.includes('ovh') ? 'ovh' : u.includes('groq') ? 'groq' : 'x') + '|' + body.model, s = script[who] || 'ok';
   if (s === 'rate') return new Response('{"error":"rate"}', { status: 429, headers: { 'retry-after': '1' } });
   if (s === 'day') return new Response('{"error":"Rate limit reached for requests per day (RPD)"}', { status: 429 });
   if (s === 'junk') return sse('Sure! Here is the answer you asked for.', true);
   if (s === 'nochain') return sse({ by: who });
+  if (s === 'empty') return sse({});
+  if (s === 'cut') return new Response(new ReadableStream({ start(c) { const e = new TextEncoder(); c.enqueue(e.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: '{"by":"' + who + '","chain":[{"id":"S1"},{"id":"S2"},{"id":"S3","title":"cut he' } }] }) + '\n\n')); c.enqueue(e.encode('data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] }) + '\n\ndata: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   return sse({ by: who, chain: [{ id: 'S1' }] });
 };
 const C = await import('../js/ai/claude.js'), F = await import('../js/ai/free.js');
@@ -76,4 +79,27 @@ const t0 = Date.now(); v = await C.askJSON(P(11), { onStatus: s => { if (/Waitin
 reset(); const q = 'the same request'; await C.askJSON(q); const f0 = fetches; v = await C.askJSON(q); ok(fetches === f0 && v.chain, 'an answer that passed is cached: the same request costs nothing the second time');
 // 10. the engine's words and limits
 F.saveSettings({ mode: 'free' }); ok(C.imageLimit() === 0, 'free mode without a vision model sends no images'); F.saveSettings({ mode: 'claude' }); ok(C.imageLimit() === 5, 'claude mode keeps Claude\'s image limit');
+// 11. a cut-off answer (finish "length"): refused by default; kept when the caller accepts it and its check passes; never cached
+F.saveSettings({ mode: 'free' }); reset(); script['ovh|gpt-oss-120b'] = 'cut'; script['groq|openai/gpt-oss-120b'] = 'cut';
+const chain2 = x => !(x && Array.isArray(x.chain) && x.chain.length) ? 'no chain' : x._truncated && x.chain.length < 2 ? 'cut before two steps' : null;
+v = await C.askJSON(P(12), { validate: chain2 }); ok(v && !v._truncated && /llama/i.test(v.by), 'a cut-off answer goes to the next model unless accepted (' + v.by + ')');
+const qc = 'cut request ' + Math.random(); v = await C.askJSON(qc, { validate: chain2, acceptTruncated: true, role: 'director' }); ok(v && v._truncated && /gpt-oss/.test(v.by) && v.chain.length >= 2, 'acceptTruncated: the complete steps of a cut-off chain are used (' + (v && v.chain.length) + ' steps)');
+let f1 = fetches; await C.askJSON(qc, { validate: chain2, acceptTruncated: true, role: 'director' }); ok(fetches > f1, 'a cut-off answer is not cached');
+v = await C.askJSON(P(13), { validate: x => x._truncated && x.chain.length < 5 ? 'too short' : x.chain ? null : 'no chain', acceptTruncated: true }); ok(v && !v._truncated && /llama/i.test(v.by), 'acceptTruncated still needs the check to pass (' + v.by + ')');
+// 12. the cache keeps only answers that passed: an empty object is not kept; o.fresh skips the cache
+reset(); script['ovh|gpt-oss-120b'] = 'empty'; script['groq|openai/gpt-oss-120b'] = 'empty'; script['ovh|Meta-Llama-3_3-70B-Instruct'] = 'empty'; script['groq|llama-3.3-70b-versatile'] = 'empty';
+const qe = 'empty request ' + Math.random(); await C.askJSON(qe); f1 = fetches; await C.askJSON(qe); ok(fetches > f1, 'an empty answer (no validate) is not cached');
+reset(); const qv = 'validated request ' + Math.random(); await C.askJSON(qv, { validate: x => x.chain ? null : 'no chain' }); f1 = fetches; v = await C.askJSON(qv, { validate: x => x.chain ? null : 'no chain' }); ok(fetches === f1 && v.chain, 'an answer that passed its check is cached');
+f1 = fetches; v = await C.askJSON(qv, { validate: x => x.chain ? null : 'no chain', fresh: true }); ok(fetches > f1 && v.chain, 'fresh: the cache is skipped (a forced re-analysis asks again)');
+f1 = fetches; const by0 = v.by; v = await C.askJSON(qv, { validate: x => x.by === by0 ? 'not that one' : null }); ok(fetches > f1 && v.by !== by0, 'a cached answer that fails the current check is not returned');
+// 13. strength floor: the director's request waits briefly for a strong model rather than take a weak one; a worker's does not
+reset(); script['ovh|gpt-oss-120b'] = 'rate'; script['groq|openai/gpt-oss-120b'] = 'rate'; setTimeout(() => { delete script['ovh|gpt-oss-120b']; delete script['groq|openai/gpt-oss-120b']; }, 1200);
+v = await C.askJSON(P(14), { role: 'director' }); ok(/gpt-oss/.test(v.by), 'director (minRank 80): a strong model busy for a moment is waited for (' + v.by + ')');
+reset(); v = await C.askJSON(P(15), { minRank: 99 }); ok(v && v.chain, 'no model reaches the floor: the best available answers (' + v.by + ')');
+reset(); for (const k of ['ovh|gpt-oss-120b', 'groq|openai/gpt-oss-120b']) script[k] = 'day'; v = await C.askJSON(P(16), { role: 'director' }); ok(/llama/i.test(v.by), 'director: strong models out for the day → a lighter one takes it (' + v.by + ')');
+// 14. a free model is not asked for sources it cannot look up; Claude (with its tools) still is
+const PR = await import('../js/ai/prompts.js'); const cp = PR.chapterPrompt({ book: 'B', chapter: 'C', text: 'Some text 2.0 m.', depth: 'complete' });
+reset(); await C.askJSON(cp + ' ' + Math.random()); ok(!/search_literature|DESIGN REFERENCES|real source/.test(freePrompt) && freePrompt.includes(PR.NO_LOOKUP_RULES), 'free mode: grounding rules swapped for "add no outside sources"');
+F.saveSettings({ mode: 'hybrid' }); reset(); await C.askJSON(cp + ' ' + Math.random(), { role: 'worker' }); ok(freePrompt.includes(PR.NO_LOOKUP_RULES) && !/search_literature/.test(freePrompt), 'hybrid worker (free models): no source rules');
+await C.askJSON(cp + ' ' + Math.random(), { role: 'director' }); ok(/search_literature/.test(claudePrompt) && !claudePrompt.includes(PR.NO_LOOKUP_RULES), 'hybrid director (Claude): the grounding rules stay');
 console.log(fail ? `${fail} failed` : 'all passed'); process.exit(fail ? 1 : 0);
