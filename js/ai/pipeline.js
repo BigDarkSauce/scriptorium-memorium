@@ -33,6 +33,13 @@ function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(
 // ---------------------------------------------------------------- material (no AI)
 export async function material(ctx, part, { onStatus } = {}) {
   const { app, book } = ctx, P = part, src = P.subOf ? ((ctx.data.parts || []).find(x => x.id === P.subOf) || P) : P;
+  if (book.sourceType === 'pptx') {
+    const deck = await app.store.get('pptx:' + book.id);
+    if (!deck) return { sections: null, figures: [], text: P.text || '' };
+    onStatus && onStatus('Reading slide text, accessible descriptions and speaker notes…');
+    const sec = await cached(partKey('sections', book.id, src.id), () => app.ingest.presentationSections(deck, src));
+    return { sections: sec.sections, figures: [], blob: null, src, text: P.text || sec.text };
+  }
   if (!book.hasPdf) return { sections: null, figures: [], text: P.text || '' };
   const blob = app.ingest.keyPDF ? app.ingest.keyPDF(await app.store.get('pdf:' + book.id), book.id) : await app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [], text: P.text || '' };
   if (book.pdfTitle == null && app.ingest.pdfTitle) { try { book.pdfTitle = await app.ingest.pdfTitle(blob) || ''; if (app.saveLib) app.saveLib(); } catch (e) { } }
