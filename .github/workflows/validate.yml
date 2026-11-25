@@ -56,6 +56,9 @@ jobs:
       - name: Test semantic atlas and progressive challenge reveals
         run: node tools/test-atlas.mjs
 
+      - name: Test PowerPoint image, chart and SmartArt extraction
+        run: node tools/test-pptx-visuals.mjs
+
       - name: Test loci spaced-review ledger integration
         run: node tools/test-locus-review.mjs
 
