@@ -118,7 +118,10 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     'aria-label': 'Search source steps'
   });
   const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
-  const openNode = node => { if (node) select(node.id); };
+  const openNode = (node, stepId = null) => {
+    atlas.selectedSourceStepId = stepId == null ? null : String(stepId);
+    if (node) select(node.id);
+  };
   const paintScan = query => {
     const q = String(query || '').trim().toLowerCase();
     scanResults.innerHTML = '';
@@ -137,7 +140,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           type: 'button',
           role: 'listitem',
           disabled: !first,
-          onclick: () => openNode(first && first.node)
+          onclick: () => openNode(first && first.node, first && first.step.id)
         }, [
           el('span', { class: 'atlas-scan-main' }, [
             el('b', { text: sec.title || sec.id }),
@@ -162,7 +165,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         type: 'button',
         role: 'listitem',
         disabled: !entry.node,
-        onclick: () => openNode(entry.node)
+        onclick: () => openNode(entry.node, st.id)
       }, [
         el('span', { class: 'atlas-scan-main' }, [
           el('b', { text: st.title || st.id }),
@@ -557,14 +560,21 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       detail.append(block);
     }
 
-    const trail = el('details', { class: 'atlas-source-trail' }, [
+    const selectedSourceStepId = String(atlas.selectedSourceStepId || '');
+    const trail = el('details', {
+      class: 'atlas-source-trail',
+      open: !!selectedSourceStepId && (node.stepIds || []).some(id => String(id) === selectedSourceStepId)
+    }, [
       el('summary', { text: 'Source trail and internal indexing' }),
       el('p', { class: 'atlas-audit-line', text: 'Indexing method: ' + (atlas.sourceIndex?.method || atlas.audit?.method || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Source steps: ' + ((node.sourceRefs?.stepIds || []).join(', ')) }),
       el('p', { class: 'atlas-audit-line', text: 'Subsections: ' + ((node.sourceRefs?.subsectionIds || []).join(', ')) }),
       el('p', { class: 'atlas-audit-line', text: 'Source spans (' + (atlas.sourceIndex?.sourceUnit === 'slide' ? 'slides' : 'pages') + '): ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Figures: ' + ((node.sourceRefs?.figureIds || []).join(', ') || 'none linked') }),
-      ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', { class: 'atlas-source-step' }, [
+      ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', {
+        class: 'atlas-source-step',
+        open: String(st.stepId) === selectedSourceStepId
+      }, [
         el('summary', { text: st.stepId + ' · ' + txt(st.title, 110) }),
         el('p', { class: 'atlas-audit-line', text: txt(st.statement, 900) || 'No short statement was recorded for this source step.' }),
         st.answers ? el('p', { class: 'atlas-audit-line', text: 'Answers: ' + txt(st.answers, 260) }) : null,
