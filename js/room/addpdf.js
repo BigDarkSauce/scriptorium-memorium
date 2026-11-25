@@ -10,11 +10,11 @@
 import { el, toast, uid, esc } from '../util.js';
 import { aiAvailable, engine } from '../ai/claude.js';
 // who writes, as the dialog says it (the AI settings choose: js/ai/aipanel.js)
-const engineLine = () => ({ claude: 'Your Claude writes each part', hybrid: 'Your Claude reads and plans each part, the free models write the rest', free: 'The free models write each part' })[engine()] || 'Your Claude writes each part';
+const engineLine = () => ({ claude: 'Claude writes each part', hybrid: 'Claude directs and the fallback models write', free: 'OpenAI is preferred, with configured fallback models' })[engine()] || 'OpenAI is preferred, with configured fallback models';
 import { evidenceAvailable } from '../ai/evidence.js';
 import { runJob, saveJob, pendingJobs, allocateSteps, STAGES } from '../ai/pipeline.js';
 
-const STAGE_LABEL = { chain: 'chain', coverage: 'coverage', gate: 'quality check', figures: 'figures', dioramas: 'dioramas', done: 'done' };
+const STAGE_LABEL = { chain: 'chain', coverage: 'coverage', gate: 'quality check', figures: 'figures', dioramas: 'dioramas', atlas: 'concept map', done: 'done' };
 const RUN = { job: null, ctrl: null, listeners: new Set(), last: new Map() };   // one running job at a time (the chip shows it)
 
 // ---- the hub, through its public API, with fallbacks
@@ -225,7 +225,7 @@ function openPanel(app) {
     const data = await app.loadRoom(job.bookId).catch(() => null); const parts = job.parts.map(id => data && data.parts.find(p => p.id === id)).filter(Boolean);
     list.innerHTML = ''; let doneN = 0, cur = null;
     parts.forEach(p => { const live = RUN.last.get(p.id) || {}, stage = live.stage || (p.job && p.job.stage) || 'pending', si = STAGES.indexOf(stage); if (stage === 'done') doneN++; else if (!cur && RUN.ctrl && RUN.job.current === p.id) cur = live.status;
-      list.append(el('li', { class: 'ap-pp' + (stage === 'done' ? ' done' : RUN.job.current === p.id && RUN.ctrl ? ' now' : '') }, [el('span', { class: 'ap-pt', text: p.title }), el('span', { class: 'ap-stages' }, STAGES.slice(0, 5).map((s, k) => el('span', { class: 'ap-stage' + (si > k || stage === 'done' ? ' ok' : si === k && RUN.ctrl && RUN.job.current === p.id ? ' run' : ''), text: STAGE_LABEL[s] })))])); });
+      list.append(el('li', { class: 'ap-pp' + (stage === 'done' ? ' done' : RUN.job.current === p.id && RUN.ctrl ? ' now' : '') }, [el('span', { class: 'ap-pt', text: p.title }), el('span', { class: 'ap-stages' }, STAGES.slice(0, 6).map((s, k) => el('span', { class: 'ap-stage' + (si > k || stage === 'done' ? ' ok' : si === k && RUN.ctrl && RUN.job.current === p.id ? ' run' : ''), text: STAGE_LABEL[s] })))])); });
     bar.firstChild.style.width = (parts.length ? doneN / parts.length * 100 : 0) + '%';
     st.textContent = RUN.ctrl ? (cur || 'Working…') : job.status === 'done' ? 'Done. Every part is analysed.' : job.status === 'paused' ? 'Paused. Resume to continue where it stopped.' : job.error ? 'Stopped: ' + job.error : '';
     foot.innerHTML = '';
