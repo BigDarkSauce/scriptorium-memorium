@@ -43,7 +43,7 @@ try {
         { title: prefix + ' · conclude', text: 'Apply the intervention and state the supported consequence.', sourceStepIds: ['S1', 'S2'] }
       ]
     });
-    let memoryAssignments = 0, memoryVisits = 0;
+    let memoryAssignments = 0, memoryRemovals = 0, memoryVisits = 0;
     const atlas = {
       question: 'How do the system components constrain the outcome?',
       attempts: {},
@@ -69,6 +69,7 @@ try {
       atlas, part: { title: 'Test part' },
       onSave: () => { saves++; },
       onAssignMemoryPlace: () => { memoryAssignments++; },
+      onRemoveMemoryPlace: () => { memoryRemovals++; },
       onVisitMemoryRoute: () => { memoryVisits++; }
     });
     view.dataset.testAtlas = 'true';
@@ -76,6 +77,7 @@ try {
     window.__atlasUITest = {
       atlas, getSaves: () => saves,
       memoryAssignments: () => memoryAssignments,
+      memoryRemovals: () => memoryRemovals,
       memoryVisits: () => memoryVisits
     };
   });
@@ -85,12 +87,14 @@ try {
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
+  await page.getByRole('button', { name: 'Remove memory place' }).click();
   await page.getByRole('button', { name: /Visit memory route/ }).click();
   const memoryCallbacks = await page.evaluate(() => ({
     assignments: window.__atlasUITest.memoryAssignments(),
+    removals: window.__atlasUITest.memoryRemovals(),
     visits: window.__atlasUITest.memoryVisits()
   }));
-  assert.deepEqual(memoryCallbacks, { assignments: 1, visits: 1 }, 'the concept atlas must expose assignment and route callbacks');
+  assert.deepEqual(memoryCallbacks, { assignments: 1, removals: 1, visits: 1 }, 'the concept atlas must expose assignment, removal and route callbacks');
 
   const prediction = page.locator('.atlas-prediction');
   await prediction.fill('The channel provides a route through the boundary.');
