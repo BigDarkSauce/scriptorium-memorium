@@ -116,3 +116,13 @@ jobs:
             ${{ runner.temp }}/scriptorium-server.log
           if-no-files-found: ignore
           retention-days: 7
+
+  windows-powershell-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Exercise the actual Windows localhost server
+        shell: pwsh
+        run: ./tools/test-ps-server.ps1

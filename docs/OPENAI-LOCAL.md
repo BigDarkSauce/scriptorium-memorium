@@ -57,7 +57,7 @@ python tools/test-openai-proxy.py
 The suite checks that the information and model routes never return the secret, that Responses and Chat Completions
 requests reach only their fixed OpenAI endpoints, that streamed bytes and upstream error statuses are preserved,
 and that missing keys, malformed payloads, oversized bodies, cross-origin requests, untrusted Host headers and
-unknown routes are rejected. The same checks run in GitHub Actions on the feature branch and its pull request.
+unknown routes are rejected. The same checks run in GitHub Actions on the feature branch and its pull request. A separate `windows-latest` job starts the actual PowerShell fallback server and exercises static serving, relay discovery, OpenAI info/model routes, key secrecy, same-origin rejection, malformed-request handling and 404s using a disposable dummy key; it does not contact an AI provider.
 
 ## How the AI now builds a room
 
