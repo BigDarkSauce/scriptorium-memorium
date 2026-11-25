@@ -77,6 +77,44 @@ delete legacy.nodes[0].challenges[0].reasoning;
 assert.equal(validateAtlas(legacy, ['S1', 'S2'], steps), null, 'older saved atlases without reveal units remain valid');
 assert.match(validateAtlas(legacy, ['S1', 'S2'], steps, true), /missing its progressive reasoning path/);
 
+const validLocus = makeAtlas();
+validLocus.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage'
+}];
+assert.equal(validateAtlas(validLocus, ['S1', 'S2'], steps), null, 'a valid learner-authored loci anchor should pass');
+
+const foreignLocus = makeAtlas();
+foreignLocus.memoryPlaces = [{
+  nodeId: 'missing-concept', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage'
+}];
+assert.match(validateAtlas(foreignLocus, ['S1', 'S2'], steps), /memory place refers to a concept node not present/);
+
+const malformedLocus = makeAtlas();
+malformedLocus.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: -1, slot: 2,
+  association: 'A gate with one narrow passage'
+}];
+assert.match(validateAtlas(malformedLocus, ['S1', 'S2'], steps), /invalid bookcase, row, slot or association/);
+
+const duplicateLocus = makeAtlas();
+duplicateLocus.nodes[0].stepIds = ['S1'];
+duplicateLocus.nodes[0].challenges = [];
+duplicateLocus.nodes.push({
+  ...duplicateLocus.nodes[0],
+  id: 'channel-route',
+  title: 'Channel route',
+  question: 'What route does the channel provide?',
+  stepIds: ['S2'],
+  position: { x: 80, y: 80 }
+});
+duplicateLocus.memoryPlaces = [
+  { nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2, association: 'Gate' },
+  { nodeId: 'channel-route', caseId: 'bookcase-1', row: 0, slot: 2, association: 'Door' }
+];
+assert.match(validateAtlas(duplicateLocus, ['S1', 'S2'], steps), /two concept nodes share the same loci location/);
+
 const wrongPartition = makeAtlas();
 wrongPartition.nodes[0].stepIds = ['S1'];
 wrongPartition.nodes[0].challenges = []; // keep the fixture focused on the partition check, not its now-foreign reasoning citations
@@ -105,4 +143,4 @@ assert.match(prompt, /sourceStepIds/);
 assert.match(prompt, /each UNFOLD action exposes exactly one next unit/);
 assert.match(prompt, /Never use an UNFOLD action to advance to another challenge/);
 
-console.log('PASS  atlas coverage, branch challenge IDs, progressive reasoning, source links and legacy compatibility');
+console.log('PASS  atlas coverage, source-mapped progressive challenges, legacy compatibility and unique loci anchors');
