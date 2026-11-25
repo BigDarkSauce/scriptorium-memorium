@@ -13,7 +13,7 @@ import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
 import { seedHook } from '../seeds-hooks.js';
-import { renderReveal, renderTransfer, normReveal, revealSpec, enrollCheck } from './reveal.js';
+import { renderReveal, renderTransfer, normReveal, revealSpec, enrollCheck, ensureLocusReviewCard, rateLocusRecall, removeLocusReviewCard } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { fitAll } from './textfit.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
@@ -419,6 +419,7 @@ export class Reader {
     if (!ok) return;
     atlas.memoryPlaces = atlas.memoryPlaces.filter(p => String(p.nodeId) !== String(node.id));
     await roomCtx(this.app, book.id).save(part);
+    await removeLocusReviewCard(book.id, part.id, node.id);
     this.render();
     toast('Memory place removed. The concept remains in the atlas.');
   }
@@ -427,6 +428,12 @@ export class Reader {
     const places = atlas && Array.isArray(atlas.memoryPlaces) ? atlas.memoryPlaces : [];
     if (!places.length) { toast('Assign a memory place to a concept first.'); return; }
     try {
+      const reviewSchedules = {};
+      for (const place of places) {
+        const concept = (atlas.nodes || []).find(item => String(item.id) === String(place.nodeId));
+        if (!concept) continue;
+        reviewSchedules[concept.id] = await ensureLocusReviewCard(book.id, part.id, part.title, concept);
+      }
       await app.openHub();
       const hub = app.mode;
       if (!hub || typeof hub.showMemoryRoute !== 'function') throw new Error('The library memory route could not be opened.');
@@ -436,6 +443,11 @@ export class Reader {
         partId: part.id,
         atlas,
         initialNodeId: node && node.id,
+        reviewSchedules,
+        onGradeRecall: (nodeId, recalled) => {
+          const schedule = reviewSchedules[String(nodeId)];
+          return schedule ? rateLocusRecall(schedule.id, recalled) : Promise.resolve(null);
+        },
         onSave: () => ctx.save(part)
       });
     } catch (e) {
