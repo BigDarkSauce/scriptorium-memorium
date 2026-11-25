@@ -612,6 +612,45 @@
               "revealedAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "history": {
+                "type": "array",
+                "description": "Earlier recall attempts retained when the learner starts a fresh attempt at the same locus.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "response",
+                    "confidence"
+                  ],
+                  "properties": {
+                    "response": {
+                      "type": "string",
+                      "maxLength": 1200
+                    },
+                    "confidence": {
+                      "enum": [
+                        "",
+                        "Low",
+                        "Medium",
+                        "High"
+                      ]
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "revealedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    }
+                  }
+                }
               }
             }
           }
