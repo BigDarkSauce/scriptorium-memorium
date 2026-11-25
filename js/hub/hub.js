@@ -674,6 +674,34 @@ export class Hub {
             el('small', { text: 'Source steps: ' + ((node.stepIds || []).join(', ') || 'not recorded') })
           ]));
           panel.append(el('p', { class: 'memory-route-transfer-note', text: 'Return to the concept atlas for the full source-linked reasoning path, diagrams and dioramas.' }));
+          panel.append(el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Start another recall attempt',
+            onclick: async () => {
+              const current = place.review || {};
+              const history = [...(current.history || [])];
+              if (current.committed) history.push({
+                response: current.response || '',
+                confidence: current.confidence || '',
+                attemptedAt: current.attemptedAt || null,
+                revealedAt: current.revealedAt || null
+              });
+              place.review = { history, response: '', confidence: '', committed: false, revealed: false };
+              await flushSave();
+              render();
+            }
+          }));
+          if ((review.history || []).length) {
+            panel.append(el('details', { class: 'memory-route-history' }, [
+              el('summary', { text: 'Previous attempts · ' + review.history.length }),
+              ...(review.history || []).map((attempt, i) => el('div', { class: 'memory-route-history-item' }, [
+                el('b', { text: 'Attempt ' + (i + 1) + (attempt.confidence ? ' · ' + attempt.confidence + ' confidence' : '') }),
+                el('p', { text: attempt.response || '' }),
+                attempt.attemptedAt ? el('small', { text: 'Committed ' + new Date(attempt.attemptedAt).toLocaleString() }) : null
+              ]))
+            ]));
+          }
         }
       }
 
