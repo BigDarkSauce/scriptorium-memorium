@@ -221,7 +221,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     (Array.isArray(step.terms) ? step.terms : []).forEach((term, index) => {
       const name = sourceText(term && term.term).trim();
       const meaning = sourceText(term && term.meaning).trim();
-      if (!name || !meaning || name.toLowerCase() === meaning.toLowerCase() || meaning.length > 1000) return;
+      if (!name || !meaning || meaning.toLowerCase().includes(name.toLowerCase()) || meaning.length > 1000) return;
       prompts.push({
         id: 'term:' + String(step.id) + ':' + index,
         kind: 'term completion',
@@ -236,7 +236,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     (Array.isArray(step.examples) ? step.examples : []).forEach((example, index) => {
       const problem = sourceText(example && example.problem).trim();
       const answer = sourceText(example && example.answer).trim();
-      if (!problem || !answer || problem.length > 1000 || answer.length > 1000) return;
+      const compactProblem = problem.replace(/\s+/g, '').toLowerCase();
+      const compactAnswer = answer.replace(/\s+/g, '').toLowerCase();
+      if (!problem || !answer || problem.length > 1000 || answer.length > 1000 || compactProblem.includes(compactAnswer)) return;
       prompts.push({
         id: 'example:' + String(step.id) + ':' + index,
         kind: 'worked example',
@@ -250,7 +252,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     });
     const equation = sourceText(step.math).trim();
     const statement = sourceText(step.statement).trim();
-    if (!prompts.length && equation && statement && !statement.includes(equation) && equation.length <= 1000 && statement.length <= 1000) {
+    const compactStatement = statement.replace(/\s+/g, '').toLowerCase();
+    const compactEquation = equation.replace(/\s+/g, '').toLowerCase();
+    if (!prompts.length && equation && statement && !compactStatement.includes(compactEquation) && equation.length <= 1000 && statement.length <= 1000) {
       prompts.push({
         id: 'equation:' + String(step.id),
         kind: 'equation anticipation',
@@ -301,8 +305,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         text: prompt.kind.toUpperCase() + ' · ' + prompt.stepId + (location ? ' · ' + location : '')
       }),
       el('h4', { text: prompt.question }),
-      el('p', { class: 'atlas-scan-recall-stimulus', html: mathHTML(prompt.stimulus) }),
-      el('small', { class: 'atlas-scan-recall-title', text: prompt.title || '' })
+      el('p', { class: 'atlas-scan-recall-stimulus', html: mathHTML(prompt.stimulus) })
     );
     const response = el('textarea', {
       class: 'field atlas-scan-recall-response',

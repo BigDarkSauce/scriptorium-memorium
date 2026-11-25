@@ -145,6 +145,11 @@ try {
           {
             id: 'S3', kind: 'note', title: 'Supplemental observation',
             statement: 'An additional note has no subsection mapping.',
+            examples: [{
+              title: 'Gradient movement',
+              problem: 'A solute moves down its concentration gradient through a permeable boundary. State the expected direction of net movement.',
+              answer: 'Net movement is from the higher-concentration region to the lower-concentration region.'
+            }],
             pages: [4]
           }
         ]
@@ -236,7 +241,7 @@ try {
   assert.ok(suggestionValues.includes('Membrane permeability diagram'), 'autocomplete must include indexed figure labels');
   assert.ok(suggestionValues.includes('A diagram showing a selective boundary and its transport route.'), 'autocomplete must include source figure captions');
   const recallTabs = sourceScan.locator('.atlas-scan-recall-tab');
-  assert.equal(await recallTabs.count(), 2, 'the scan should adapt its prompt types to the source term and equation records');
+  assert.equal(await recallTabs.count(), 3, 'the scan should adapt its prompt types to the source term, equation and complete worked example records');
   assert.match(await recallTabs.nth(0).innerText(), /term completion.*S1/i);
   await recallTabs.nth(0).evaluate(el => el.click());
   const recallCard = sourceScan.locator('.atlas-scan-recall-card');
@@ -256,6 +261,14 @@ try {
   await recallCard.getByRole('button', { name: 'Commit recall' }).click();
   await recallCard.getByRole('button', { name: 'Reveal expected answer' }).click();
   assert.match(await recallCard.innerText(), /J = P \(C1 - C2\)/);
+  await recallTabs.nth(2).evaluate(el => el.click());
+  assert.match(await recallCard.innerText(), /worked example/i);
+  assert.match(await recallCard.innerText(), /A solute moves down its concentration gradient/i);
+  assert.doesNotMatch(await recallCard.innerText(), /Net movement is from the higher-concentration region/i, 'the worked-example answer must remain hidden before reveal');
+  await recallCard.locator('.atlas-scan-recall-response').fill('From the higher-concentration region to the lower-concentration region.');
+  await recallCard.getByRole('button', { name: 'Commit recall' }).click();
+  await recallCard.getByRole('button', { name: 'Reveal expected answer' }).click();
+  assert.match(await recallCard.innerText(), /Net movement is from the higher-concentration region to the lower-concentration region/i);
   await scanSearch.fill('selective permeability');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'a term search must find its exact source step');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S1.*p\. 2/i);
