@@ -165,7 +165,7 @@ try {
       ],
       memoryPlaces: [
         { nodeId: 'locus-one', caseId: shelf.caseId, row: row.row, slot: slot.slot, rowLabel: row.label, shelfName: shelf.title, association: 'A key beside a narrow doorway' },
-        { nodeId: 'locus-two', caseId: shelf.caseId, row: row.row, slot: slot.slot + 1, rowLabel: row.label, shelfName: shelf.title, association: 'A bridge that disappears' }
+        { nodeId: 'locus-two', caseId: shelf.caseId, row: row.row, slot: (row.slots[1] || slot).slot, rowLabel: row.label, shelfName: shelf.title, association: 'A bridge that disappears' }
       ]
     };
     let saves = 0;
@@ -201,7 +201,7 @@ try {
   await memoryPanel.locator('.memory-route-footer button').nth(0).click();
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i, 'revealed recall state must persist when returning to a route stop');
   const lociSaves = await page.evaluate(() => window.__lociUITest.getSaves());
-  assert.ok(lociSaves >= 3, 'the route must save draft, committed recall and reveal state');
+  assert.ok(lociSaves >= 2, 'the route must flush the recall draft with the commitment and save the reveal state');
   const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces[0].review);
   assert.equal(persistedReview.committed, true);
   assert.equal(persistedReview.revealed, true);
