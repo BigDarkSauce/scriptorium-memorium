@@ -52,7 +52,10 @@ export async function material(ctx, part, { onStatus } = {}) {
         figures = [];
       }
     }
-    if (!src.figureIndex || src.figureIndex.length !== figures.length) src.figureIndex = app.ingest.figureMeta(figures);
+    if (presentation) src.figureIndex = app.ingest.figureMeta(figures);
+    else if (!Array.isArray(src.figureIndex)) src.figureIndex = [];
+    // A room JSON import can carry the slide/media index but not the original ZIP binary. Preserve that audit
+    // metadata rather than replacing it with an empty list when re-analysis is text-only.
     return { sections: sec.sections, figures, blob: null, src, text: P.text || sec.text };
   }
   if (!book.hasPdf) return { sections: null, figures: [], text: P.text || '' };
