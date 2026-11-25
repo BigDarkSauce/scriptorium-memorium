@@ -130,6 +130,13 @@ try {
   await sourceScan.locator('summary').click({ force: true });
   assert.equal(await sourceScan.evaluate(el => el.open), true, 'the native source-scan disclosure must open');
   assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
+  const sectionBrowse = sourceScan.locator('.atlas-scan-section').first();
+  assert.match(await sectionBrowse.innerText(), /Membrane transport.*2 source steps/s);
+  await sectionBrowse.locator('summary').click({ force: true });
+  assert.equal(await sectionBrowse.evaluate(el => el.open), true, 'each subsection should expand independently');
+  assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row').count(), 2, 'expanded subsections must expose their source-step inventory');
+  assert.match(await sectionBrowse.innerText(), /S1.*Membrane boundary/i);
+  assert.match(await sectionBrowse.innerText(), /S2.*Flux relation/i);
   const scanSearch = sourceScan.locator('.atlas-scan-search');
   assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
   const suggestionValues = await page.locator('#atlas-source-suggestions-test-node option').evaluateAll(options => options.map(option => option.value));
