@@ -75,6 +75,7 @@ assert.match(validateAtlas(legacy, ['S1', 'S2'], steps, true), /missing its prog
 
 const wrongPartition = makeAtlas();
 wrongPartition.nodes[0].stepIds = ['S1'];
+wrongPartition.nodes[0].challenges = []; // keep the fixture focused on the partition check, not its now-foreign reasoning citations
 assert.match(validateAtlas(wrongPartition, ['S1', 'S2'], steps), /does not partition all source steps/);
 
 const duplicateChallenge = makeAtlas();
