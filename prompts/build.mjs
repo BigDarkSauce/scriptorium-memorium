@@ -26,10 +26,10 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 3b. \`08-repair-steps.md\`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. \`09-figures.md\`: only for paragraphs and teaching boxes that still lack a figure.
 3d. \`12-domain-compiler.md\`: the explanatory compiler: for steps whose structure (an argument, a feedback loop, a business model, a matrix, a data series…) is drawn best by a domain primitive and that have none yet, the visual routing and the interactive primitive spec (\`../docs/research/explanatory-compiler.md\`).
-4. \`10-didactic-plan.md\`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with \`node tools/verify-chain.mjs plan.json\`.
-4b. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`), built from the plan (paste the plan into the request's "plan").
-4c. \`11-self-critique.md\`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
-5. \`04-edit-diorama.md\`: change an existing diorama.
+4. \`10-didactic-plan.md\`: write the explanatory sequence and a source-mapped model contract before authoring a new 3D scene.
+4b. \`03-author-diorama.md\`: create the scene from the approved plan and preserve its actor IDs, parameter ranges and units exactly.
+4c. \`11-self-critique.md\`: check whether a newcomer can explain the concept; this review may patch lesson text only.
+4d. \`13-model-audit.md\`: independently inspect entity, causal, quantitative, constraint, intervention and scope fidelity. The app stores this review and its uncertainties.
 6. \`05-sub-scroll.md\`: expand one step into a detailed sub-scroll.
 7. \`06-whole-room.md\`: everything in one answer (for AIs with large outputs).
 
@@ -93,11 +93,11 @@ For 3D scenes not covered by the built-in models, put {"type":"scene","title":st
 Import the file in the app with *Import / export → Import JSON*. It appears as a new scroll on your first bookcase. Open each scroll once with the PDF attached to the book to run the coverage check.
 `);
 // the didactic planner (docs/PEDAGOGY.md, "The didactic planner") and the self-critique, shown with placeholders
-w('prompts/10-didactic-plan.md', `# Plan a 3D demo before building it
+w('prompts/10-didactic-plan.md', \`# Plan a 3D demo and model contract before building it
 
-The app sends this before it authors a scene (stage 5 of the pipeline). The plan is short (about 1.5k tokens): the demo's question, the kind of knowledge, the levels of its multiscale scene graph, Jared Owen's sequence (curiosity → orientation → decomposition → inspection → mechanism → intuition → reconstruction → understanding, recursive inside a beat) with one operation of the visual grammar and one camera mode per beat, an analogy with its limit, and the comprehension check. Operations are named, never described: the app already knows how to explode, section, compare, zoom, track and so on. \`node tools/verify-chain.mjs plan.json\` checks a plan; the built-in models' own plans are in \`../js/dio/plans.js\` (\`node tools/verify-chain.mjs --builtins\`).
+The app plans the explanatory sequence and a source-mapped model contract before authoring a scene. The contract names the system boundary, actors, state variables and units, causal mechanisms and evidence basis, constraints, assumptions, observables and uncertainties. Illustrative parameters must be labelled and justified; do not present them as source measurements. Evidence IDs must come only from the supplied source-step IDs.
 
-` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>' }, '<the study step it illustrates>')));
+\` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>', sourceStepIds: ['S1'] }, '<the study step it illustrates>')));
 w('prompts/11-self-critique.md', `# Check a demo against its plan
 
 Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the verdict on the scene as \`critique\`.
