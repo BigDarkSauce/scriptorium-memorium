@@ -97,9 +97,9 @@ try {
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /component is removed/i);
   assert.equal(await page.locator('.atlas-reasoning-unit').count(), 0, 'a new branch starts at its own first reveal state');
 
-  await page.locator('.atlas-branch-tab').nth(0).click();
+  await page.keyboard.press('ArrowLeft');
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
-  assert.equal(await page.locator('.atlas-reasoning-unit').count(), 1, 'returning to a branch must restore its saved reveal cursor');
+  assert.equal(await page.locator('.atlas-reasoning-unit').count(), 1, 'arrow navigation must return to the previous branch and restore its saved reveal cursor');
 
   const state = await page.evaluate(() => ({
     unfolded: window.__atlasUITest.atlas.attempts['branch-mechanism'].unfoldedCount,
@@ -113,7 +113,7 @@ try {
   assert.ok(state.saves >= 4, 'prediction, answer and reveal movements should be saved');
   assert.deepEqual(errors, [], 'the atlas interaction must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, source labels and per-branch persistence');
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, source labels and per-branch persistence');
 } finally {
   await browser.close();
 }
