@@ -178,16 +178,17 @@ class OpenAIProxyRuntimeTests(unittest.TestCase):
         self.assertEqual(host_status, 403)
 
     def test_oversized_body_is_rejected_before_reading_it(self):
-        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.putrequest("POST", "/__openai/v1/responses")
-        conn.putheader("Host", f"127.0.0.1:{self.port}")
-        conn.putheader("Origin", f"http://127.0.0.1:{self.port}")
-        conn.putheader("Content-Length", str(24 * 1024 * 1024 + 1))
-        conn.endheaders()
-        response = conn.getresponse()
-        status = response.status
-        response.read()
-        conn.close()
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            conn.putrequest("POST", "/__openai/v1/responses")
+            conn.putheader("Host", f"127.0.0.1:{self.port}")
+            conn.putheader("Origin", f"http://127.0.0.1:{self.port}")
+            conn.putheader("Content-Length", str(24 * 1024 * 1024 + 1))
+            conn.endheaders()
+            response = conn.getresponse()
+            status = response.status
+            response.read()
+            conn.close()
         self.assertEqual(status, 413)
 
     def test_unknown_openai_routes_are_not_forwarded(self):
