@@ -176,11 +176,11 @@ try {
       initialNodeId: 'locus-one',
       onSave: () => { saves++; }
     });
+    window.__lociUITest = { atlas, getSaves: () => saves };
     return {
       count: atlas.memoryPlaces.length,
       shelfId: shelf.caseId,
-      markerParentId: hub.memoryMarker && hub.memoryMarker.parent && hub.memoryMarker.parent.userData.shelfId,
-      getSaves: () => saves
+      markerParentId: hub.memoryMarker && hub.memoryMarker.parent && hub.memoryMarker.parent.userData.shelfId
     };
   });
   assert.equal(routeInfo.count, 2);
@@ -196,10 +196,15 @@ try {
   await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
   assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true, 'the attempt locks after reveal');
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i);
-  await memoryPanel.locator('.memory-route-footer button').nth(2).click();
+  await memoryPanel.locator('.memory-route-footer button').nth(1).click();
   assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What changes if the route is removed/i);
   await memoryPanel.locator('.memory-route-footer button').nth(0).click();
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i, 'revealed recall state must persist when returning to a route stop');
+  const lociSaves = await page.evaluate(() => window.__lociUITest.getSaves());
+  assert.ok(lociSaves >= 3, 'the route must save draft, committed recall and reveal state');
+  const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces[0].review);
+  assert.equal(persistedReview.committed, true);
+  assert.equal(persistedReview.revealed, true);
   await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
