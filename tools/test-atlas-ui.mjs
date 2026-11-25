@@ -43,9 +43,14 @@ try {
         { title: prefix + ' · conclude', text: 'Apply the intervention and state the supported consequence.', sourceStepIds: ['S1', 'S2'] }
       ]
     });
+    let memoryAssignments = 0, memoryVisits = 0;
     const atlas = {
       question: 'How do the system components constrain the outcome?',
       attempts: {},
+      memoryPlaces: [{
+        nodeId: 'test-node', caseId: 'test-case', row: 0, slot: 1, rowLabel: 2,
+        shelfName: 'Test bookcase', association: 'A brass key opening a narrow gate'
+      }],
       nodes: [{
         id: 'test-node', title: 'Test concept', question: 'How does this system behave?',
         summary: 'A two-branch test of source-grounded reasoning.',
@@ -62,16 +67,30 @@ try {
     let saves = 0;
     const view = renderAtlasView({
       atlas, part: { title: 'Test part' },
-      onSave: () => { saves++; }
+      onSave: () => { saves++; },
+      onAssignMemoryPlace: () => { memoryAssignments++; },
+      onVisitMemoryRoute: () => { memoryVisits++; }
     });
     view.dataset.testAtlas = 'true';
     document.body.append(view);
-    window.__atlasUITest = { atlas, getSaves: () => saves };
+    window.__atlasUITest = {
+      atlas, getSaves: () => saves,
+      memoryAssignments: () => memoryAssignments,
+      memoryVisits: () => memoryVisits
+    };
   });
 
   const branches = page.locator('.atlas-branch-tab');
   assert.equal(await branches.count(), 2, 'two questions should appear as horizontal branches');
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
+  assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
+  await page.getByRole('button', { name: 'Change this memory place' }).click();
+  await page.getByRole('button', { name: /Visit memory route/ }).click();
+  const memoryCallbacks = await page.evaluate(() => ({
+    assignments: window.__atlasUITest.memoryAssignments(),
+    visits: window.__atlasUITest.memoryVisits()
+  }));
+  assert.deepEqual(memoryCallbacks, { assignments: 1, visits: 1 }, 'the concept atlas must expose assignment and route callbacks');
 
   const prediction = page.locator('.atlas-prediction');
   await prediction.fill('The channel provides a route through the boundary.');
@@ -127,7 +146,65 @@ try {
   assert.ok(state.saves >= 7, 'drafts, confidence, prediction, answer and reveal movements should be saved');
   assert.deepEqual(errors, [], 'the atlas interaction must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, draft preservation, locked predictions, source labels and per-branch persistence');
+  // Exercise the actual walkable-library implementation, not a mock: slots are bookcase-local and the review is
+  // committed before the expected reconstruction is shown.
+  await page.waitForFunction(() => {
+    const h = window.__scriptorium && window.__scriptorium.mode;
+    return !!(h && typeof h.listShelves === 'function' && typeof h.showMemoryRoute === 'function');
+  }, { timeout: 60000 });
+  const routeInfo = await page.evaluate(() => {
+    const app = window.__scriptorium, hub = app.mode;
+    const shelf = hub.listShelves()[0], row = shelf.rows[0], slot = row.slots[0];
+    const makeNode = (id, title, question, summary) => ({
+      id, title, question, summary, stepIds: ['S1', 'S2']
+    });
+    const atlas = {
+      nodes: [
+        makeNode('locus-one', 'Selective boundary', 'What does the boundary allow?', 'The boundary permits only the movements supported by its available routes.'),
+        makeNode('locus-two', 'Available route', 'What changes if the route is removed?', 'Removing the route removes that route-dependent movement.')
+      ],
+      memoryPlaces: [
+        { nodeId: 'locus-one', caseId: shelf.caseId, row: row.row, slot: slot.slot, rowLabel: row.label, shelfName: shelf.title, association: 'A key beside a narrow doorway' },
+        { nodeId: 'locus-two', caseId: shelf.caseId, row: row.row, slot: slot.slot + 1, rowLabel: row.label, shelfName: shelf.title, association: 'A bridge that disappears' }
+      ]
+    };
+    let saves = 0;
+    hub.showMemoryRoute({
+      bookId: app.lib.books[0].id,
+      partId: 'memory-test-part',
+      atlas,
+      initialNodeId: 'locus-one',
+      onSave: () => { saves++; }
+    });
+    return {
+      count: atlas.memoryPlaces.length,
+      shelfId: shelf.caseId,
+      markerParentId: hub.memoryMarker && hub.memoryMarker.parent && hub.memoryMarker.parent.userData.shelfId,
+      getSaves: () => saves
+    };
+  });
+  assert.equal(routeInfo.count, 2);
+  assert.equal(routeInfo.markerParentId, routeInfo.shelfId, 'the visual anchor must be attached to the bookcase, not a world-space coordinate');
+  const memoryPanel = page.locator('.memory-route-panel');
+  await memoryPanel.waitFor();
+  assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What does the boundary allow/i);
+  assert.equal(await memoryPanel.getByText(/Expected reconstruction/).count(), 0, 'the expected answer must be hidden before the recall attempt');
+  await memoryPanel.locator('.memory-route-response').fill('The boundary permits only movement through an available route.');
+  await memoryPanel.locator('.memory-route-confidence').selectOption('High');
+  await memoryPanel.getByRole('button', { name: 'Commit recall' }).click();
+  assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), false, 'a committed attempt remains editable until reveal');
+  await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
+  assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true, 'the attempt locks after reveal');
+  assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i);
+  await memoryPanel.locator('.memory-route-footer button').nth(2).click();
+  assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What changes if the route is removed/i);
+  await memoryPanel.locator('.memory-route-footer button').nth(0).click();
+  assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i, 'revealed recall state must persist when returning to a route stop');
+  await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
+  assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
+  assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
+
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence and loci recall route');
 } finally {
   await browser.close();
 }
