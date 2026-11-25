@@ -52,6 +52,7 @@ const makeAtlas = () => ({
 
 const valid = makeAtlas();
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps), null, 'a complete source-mapped atlas should pass');
+assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true), null, 'newly authored progressive challenges should pass');
 
 const foreignStep = makeAtlas();
 foreignStep.nodes[0].challenges[0].reasoning[1].sourceStepIds = ['S99'];
@@ -70,6 +71,7 @@ assert.match(validateAtlas(tooManyUnits, ['S1', 'S2'], steps), /1–5 ordered re
 const legacy = makeAtlas();
 delete legacy.nodes[0].challenges[0].reasoning;
 assert.equal(validateAtlas(legacy, ['S1', 'S2'], steps), null, 'older saved atlases without reveal units remain valid');
+assert.match(validateAtlas(legacy, ['S1', 'S2'], steps, true), /missing its progressive reasoning path/);
 
 const wrongPartition = makeAtlas();
 wrongPartition.nodes[0].stepIds = ['S1'];
