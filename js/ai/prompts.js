@@ -499,13 +499,13 @@ const fmtInv = inv => {
 };
 export function sectionList(sections, sourceType = 'pdf') {
   const unit = sourceType === 'pptx' ? 'slide ' : 'p. ';
-  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — ${unit}${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory)}` : '')).join('\\n');
+  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — ${unit}${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory)}` : '')).join('\n');
 }
 export function figureList(figures, attached = []) {
   return figures.map(f => {
     const location = f.slide != null ? 'slide ' + f.slide : f.page != null ? 'p. ' + f.page : 'source figure';
     return `${f.id} · ${f.label} · ${location} · "${String(f.caption || '').slice(0, 220)}"` + (attached.includes(f.id) ? ` [image ${attached.indexOf(f.id) + 1} attached]` : '');
-  }).join('\\n');
+  }).join('\n');
 }
 
 // The analysis prompt: one call per part. sections = partSections(...).sections, figures = figure metadata.
