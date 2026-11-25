@@ -198,6 +198,7 @@ function modelContractIssues(plan, sourceStepIds = null) {
   return out;
 }
 export function checkSceneContract(scene, plan, sourceStepIds = null) {
+  if (!plan || plan.version !== 'scriptorium-model-plan/1') return { faults: [], warnings: ['legacy plan has no versioned model contract; structural scene checks only'] };
   const faults = modelContractIssues(plan, sourceStepIds);
   if (!scene || !Array.isArray(scene.bodies)) return { faults: [...faults, 'scene bodies are missing'], warnings: [] };
   const m = plan && plan.modelContract, actors = scene.bodies.filter(b => b && b.role === 'actor');
@@ -206,13 +207,20 @@ export function checkSceneContract(scene, plan, sourceStepIds = null) {
   const actual = actors.map(b => String(b.id));
   declared.filter(id => !actual.includes(id)).forEach(id => faults.push(`planned actor "${id}" is missing from the scene`));
   actual.filter(id => !declared.includes(id)).forEach(id => faults.push(`scene actor "${id}" is absent from the model contract`));
+  if (new Set(actual).size !== actual.length) faults.push('scene actor IDs are not unique');
   const params = new Map((scene.params || []).map(p => [String(p.key), p]));
-  (m.stateVariables || []).filter(v => v && v.controllable).forEach(v => {
+  const controllable = (m.stateVariables || []).filter(v => v && v.controllable);
+  controllable.forEach(v => {
     const p = params.get(String(v.key));
     if (!p) faults.push(`controllable variable "${v.key}" has no matching scene param`);
-    else if (+p.min < +v.min - 1e-9 || +p.max > +v.max + 1e-9 || +p.value < +v.min - 1e-9 || +p.value > +v.max + 1e-9) faults.push(`scene param "${v.key}" exceeds its model-contract range`);
+    else {
+      if (Math.abs(+p.min - +v.min) > 1e-9 || Math.abs(+p.max - +v.max) > 1e-9) faults.push(`scene param "${v.key}" range differs from the model contract`);
+      if (Math.abs(+p.value - +v.initial) > 1e-9) faults.push(`scene param "${v.key}" initial value differs from the model contract`);
+      if (String(p.unit || '') !== String(v.unit || '')) faults.push(`scene param "${v.key}" unit differs from the model contract`);
+    }
   });
-  if (scene.modelContract && JSON.stringify(scene.modelContract) !== JSON.stringify(m)) faults.push('scene.modelContract does not preserve the approved plan contract');
+  params.forEach((p, key) => { if (!controllable.some(v => String(v.key) === key)) faults.push(`scene param "${key}" is absent from modelContract.stateVariables`); });
+  if (JSON.stringify(scene.modelContract) !== JSON.stringify(m)) faults.push('scene.modelContract does not preserve the approved plan contract');
   return { faults, warnings: [] };
 }
 
