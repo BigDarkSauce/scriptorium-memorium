@@ -1,6 +1,6 @@
 # Learning workflow: scan, discover, remember, transfer
 
-Status: progressive question branches are implemented in the semantic atlas. The rapid-scan and loci layers below are the next product-design targets; they are specified here, not claimed as shipped.
+Status: progressive question branches and a first loci-memory route are implemented. The rapid source-scan layer and spaced-review scheduling for loci remain design targets, not shipped features.
 
 The learning surface should let a learner move quickly across a whole source, stop at the question that matters, and then uncover only as much reasoning as they need. It should not turn a PDF into another long article to read.
 
@@ -44,20 +44,20 @@ Each reasoning unit cites one or more exact chain-step IDs. The UI can therefore
 
 ## 2. Loci routes: an optional spatial memory layer
 
-The library and its book rooms already provide stable, navigable places. A loci route should use that spatial structure as an optional second representation of the concept atlas, not as a replacement for the source or a mandatory 3D decoration.
+The library and its book rooms already provide stable, navigable places. The initial loci route uses that spatial structure as an optional second representation of the concept atlas, not as a replacement for the source or a mandatory 3D decoration.
 
 ### What a useful route contains
 
-- **One distinct anchor per important concept or compact concept cluster.** Anchors should be recognisable landmarks in a stable room: a doorway, desk object, shelf bay, lectern or a meaningful diorama object. Avoid assigning many ideas to visually similar objects.
+- **One distinct anchor per important concept or compact concept cluster.** The shipped first version anchors a concept to a stable bookcase ID, row and slot. The marker is attached to the bookcase, so it follows the case when moved or rotated; it marks the position rather than depending on the identity of the scroll occupying it. Doorways, desks, lecterns and meaningful diorama objects are future anchor types.
 - **A concrete association chosen or accepted by the learner.** The association can use shape, movement, scale, sound or a small visual scene. It is a retrieval cue, not evidence that the association is scientifically literal.
-- **A question at the location, not the answer.** Arriving at an anchor asks the learner to reconstruct the concept, relationship or mechanism. The explanation remains hidden until the learner commits or requests help.
+- **A question at the location, not the answer.** The current route shows the concept question and the learner's own association cue. The learner writes a reconstruction and confidence, commits it, and only then reveals the expected reconstruction (the node summary). The full source-linked reasoning remains in the atlas.
 - **A route with an intelligible order.** The order may follow prerequisite, causal or temporal relationships, but the app must say which relationship determines the route. A purely navigational order must not be mistaken for a causal one.
-- **Edit, move, replace and remove.** The learner can change an association, choose another landmark, opt out of imagery or use a verbal/symbolic cue instead. A poor or culturally opaque association should not become a permanent obstacle.
+- **Edit and bypass.** The learner can change the association or choose another shelf location, or simply ignore the optional route and use the atlas. The first version uses a learner-authored short cue; the location does not encode a factual claim.
 - **A source link at every stop.** Each locus points back to its atlas node and source step IDs. The mnemonic may be vivid; the underlying claim still comes from the cited source.
 
 ### Retrieval and spacing
 
-A due review should reuse the existing retrieval ledger rather than create a competing points system. A due card can open the corresponding locus and present its question. The learner predicts first, reveals the expected reconstruction, and then sees the source-linked reasoning path. Missed items return according to the review schedule; route completion, time spent and streaks are not learning scores.
+The current route stores the learner's attempt, confidence and reveal state with its locus, but it does not yet enqueue due reviews or integrate with the existing retrieval ledger. The next scheduling layer should reuse that ledger rather than create a competing points system: a due item would open its locus, present the question, and then return to source-linked reasoning. Missed items should recur according to a reviewed schedule; route completion, time spent and streaks are not learning scores.
 
 A route can be walked without the labels after the learner has practised it. That is the test of whether the place has become a retrieval cue rather than a decorative list. The route remains optional because spatial imagery is not a universal requirement for understanding.
 
