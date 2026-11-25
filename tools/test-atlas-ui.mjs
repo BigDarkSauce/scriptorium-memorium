@@ -127,7 +127,8 @@ try {
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
 
   const sourceScan = page.locator('.atlas-source-scan');
-  await sourceScan.locator('summary').click();
+  await sourceScan.locator('summary').click({ force: true });
+  assert.equal(await sourceScan.evaluate(el => el.open), true, 'the native source-scan disclosure must open');
   assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
   const scanSearch = sourceScan.locator('.atlas-scan-search');
   assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
