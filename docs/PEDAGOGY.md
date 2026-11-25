@@ -36,30 +36,22 @@ The quality gate checks every answer for pasted text, repeated passages and figu
 
 The learner chooses how fine the chain is, but never coarser than the source: *Complete* (every definition, rule, worked example, table, figure, code block and panel item its own step), *Essential* (the spine, at least one step per subsection), or an *exact number* of steps for the chosen pages (raised to the number of subsections if it is smaller).
 
-## 2. Grounding: the literature as a co-author
+## 2. Grounding: source evidence, research and provenance
 
-Inside claude.ai the page uses the viewer's own research connectors (the artifact `mcp` capability):
+Scriptorium uses OpenAI as its primary authoring engine when the local launcher is configured. The browser sends requests to the same-origin local adapter; the adapter reads `OPENAI_API_KEY` from its process environment and forwards requests to the Responses API over HTTPS. The API key is never placed in browser storage or in a prompt. Setup, limits and the optional fallback route are described in [the OpenAI-first setup guide](OPENAI-LOCAL.md).
 
-- **OpenAlex**: an open index of about 250 million scholarly works in every field, with CC0 metadata and DOIs. It is used for search and for **verifying citations** (`resolve_references`).
-- **Consensus**: semantic search over peer-reviewed papers for plain-language research questions, used for empirical claims and measured values.
-- **PubMed**: biomedical and life-science literature.
+**External research is separate from the uploaded source.** The OpenAI Responses API can provide the model with the `web_search` tool. The model decides when it is useful; the app records actual search calls and returned URL citations. A prompt asking for research is not proof that research occurred. The atlas displays those external citations separately from PDF/PPTX subsection, page, slide and figure references. See the [Responses API documentation](https://developers.openai.com/api/docs/guides/tools-web-search).
 
-**While writing** a chain, a diorama or a sub-scroll, Claude gets these as tools (`search_literature`, `search_evidence`, `search_biomedical`). The prompt's GROUNDING rules tell it to:
-- look up the central laws, definitions and every number it will state or plot;
-- copy titles and DOIs exactly from what it found;
-- never invent a DOI;
-- give a range when sources disagree.
+**Optional scholarly connectors.** When an approved host connector is configured, `js/ai/evidence.js` can also query services such as OpenAlex, Consensus and PubMed. These connectors are optional and are not assumed to exist in the standalone local workflow. OpenAlex is used by the explicit **Verify sources** action: a reference is marked verified only after the resolver returns an exact or likely match. Without a successful resolver result, it remains unchecked. The reader can still search and attach a reference manually; a plausible-looking DOI is never treated as verified merely because it appears in model output.
 
-**After writing**, every cited reference is checked against OpenAlex and marked:
-- ✓ found;
-- ? partial match;
-- ✗ not found: the reference may be garbled or invented.
+Grounding rules:
+- look up central laws, definitions and measured values when an appropriate research tool is available;
+- preserve titles, author lists, years, DOIs and URLs returned by the source rather than reconstructing them from memory;
+- distinguish a source statement, an inference, a standard background fact and an externally researched addition;
+- show a range or uncertainty when reliable sources disagree;
+- never claim that a search or citation check happened unless the corresponding tool actually returned a result.
 
-The reader can also press **Find sources** on any step to search OpenAlex and cite a work by hand.
-
-**Without connectors** (outside claude.ai, or with another AI), the same prompts still ask for sources. They show as *unchecked* until verified.
-
-**Corrections over fidelity.** When a book and the established literature disagree, the chain follows the literature, keeps the step, and says what differs in `sourceNote`. Two corrections made while grounding the example library:
+**Corrections over fidelity.** When a book and the established literature disagree, the chain follows the literature, keeps the source wording visible and explains the difference in `sourceNote`. Two corrections made while grounding the example library:
 - *Water cycle:* "warm air holds more water" was replaced by the saturation vapour pressure of water, $e_s(T)$, which rises about 7 % per kelvin. Saturation is a property of water at a given temperature, not of the air (Koutsoyiannis 2012).
 - *Osmosis:* "water diffuses down its own concentration gradient" was replaced by flow driven by the water's chemical potential, mostly as bulk flow through pores (Kramer & Myers 2013; Kedem & Katchalsky 1958). The diorama's lesson text now says that its particle picture shows the direction of flow, not the molecular mechanism.
 
