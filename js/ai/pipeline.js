@@ -356,7 +356,12 @@ async function analyseOne(ctx, P, o) {
   if (!done('dioramas')) { check(o.signal); if (o.dioramas !== false) await buildDioramas(ctx, P, M, { ...o, auto, onStatus: say }); stage('atlas'); save(); show(); }
   if (!P.analysis.atlas || !done('atlas')) {
     check(o.signal); stage('atlas');
-    P.analysis.atlas = await compileAtlas({ book: bookName(ctx), part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, researchAudit, onStatus: say });
+    // The atlas itself is persisted before the slower grouped-scene authoring pass. If that pass is interrupted,
+    // resume the existing concept graph and fill its missing diorama links instead of paying to recompile the map.
+    if (!P.analysis.atlas) {
+      P.analysis.atlas = await compileAtlas({ book: bookName(ctx), part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, researchAudit, onStatus: say });
+      save(); show();
+    }
     if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, onStatus: say });
     stage('done'); save(); show();
   }
