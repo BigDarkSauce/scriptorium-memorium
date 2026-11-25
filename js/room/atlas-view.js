@@ -89,6 +89,19 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
   root.append(mapWrap);
   const detail = el('div', { class: 'atlas-detail' }); root.append(detail);
 
+  // Keyboard control is scoped to an active challenge, never to the whole app or text-editing fields.
+  root.addEventListener('keydown', e => {
+    const card = e.target && e.target.closest ? e.target.closest('.atlas-challenge-card') : null;
+    if (!card || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.code === 'Space' && !e.repeat) {
+      const next = card.querySelector('.atlas-unfold-next:not(:disabled)');
+      if (next) { e.preventDefault(); next.click(); }
+    } else if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'z') {
+      const back = card.querySelector('.atlas-unfold-back');
+      if (back) { e.preventDefault(); back.click(); }
+    }
+  });
+
   function select(id) {
     if (!byId.has(id)) return;
     activeId = id; atlas.selectedNodeId = id;
@@ -163,52 +176,194 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       customTa, el('div', { class: 'row wrap' }, [add, status])
     ]));
 
-    // Controlled incompleteness: commit a prediction before showing the worked answer and feedback.
+    // Question branches are a horizontal selector, not a vertical stack. Each branch owns its prediction
+    // and reveal cursor; switching branches never advances or resets another branch.
     const challenges = node.challenges || [];
     if (challenges.length) {
-      const block = el('div', { class: 'atlas-challenge' }, [el('div', { class: 'atlas-section-label', text: 'PREDICT BEFORE REVEALING' })]);
-      challenges.forEach(ch => {
+      const block = el('div', { class: 'atlas-challenge' }, [
+        el('div', { class: 'atlas-section-label', text: 'QUESTION BRANCHES · CHOOSE A GAP TO INVESTIGATE' })
+      ]);
+      const validSelected = challenges.some(ch => ch.id === atlas.selectedChallengeId);
+      if (!validSelected) atlas.selectedChallengeId = challenges[0].id;
+      const rail = el('div', { class: 'atlas-branch-rail', role: 'tablist', 'aria-label': 'Question branches' });
+      challenges.forEach((ch, i) => {
         const saved = atlas.attempts[ch.id] || {};
-        const body = el('div', { class: 'atlas-challenge-card' });
-        body.append(
-          el('div', { class: 'atlas-challenge-type', text: titleCase(ch.type) + ' incompleteness' }),
-          el('h4', { html: mathHTML(ch.question) }),
-          el('p', { class: 'atlas-challenge-stimulus', html: mathHTML(ch.stimulus || '') })
-        );
-        if (ch.hint) body.append(el('details', { class: 'atlas-hint' }, [el('summary', { text: 'A small hint' }), el('p', { html: mathHTML(ch.hint) })]));
-        const response = el('textarea', { class: 'field atlas-prediction', rows: 3, placeholder: 'Generate your own answer before revealing the explanation…' });
-        response.value = saved.response || '';
-        const confidence = el('select', { class: 'field small atlas-confidence', 'aria-label': 'Confidence in prediction' }, [
-          el('option', { value: '', text: 'Confidence?' }),
-          ...['Low', 'Medium', 'High'].map(v => el('option', { value: v, text: v, selected: saved.confidence === v }))
-        ]);
-        const commit = el('button', { class: 'btn primary small', type: 'button', text: saved.committed ? 'Update prediction' : 'Commit prediction', disabled: !response.value.trim(), onclick: () => {
-          atlas.attempts[ch.id] = { ...saved, response: response.value.trim(), confidence: confidence.value || '', committed: true, at: new Date().toISOString() };
-          onSave && onSave(); toast('Prediction committed. Now compare it with the explanation.');
-          renderDetail();
-        } });
-        response.addEventListener('input', () => { commit.disabled = !response.value.trim(); });
-        body.append(response, el('div', { class: 'row wrap' }, [confidence, commit]));
-        if (saved.committed) {
-          if (saved.revealed) {
-            body.append(el('div', { class: 'atlas-feedback' }, [
-              el('b', { text: 'Expected reconstruction' }), el('p', { html: mathHTML(ch.answer) }),
-              el('b', { text: 'Why this follows' }), el('p', { html: mathHTML(ch.why) }),
-              el('b', { text: 'Feedback' }), el('p', { html: mathHTML(ch.feedback || 'Compare the causal and relational structure of your answer with the explanation.') })
-            ]));
-            const ref = (node.dioramaRefs || [])[0];
-            if (ref && ch.type === 'structural' && (ch.missingBodyIds || []).length) {
-              body.append(el('button', { class: 'btn small', type: 'button', text: 'Inspect the incomplete structure', onclick: () => onOpenDiorama && onOpenDiorama(ref, { challenge: ch, incomplete: true }) }));
-              body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the complete diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
-            } else if (ref) {
-              body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the related diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
-            }
-          } else {
-            body.append(el('button', { class: 'btn small', type: 'button', text: 'Reveal answer and feedback', onclick: () => { atlas.attempts[ch.id] = { ...saved, revealed: true }; onSave && onSave(); renderDetail(); } }));
+        const status = saved.revealed ? 'revealed' : saved.committed ? 'prediction saved' : 'unopened';
+        const tab = el('button', {
+          class: 'atlas-branch-tab' + (ch.id === atlas.selectedChallengeId ? ' active' : ''),
+          type: 'button', role: 'tab', 'aria-selected': String(ch.id === atlas.selectedChallengeId),
+          'aria-controls': 'atlas-challenge-active',
+          onclick: () => {
+            atlas.selectedChallengeId = ch.id;
+            onSave && onSave();
+            renderDetail();
           }
-        }
-        block.append(body);
+        }, [
+          el('span', { class: 'atlas-branch-index', text: String(i + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-branch-name' }, [
+            el('b', { text: titleCase(ch.type) }),
+            el('small', { text: status })
+          ])
+        ]);
+        rail.append(tab);
       });
+      block.append(rail);
+
+      const ch = challenges.find(item => item.id === atlas.selectedChallengeId) || challenges[0];
+      const saved = atlas.attempts[ch.id] || {};
+      const reasoning = Array.isArray(ch.reasoning) && ch.reasoning.length
+        ? ch.reasoning
+        : [{ title: 'Why this follows', text: ch.why || ch.answer, sourceStepIds: (node.stepIds || []).slice(0, 1) }];
+      const revealedCount = Math.max(0, Math.min(reasoning.length, Number(saved.unfoldedCount) || 0));
+      const body = el('div', {
+        class: 'atlas-challenge-card',
+        id: 'atlas-challenge-active',
+        role: 'tabpanel',
+        'aria-label': titleCase(ch.type) + ' question branch'
+      });
+      body.append(
+        el('div', { class: 'atlas-challenge-type', text: titleCase(ch.type) + ' · BRANCH ' + (challenges.indexOf(ch) + 1) + ' OF ' + challenges.length }),
+        el('h4', { html: mathHTML(ch.question) }),
+        el('p', { class: 'atlas-challenge-stimulus', html: mathHTML(ch.stimulus || '') })
+      );
+      if (ch.hint) body.append(el('details', { class: 'atlas-hint' }, [
+        el('summary', { text: 'A small hint' }),
+        el('p', { html: mathHTML(ch.hint) })
+      ]));
+
+      const response = el('textarea', {
+        class: 'field atlas-prediction',
+        rows: 3,
+        placeholder: 'Commit to your own reconstruction before revealing the answer…',
+        'aria-label': 'Your prediction'
+      });
+      response.value = saved.response || '';
+      const confidence = el('select', {
+        class: 'field small atlas-confidence',
+        'aria-label': 'Confidence in prediction'
+      }, [
+        el('option', { value: '', text: 'Confidence?' }),
+        ...['Low', 'Medium', 'High'].map(v => el('option', { value: v, text: v, selected: saved.confidence === v }))
+      ]);
+      const commit = el('button', {
+        class: 'btn primary small',
+        type: 'button',
+        text: saved.committed ? 'Update prediction' : 'Commit prediction',
+        disabled: !response.value.trim(),
+        onclick: () => {
+          const current = atlas.attempts[ch.id] || {};
+          atlas.attempts[ch.id] = {
+            ...current,
+            response: response.value.trim(),
+            confidence: confidence.value || '',
+            committed: true,
+            at: new Date().toISOString()
+          };
+          onSave && onSave();
+          toast('Prediction saved. Reveal the answer when you are ready.');
+          renderDetail();
+          const field = detail.querySelector('.atlas-prediction');
+          if (field) field.focus();
+        }
+      });
+      response.addEventListener('input', () => { commit.disabled = !response.value.trim(); });
+      body.append(response, el('div', { class: 'row wrap' }, [confidence, commit]));
+
+      if (saved.committed) {
+        if (saved.revealed) {
+          body.append(el('div', { class: 'atlas-feedback' }, [
+            el('b', { text: 'Expected reconstruction' }),
+            el('p', { html: mathHTML(ch.answer) }),
+            el('b', { text: 'Feedback' }),
+            el('p', { html: mathHTML(ch.feedback || 'Compare the causal and relational structure of your prediction with the expected reconstruction.') })
+          ]));
+
+          const path = el('div', { class: 'atlas-reasoning-path' }, [
+            el('div', { class: 'atlas-reasoning-head' }, [
+              el('span', { class: 'atlas-section-label', text: 'REASONING PATH' }),
+              el('span', { class: 'atlas-reasoning-count', text: revealedCount + ' / ' + reasoning.length + ' revealed' })
+            ])
+          ]);
+          reasoning.slice(0, revealedCount).forEach((unit, i) => {
+            const sourceIds = Array.isArray(unit.sourceStepIds) ? unit.sourceStepIds : [];
+            path.append(el('article', { class: 'atlas-reasoning-unit' }, [
+              el('div', { class: 'atlas-reasoning-unit-head' }, [
+                el('span', { class: 'atlas-reasoning-number', text: String(i + 1).padStart(2, '0') }),
+                el('b', { text: txt(unit.title || 'Reasoning move', 100) })
+              ]),
+              el('p', { html: mathHTML(unit.text || '') }),
+              sourceIds.length ? el('div', { class: 'atlas-reasoning-sources' }, [
+                el('span', { text: 'GROUNDED IN' }),
+                ...sourceIds.map(id => el('span', { class: 'atlas-source-chip', text: String(id) }))
+              ]) : null
+            ]));
+          });
+          if (revealedCount < reasoning.length) {
+            const next = reasoning[revealedCount];
+            path.append(el('div', { class: 'atlas-unfold-preview' }, [
+              el('span', { class: 'atlas-reasoning-number', text: String(revealedCount + 1).padStart(2, '0') }),
+              el('span', { text: 'Next: ' + txt(next.title || 'the next reasoning move', 100) })
+            ]));
+          } else {
+            path.append(el('p', { class: 'atlas-reasoning-complete', text: 'All reasoning units in this branch are now visible.' }));
+          }
+          const controls = el('div', { class: 'atlas-unfold-controls' });
+          if (revealedCount > 0) controls.append(el('button', {
+            class: 'btn small atlas-unfold-back',
+            type: 'button',
+            text: '← Back one reveal',
+            title: 'Ctrl+Z',
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, unfoldedCount: Math.max(0, (Number(current.unfoldedCount) || 0) - 1) };
+              onSave && onSave();
+              renderDetail();
+              const focus = detail.querySelector('.atlas-unfold-next') || detail.querySelector('.atlas-unfold-back');
+              focus && focus.focus();
+            }
+          }));
+          controls.append(el('button', {
+            class: 'btn primary small atlas-unfold-next',
+            type: 'button',
+            text: revealedCount < reasoning.length ? 'UNFOLD · ' + (revealedCount + 1) + ' / ' + reasoning.length : 'UNFOLD COMPLETE',
+            disabled: revealedCount >= reasoning.length,
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, unfoldedCount: Math.min(reasoning.length, (Number(current.unfoldedCount) || 0) + 1) };
+              onSave && onSave();
+              renderDetail();
+              const focus = detail.querySelector('.atlas-unfold-next') || detail.querySelector('.atlas-unfold-back');
+              focus && focus.focus();
+            }
+          }));
+          path.append(controls);
+          path.append(el('p', { class: 'atlas-keyboard-hint', text: 'Space: unfold one unit · Ctrl+Z: step back · switching branches keeps each path where you left it' }));
+          body.append(path);
+
+          const ref = (node.dioramaRefs || [])[0];
+          if (ref && ch.type === 'structural' && (ch.missingBodyIds || []).length) {
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Inspect the incomplete structure', onclick: () => onOpenDiorama && onOpenDiorama(ref, { challenge: ch, incomplete: true }) }));
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the complete diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+          } else if (ref) {
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the related diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+          }
+        } else {
+          body.append(el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Reveal answer and begin unfolding',
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, revealed: true, unfoldedCount: 0 };
+              onSave && onSave();
+              renderDetail();
+              const next = detail.querySelector('.atlas-unfold-next');
+              next && next.focus();
+            }
+          }));
+        }
+      }
+      block.append(body);
       detail.append(block);
     }
 
