@@ -79,11 +79,13 @@ try {
 
   $asset = Invoke-SmokeRequest -Path '/css/app.css'
   Assert-True ([int]$asset.StatusCode -eq 200) 'GET /css/app.css must serve a static asset'
-  Assert-True ($asset.Headers['Content-Type'] -like 'text/css*') 'CSS assets must have a CSS content type'
+  $assetContentType = [string](@($asset.Headers['Content-Type'])[0])
+  Assert-True ($assetContentType -like 'text/css*') 'CSS assets must have a CSS content type'
 
   $relay = Invoke-SmokeRequest -Path '/__relay/info'
   Assert-True ([int]$relay.StatusCode -eq 200) 'GET /__relay/info must succeed'
-  Assert-True ($relay.Headers['X-Scriptorium-Relay'] -eq '1.0.0') 'the relay discovery header must be present'
+  $relayVersion = [string](@($relay.Headers['X-Scriptorium-Relay'])[0])
+  Assert-True ($relayVersion -eq '1.0.0') 'the relay discovery header must be present'
   $relayInfo = $relay.Content | ConvertFrom-Json
   Assert-True ($relayInfo.name -eq 'scriptorium-relay') 'the relay discovery endpoint must identify the local relay'
 
