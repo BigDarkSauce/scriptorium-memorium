@@ -40,7 +40,7 @@ const net = async (url, init) => {
 export const PROVIDERS = [
   // Local OpenAI API adapter: the API key remains in OPENAI_API_KEY on the local Python server.
   // No key or billable request is sent until that server is configured and the user starts an AI task.
-  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', fixed: ['gpt-6.2-astra'], local: true, json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
+  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', local: true, json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
 
   // no key needed: work from the first minute (slow: small per-IP limits)
   { id: 'ovh', name: 'OVHcloud AI Endpoints', base: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', key: 'optional', keyUrl: 'https://endpoints.ai.cloud.ovh.net/', rpm: 2, rpd: 2000, perModel: true, note: 'No key: 2 requests a minute per model, from EU data centres.' },
@@ -64,6 +64,7 @@ export const PROVIDERS = [
 // How well a model family writes long, exact JSON in this app's formats (higher is better). Ordered from the live tests
 // (js/ai/freetest.js) and the public leaderboards; unknown names get 40, so a new model is tried but after the known.
 const RANK = [
+  [/gpt-6\\.2-astra/i, 100], [/gpt-6\\.2-sol/i, 96],
   [/gemini-[3-9][\d.]*-pro|gemini-2\.5-pro/i, 97], [/gemini-[3-9][\d.]*-flash(?!-lite)/i, 95], [/qwen3[\d.]*-(397|235)b|qwen3\.\d-max/i, 91], [/deepseek-v4(\.\d)?-pro|deepseek-v4(?![\w.-]*flash)/i, 90],
   [/gpt-oss-120b/i, 88], [/glm-5/i, 88], [/kimi-k2/i, 86], [/deepseek-v4[\w.:-]*flash|deepseek-v3/i, 85], [/gemini-2\.5-flash(?!-lite)/i, 85], [/nemotron-3-ultra/i, 84],
   [/mistral-(medium|large)|magistral-medium/i, 82], [/llama-4-maverick/i, 80], [/command-a(?![\w-]*(vision|reasoning))/i, 76], [/llama-3[._]3-70b/i, 75], [/gemma-4-(31|26)b/i, 74],
