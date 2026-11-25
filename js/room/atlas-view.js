@@ -120,10 +120,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       ]);
       set.append(b);
     });
-    else if (node.visualKind === 'diagram' && node.generatedFigure) {
-      const figureHost = el('div', { class: 'atlas-generated-figure' });
-      renderFigure(node.generatedFigure, figureHost);
-      set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented as an explanatory 2D figure rather than an artificial 3D simulation.' }), figureHost);
+    else if (node.visualKind === 'diagram' || (node.dioramaSet || []).some(d => d.medium === '2d')) {
+      set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented through explanatory diagrams rather than an artificial 3D simulation. The related figures are shown below.' }));
     } else {
       set.append(el('div', { class: 'atlas-empty-visual', text: 'No authored 3D scene is linked to this node yet. Add a diorama request below.' }));
     }
@@ -131,7 +129,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
 
     // Carry source-linked explanatory visuals into the atlas. A node can have both 3D dioramas and 2D diagrams;
     // these are complementary views rather than mutually exclusive display modes.
-    const figures = node.explanatoryFigures || [];
+    const figures = (node.explanatoryFigures && node.explanatoryFigures.length)
+      ? node.explanatoryFigures
+      : (node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
     if (figures.length) {
       const figureSet = el('div', { class: 'atlas-explanatory-figures' }, [
         el('div', { class: 'atlas-section-label', text: 'RELATED EXPLANATORY FIGURES' })
