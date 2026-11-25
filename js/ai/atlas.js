@@ -165,6 +165,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
   }
   // Ground every map node in exact source chain and subsection IDs; AI-authored source claims never overwrite these records.
   const byStep = new Map((analysis.chain || []).map(st => [String(st.id), st]));
+  const bySection = new Map((sections || []).map(sec => [String(sec.id), sec]));
   authored.nodes = authored.nodes.map(n => {
     const stepIds = unique(n.stepIds).filter(id => byStep.has(id));
     const subIds = unique(stepIds.map(id => byStep.get(id).section).filter(Boolean));
@@ -181,7 +182,14 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       dioramaRefs: dioramas,
       sourceRefs: {
         stepIds, subsectionIds: subIds,
-        pages: unique(refs.flatMap(st => st.pages || []).filter(Number.isFinite)).map(Number),
+        pages: unique(refs.flatMap(st => {
+          const sec = bySection.get(String(st.section));
+          return [...(st.pages || []), ...(sec ? [sec.startPage, sec.endPage] : [])];
+        }).filter(Number.isFinite)).map(Number),
+        pageSpans: subIds.map(id => {
+          const sec = bySection.get(String(id));
+          return sec ? { subsectionId: String(id), startPage: Number(sec.startPage), endPage: Number(sec.endPage) } : null;
+        }).filter(Boolean),
         figureIds: unique(refs.flatMap(st => st.figures || [])),
         externalSources: refs.flatMap(st => (st.sources || []).map(s => ({ title: s.title || '', doi: s.doi || '', url: s.url || '' })))
       }
