@@ -109,6 +109,17 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
   if (want.length !== got.length || want.some(id => !got.includes(id))) return 'the atlas does not partition all source steps (missing or invented step IDs)';
   const edgeTypes = new Set(['prerequisite','part-of','causes','enables','constrains','transforms-into','regulates','contrasts-with','evidence-for','temporal-before','spatial-within','application-of']);
   for (const e of A.edges) if (!e || !ids.has(String(e.from)) || !ids.has(String(e.to)) || e.from === e.to || !edgeTypes.has(String(e.type)) || !clean(e.label, 120)) return 'edge has an invalid endpoint, type or relationship label';
+  if (A.memoryPlaces != null && !Array.isArray(A.memoryPlaces)) return 'atlas memoryPlaces must be an array';
+  const memoryNodes = new Set(), memoryLocations = new Set();
+  for (const place of A.memoryPlaces || []) {
+    if (!place || !clean(place.nodeId, 80) || !ids.has(String(place.nodeId))) return 'memory place refers to a concept node not present in the atlas';
+    if (memoryNodes.has(String(place.nodeId))) return 'atlas has more than one memory place for concept node: ' + place.nodeId;
+    memoryNodes.add(String(place.nodeId));
+    if (!clean(place.caseId, 100) || !Number.isInteger(+place.row) || +place.row < 0 || !Number.isInteger(+place.slot) || +place.slot < 0 || !clean(place.association, 240)) return 'memory place has an invalid bookcase, row, slot or association: ' + place.nodeId;
+    const location = [String(place.caseId), String(+place.row), String(+place.slot)].join(':');
+    if (memoryLocations.has(location)) return 'two concept nodes share the same loci location: ' + place.caseId + ' row ' + place.row + ' slot ' + place.slot;
+    memoryLocations.add(location);
+  }
   return null;
 }
 
