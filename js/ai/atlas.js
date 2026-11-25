@@ -225,25 +225,96 @@ export function sourceVisualFigure(record) {
   return checked.ok ? checked.fig : null;
 }
 
+const VIEW_STAGES = new Set(['curiosity', 'orientation', 'decomposition', 'inspection', 'mechanism', 'intuition', 'reconstruction', 'understanding']);
+
 /** Build only the diagram entries selected by this concept's own view plan. */
 export function selectedSourceVisualFigures(node, sourceSteps = [], sections = []) {
-  const selected = new Set(unique((node && node.dioramaSet || []).flatMap(view =>
-    Array.isArray(view && view.sourceVisualIds) ? view.sourceVisualIds : []
-  )));
-  if (!selected.size) return [];
-  return sourceVisualEvidence(node && node.stepIds || [], sourceSteps, sections).visuals
-    .filter(record => selected.has(record.id))
-    .map(record => {
+  const records = new Map(sourceVisualEvidence(node && node.stepIds || [], sourceSteps, sections).visuals.map(v => [v.id, v]));
+  const out = [];
+  (node && node.dioramaSet || []).forEach((view, index) => {
+    if (!view || view.medium !== '2d') return;
+    const viewId = String(view.viewId || ('view-' + (index + 1)));
+    for (const id of Array.isArray(view.sourceVisualIds) ? view.sourceVisualIds : []) {
+      const record = records.get(String(id));
+      if (!record) continue;
       const figure = sourceVisualFigure(record);
-      return figure ? {
+      if (!figure) continue;
+      out.push({
+        viewId, viewOrder: Number(view.order) || index + 1,
+        viewStage: VIEW_STAGES.has(view.stage) ? view.stage : 'orientation',
         stepId: record.stepIds[0] || String((node.stepIds || [])[0] || ''),
-        title: clean(record.label || record.kind, 100),
-        purpose: record.kind === 'chart'
+        title: clean(view.title || record.label || record.kind, 100),
+        purpose: clean(view.purpose || (record.kind === 'chart'
           ? 'A faithful 2D reconstruction of the source chart cache.'
-          : 'A 2D reconstruction of the source SmartArt nodes and connections.',
-        figure, sourceVisualId: record.id, sourceSlide: record.slide, sourceKind: record.kind
-      } : null;
-    }).filter(Boolean);
+          : 'A 2D reconstruction of the source SmartArt nodes and connections.'), 220),
+        figure, sourceVisualId: record.id, sourceSlide: record.slide, sourceKind: record.kind,
+        sourceVisualIds: [record.id], sourceFigureIds: Array.isArray(view.sourceFigureIds) ? view.sourceFigureIds.slice() : [],
+        sourceStepIds: record.stepIds.slice()
+      });
+    }
+  });
+  return out;
+}
+
+/**
+ * Build an ordered pathway across the concept's planned views. All 3D view intentions share
+ * the authored interactive scene; 2D views remain distinct so evidence, mechanism and
+ * comparison diagrams can be inspected in the order the learning plan intended.
+ */
+export function buildConceptVisualSequence(node) {
+  const plans = (node && Array.isArray(node.dioramaSet) ? node.dioramaSet : []).map((view, index) => ({
+    ...view,
+    viewId: String(view.viewId || ('view-' + (index + 1))),
+    order: Number.isInteger(+view.order) && +view.order > 0 ? +view.order : index + 1,
+    stage: VIEW_STAGES.has(view.stage) ? view.stage : 'orientation'
+  })).sort((a, b) => a.order - b.order);
+  const figures = Array.isArray(node && node.explanatoryFigures) ? node.explanatoryFigures : [];
+  const sequence = [], consumed = new Set();
+  let sceneAdded = false;
+  for (const view of plans) {
+    if (view.medium === '3d') {
+      if (sceneAdded) continue;
+      sceneAdded = true;
+      const sceneViews = plans.filter(x => x.medium === '3d');
+      const dioramaRef = (node.dioramaRefs || [])[0] || null;
+      sequence.push({
+        id: String((node.id || 'concept') + '-interactive-3d'),
+        viewId: view.viewId, viewIds: sceneViews.map(x => x.viewId),
+        order: view.order, stage: view.stage,
+        title: 'Interactive 3D diorama',
+        purpose: sceneViews.map(x => x.purpose).filter(Boolean).join(' → ').slice(0, 600),
+        medium: '3d', status: dioramaRef ? 'ready' : 'planned',
+        dioramaRef, figures: []
+      });
+      continue;
+    }
+    const entries = figures.filter((figure, index) => {
+      const linked = figure.viewId === view.viewId ||
+        (Array.isArray(view.sourceVisualIds) && figure.sourceVisualId && view.sourceVisualIds.includes(figure.sourceVisualId));
+      if (linked) consumed.add(index);
+      return linked;
+    });
+    sequence.push({
+      id: view.viewId, viewId: view.viewId, order: view.order, stage: view.stage,
+      title: clean(view.title || 'Explanatory view', 100),
+      purpose: clean(view.purpose || '', 220),
+      medium: '2d', status: entries.length ? 'ready' : 'planned',
+      sourceFigureIds: Array.isArray(view.sourceFigureIds) ? view.sourceFigureIds : [],
+      sourceVisualIds: Array.isArray(view.sourceVisualIds) ? view.sourceVisualIds : [],
+      sourceStepIds: unique(entries.flatMap(x => x.sourceStepIds || (x.stepId ? [x.stepId] : []))),
+      figures: entries
+    });
+  }
+  const supporting = figures.filter((_, index) => !consumed.has(index));
+  if (supporting.length) sequence.push({
+    id: String((node && node.id || 'concept') + '-supporting-figures'),
+    viewId: 'supporting-figures', order: plans.length + 1,
+    stage: 'understanding', title: 'Supporting explanations',
+    purpose: 'Additional figures linked to the concept’s validated source steps.',
+    medium: '2d', status: 'ready', sourceStepIds: unique(supporting.flatMap(x => x.sourceStepIds || (x.stepId ? [x.stepId] : []))),
+    figures: supporting
+  });
+  return sequence;
 }
 
 export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [] }) {
@@ -282,7 +353,7 @@ TASK
 2. Create an appropriate number of topic nodes for the information's true breadth and depth. Prefer a small map of coherent, sufficiently deep concepts over a long flat list. Split a node when its steps explain meaningfully different mechanisms, states, scales or questions. Merge nodes only when they genuinely form one explanatory unit. Preserve prerequisites and dependencies.
 3. Assign every supplied step ID to exactly one node. No invented or missing step IDs. The map must account for the complete source chain.
 4. Create typed directed edges between nodes: prerequisite, part-of, causes, enables, constrains, transforms-into, regulates, contrasts-with, evidence-for, temporal-before, spatial-within, or application-of. Direction must mean something; do not add decorative edges. Include a short relationship label.
-5. For each node, formulate one strong learner-facing question and a short explanation of the conceptual territory (not an essay). Also propose a diorama set: the 3D / 2D explanatory views that would make the concept intelligible, what each view must show, and what can be manipulated. Each view MUST include sourceFigureIds and sourceVisualIds (arrays; use [] when no directly relevant source asset exists). Select sourceFigureIds only from the SOURCE FIGURE INDEX and only when the figure is referenced by a step assigned to this node. Select sourceVisualIds only from the STRUCTURED SOURCE VISUAL INDEX and only when the source visual shares a slide with one of the node's validated steps. Never invent IDs or infer a relationship from visual similarity. A same-slide link is a locator, not proof that the visual explains every step. Never force 3D for intrinsically abstract material: use an explanatory 2D map/diagram when spatial simulation would mislead. The app will connect these intentions to authored dioramas.
+5. For each node, formulate one strong learner-facing question and a short explanation of the conceptual territory (not an essay). Also propose a diorama set: the 3D / 2D explanatory views that would make the concept intelligible, what each view must show, and what can be manipulated. Each view MUST include a unique stable viewId, a unique integer order from 1–6, a teaching stage and sourceFigureIds/sourceVisualIds arrays (use [] when no directly relevant source asset exists). Order the views as a progression: orientation before inspection, evidence before interpretation, mechanism before reconstruction/prediction. Distinct views must add a new explanatory job rather than repeat the same drawing. All 3D views for one concept are combined into one interactive scene; 2D views become separate inspectable figures. Select sourceFigureIds only from the SOURCE FIGURE INDEX and only when the figure is referenced by a step assigned to this node. Select sourceVisualIds only from the STRUCTURED SOURCE VISUAL INDEX and only when the source visual shares a slide with one of the node's validated steps. Never invent IDs or infer a relationship from visual similarity. A same-slide link is a locator, not proof that the visual explains every step. Never force 3D for intrinsically abstract material: use an explanatory 2D map/diagram when spatial simulation would mislead. The app will connect these intentions to authored dioramas.
 6. Add controlled generative incompleteness. Select one to three useful challenges across the part, only where the missing information is inferable. Use the six types:
    - structural: conceal a meaningful component of a structure;
    - mechanistic: show an initial and final state, with the mechanism withheld;
@@ -298,7 +369,7 @@ Return ONLY JSON:
  "version":"scriptorium-atlas/1",
  "question":"the central question this part resolves",
  "nodes":[
-  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"title":"view title","purpose":"explanatory job","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d","sourceFigureIds":["only exact, indexed IDs referenced by this node's steps; otherwise []"],"sourceVisualIds":["only exact structured visual IDs on a slide mapped to this node; otherwise []"]}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","reasoning":[{"title":"first inferential move","text":"one short reasoning unit","sourceStepIds":["S1"]},{"title":"next inferential move","text":"the next linked unit","sourceStepIds":["S2"]}],"missingBodyIds":["only grounded IDs, otherwise []"]}]}
+  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"viewId":"stable-kebab-id","order":1,"stage":"curiosity|orientation|decomposition|inspection|mechanism|intuition|reconstruction|understanding","title":"view title","purpose":"the distinct explanatory job this view performs","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d","sourceFigureIds":["only exact, indexed IDs referenced by this node's steps; otherwise []"],"sourceVisualIds":["only exact structured visual IDs on a slide mapped to this node; otherwise []"]}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","reasoning":[{"title":"first inferential move","text":"one short reasoning unit","sourceStepIds":["S1"]},{"title":"next inferential move","text":"the next linked unit","sourceStepIds":["S2"]}],"missingBodyIds":["only grounded IDs, otherwise []"]}]}
  ],
  "edges":[{"from":"node-id","to":"node-id","type":"prerequisite|part-of|causes|enables|constrains|transforms-into|regulates|contrasts-with|evidence-for|temporal-before|spatial-within|application-of","label":"short precise relation"}],
  "uncertainties":["explicit limits or ambiguity in the source"],
@@ -327,7 +398,9 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
     ids.add(n.id);
     if (!clean(n.title, 100) || !clean(n.question, 300) || !clean(n.summary, 500) || !Array.isArray(n.stepIds) || !n.stepIds.length) return 'node is missing a title, question, summary or stepIds: ' + n.id;
     assigned.push(...n.stepIds.map(String));
-    if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations) || (requireVisualEvidence && (!Array.isArray(v.sourceFigureIds) || !Array.isArray(v.sourceVisualIds))))) return 'node is missing a complete explanatory-view plan: ' + n.id;
+    if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.length > 6 || n.dioramaSet.some(v => !v || !/^[a-z0-9][a-z0-9-]{1,47}$/.test(String(v.viewId || '')) || !Number.isInteger(+v.order) || +v.order < 1 || +v.order > 6 || !VIEW_STAGES.has(v.stage) || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations) || (requireVisualEvidence && (!Array.isArray(v.sourceFigureIds) || !Array.isArray(v.sourceVisualIds))))) return 'node is missing a complete ordered explanatory-view plan: ' + n.id;
+    if (new Set(n.dioramaSet.map(v => v.viewId)).size !== n.dioramaSet.length) return 'concept node has duplicate viewId values: ' + n.id;
+    if (new Set(n.dioramaSet.map(v => +v.order)).size !== n.dioramaSet.length) return 'concept node has duplicate view order values: ' + n.id;
     if (requireVisualEvidence) {
       const linkedFigureIds = new Set(sourceFigureEvidence(n.stepIds, sourceSteps, sourceFigures).figures.map(f => f.id));
       const linkedVisualIds = new Set(sourceVisualEvidence(n.stepIds, sourceSteps, sourceSections).visuals.map(v => v.id));
@@ -503,10 +576,20 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
     return {
       ...n,
       stepIds, subsectionIds: subIds,
+      dioramaSet: (n.dioramaSet || []).map((view, i) => ({
+        ...view, viewId: String(view.viewId), order: +view.order, stage: view.stage
+      })).sort((x, y) => x.order - y.order),
       explanatoryFigures: uniqueFigures,
       title: clean(n.title, 100), question: clean(n.question, 300), summary: clean(n.summary, 500),
       position: { x: Math.max(4, Math.min(96, +n.position.x)), y: Math.max(4, Math.min(96, +n.position.y)) },
       dioramaRefs: dioramas,
+      visualSequence: buildConceptVisualSequence({
+        ...n, dioramaSet: (n.dioramaSet || []).map((view, i) => ({
+          ...view, viewId: String(view.viewId || ('view-' + (i + 1))),
+          order: Number(view.order) || i + 1, stage: view.stage || 'orientation'
+        })),
+        explanatoryFigures: uniqueFigures, dioramaRefs: dioramas
+      }),
       sourceRefs: {
         stepIds, subsectionIds: subIds,
         pages: unique(refs.flatMap(st => {

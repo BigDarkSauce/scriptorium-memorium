@@ -136,6 +136,27 @@
                     "type": "string"
                   },
                   "description": "Exact structured chart/SmartArt source visual IDs from a slide mapped to validated steps in this concept."
+                },
+                "viewId": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{1,47}$"
+                },
+                "order": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6
+                },
+                "stage": {
+                  "enum": [
+                    "curiosity",
+                    "orientation",
+                    "decomposition",
+                    "inspection",
+                    "mechanism",
+                    "intuition",
+                    "reconstruction",
+                    "understanding"
+                  ]
                 }
               }
             }
@@ -536,6 +557,141 @@
                     "chart",
                     "smartart",
                     "visual"
+                  ]
+                },
+                "viewId": {
+                  "type": "string"
+                },
+                "viewOrder": {
+                  "type": "integer"
+                },
+                "viewStage": {
+                  "enum": [
+                    "curiosity",
+                    "orientation",
+                    "decomposition",
+                    "inspection",
+                    "mechanism",
+                    "intuition",
+                    "reconstruction",
+                    "understanding"
+                  ]
+                },
+                "sourceFigureIds": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sourceVisualIds": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sourceStepIds": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "generatedByAtlas": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "visualSequence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "viewId",
+                "order",
+                "stage",
+                "title",
+                "purpose",
+                "medium",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "viewId": {
+                  "type": "string"
+                },
+                "viewIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "order": {
+                  "type": "integer"
+                },
+                "stage": {
+                  "enum": [
+                    "curiosity",
+                    "orientation",
+                    "decomposition",
+                    "inspection",
+                    "mechanism",
+                    "intuition",
+                    "reconstruction",
+                    "understanding"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "medium": {
+                  "enum": [
+                    "2d",
+                    "3d"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "ready",
+                    "planned"
+                  ]
+                },
+                "sourceFigureIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sourceVisualIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sourceStepIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "figures": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "dioramaRef": {
+                  "type": [
+                    "object",
+                    "null"
                   ]
                 }
               }

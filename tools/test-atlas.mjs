@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, sourceVisualFigure, selectedSourceVisualFigures, compileAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, sourceVisualFigure, selectedSourceVisualFigures, buildConceptVisualSequence, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [3], table: { caption: 'Transport conditions', columns: ['Condition', 'Flux'], rows: [['A', '2.1'], ['B', '3.4']] } },
@@ -44,6 +44,7 @@ const makeAtlas = () => ({
     knowledgeKinds: ['causal', 'structural'],
     visualIntent: 'Show a membrane, a channel and solute movement.',
     dioramaSet: [{
+      viewId: 'boundary-evidence', order: 1, stage: 'orientation',
       title: 'A selective boundary',
       purpose: 'Make selective passage and its constraint visible.',
       mustShow: ['membrane', 'channel', 'solute'],
@@ -121,15 +122,40 @@ const selectedSourceFigures = selectedSourceVisualFigures(valid.nodes[0], steps,
 assert.equal(selectedSourceFigures.length, 1, 'the atlas should compile only the source visual selected by this concept view');
 assert.equal(selectedSourceFigures[0].sourceVisualId, 'pptx-chart-s3-1');
 assert.equal(selectedSourceFigures[0].sourceSlide, 3);
+assert.equal(selectedSourceFigures[0].viewId, 'boundary-evidence');
+assert.equal(selectedSourceFigures[0].viewOrder, 1);
+assert.equal(selectedSourceFigures[0].viewStage, 'orientation');
 assert.equal(selectedSourceFigures[0].figure.kind, 'bars');
 const noSelection = selectedSourceVisualFigures({
   ...valid.nodes[0], dioramaSet: [{ ...valid.nodes[0].dioramaSet[0], sourceVisualIds: [] }]
 }, steps, sourceSections);
 assert.deepEqual(noSelection, [], 'unselected source visuals stay in provenance but are not presented as explanatory figures');
 
+const stagedNode = {
+  ...valid.nodes[0],
+  dioramaSet: [
+    { ...valid.nodes[0].dioramaSet[0], viewId: 'boundary-evidence', order: 1, stage: 'orientation', sourceVisualIds: ['pptx-chart-s3-1'] },
+    { viewId: 'mechanism-map', order: 2, stage: 'mechanism', title: 'The transport mechanism', purpose: 'Connect the route and its effect.', medium: '2d', mustShow: ['channel', 'solute'], manipulations: [], sourceFigureIds: [], sourceVisualIds: [] },
+    { viewId: 'interactive-model', order: 3, stage: 'reconstruction', title: 'Reconstruct the system', purpose: 'Inspect the mechanism in 3D.', medium: '3d', mustShow: ['membrane', 'channel'], manipulations: ['channel availability'], sourceFigureIds: [], sourceVisualIds: [] },
+    { viewId: 'prediction-view', order: 4, stage: 'understanding', title: 'Predict the outcome', purpose: 'Test the mechanism.', medium: '2d', mustShow: ['outcome'], manipulations: [], sourceFigureIds: [], sourceVisualIds: [] }
+  ],
+  explanatoryFigures: selectedSourceFigures,
+  dioramaRefs: [{ stepId: 'S1', demoIndex: 0, title: 'Transport diorama', purpose: 'Inspect the route.' }]
+};
+const visualSequence = buildConceptVisualSequence(stagedNode);
+assert.deepEqual(visualSequence.map(v => [v.viewId, v.order, v.stage, v.medium, v.status]), [
+  ['boundary-evidence', 1, 'orientation', '2d', 'ready'],
+  ['mechanism-map', 2, 'mechanism', '2d', 'planned'],
+  ['interactive-model', 3, 'reconstruction', '3d', 'ready'],
+  ['prediction-view', 4, 'understanding', '2d', 'planned']
+], 'the concept visual pathway must preserve planned order/stage and distinguish ready from planned views');
+assert.deepEqual(visualSequence[0].figures.map(f => f.sourceVisualId), ['pptx-chart-s3-1']);
+assert.equal(visualSequence[2].dioramaRef.title, 'Transport diorama', 'all 3D intentions resolve through the single grouped scene');
+assert.equal(visualSequence.filter(v => v.medium === '3d').length, 1, 'multiple 3D plans collapse into one coherent interactive model');
+
 const smartArtOnlyNode = {
   ...valid.nodes[0],
-  dioramaSet: [{ ...valid.nodes[0].dioramaSet[0], sourceVisualIds: ['pptx-smartart-s3-1'] }]
+  dioramaSet: [{ ...valid.nodes[0].dioramaSet[0], viewId: 'smartart-route', order: 1, stage: 'mechanism', sourceVisualIds: ['pptx-smartart-s3-1'] }]
 };
 const selectedSmartArt = selectedSourceVisualFigures(smartArtOnlyNode, steps, sourceSections);
 assert.equal(selectedSmartArt.length, 1);
@@ -177,6 +203,16 @@ const misalignedChart = sourceVisualFigure({
 });
 assert.equal(misalignedChart, null, 'misaligned or missing categories must not be assigned arbitrary labels');
 
+
+const duplicateViewId = makeAtlas();
+duplicateViewId.nodes[0].dioramaSet.push({ ...duplicateViewId.nodes[0].dioramaSet[0], order: 2 });
+assert.match(validateAtlas(duplicateViewId, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /duplicate viewId/);
+const duplicateViewOrder = makeAtlas();
+duplicateViewOrder.nodes[0].dioramaSet.push({ ...duplicateViewOrder.nodes[0].dioramaSet[0], viewId: 'second-view', order: 1 });
+assert.match(validateAtlas(duplicateViewOrder, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /duplicate view order/);
+const missingViewStage = makeAtlas();
+delete missingViewStage.nodes[0].dioramaSet[0].stage;
+assert.match(validateAtlas(missingViewStage, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /ordered explanatory-view plan/);
 
 const invalidVisual = makeAtlas();
 invalidVisual.nodes[0].dioramaSet[0].sourceVisualIds = ['pptx-chart-s8-1'];
@@ -349,6 +385,9 @@ assert.match(prompt, /sourceStepIds/);
 assert.match(prompt, /SOURCE FIGURE INDEX/);
 assert.match(prompt, /sourceFigureIds/);
 assert.match(prompt, /sourceVisualIds/);
+assert.match(prompt, /stable-kebab-id/);
+assert.match(prompt, /a unique integer order from 1–6/);
+assert.match(prompt, /All 3D views for one concept are combined into one interactive scene/);
 assert.match(prompt, /STRUCTURED SOURCE VISUAL INDEX/);
 assert.match(prompt, /pptx-chart-s3-1/);
 assert.match(prompt, /F1/);
