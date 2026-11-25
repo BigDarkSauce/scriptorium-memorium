@@ -679,7 +679,7 @@ export class Reader {
           el('ul', { class: 'model-audit-list' }, notes.map(x => el('li', { text: x })))
         ]);
       })() : null;
-      return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb, audit]);
+      return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb, audit]); };
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {
