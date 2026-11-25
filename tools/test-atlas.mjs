@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // Regression tests for semantic atlas coverage and progressive, source-mapped challenge reasoning.
 import assert from 'node:assert/strict';
-import { atlasPrompt, validateAtlas } from '../js/ai/atlas.js';
+
+// The atlas module imports the configured provider router. Its module-level environment probe
+// expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
+globalThis.window = globalThis.window || {};
+const { atlasPrompt, validateAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [2] },
