@@ -3,7 +3,7 @@
 const TAG_PREFIX = '(?:[A-Za-z_][\\w.-]*:)?';
 const attrMap = tag => {
   const out = {};
-  for (const m of String(tag || '').matchAll(/([^\\s=]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')/g)) out[m[1]] = decodeXml(m[2] ?? m[3] ?? '');
+  for (const m of String(tag || '').matchAll(/([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) out[m[1]] = decodeXml(m[2] ?? m[3] ?? '');
   return out;
 };
 const localTags = (xml, local) => {
