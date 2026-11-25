@@ -31,6 +31,43 @@ $handler = {
         $o.keyFound = [bool]$o.key; try { $o.readyModels = @((Invoke-RestMethod -UseBasicParsing -TimeoutSec 4 -Headers @{ Authorization = "Bearer $($o.key)" } "$base/models?execution_status=ready").data).Count } catch { } }
       $b = [Text.Encoding]::UTF8.GetBytes(($o | ConvertTo-Json -Compress)); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
     }
+    if ($p -eq '/__openai/info' -or $p -eq '/__openai/v1/models' -or $p -eq '/__openai/v1/chat/completions') {
+      # Same-origin, localhost-only proxy. The key never enters browser storage or a URL.
+      $origin = $req.Headers['Origin']
+      if ($origin) { try { if (([Uri]$origin).Authority -ne $req.Url.Authority) { $res.StatusCode = 403; return } } catch { $res.StatusCode = 403; return } }
+      $key = [string]$env:OPENAI_API_KEY
+      $model = [string]$env:OPENAI_MODEL
+      if (-not $model) { $model = 'gpt-6.2-astra' }
+
+      if ($p -eq '/__openai/info') {
+        $o = @{ configured = [bool]$key.Trim(); model = $model; keyLocation = 'server environment' }
+        $b = [Text.Encoding]::UTF8.GetBytes(($o | ConvertTo-Json -Compress)); $res.ContentType = 'application/json'; $res.AddHeader('Cache-Control','no-store'); $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
+      }
+      if (-not $key.Trim()) { $res.StatusCode = 503; $b = [Text.Encoding]::UTF8.GetBytes('{"error":"Set OPENAI_API_KEY in the environment"}'); $res.ContentType = 'application/json'; $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return }
+      if ($p -eq '/__openai/v1/models') {
+        $o = @{ object = 'list'; data = @(@{ id = $model; object = 'model'; owned_by = 'openai' }) }
+        $b = [Text.Encoding]::UTF8.GetBytes(($o | ConvertTo-Json -Depth 5 -Compress)); $res.ContentType = 'application/json'; $res.AddHeader('Cache-Control','no-store'); $res.ContentLength64 = $b.Length; $res.OutputStream.Write($b, 0, $b.Length); return
+      }
+
+      if ($req.HttpMethod -ne 'POST' -or $req.ContentLength64 -gt 25165824) { $res.StatusCode = 413; return }
+      $buffer = New-Object IO.MemoryStream
+      $req.InputStream.CopyTo($buffer)
+      $payload = [Text.Encoding]::UTF8.GetString($buffer.ToArray())
+      try { $j = $payload | ConvertFrom-Json -ErrorAction Stop; if (-not $j.model -or -not $j.messages) { throw 'model and messages are required' } } catch { $res.StatusCode = 400; return }
+      $up = [Net.HttpWebRequest]::Create('https://api.openai.com/v1/chat/completions')
+      $up.Method = 'POST'; $up.ContentType = 'application/json'; $up.Accept = $(if ($req.Headers['Accept']) { $req.Headers['Accept'] } else { 'text/event-stream, application/json' })
+      $up.Headers['Authorization'] = "Bearer $key"; $up.Timeout = 600000; $up.ReadWriteTimeout = 600000; $up.AllowReadStreamBuffering = $false
+      $bytes = [Text.Encoding]::UTF8.GetBytes($payload); $up.ContentLength = $bytes.Length
+      try { $stream = $up.GetRequestStream(); $stream.Write($bytes, 0, $bytes.Length); $stream.Close(); $upstream = $up.GetResponse() }
+      catch [Net.WebException] { $upstream = $_.Exception.Response; if (-not $upstream) { $res.StatusCode = 502; return } }
+      $res.StatusCode = [int]$upstream.StatusCode; $res.SendChunked = $true
+      if ($upstream.ContentType) { $res.ContentType = $upstream.ContentType }
+      $res.AddHeader('Cache-Control','no-store')
+      foreach ($h in 'Retry-After', 'x-request-id', 'openai-processing-ms') { if ($upstream.Headers[$h]) { $res.AddHeader($h, $upstream.Headers[$h]) } }
+      $input = $upstream.GetResponseStream(); $chunk = New-Object byte[] 8192
+      while (($count = $input.Read($chunk, 0, $chunk.Length)) -gt 0) { $res.OutputStream.Write($chunk, 0, $count); $res.OutputStream.Flush() }
+      $upstream.Close(); return
+    }
     if ($p -eq '/__relay/fetch') {
       $qs = [Web.HttpUtility]::ParseQueryString($req.Url.Query); $u = $qs['u']; $media = $qs['media']; $x = $null
       if ($media -and ($media -ne 'image' -or $req.HttpMethod -ne 'GET')) { $res.StatusCode = 403; return }
