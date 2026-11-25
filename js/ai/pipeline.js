@@ -231,7 +231,7 @@ export async function critiqueDemo(s, plan, o = {}) {
   } catch (e) { if (e && e.code === 'cancelled') throw e; s.critique.error = (e && (e.code || e.message)) || 'failed'; }
   try {
     check(o.signal); o.onStatus && o.onStatus('Auditing the scene model: entities, mechanisms, units, constraints and controls…');
-    const audit = await ask(modelAuditPrompt(plan, s, sourceStepIds), { ...o, tools: false, writing: 'Auditing the simulation model', role: 'director' }, 'Independently audit this simulation model');
+    const audit = await ask(modelAuditPrompt(plan, s, sourceStepIds, o.sourceContext || ''), { ...o, tools: false, writing: 'Auditing the simulation model', role: 'director' }, 'Independently audit this simulation model');
     if (audit && typeof audit === 'object') s.modelAudit = {
       checkedAt: new Date().toISOString(), verdict: ['pass', 'revise', 'uncertain'].includes(audit.verdict) ? audit.verdict : 'uncertain',
       score: Number.isFinite(+audit.score) ? Math.max(0, Math.min(1, +audit.score)) : null,
@@ -275,7 +275,7 @@ async function authorDemo0(ctx, st, d, o = {}) {
               s.modelValidation = { checkedAt: new Date().toISOString(), method: 'deterministic scene-to-contract checks', pass: !local.faults.length, faults: local.faults, warnings: local.warnings };
               if (local.faults.length) { rejectedAttempts.push({ attempt: simple ? 'simple' : 'full', stage: 'modelValidation', faults: local.faults.slice(0, 12) }); fail = 'scene-to-model contract validation failed: ' + local.faults.slice(0, 8).join('; '); continue; }
             }
-            await critiqueDemo(s, s.plan, { ...o, sourceStepIds });
+            await critiqueDemo(s, s.plan, { ...o, sourceStepIds, sourceContext: [context, d.request || ''].filter(Boolean).join('\n\n') });
             const major = (s.modelAudit && s.modelAudit.issues || []).filter(x => x.severity === 'critical' || x.severity === 'major');
             if (s.modelAudit && s.modelAudit.verdict === 'revise' && major.length) {
               rejectedAttempts.push({ attempt: simple ? 'simple' : 'full', stage: 'modelAudit', verdict: s.modelAudit.verdict, issues: s.modelAudit.issues.slice(0, 12), unverified: s.modelAudit.unverified || [] });
