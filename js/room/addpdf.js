@@ -82,12 +82,12 @@ export function choosePlace(app, { title = 'Where should it go?', verb = 'Put it
 }
 export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null } = {}) {
   const S = { file: null, split: null, sourceType: 'pdf', title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true, deep: false };
-  const veil = el('div', { class: 'modal-veil addpdf-veil' }), box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a PDF scroll' });
+  const veil = el('div', { class: 'modal-veil addpdf-veil' }), box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a PDF or PowerPoint scroll' });
   veil.append(box); document.body.append(veil);
   const close = () => { preview(hub, null); veil.remove(); removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape' && !RUN.ctrl) close(); }; addEventListener('keydown', onKey);
   const body = el('div', { class: 'ap-body' }), steps = el('ol', { class: 'ap-steps' }), foot = el('div', { class: 'row end ap-foot' });
-  box.append(el('h3', { text: 'Add a PDF scroll' }), steps, body, foot);
+  box.append(el('h3', { text: 'Add a PDF or PowerPoint scroll' }), steps, body, foot);
   const STEP = ['The source', 'Place', 'Pages / slides', 'Breakdown', 'Analyse']; let at = 0;
   const go = k => { at = k; render(); };
   // The dialog sits at the bottom of the screen (its bottom edge never moves; js/hub/hub.js frameAt puts a framed place in
