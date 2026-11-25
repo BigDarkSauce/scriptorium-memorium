@@ -213,7 +213,26 @@ try {
   await sourceScan.locator('.atlas-scan-row').first().evaluate(el => el.click());
   const unmappedSourceTrailStep = await page.locator('.atlas-source-step[open]').innerText();
   assert.ok(unmappedSourceTrailStep.includes('S3') && unmappedSourceTrailStep.includes('Supplemental observation'));
-  await scanSearch.fill('a diagram showing a selective boundary');
+  const afterUnmappedSelection = await page.evaluate(() => {
+    const view = document.querySelector('[data-test-atlas="true"]');
+    const scan = view && view.querySelector('.atlas-source-scan');
+    const body = scan && scan.querySelector('.atlas-source-scan-body');
+    return {
+      viewPresent: !!view,
+      scanPresent: !!scan,
+      scanBodyHidden: body ? body.hidden : null,
+      searchPresent: !!(scan && scan.querySelector('.atlas-scan-search')),
+      query: scan && scan.querySelector('.atlas-scan-search') && scan.querySelector('.atlas-scan-search').value,
+      activeNode: window.__atlasUITest && window.__atlasUITest.atlas.selectedNodeId,
+      selectedStep: window.__atlasUITest && window.__atlasUITest.atlas.selectedSourceStepId
+    };
+  });
+  console.log('ATLAS_AFTER_UNMAPPED_SELECTION', JSON.stringify(afterUnmappedSelection));
+  assert.equal(afterUnmappedSelection.scanPresent, true, 'selecting an unsectioned source result must keep the source scan mounted');
+  assert.equal(afterUnmappedSelection.scanBodyHidden, false, 'selecting an unsectioned source result must keep the source scan expanded');
+  assert.equal(afterUnmappedSelection.searchPresent, true, 'selecting an unsectioned source result must keep the source search field mounted');
+  const currentScanSearch = page.locator('.atlas-source-scan .atlas-scan-search');
+  await currentScanSearch.fill('a diagram showing a selective boundary');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'figure captions must be searchable through their linked source step');
   const figureResult = await sourceScan.locator('.atlas-scan-row').first().innerText();
   assert.ok(figureResult.includes('Flux relation') && figureResult.includes('S2 · p. 3'), 'the figure-caption result must retain its linked source title and ID/page');
