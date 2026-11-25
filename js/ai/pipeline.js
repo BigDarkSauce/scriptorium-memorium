@@ -34,11 +34,26 @@ function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(
 export async function material(ctx, part, { onStatus } = {}) {
   const { app, book } = ctx, P = part, src = P.subOf ? ((ctx.data.parts || []).find(x => x.id === P.subOf) || P) : P;
   if (book.sourceType === 'pptx') {
-    onStatus && onStatus('Reading slide text, accessible descriptions and speaker notes…');
-    // Extracted slide text is also embedded in the room record, so a shared/imported room can be re-analysed
-    // even when the original .pptx binary is not present in this browser's IndexedDB.
+    onStatus && onStatus('Reading slide text, notes, chart data and SmartArt structure…');
+    // The room retains extracted text for portability. When the original package is present, inspect its embedded
+    // images too; shared JSON imports without the package still retain their textual source trail.
     const sec = await cached(partKey('sections', book.id, src.id), () => app.ingest.presentationSections(null, src));
-    return { sections: sec.sections, figures: [], blob: null, src, text: P.text || sec.text };
+    let figures = [];
+    const presentation = await app.store.get('pptx:' + book.id).catch(() => null);
+    if (presentation && app.ingest.extractPresentationFigures) {
+      try {
+        onStatus && onStatus('Inspecting embedded PowerPoint images…');
+        figures = await cached(partKey('figs', book.id, src.id), () => app.ingest.extractPresentationFigures(
+          presentation, src.startPage || 1, src.endPage || src.startPage || 1,
+          { onProgress: k => onStatus && onStatus('Inspecting embedded PowerPoint images… ' + Math.round(k * 100) + '%') }
+        ));
+      } catch (e) {
+        onStatus && onStatus('Some embedded images could not be decoded; continuing with slide text, chart data and SmartArt structure.');
+        figures = [];
+      }
+    }
+    if (!src.figureIndex || src.figureIndex.length !== figures.length) src.figureIndex = app.ingest.figureMeta(figures);
+    return { sections: sec.sections, figures, blob: null, src, text: P.text || sec.text };
   }
   if (!book.hasPdf) return { sections: null, figures: [], text: P.text || '' };
   const blob = app.ingest.keyPDF ? app.ingest.keyPDF(await app.store.get('pdf:' + book.id), book.id) : await app.store.get('pdf:' + book.id); if (!blob) return { sections: null, figures: [], text: P.text || '' };
