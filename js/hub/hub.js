@@ -566,7 +566,7 @@ export class Hub {
         el('div', { class: 'memory-route-heading' }, [
           el('div', {}, [
             el('h3', { text: node.title || 'Concept' }),
-            el('p', { text: (shelf ? shelf.name : place.shelfName || 'Missing bookcase') + ' · row ' + (Number(place.row) + 1) + ' · slot ' + (Number(place.slot) + 1) })
+            el('p', { text: (shelf ? shelf.name : place.shelfName || 'Missing bookcase') + ' · row ' + (place.rowLabel || Number(place.row) + 1) + ' · slot ' + (Number(place.slot) + 1) })
           ]),
           el('button', { class: 'ibtn dark tiny', type: 'button', text: '×', title: 'Close route panel', 'aria-label': 'Close route panel', onclick: () => this.closeMemoryRoute() })
         ])
