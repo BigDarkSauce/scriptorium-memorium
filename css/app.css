@@ -1448,3 +1448,11 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .ai-openai-status { margin: 7px 0; overflow-wrap: anywhere; }
 .ai-openai-status.good { color: #54765e; }
 .ai-openai-status.warn { color: #9c5a2e; }
+
+
+.atlas-explanatory-figures { display: grid; gap: 10px; }
+.atlas-figure-entry { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid rgba(90,60,30,.18); border-radius: 10px; background: rgba(255,255,255,.28); }
+.atlas-figure-entry > b { font: 500 15px var(--f-display); color: var(--iron); }
+.atlas-figure-entry > p { margin: 0; color: #6a5037; font-size: 12px; line-height: 1.4; }
+.atlas-figure-entry > small { color: var(--iron-soft); font: 10px var(--f-mono); }
+.atlas-figure-entry .fig { margin: 0; }
