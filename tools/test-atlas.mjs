@@ -69,7 +69,7 @@ assert.equal(validateAtlas(valid, ['S1', 'S2'], steps), null, 'a complete source
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true, sourceFigures, true), null, 'new atlas views may cite only a source figure linked to their own steps');
 
 const figureEvidence = sourceFigureEvidence(['S1', 'S2'], steps, sourceFigures);
-assert.deepEqual(figureEvidence.figures.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
+assert.deepEqual(figureEvidence.figures.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page, slide: f.slide })), [
   { id: 'F1', stepIds: ['S2'], page: 3, slide: 3 }
 ], 'the evidence index must map extracted figure provenance back to the exact chain step');
 assert.deepEqual(figureEvidence.unresolvedFigureIds, [], 'a figure with a valid extracted record is resolved');
@@ -104,7 +104,7 @@ const deterministicAtlas = await compileAtlas({
   sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }],
   figures: sourceFigures, auto: false
 });
-assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.figureRecords.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
+assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.figureRecords.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page, slide: f.slide })), [
   { id: 'F1', stepIds: ['S2'], page: 3, slide: 3 }
 ], 'the deterministic fallback must preserve figure-to-step provenance');
 assert.deepEqual(deterministicAtlas.sourceIndex.pdfFigureIndex.find(f => f.id === 'F2').stepIds, [], 'unlinked indexed figures remain explicitly unlinked');
