@@ -171,6 +171,13 @@
                     },
                     "page": {
                       "type": "integer"
+                    },
+                    "slide": {
+                      "type": "integer"
+                    },
+                    "mediaPath": {
+                      "type": "string",
+                      "description": "Package-internal media path for a PowerPoint embedded visual; binary content remains in IndexedDB."
                     }
                   }
                 }
