@@ -113,7 +113,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   ]);
   const scanInput = el('input', {
     class: 'atlas-scan-search',
-    inputType: 'search',
+    type: 'search',
     placeholder: 'Search concepts, terms, equations, examples, tables, figures or code…',
     'aria-label': 'Search source steps'
   });
