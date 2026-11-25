@@ -262,6 +262,28 @@
                 "items": {
                   "type": "object"
                 }
+              },
+              "pageSpans": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "subsectionId",
+                    "startPage",
+                    "endPage"
+                  ],
+                  "properties": {
+                    "subsectionId": {
+                      "type": "string"
+                    },
+                    "startPage": {
+                      "type": "integer"
+                    },
+                    "endPage": {
+                      "type": "integer"
+                    }
+                  }
+                }
               }
             }
           },
