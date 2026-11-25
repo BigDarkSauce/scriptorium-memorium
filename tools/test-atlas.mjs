@@ -58,6 +58,11 @@ const valid = makeAtlas();
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps), null, 'a complete source-mapped atlas should pass');
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true), null, 'newly authored progressive challenges should pass');
 
+const singleUnitLegacy = makeAtlas();
+singleUnitLegacy.nodes[0].challenges[0].reasoning = [singleUnitLegacy.nodes[0].challenges[0].reasoning[0]];
+assert.equal(validateAtlas(singleUnitLegacy, ['S1', 'S2'], steps), null, 'legacy one-unit reasoning remains readable');
+assert.match(validateAtlas(singleUnitLegacy, ['S1', 'S2'], steps, true), /2–5 ordered reveal units/, 'new challenge authoring requires at least two reasoning units');
+
 const foreignStep = makeAtlas();
 foreignStep.nodes[0].challenges[0].reasoning[1].sourceStepIds = ['S99'];
 assert.match(validateAtlas(foreignStep, ['S1', 'S2'], steps), /outside its concept node/);
