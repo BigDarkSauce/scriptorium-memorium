@@ -91,6 +91,20 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
 
   // Keyboard control is scoped to an active challenge, never to the whole app or text-editing fields.
   root.addEventListener('keydown', e => {
+    const tab = e.target && e.target.closest ? e.target.closest('.atlas-branch-tab') : null;
+    if (tab && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+      const tabs = [...root.querySelectorAll('.atlas-branch-tab')];
+      const index = tabs.indexOf(tab);
+      const nextIndex = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+        : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      if (tabs[nextIndex]) {
+        e.preventDefault();
+        tabs[nextIndex].click();
+        const freshTabs = root.querySelectorAll('.atlas-branch-tab');
+        freshTabs[nextIndex] && freshTabs[nextIndex].focus();
+      }
+      return;
+    }
     const card = e.target && e.target.closest ? e.target.closest('.atlas-challenge-card') : null;
     if (!card || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
     if (e.code === 'Space' && !e.repeat) {
@@ -197,6 +211,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
             atlas.selectedChallengeId = ch.id;
             onSave && onSave();
             renderDetail();
+            const tabs = root.querySelectorAll('.atlas-branch-tab');
+            const activeTab = [...tabs].find(tab => tab.getAttribute('aria-selected') === 'true');
+            activeTab && activeTab.focus();
           }
         }, [
           el('span', { class: 'atlas-branch-index', text: String(i + 1).padStart(2, '0') }),
