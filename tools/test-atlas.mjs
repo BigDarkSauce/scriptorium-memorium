@@ -80,7 +80,7 @@ assert.match(validateAtlas(tooManyUnits, ['S1', 'S2'], steps), /1–5 ordered re
 const legacy = makeAtlas();
 delete legacy.nodes[0].challenges[0].reasoning;
 assert.equal(validateAtlas(legacy, ['S1', 'S2'], steps), null, 'older saved atlases without reveal units remain valid');
-assert.match(validateAtlas(legacy, ['S1', 'S2'], steps, true), /missing its progressive reasoning path/);
+assert.match(validateAtlas(legacy, ['S1', 'S2'], steps, true), /2–5 ordered reveal units/);
 
 const validLocus = makeAtlas();
 validLocus.memoryPlaces = [{
