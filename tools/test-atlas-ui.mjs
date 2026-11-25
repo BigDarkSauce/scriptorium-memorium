@@ -293,15 +293,36 @@ try {
         { nodeId: 'locus-two', caseId: shelf.caseId, row: row.row, slot: (row.slots[1] || slot).slot, rowLabel: row.label, shelfName: shelf.title, association: 'A bridge that disappears' }
       ]
     };
+    const reviewSchedules = {
+      'locus-one': { id: 'review-one', due: Date.now(), interval: 1, attempts: 0, history: [] },
+      'locus-two': { id: 'review-two', due: Date.now(), interval: 1, attempts: 0, history: [] }
+    };
+    const ratings = [];
     let saves = 0;
     hub.showMemoryRoute({
       bookId: app.lib.books[0].id,
       partId: 'memory-test-part',
       atlas,
       initialNodeId: 'locus-one',
+      reviewSchedules,
+      onGradeRecall: async (nodeId, recalled) => {
+        const current = reviewSchedules[nodeId];
+        const interval = recalled ? Math.min(120, Math.max(2, current.interval * 2.5)) : 1;
+        const next = {
+          ...current,
+          interval,
+          attempts: current.attempts + 1,
+          history: [...current.history, recalled ? 1 : 0].slice(-12),
+          lastRating: recalled ? 'recalled' : 'again',
+          due: Date.now() + interval * 864e5
+        };
+        reviewSchedules[nodeId] = next;
+        ratings.push({ nodeId, recalled });
+        return next;
+      },
       onSave: () => { saves++; }
     });
-    window.__lociUITest = { atlas, getSaves: () => saves };
+    window.__lociUITest = { atlas, reviewSchedules, ratings, getSaves: () => saves };
     return {
       count: atlas.memoryPlaces.length,
       shelfId: shelf.caseId,
@@ -321,6 +342,10 @@ try {
   await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
   assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true, 'the attempt locks after reveal');
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i);
+  assert.match(await memoryPanel.locator('.memory-route-schedule').innerText(), /Due today/i);
+  await memoryPanel.getByRole('button', { name: 'Needs another pass' }).click();
+  assert.match(await memoryPanel.locator('.memory-route-schedule').innerText(), /Due tomorrow/i, 'a learner-rated difficult recall should return after one day');
+  assert.match(await memoryPanel.locator('.memory-route-schedule').innerText(), /Current interval · 1 day/i);
   await memoryPanel.getByRole('button', { name: 'Start another recall attempt' }).click();
   assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), false, 'a learner must be able to practise a revealed concept again');
   assert.equal(await memoryPanel.locator('.memory-route-response').inputValue(), '', 'a fresh attempt starts without copying the prior answer');
@@ -332,6 +357,9 @@ try {
   await memoryPanel.getByRole('button', { name: 'Commit recall' }).click();
   await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
   assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true);
+  await memoryPanel.getByRole('button', { name: 'Recalled accurately' }).click();
+  assert.match(await memoryPanel.locator('.memory-route-schedule').innerText(), /Due in 3 days/i, 'accurate recall should expand the interval');
+  assert.match(await memoryPanel.locator('.memory-route-schedule').innerText(), /Current interval · 2.5 days/i);
   await memoryPanel.locator('.memory-route-footer button').nth(1).click();
   assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What changes if the route is removed/i);
   await memoryPanel.locator('.memory-route-footer button').nth(0).click();
@@ -341,16 +369,26 @@ try {
   const routeOrder = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.map(p => p.nodeId));
   assert.deepEqual(routeOrder, ['locus-two', 'locus-one'], 'the learner-defined order must be saved on the atlas');
   const lociSaves = await page.evaluate(() => window.__lociUITest.getSaves());
-  assert.ok(lociSaves >= 3, 'the route must flush the recall draft with commitment, reveal and explicit route order');
+  assert.ok(lociSaves >= 7, 'the route must flush both recall attempts, self-ratings and explicit route order');
   const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review);
   assert.equal(persistedReview.committed, true);
   assert.equal(persistedReview.revealed, true);
+  assert.equal(persistedReview.rating, 'recalled');
   assert.equal(persistedReview.history.length, 1, 'the prior recall attempt must survive a second attempt');
+  assert.equal(persistedReview.history[0].rating, 'again');
+  const scheduleState = await page.evaluate(() => ({
+    interval: window.__lociUITest.reviewSchedules['locus-one'].interval,
+    history: window.__lociUITest.reviewSchedules['locus-one'].history,
+    ratings: window.__lociUITest.ratings
+  }));
+  assert.equal(scheduleState.interval, 2.5);
+  assert.deepEqual(scheduleState.history, [0, 1]);
+  assert.deepEqual(scheduleState.ratings, [{ nodeId: 'locus-one', recalled: false }, { nodeId: 'locus-one', recalled: true }]);
   await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, learner-controlled route order and source-index search');
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, self-rated due scheduling, learner-controlled route order and source-index search');
 } finally {
   await browser.close();
 }
