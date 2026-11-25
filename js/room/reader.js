@@ -21,6 +21,7 @@ import { seedMotion } from '../seeds-motion.js';
 import { redundantFigures, isFlow } from './figspec.js';
 import * as MEDIA from '../ai/media.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
+import { renderAtlasView } from './atlas-view.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
 let sketchQ = Promise.resolve();
@@ -124,6 +125,17 @@ export class Reader {
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
     if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }
+    if (P.analysis.atlas) {
+      this.folds = null; R.classList.add('atlas-reader');
+      body.append(...(this._improving ? [this.improvingBar()] : []), renderAtlasView({
+        atlas: P.analysis.atlas, part: P,
+        onOpenDiorama: (ref, challenge) => this.openAtlasDiorama(ref, challenge),
+        onGenerate: (request, nodeId, status) => this.generateAtlasDiorama(request, nodeId, status),
+        onSave: () => this.save()
+      }));
+      return;
+    }
+    R.classList.remove('atlas-reader');
     if (addReveals(P.analysis)) this.save();   /* an example scroll from before the Revelation Engine gets its loops (seeds-sources.js) */   // analysed, but the chain came back empty: nothing to unfold
     // an analysed scroll opens on its content: the authoring controls (depth, Re-analyse, Paste JSON) wait in the ⋯ menu
     // (showAuthoring); a sealed one keeps its Analyse bar in view, its main action (renderEmpty)
@@ -258,6 +270,68 @@ export class Reader {
     const pasted = el('button', { class: 'btn small', text: 'Paste JSON from another AI', onclick: () => this.pasteJSON() });
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
+  // ---------- chapter atlas actions ----------
+  openAtlasDiorama(ref, challengeMode = null) {
+    const A = this.part.analysis, st = (A.chain || []).find(x => String(x.id) === String(ref.stepId));
+    const d = st && (st.demos || [])[+ref.demoIndex];
+    if (!d || !is3D(d)) { toast('This atlas node has no 3D diorama linked to that reference yet.'); return; }
+    let spec;
+    try { spec = JSON.parse(JSON.stringify(d)); } catch (e) { toast('This diorama could not be copied safely.'); return; }
+    let partial = false;
+    if (challengeMode && challengeMode.incomplete && spec.type === 'scene' && Array.isArray(spec.bodies)) {
+      const missing = new Set((challengeMode.challenge && challengeMode.challenge.missingBodyIds) || []);
+      if (missing.size) {
+        spec.bodies = spec.bodies.map(b => missing.has(String(b.id)) ? { ...b, hidden: true } : b);
+        partial = true;
+      } else if (challengeMode.challenge && challengeMode.challenge.type === 'structural') {
+        toast('The structural prompt was recorded, but no hideable actor IDs were mapped; opening the full model.');
+      }
+    }
+    this.app.openDiorama(spec, {
+      buildIn: true, autoTransition: true,
+      title: (spec.title || ref.title || this.part.title) + (partial ? ' · incomplete view' : ''),
+      subtitle: this.part.title + ' · ' + ref.stepId,
+      context: (st.title || '') + ': ' + (st.statement || ''),
+      onSave: () => this.save(),
+      returnTo: { room: this.room.book.id, part: this.part.id }
+    });
+  }
+  async generateAtlasDiorama(request, nodeId, onStatus = () => {}) {
+    const A = this.part.analysis, atlas = A && A.atlas, node = atlas && (atlas.nodes || []).find(n => n.id === nodeId);
+    if (!node) throw new Error('The selected concept node no longer exists.');
+    if (this._atlasBuildBusy) throw new Error('A diorama for this chapter is already being authored.');
+    const st = (node.stepIds || []).map(id => (A.chain || []).find(x => String(x.id) === String(id))).find(Boolean);
+    if (!st) throw new Error('This concept has no source step to anchor the new diorama.');
+    this._atlasBuildBusy = true;
+    const d = {
+      type: 'scene', title: (node.title + ' · Additional view').slice(0, 90),
+      purpose: node.question, technique: 'card',
+      request: 'Create an additional diorama requested by the learner for this concept.\n' +
+        'Concept: ' + node.title + '\nQuestion: ' + node.question + '\nSummary: ' + node.summary + '\n' +
+        'Visual intent already planned: ' + node.visualIntent + '\n' +
+        'LEARNER REQUEST: ' + request + '\n' +
+        'Source step: ' + st.id + ' — ' + st.title + ': ' + st.statement + '\n' +
+        'Use the learner request as an additional view, not as permission to contradict the source. Keep factual claims, quantities and actors grounded in the supplied source steps. Prefer a meaningful manipulation or comparison over decorative motion.'
+    };
+    try {
+      onStatus('Planning and authoring the additional diorama…');
+      const how = await authorDemo(this.ctx(), st, d, { onStatus });
+      st.demos = st.demos || []; st.demos.push(d);
+      const index = st.demos.length - 1;
+      if (is3D(d)) {
+        node.dioramaRefs = node.dioramaRefs || [];
+        node.dioramaRefs.push({ stepId: st.id, demoIndex: index, title: d.title || node.title, purpose: d.purpose || node.question, learnerRequested: true });
+        node.visualKind = 'diorama';
+      } else if (d.type === 'figure' && d.figure) {
+        node.generatedFigure = d.figure; node.visualKind = 'diagram';
+      }
+      atlas.audit = { ...(atlas.audit || {}), linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0) };
+      this.save(); this.room.refreshStation(this.part); this.render();
+      toast(is3D(d) ? 'Additional diorama added to the concept sequence.' : 'The request was represented as a 2D explanatory figure rather than a spatial simulation.');
+      return how;
+    } finally { this._atlasBuildBusy = false; }
+  }
+
   // ---------- the analysis pipeline (docs/PROTOCOL.md, "Recipe for any AI"; js/ai/pipeline.js) ----------
   // chain → coverage follow-ups → quality gate with targeted repairs → figures → dioramas per subsection. Nothing stored
   // is ever recomputed or re-asked; an interrupted run resumes at the stage it reached.
