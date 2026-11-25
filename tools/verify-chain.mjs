@@ -53,7 +53,7 @@ const readJSON = f => { try { return JSON.parse(readFileSync(f, 'utf8')); } catc
 
 // ---------------------------------------------------------------- a small draft 2020-12 validator (the subset the schemas use)
 const REG = new Map();
-for (const f of ['chain.schema.json', 'chain.strict.schema.json', 'room.schema.json', 'scene.schema.json', 'figure.schema.json']) { const s = JSON.parse(readFileSync(join(ROOT, 'schema', f), 'utf8')); REG.set(s.$id, s); }
+for (const f of ['chain.schema.json', 'chain.strict.schema.json', 'room.schema.json', 'scene.schema.json', 'figure.schema.json', 'atlas.schema.json']) { const s = JSON.parse(readFileSync(join(ROOT, 'schema', f), 'utf8')); REG.set(s.$id, s); }
 const typeOf = v => v === null ? 'null' : Array.isArray(v) ? 'array' : Number.isInteger(v) ? 'integer' : typeof v;
 const isType = (v, t) => t === 'number' ? typeof v === 'number' && isFinite(v) : t === 'integer' ? Number.isInteger(v) : typeOf(v) === t;
 function resolve(ref, base) {
