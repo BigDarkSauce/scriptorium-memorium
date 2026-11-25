@@ -132,7 +132,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   // Suggestions are retrieval cues, not generated questions or hidden answers.
   const suggestions = new Set();
   const addSuggestion = value => {
-    const v = sourceText(value).replace(/\\s+/g, ' ').trim();
+    const v = sourceText(value).replace(/\s+/g, ' ').trim();
     if (v.length >= 2 && v.length <= 160) suggestions.add(v);
   };
   sourceSteps.forEach(st => {
