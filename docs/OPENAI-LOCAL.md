@@ -63,7 +63,7 @@ unknown routes are rejected. The same checks run in GitHub Actions on the featur
 
 The new authoring workflow is staged rather than asking for one enormous scene dump:
 
-1. **Local source extraction.** PDF.js reads PDF text, typography, hierarchy, page locations and figure regions. A PPTX parser reads the Open XML presentation order and extracts slide title/body/table text, speaker notes and accessibility descriptions.
+1. **Local source extraction.** PDF.js reads PDF text, typography, hierarchy, page locations and figure regions. The PPTX parser follows the actual Open XML slide order, extracts text, notes and accessibility descriptions, resolves each slide's embedded images, and recovers cached chart values plus SmartArt labels and connections.
 2. **Source inventory.** The app retains subsection/slide IDs, text, page/slide spans, figures and inventories. Those units are source evidence, not assumed to be the right conceptual chunks.
 3. **Grounded reasoning chain.** The current chapter prompt derives a detailed chain of definitions, mechanisms, explanations, quantities and evidence from the source. Existing source-coverage and quality checks detect dropped or coarse material and request targeted repairs.
 4. **Diorama planning and authoring.** The explanatory compiler routes each concept to an appropriate visual grammar. Spatial, temporal and causal mechanisms can become 3D scenes; intrinsically abstract or argumentative structures remain 2D diagrams rather than receiving decorative 3D treatment.
@@ -90,7 +90,9 @@ A complete chapter can make multiple requests: chain writing, targeted repairs, 
 
 ## Honest extraction limits
 
-- **PPTX images:** this implementation extracts accessible `descr`/`title` text from PowerPoint image/object nodes. It does not yet render or visually interpret every embedded picture, raster diagram, chart or video. When no accessible description exists, the parser records that the slide may be image-led rather than inventing a description.
+- **PPTX embedded images:** package-internal images actually referenced by a slide are extracted, compressed and attached to the chapter-authoring request when the selected model accepts image input and the configured image limit permits it. Each image retains its slide number, media path, and accessible label/caption where present. This does not mean every picture is interpreted: image attachments are bounded by per-image, per-part and total-byte limits, and a text-only provider cannot inspect their pixels.
+- **PPTX charts and SmartArt:** cached chart series values and SmartArt node labels/connections are extracted from their Open XML parts and added to the relevant slide's source text. Chart formulas are not recalculated from the linked workbook, uncached values are not invented, and the original chart styling is not reconstructed. Unsupported vector shapes, embedded objects and video are not yet visually rendered or interpreted. External linked images are not fetched.
+- **No silent image guessing:** when a slide is predominantly visual and there is no extractable caption or alt text, its attached image can be inspected by a vision-capable authoring model; otherwise the source record remains explicit about the missing visual interpretation.
 - **PDF figures:** the existing PDF extractor crops figure regions, but an AI model only receives images where the selected model supports image input and the app's image limit allows it.
 - **Semantic accuracy:** a strict coverage check can prove that every source step was assigned once; it cannot prove that the inferred concepts or causal edges are all true. The audit records uncertainties and marks deterministic subsection fallback when semantic clustering fails.
 - **Diorama quality:** scene schema validation and the storyboard critique catch structural omissions, not every domain error. Review high-stakes scientific, medical, engineering or quantitative simulations.
