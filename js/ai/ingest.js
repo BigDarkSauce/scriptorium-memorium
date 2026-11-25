@@ -754,7 +754,7 @@ export function restrictParts(parts, from, to, only = null) {
   });
 }
 // metadata only (what the prompt and the room file carry; images stay in IndexedDB)
-export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page, ...(Number.isFinite(f.slide) ? { slide: f.slide } : {}) }));
+export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page, ...(Number.isFinite(f.slide) ? { slide: f.slide } : {}), ...(f.mediaPath ? { mediaPath: f.mediaPath } : {}) }));
 
 
 
