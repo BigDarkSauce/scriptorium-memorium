@@ -56,6 +56,9 @@ jobs:
       - name: Test semantic atlas and progressive challenge reveals
         run: node tools/test-atlas.mjs
 
+      - name: Test loci spaced-review ledger integration
+        run: node tools/test-locus-review.mjs
+
       - name: Verify built-in diorama plans
         run: node tools/verify-chain.mjs --builtins
 
