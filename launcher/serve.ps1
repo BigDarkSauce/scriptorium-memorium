@@ -33,8 +33,12 @@ $handler = {
     }
     if ($p -eq '/__openai/info' -or $p -eq '/__openai/v1/models' -or $p -eq '/__openai/v1/chat/completions' -or $p -eq '/__openai/v1/responses') {
       # Same-origin, localhost-only proxy. The key never enters browser storage or a URL.
+      # Reject non-local Host values and cross-site requests (including simple DNS-rebinding attempts).
+      if ($req.Url.Host -notin @('localhost', '127.0.0.1', '::1')) { $res.StatusCode = 403; return }
       $origin = $req.Headers['Origin']
-      if ($origin) { try { if (([Uri]$origin).Authority -ne $req.Url.Authority) { $res.StatusCode = 403; return } } catch { $res.StatusCode = 403; return } }
+      if ($origin) { try { $o = [Uri]$origin; if ($o.Scheme -ne 'http' -or $o.Authority -ne $req.Url.Authority) { $res.StatusCode = 403; return } } catch { $res.StatusCode = 403; return } }
+      $fetchSite = $req.Headers['Sec-Fetch-Site']
+      if ($fetchSite -and $fetchSite -notin @('same-origin', 'none')) { $res.StatusCode = 403; return } }
       $key = [string]$env:OPENAI_API_KEY
       $model = [string]$env:OPENAI_MODEL
       if (-not $model) { $model = 'gpt-6.2-astra' }
