@@ -303,10 +303,21 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
       });
     });
     const needsGroupedScene = (node.dioramaSet || []).some(v => v && v.medium === '3d');
-    const alreadyGrouped = (node.stepIds || []).some(id => {
+    const groupedResult = (node.stepIds || []).flatMap(id => {
       const st = byId.get(String(id));
-      return (st && st.demos || []).some(d => d && d.atlasNodeId === node.id && isThreeD(d) && !needsAuthoring(d));
-    });
+      return (st && st.demos || []).map((d, demoIndex) => ({ st, d, demoIndex })).filter(x => x.d && x.d.atlasNodeId === node.id && !needsAuthoring(x.d));
+    })[0] || null;
+    const alreadyGrouped = !!groupedResult;
+    if (groupedResult && groupedResult.d.type === 'figure' && groupedResult.d.figure) {
+      node.generatedFigure = groupedResult.d.figure;
+      node.explanatoryFigures = node.explanatoryFigures || [];
+      if (!node.explanatoryFigures.some(x => x.generatedByAtlas && x.stepId === String(groupedResult.st.id))) {
+        node.explanatoryFigures.push({
+          stepId: String(groupedResult.st.id), title: groupedResult.d.title || node.title,
+          purpose: groupedResult.d.purpose || node.question, figure: groupedResult.d.figure, generatedByAtlas: true
+        });
+      }
+    }
     if (needsGroupedScene && !alreadyGrouped) {
       const st = (node.stepIds || []).map(id => byId.get(String(id))).find(Boolean);
       if (st) {
@@ -347,7 +358,9 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         else if (d.type === 'figure' && d.figure) {
           node.generatedFigure = d.figure;
           node.explanatoryFigures = node.explanatoryFigures || [];
-          node.explanatoryFigures.push({ stepId: String(st.id), title: d.title || node.title, purpose: d.purpose || node.question, figure: d.figure });
+          if (!node.explanatoryFigures.some(x => x.generatedByAtlas && x.stepId === String(st.id))) {
+            node.explanatoryFigures.push({ stepId: String(st.id), title: d.title || node.title, purpose: d.purpose || node.question, figure: d.figure, generatedByAtlas: true });
+          }
         }
         node.dioramaBuild = how;
         if (ctx.save) await ctx.save(P);
