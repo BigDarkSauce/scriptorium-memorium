@@ -119,6 +119,17 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
     const location = [String(place.caseId), String(+place.row), String(+place.slot)].join(':');
     if (memoryLocations.has(location)) return 'two concept nodes share the same loci location: ' + place.caseId + ' row ' + place.row + ' slot ' + place.slot;
     memoryLocations.add(location);
+    if (place.review != null) {
+      if (!place.review || typeof place.review !== 'object' || Array.isArray(place.review)) return 'memory place has an invalid recall record: ' + place.nodeId;
+      if (place.review.response != null && (typeof place.review.response !== 'string' || place.review.response.length > 1200)) return 'memory place recall response is too long: ' + place.nodeId;
+      if (place.review.confidence != null && !['', 'Low', 'Medium', 'High'].includes(place.review.confidence)) return 'memory place recall confidence is invalid: ' + place.nodeId;
+      if (place.review.history != null) {
+        if (!Array.isArray(place.review.history) || place.review.history.length > 12) return 'memory place recall history must contain at most twelve attempts: ' + place.nodeId;
+        for (const attempt of place.review.history) {
+          if (!attempt || typeof attempt.response !== 'string' || attempt.response.length > 1200 || !['', 'Low', 'Medium', 'High'].includes(attempt.confidence || '')) return 'memory place recall history contains an invalid attempt: ' + place.nodeId;
+        }
+      }
+    }
   }
   return null;
 }
