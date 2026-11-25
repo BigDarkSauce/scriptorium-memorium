@@ -1440,6 +1440,9 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .memory-route-response, .memory-locus-cue { width: 100%; min-height: 74px; padding: 10px 11px; resize: vertical; border: 1px solid rgba(242,226,194,.22); border-radius: 8px; outline: none; background: rgba(255,255,255,.075); color: #fff5e4; font: 13px/1.5 var(--f-body); }
 .memory-route-response:focus, .memory-locus-cue:focus { border-color: rgba(242,198,110,.7); }
 .memory-route-confidence, .memory-locus-select { min-width: 118px; max-width: 100%; }
+.memory-route-order { display: grid; gap: 5px; padding-top: 3px; border-top: 1px solid rgba(255,239,211,.12); }
+.memory-route-order .memory-route-status { letter-spacing: .04em; }
+.memory-route-order .row { gap: 6px; }
 .memory-route-footer { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 .memory-route-progress { color: rgba(255,239,211,.68); font: 10px var(--f-mono); }
 .memory-route-feedback b { color: #f1ce88; font: 500 13px var(--f-display); }
