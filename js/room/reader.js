@@ -132,6 +132,7 @@ export class Reader {
         onOpenDiorama: (ref, challenge) => this.openAtlasDiorama(ref, challenge),
         onGenerate: (request, nodeId, status) => this.generateAtlasDiorama(request, nodeId, status),
         onAssignMemoryPlace: node => this.assignAtlasMemoryPlace(node),
+        onRemoveMemoryPlace: node => this.removeAtlasMemoryPlace(node),
         onVisitMemoryRoute: node => this.visitAtlasMemoryRoute(node),
         onSave: () => this.save()
       }));
