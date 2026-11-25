@@ -43,6 +43,15 @@ node tools/verify-chain.mjs answer.json sections.json      # also check against 
 
 It runs the app's own coverage check (`verifyChain` in `js/ai/prompts.js`) and the strict schema (`schema/chain.strict.schema.json`), and prints one line per fault: a subsection without steps or coarser than the book, a PDF figure nobody cites, a break in the question thread, a 3D demo without 3–6 lessons, a lesson waiting for an event the model never logs, outside data without a source. Numbers that are not in the PDF text are printed as warnings. Exit code 0 means the chain passes; `--json` prints the full report, `--loose` checks the base schema only. `examples/chain-coverage-example.json` passes.
 
+## PowerPoint ingestion regression tests
+
+The source parser has two complementary checks:
+
+- `node tools/test-pptx-visuals.mjs` tests Open XML relationship resolution, cached chart values, SmartArt nodes/edges, and the human-readable slide/page source labels without a browser.
+- With the app served and Playwright plus Chromium installed, `node tools/test-pptx-browser.mjs http://localhost:8000/` generates a synthetic `.pptx` package in the browser and tests the actual ZIP ingestion path: presentation slide order, shape text, speaker notes, chart cache, SmartArt, embedded image decoding and media provenance.
+
+The browser fixture does not call an AI provider or incur API charges. It verifies ingestion mechanics, not the scientific accuracy of a model's later interpretation.
+
 ## Simulation contract regression test
 
 Run `node tools/test-model-contract.mjs` (Node 18 or later, no installs) to exercise the source-evidence, actor identity, parameter range/unit and legacy-compatibility checks used by the scene authoring pipeline.
