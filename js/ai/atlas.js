@@ -186,6 +186,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     };
   });
   const index = sourceIndex(analysis, sections, figures);
+  index.webResearch = analysis.researchEvidence ? { ...analysis.researchEvidence, citations: (analysis.researchEvidence.citations || []).filter(c => c && /^https:\/\//i.test(c.url)) } : null;
   const atlas = {
     ...authored,
     sourceIndex: index,
@@ -197,7 +198,8 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       sourceStepCount: ids.length,
       assignedStepCount: unique(authored.nodes.flatMap(n => n.stepIds)).length,
       fallbackReason: failure || null,
-      certainty: failure ? 'low: section grouping only' : 'AI-generated; inspect the source links and uncertainty notes'
+      certainty: failure ? 'low: section grouping only' : 'AI-generated; inspect the source links and uncertainty notes',
+      webResearch: index.webResearch ? { provider: index.webResearch.provider || null, model: index.webResearch.model || null, searches: index.webResearch.searched || 0, citations: index.webResearch.citations.length } : { status: 'no web-search citations recorded' }
     }
   };
   return atlas;
