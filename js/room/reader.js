@@ -315,7 +315,8 @@ export class Reader {
     };
     try {
       onStatus('Planning and authoring the additional diorama…');
-      const how = await authorDemo(this.ctx(), st, d, { onStatus });
+      const researchAudit = A.researchEvidenceCalls || (A.researchEvidenceCalls = []);
+      const how = await authorDemo(this.ctx(), st, d, { onStatus, researchAudit });
       st.demos = st.demos || []; st.demos.push(d);
       const index = st.demos.length - 1;
       if (is3D(d)) {
@@ -326,6 +327,18 @@ export class Reader {
         node.generatedFigure = d.figure; node.visualKind = 'diagram';
       }
       atlas.audit = { ...(atlas.audit || {}), linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0) };
+      if (researchAudit.length) {
+        const W = atlas.sourceIndex.webResearch || { provider: '', model: '', searched: 0, tasks: [], citations: [] };
+        const all = [...(W.citations || []), ...researchAudit.flatMap(x => x.citations || [])];
+        W.provider = [...new Set([W.provider, ...researchAudit.map(x => x.provider)].filter(Boolean))].join(', ');
+        W.model = [...new Set([W.model, ...researchAudit.map(x => x.model)].filter(Boolean))].join(', ');
+        W.searched = (+W.searched || 0) + researchAudit.reduce((n, x) => n + (+x.searched || 0), 0);
+        W.tasks = [...(W.tasks || []), ...researchAudit.map(x => x.task || 'Learner-requested diorama')];
+        W.citations = all.filter((x, i) => x && x.url && all.findIndex(y => y && y.url === x.url) === i);
+        atlas.sourceIndex.webResearch = W;
+        atlas.audit.webResearch = { provider: W.provider, model: W.model, searches: W.searched, citations: W.citations.length };
+        researchAudit.length = 0;
+      }
       this.save(); this.room.refreshStation(this.part); this.render();
       toast(is3D(d) ? 'Additional diorama added to the concept sequence.' : 'The request was represented as a 2D explanatory figure rather than a spatial simulation.');
       return how;
