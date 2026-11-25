@@ -43,6 +43,7 @@
 
 The atlas presents a chapter as an interactive concept map. Select a node to see its central question, explanatory views, linked dioramas, figures and source trail. It is intended for question-led exploration rather than reading one long chapter summary.
 
+- **Quick source scan:** expand the collapsed scan above the concept map. It lists the ingested subsections and source-step counts. Search for a concept, term, equation, worked example, table, figure or code fragment; selecting a result opens the concept that owns that validated source step.
 - **Question branches:** challenges appear in a horizontal scroller. Select a branch to investigate one question at a time. Your other branches keep their own progress.
 - **Predict first:** inspect the stimulus, open a hint only when useful, write your prediction and choose a confidence level, then commit it before revealing the expected reconstruction.
 - **Unfold one move at a time:** after revealing the answer, press **UNFOLD** to expose exactly one next reasoning unit. Earlier units stay visible. **Space** unfolds one more unit; **Ctrl+Z** steps back one unit. Neither action changes the selected question.
@@ -50,7 +51,7 @@ The atlas presents a chapter as an interactive concept map. Select a node to see
 - **Dioramas and diagrams:** open a linked diorama to inspect the concept as a manipulable model. Where 3D would mislead, the atlas can show 2D explanatory figures instead.
 - **Legacy atlases:** saved atlases created before the structured reasoning path remain readable. Their existing explanation appears as one reveal unit rather than being rewritten or divided into invented steps.
 
-See [the learning workflow](LEARNING-WORKFLOW.md) for the planned rapid source-scan layer. The optional loci route described below is available now; due-review scheduling and non-bookcase landmarks remain future work.
+See [the learning workflow](LEARNING-WORKFLOW.md) for the planned advanced autocomplete scan and spatial-memory extensions. The compact source scan and bookcase-based loci route described here are available now; due-review scheduling and non-bookcase landmarks remain future work.
 
 ## Optional loci memory route
 
