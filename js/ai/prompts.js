@@ -497,39 +497,44 @@ const fmtInv = inv => {
   if (inv.quantities) bits.push(inv.quantities + ' quantities with units');
   return (bits.length ? bits.join(' · ') : 'text only') + (inv.expectSteps ? ` · aim for ≥ ${inv.expectSteps} step${inv.expectSteps > 1 ? 's' : ''}` : '');
 };
-export function sectionList(sections) {
-  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory)}` : '')).join('\n');
+export function sectionList(sections, sourceType = 'pdf') {
+  const unit = sourceType === 'pptx' ? 'slide ' : 'p. ';
+  return sections.map(s => `[${s.id}] ${'  '.repeat(Math.max(0, (s.level || 2) - 2))}${s.title} — ${unit}${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}` + (s.inventory ? ` · ${s.inventory.chars.toLocaleString('en')} chars · contains: ${fmtInv(s.inventory)}` : '')).join('\\n');
 }
 export function figureList(figures, attached = []) {
-  return figures.map(f => `${f.id} · ${f.label} · p. ${f.page} · "${String(f.caption || '').slice(0, 220)}"` + (attached.includes(f.id) ? ` [image ${attached.indexOf(f.id) + 1} attached]` : '')).join('\n');
+  return figures.map(f => {
+    const location = f.slide != null ? 'slide ' + f.slide : f.page != null ? 'p. ' + f.page : 'source figure';
+    return `${f.id} · ${f.label} · ${location} · "${String(f.caption || '').slice(0, 220)}"` + (attached.includes(f.id) ? ` [image ${attached.indexOf(f.id) + 1} attached]` : '');
+  }).join('\\n');
 }
 
 // The analysis prompt: one call per part. sections = partSections(...).sections, figures = figure metadata.
-export function chapterPrompt({ book, chapter, text, depth = 'complete', deep = false, n, images = 0, sections = null, figures = null, attached = [], pageImages = 0, budget = 170000 }) {
+export function chapterPrompt({ book, chapter, text, depth = 'complete', deep = false, n, images = 0, sections = null, figures = null, attached = [], pageImages = 0, sourceType = 'pdf', budget = 170000 }) {
   const S = sections && sections.length ? sections : null, F = figures && figures.length ? figures : null;
+  const isPptx = sourceType === 'pptx', sourceName = isPptx ? 'PowerPoint presentation' : 'PDF', unit = isPptx ? 'slide' : 'p.';
   const min = S ? S.length : 0;
   const N = Math.max(n || 0, min), steps = depth === 'exact' ? BREAKDOWN.exact(N) + (min > (n || 0) ? ` (raised to ${min}: one per subsection is the minimum)` : '') : depth === 'essential' ? BREAKDOWN.essential : BREAKDOWN.complete;
   const sheet = S && S.some(x => x.sheet);
   // text budget: whole subsections only; the ones that do not fit are written by follow-up calls with their own text
   let used = 0; const deferred = new Set();
   if (S) S.forEach(s => { const n = (s.text || '').length + 80; if (used + n > budget && used > 0) deferred.add(s.id); else used += n; });
-  const body = S ? S.filter(s => !deferred.has(s.id)).map(s => `\n=== [${s.id}] ${s.title} (p. ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}`).join('\n') : String(text || '');
-  const listed = S ? sectionList(S).split('\n').map((l, k) => deferred.has(S[k].id) ? l + '  ← DEFERRED: its text comes in a second call; write NO steps for it now and leave it out of "coverage"' : l).join('\n') : '';
+  const body = S ? S.filter(s => !deferred.has(s.id)).map(s => `\n=== [${s.id}] ${s.title} (${unit} ${s.startPage}${s.endPage > s.startPage ? '–' + s.endPage : ''}) ===\n${s.text}`).join('\n') : String(text || '');
+  const listed = S ? sectionList(S, sourceType).split('\n').map((l, k) => deferred.has(S[k].id) ? l + '  ← DEFERRED: its text comes in a second call; write NO steps for it now and leave it out of "coverage"' : l).join('\n') : '';
   return `You are building one scroll of a study room from ONE PART of a book. Judge your answer as the winning entry of a world competition: complete to the last subsection, exact to the last digit, concrete, and teachable. Vague or synthesised-sounding text loses.
 BOOK: ${book}
 PART: ${chapter}
-${pageImages ? `Attached: ${pageImages} page image(s) of this part (its text layer is thin; read the pages).\n` : images ? `Attached: ${images} image(s): the PDF's own figures marked [image k attached] below.\n` : ''}
+${pageImages ? `Attached: ${pageImages} page image(s) of this part (its text layer is thin; read the pages).\n` : images ? `Attached: ${images} image(s): the source's own figures marked [image k attached] below.\n` : ''}
 BREAKDOWN: ${steps}${deep ? ' + DEEPEST DIVE (below): the step count above is for the main steps; the foundations go inside them as "groundwork"' : ''}.
 SUBSECTIONS OF THIS PART (cover every one; the ids in brackets go into "section" and "coverage")${sheet ? '. This part is ONE SHEET of an infographic/handout: each subsection is a panel or card of the page; the text of a panel is its labels and call-outs in reading order, so rebuild them into explained steps' : ''}:
 ${S ? listed : `(not provided) Before writing, list the part's subsections yourself and use these ids: ${SUBSECTION_IDS}`}
 
-FIGURES AND TABLES FROM THE PDF (cite them by id in "figures"; every one must be cited by a step or listed in "figuresSkipped"):
-${F ? figureList(F, attached) : `(not provided) Cite the PDF's own figures and tables by id: ${FIGURE_IDS}`}
+FIGURES, TABLES AND EMBEDDED IMAGES FROM THE SOURCE (cite them by id in "figures"; every one must be cited by a step or listed in "figuresSkipped"):
+${F ? figureList(F, attached) : `(not provided) Cite the source's own figures and tables by id: ${FIGURE_IDS}`}
 
 PROCEDURE — do these in order:
 1. INVENTORY. For each subsection, list for yourself every definition, law, equation, number with unit, worked example, table, figure and claim it contains (the "contains" notes above are a minimum). Do not output this list.
 2. STEPS. Walk the subsections in the order given. Write the BREAKDOWN above. Each step covers items of exactly one subsection and names it in "section". One step per definition, per law or equation (with the source's derivation, one move per line with a reason), per worked example (its own numbers, line by line), per table (rows copied into "table"), per code block (every line explained, see CODE), per figure (what it shows, cited in "figures" by one step only). Explain every step (EXPLAINED STEPS): statement, explain paragraphs with figures, terms, intuition, misconception and check with their small figures.
-3. REAL EXAMPLES FIRST. Use the PDF's own examples, numbers and figures.${OUT.re3}
+3. REAL EXAMPLES FIRST. Use the ${sourceName}'s own examples, numbers, tables and figures.${OUT.re3}
 4. QUESTION THREAD. Give the part a "question". Step 1 answers it. Every step has "answers" and "opens"; step k+1's "answers" repeats step k's "opens" word for word. The last step opens the question the next part (or open research) takes up.
 5. ORDER AND DEPENDENCY. Never use a symbol before defining it; "from" lists the steps each step relies on. State every assumption. Fix errors in the source and say so in "sourceNote".
 6. EMBODIMENT. Attach every step to concrete bodies, objects or events ("bodies"). Abstract ideas get an honest physical embodiment (probability → balls through pegs; a market → buyers and sellers walking to a price; an argument → weights on a balance).
@@ -560,7 +565,7 @@ Return ONLY JSON, no prose before or after, in this shape:
 ${HOOK_SPEC}
 ${CHAIN_FORMAT}
 Escape LaTeX backslashes in JSON strings (\\\\frac).
-PART TEXT (subsections marked "=== [id] title (pages) ==="):
+PART TEXT (subsections marked "=== [id] title (${isPptx ? 'slides' : 'pages'}) ==="):
 """
 ${body.slice(0, budget + 10000)}
 """`;
