@@ -339,6 +339,8 @@ export class Reader {
         node.visualKind = 'diorama';
       } else if (d.type === 'figure' && d.figure) {
         node.generatedFigure = d.figure; node.visualKind = 'diagram';
+        node.explanatoryFigures = node.explanatoryFigures || [];
+        node.explanatoryFigures.push({ stepId: String(st.id), title: d.title || node.title, purpose: d.purpose || node.question, figure: d.figure, learnerRequested: true });
       }
       atlas.audit = { ...(atlas.audit || {}), linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0) };
       recordResearch();
