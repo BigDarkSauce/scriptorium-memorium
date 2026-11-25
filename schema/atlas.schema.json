@@ -883,6 +883,24 @@
     "attempts": {
       "type": "object"
     },
+    "scanAttempts": {
+      "type": "object",
+      "description": "Learner recall attempts for source-derived scan prompts. These are self-reported and are not objective grading results.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string", "maxLength": 1200 },
+          "committed": { "type": "boolean" },
+          "revealed": { "type": "boolean" },
+          "attemptedAt": { "type": "string", "format": "date-time" },
+          "revealedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "selectedScanPromptId": {
+      "type": "string",
+      "description": "Last selected source-derived recall prompt, retained when the atlas is reopened."
+    },
     "selectedNodeId": {
       "type": "string"
     },

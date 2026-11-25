@@ -213,6 +213,188 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     'aria-label': 'Search source steps'
   });
   scanInput.value = String(atlas.sourceScanQuery || '');
+  // Adaptive retrieval checks are compiled only from complete source records.
+  // Prompt types are constrained by explicit source fields; incomplete records are skipped.
+  const recallPrompts = scanEntries.flatMap(entry => {
+    const step = entry.step;
+    const prompts = [];
+    (Array.isArray(step.terms) ? step.terms : []).forEach((term, index) => {
+      const name = sourceText(term && term.term).trim();
+      const meaning = sourceText(term && term.meaning).trim();
+      if (!name || !meaning || name.toLowerCase() === meaning.toLowerCase() || meaning.length > 1000) return;
+      prompts.push({
+        id: 'term:' + String(step.id) + ':' + index,
+        kind: 'term completion',
+        stepId: String(step.id),
+        title: step.title || 'Source term',
+        pages: entry.pages,
+        question: 'Which term is described by this definition?',
+        stimulus: meaning,
+        answer: name
+      });
+    });
+    (Array.isArray(step.examples) ? step.examples : []).forEach((example, index) => {
+      const problem = sourceText(example && example.problem).trim();
+      const answer = sourceText(example && example.answer).trim();
+      if (!problem || !answer || problem.length > 1000 || answer.length > 1000) return;
+      prompts.push({
+        id: 'example:' + String(step.id) + ':' + index,
+        kind: 'worked example',
+        stepId: String(step.id),
+        title: (example && example.title) || step.title || 'Worked example',
+        pages: entry.pages,
+        question: 'Reconstruct the worked example before checking its result.',
+        stimulus: problem,
+        answer
+      });
+    });
+    const equation = sourceText(step.math).trim();
+    const statement = sourceText(step.statement).trim();
+    if (!prompts.length && equation && statement && !statement.includes(equation) && equation.length <= 1000 && statement.length <= 1000) {
+      prompts.push({
+        id: 'equation:' + String(step.id),
+        kind: 'equation anticipation',
+        stepId: String(step.id),
+        title: step.title || 'Source equation',
+        pages: entry.pages,
+        question: 'Write the equation that expresses this relationship.',
+        stimulus: statement,
+        answer: equation
+      });
+    }
+    return prompts;
+  }).slice(0, 80);
+  atlas.scanAttempts = atlas.scanAttempts || {};
+  const scanRecall = el('section', { class: 'atlas-scan-recall', hidden: !recallPrompts.length });
+  const recallRail = el('div', {
+    class: 'atlas-scan-recall-rail',
+    role: 'group',
+    'aria-label': 'Source-derived retrieval prompts'
+  });
+  const recallCard = el('section', {
+    class: 'atlas-scan-recall-card',
+    hidden: true,
+    'aria-live': 'polite'
+  });
+  const recallTabs = new Map();
+  const refreshRecallTabs = () => {
+    recallPrompts.forEach(prompt => {
+      const button = recallTabs.get(prompt.id);
+      if (!button) return;
+      const saved = atlas.scanAttempts[prompt.id] || {};
+      button.classList.toggle('active', atlas.selectedScanPromptId === prompt.id);
+      button.setAttribute('aria-pressed', String(atlas.selectedScanPromptId === prompt.id));
+      const status = saved.revealed ? 'REVEALED' : saved.committed ? 'COMMITTED' : 'NEW';
+      const small = button.querySelector('small');
+      if (small) small.textContent = prompt.stepId + ' · ' + status;
+    });
+  };
+  const renderRecallPrompt = prompt => {
+    atlas.selectedScanPromptId = prompt.id;
+    const saved = atlas.scanAttempts[prompt.id] || {};
+    recallCard.innerHTML = '';
+    recallCard.hidden = false;
+    const location = sourcePointsLabel(prompt.pages, sourceType);
+    recallCard.append(
+      el('div', {
+        class: 'atlas-scan-recall-meta',
+        text: prompt.kind.toUpperCase() + ' · ' + prompt.stepId + (location ? ' · ' + location : '')
+      }),
+      el('h4', { text: prompt.question }),
+      el('p', { class: 'atlas-scan-recall-stimulus', html: mathHTML(prompt.stimulus) }),
+      el('small', { class: 'atlas-scan-recall-title', text: prompt.title || '' })
+    );
+    const response = el('textarea', {
+      class: 'field atlas-scan-recall-response',
+      rows: 2,
+      placeholder: 'Reconstruct the answer in your own words…',
+      'aria-label': 'Your source-derived recall response'
+    });
+    response.value = saved.response || '';
+    response.disabled = !!saved.revealed;
+    const commit = el('button', {
+      class: 'btn primary small',
+      type: 'button',
+      text: saved.committed ? 'Recommit response' : 'Commit recall',
+      disabled: !!saved.revealed || !response.value.trim(),
+      onclick: () => {
+        const current = atlas.scanAttempts[prompt.id] || {};
+        atlas.scanAttempts[prompt.id] = {
+          ...current,
+          response: response.value.trim().slice(0, 1200),
+          committed: true,
+          revealed: false,
+          attemptedAt: new Date().toISOString()
+        };
+        onSave && onSave();
+        renderRecallPrompt(prompt);
+      }
+    });
+    response.addEventListener('input', () => {
+      const current = atlas.scanAttempts[prompt.id] || {};
+      atlas.scanAttempts[prompt.id] = {
+        ...current,
+        response: response.value.slice(0, 1200),
+        committed: false,
+        revealed: false
+      };
+      commit.disabled = !response.value.trim();
+      commit.textContent = 'Commit recall';
+      refreshRecallTabs();
+      onSave && onSave();
+    });
+    recallCard.append(response, el('div', { class: 'row wrap atlas-scan-recall-actions' }, [commit]));
+    if (saved.committed && !saved.revealed) {
+      recallCard.append(el('button', {
+        class: 'btn small',
+        type: 'button',
+        text: 'Reveal expected answer',
+        onclick: () => {
+          const current = atlas.scanAttempts[prompt.id] || {};
+          atlas.scanAttempts[prompt.id] = { ...current, revealed: true, revealedAt: new Date().toISOString() };
+          onSave && onSave();
+          renderRecallPrompt(prompt);
+        }
+      }));
+    } else if (saved.revealed) {
+      recallCard.append(el('div', { class: 'atlas-scan-recall-answer' }, [
+        el('b', { text: 'EXPECTED RECONSTRUCTION' }),
+        el('p', { html: mathHTML(prompt.answer) }),
+        el('small', { text: 'Compare this source answer with your committed response. This is a recall check, not an automatically graded score.' })
+      ]));
+    }
+    refreshRecallTabs();
+  };
+  if (recallPrompts.length) {
+    scanRecall.append(
+      el('div', { class: 'atlas-section-label', text: 'SOURCE-DERIVED QUICK RETRIEVAL' }),
+      el('p', {
+        class: 'atlas-scan-recall-intro',
+        text: 'Choose a check built from complete terms, worked examples or equation statements in this source. Commit your reconstruction before revealing the expected answer.'
+      }),
+      recallRail,
+      recallCard
+    );
+    recallPrompts.forEach(prompt => {
+      const button = el('button', {
+        class: 'atlas-scan-recall-tab',
+        type: 'button',
+        'aria-pressed': 'false',
+        onclick: () => {
+          atlas.selectedScanPromptId = prompt.id;
+          onSave && onSave();
+          renderRecallPrompt(prompt);
+        }
+      }, [
+        el('b', { text: prompt.kind }),
+        el('small', { text: prompt.stepId + ' · NEW' })
+      ]);
+      recallTabs.set(prompt.id, button);
+      recallRail.append(button);
+    });
+    const rememberedPrompt = recallPrompts.find(prompt => prompt.id === atlas.selectedScanPromptId);
+    if (rememberedPrompt) renderRecallPrompt(rememberedPrompt);
+  }
   const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
   const openNode = (node, stepId = null) => {
     atlas.selectedSourceStepId = stepId == null ? null : String(stepId);
@@ -400,7 +582,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     paintScan(scanInput.value);
   });
   paintScan(scanInput.value);
-  scanBody.append(scanInput, suggestionList, scanResults);
+  scanBody.append(scanInput, suggestionList, ...(recallPrompts.length ? [scanRecall] : []), scanResults);
   scan.append(scanSummaryNode, scanBody);
   root.append(scan);
 
