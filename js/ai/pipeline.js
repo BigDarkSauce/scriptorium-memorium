@@ -57,11 +57,15 @@ export async function material(ctx, part, { onStatus } = {}) {
 
 // ---------------------------------------------------------------- the stages
 async function ask(prompt, o = {}, title) {
-  const answer = await askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated, fresh: !!(o.fresh || o.force), manualTitle: title });
-  if (answer && answer._webResearch && Array.isArray(o.researchAudit)) {
-    o.researchAudit.push({ ...answer._webResearch, task: title || o.writing || 'AI authoring call' });
-  }
-  return answer;
+  return askJSON(prompt, {
+    tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images,
+    onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`),
+    onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'),
+    onStatus: o.onStatus,
+    onResearch: x => { if (Array.isArray(o.researchAudit)) o.researchAudit.push({ ...x, task: title || o.writing || 'AI authoring call' }); },
+    role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated,
+    fresh: !!(o.fresh || o.force), manualTitle: title
+  });
 }
 // stage 1: one structured call for the whole part
 export async function writeChain(ctx, P, M, o) {
