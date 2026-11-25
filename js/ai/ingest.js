@@ -1,4 +1,4 @@
-import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary } from './pptx.js';
+import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary, pptxChartData, pptxDiagramData } from './pptx.js';
 
 // PDF ingestion in the browser (pdf.js), without AI. It finds the book's hierarchy, keeps every subsection's text
 // with its pages, and cuts the book's own figures out of the pages.
@@ -833,17 +833,35 @@ async function pptSlide(zip, slidePath, number) {
     .filter(Boolean);
   const alt = [...new Set(descriptions)];
   const notes = await pptNotes(zip, slidePath);
-  const chartSummaries = [], diagramSummaries = [];
-  for (const chart of assets.charts) {
+  const chartSummaries = [], diagramSummaries = [], sourceVisuals = [];
+  for (const [i, chart] of assets.charts.entries()) {
     try {
       const file = zip.file(chart.path);
-      if (file) chartSummaries.push(pptxChartSummary(await file.async('string'), chart.caption || 'Chart on slide ' + number));
+      if (file) {
+        const xml = await file.async('string');
+        const data = pptxChartData(xml, chart.caption || 'Chart on slide ' + number);
+        chartSummaries.push(pptxChartSummary(xml, chart.caption || 'Chart on slide ' + number));
+        sourceVisuals.push({
+          id: 'pptx-chart-s' + number + '-' + (i + 1), kind: 'chart',
+          label: chart.caption || data.title, caption: chart.caption || data.title,
+          slide: number, mediaPath: chart.path, data
+        });
+      }
     } catch (e) { /* an unreadable chart is not silently converted into invented data */ }
   }
-  for (const diagram of assets.diagrams) {
+  for (const [i, diagram] of assets.diagrams.entries()) {
     try {
       const file = zip.file(diagram.path);
-      if (file) diagramSummaries.push(pptxDiagramSummary(await file.async('string'), diagram.caption || 'SmartArt on slide ' + number));
+      if (file) {
+        const xml = await file.async('string');
+        const data = pptxDiagramData(xml, diagram.caption || 'SmartArt on slide ' + number);
+        diagramSummaries.push(pptxDiagramSummary(xml, diagram.caption || 'SmartArt on slide ' + number));
+        sourceVisuals.push({
+          id: 'pptx-smartart-s' + number + '-' + (i + 1), kind: 'smartart',
+          label: diagram.caption || 'SmartArt on slide ' + number,
+          caption: diagram.caption || '', slide: number, mediaPath: diagram.path, data
+        });
+      }
     } catch (e) { /* retain the slide and its accessible description */ }
   }
   const embeddedImages = assets.images.map(x => '- ' + x.label + (x.caption ? '' : ' (no alternative description; inspect the attached image)'));
@@ -858,7 +876,7 @@ async function pptSlide(zip, slidePath, number) {
     ...(notes ? ['Speaker notes:', notes] : []),
     ...(chunks.length || alt.length || notes || embeddedImages.length || chartSummaries.length || diagramSummaries.length ? [] : ['[No extractable text or embedded visuals found on this slide.]'])
   ].join('\n\n');
-  return { id: 'slide-' + number, num: String(number), title, level: 2, startPage: number, endPage: number, sourceSlide: number, text, inventory: inventory(text) };
+  return { id: 'slide-' + number, num: String(number), title, level: 2, startPage: number, endPage: number, sourceSlide: number, text, sourceVisuals, inventory: inventory(text) };
 }
 export async function splitPresentation(blob, { onProgress } = {}) {
   if (typeof window === 'undefined' || !window.JSZip || typeof window.JSZip.loadAsync !== 'function') {

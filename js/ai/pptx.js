@@ -85,44 +85,92 @@ export function pptxSlideAssets(slideXml, relationshipXml, slidePath, slideNumbe
 }
 
 const blockFor = (xml, local) => localTags(xml, local)[0] || '';
-const valuesIn = xml => {
-  const pts = localTags(xml, 'pt').map(tag => {
-    const a = attrMap(openTag(tag));
-    const v = localTags(tag, 'v')[0];
-    const value = v ? decodeXml(v.replace(/^<[^>]*>/, '').replace(/<\/[^>]+>$/i, '').replace(/<[^>]+>/g, '')) : '';
-    return { index: Number.isFinite(Number(a.idx)) ? Number(a.idx) : 0, value };
-  }).filter(x => x.value !== '').sort((a, b) => a.index - b.index);
-  return pts.map(x => x.value);
-};
+const pointsIn = xml => localTags(xml, 'pt').map(tag => {
+  const a = attrMap(openTag(tag));
+  const v = localTags(tag, 'v')[0];
+  const value = v ? decodeXml(v.replace(/^<[^>]*>/, '').replace(/<\/[^>]+>$/i, '').replace(/<[^>]+>/g, '')) : '';
+  return { index: Number.isFinite(Number(a.idx)) ? Number(a.idx) : 0, value };
+}).filter(x => x.value !== '').sort((a, b) => a.index - b.index);
+const valuesIn = xml => pointsIn(xml).map(x => x.value);
+const CHART_TYPES = ['barChart', 'lineChart', 'scatterChart', 'areaChart', 'area3DChart', 'bar3DChart', 'line3DChart', 'pieChart', 'pie3DChart', 'doughnutChart', 'radarChart', 'bubbleChart', 'stockChart', 'surfaceChart', 'surface3DChart'];
+const chartKind = tag => ({
+  barChart: 'bar', bar3DChart: 'bar', lineChart: 'line', line3DChart: 'line',
+  scatterChart: 'scatter', bubbleChart: 'scatter', areaChart: 'area', area3DChart: 'area',
+  pieChart: 'pie', pie3DChart: 'pie', doughnutChart: 'doughnut', radarChart: 'radar',
+  stockChart: 'stock', surfaceChart: 'surface', surface3DChart: 'surface'
+})[tag] || 'unknown';
 
-// Extract cached series values rather than guessing a chart from its screenshot or inventing absent workbook data.
-export function pptxChartSummary(chartXml, fallbackTitle = 'Chart') {
+/**
+ * Extract chart data as structured source evidence. Values remain the cached Open XML values:
+ * this function does not recalculate a workbook or interpolate missing points.
+ */
+export function pptxChartData(chartXml, fallbackTitle = 'Chart') {
   const title = textValues(blockFor(chartXml, 'title')).join(' ').trim() || fallbackTitle;
+  const chartTypes = CHART_TYPES.filter(tag => localTags(chartXml, tag).length);
+  const barDir = attrMap(openTag(blockFor(chartXml, 'barDir'))).val || '';
+  const grouping = attrMap(openTag(blockFor(chartXml, 'grouping'))).val || '';
   const series = localTags(chartXml, 'ser').map((ser, i) => {
     const tx = blockFor(ser, 'tx');
     const rawName = textValues(tx, 'v')[0] || textValues(tx, 't')[0] || '';
     const name = rawName || 'Series ' + (i + 1);
-    const cat = valuesIn(blockFor(ser, 'cat') || blockFor(ser, 'xVal'));
-    const val = valuesIn(blockFor(ser, 'val') || blockFor(ser, 'yVal'));
-    const pairs = val.map((v, k) => (cat[k] != null ? cat[k] : String(k + 1)) + ' = ' + v);
-    return { name, pairs };
+    const categories = pointsIn(blockFor(ser, 'cat') || blockFor(ser, 'xVal'));
+    const values = pointsIn(blockFor(ser, 'val') || blockFor(ser, 'yVal'));
+    const byCategory = new Map(categories.map(point => [point.index, point.value]));
+    const points = values.map(point => ({
+      index: point.index,
+      category: byCategory.has(point.index) ? byCategory.get(point.index) : null,
+      rawValue: point.value,
+      value: point.value.trim() !== '' && Number.isFinite(Number(point.value)) ? Number(point.value) : null
+    }));
+    return {
+      name, categories: categories.map(x => x.value), values: values.map(x => x.value), points,
+      cachedPointCount: values.length
+    };
   });
+  return {
+    title, chartTypes, chartKind: chartKind(chartTypes[0]),
+    ...(barDir ? { barDirection: barDir } : {}),
+    ...(grouping ? { grouping } : {}),
+    series,
+    hasCachedValues: series.some(s => s.values.length > 0),
+    limitations: ['Values are taken from cached chart XML points; the linked workbook is not recalculated.', 'Axis units and scale are not inferred when absent from the chart XML.']
+  };
+}
+
+// Extract cached series values rather than guessing a chart from its screenshot or inventing absent workbook data.
+export function pptxChartSummary(chartXml, fallbackTitle = 'Chart') {
+  const data = pptxChartData(chartXml, fallbackTitle);
+  const series = data.series.map(s => ({
+    name: s.name,
+    pairs: s.points.map(p => (p.category != null ? p.category : String(p.index + 1)) + ' = ' + p.rawValue)
+  }));
   const details = series.map(s => s.name + (s.pairs.length ? ': ' + s.pairs.slice(0, 40).join('; ') : ': no cached point values')).join('\n');
-  return 'PowerPoint chart — ' + title + (details ? '\n' + details : '\nNo cached series data was found in the chart XML.');
+  return 'PowerPoint chart — ' + data.title + (details ? '\n' + details : '\nNo cached series data was found in the chart XML.');
 }
 
 // SmartArt labels and directed connections are taken from the diagram data part, not inferred from a decorative image.
-export function pptxDiagramSummary(diagramXml, fallbackTitle = 'SmartArt') {
+export function pptxDiagramData(diagramXml, fallbackTitle = 'SmartArt') {
   const nodes = localTags(diagramXml, 'pt').map(tag => {
     const a = attrMap(openTag(tag));
     return { id: a.modelId || a.id || '', label: textValues(tag).join(' ').trim(), type: a.type || '' };
   }).filter(x => x.label);
   const links = localTags(diagramXml, 'cxn').map(tag => {
     const a = attrMap(openTag(tag));
-    return { from: a.srcId || '', to: a.destId || '', type: a.type || '' };
+    return { id: a.modelId || a.id || '', from: a.srcId || '', to: a.destId || '', type: a.type || '' };
   }).filter(x => x.from && x.to);
-  const nodeText = nodes.slice(0, 100).map(n => (n.id ? '[' + n.id + '] ' : '') + n.label).join('\n');
-  const linkText = links.slice(0, 150).map(x => x.from + ' → ' + x.to + (x.type ? ' (' + x.type + ')' : '')).join('\n');
+  return {
+    title: fallbackTitle,
+    nodes: nodes.slice(0, 100),
+    links: links.slice(0, 150),
+    omittedNodes: Math.max(0, nodes.length - 100),
+    omittedLinks: Math.max(0, links.length - 150),
+    limitations: ['Connections preserve the Open XML source and are not reinterpreted as causal relationships.', 'Original SmartArt layout and styling are not reconstructed by this data extraction.']
+  };
+}
+export function pptxDiagramSummary(diagramXml, fallbackTitle = 'SmartArt') {
+  const data = pptxDiagramData(diagramXml, fallbackTitle);
+  const nodeText = data.nodes.map(n => (n.id ? '[' + n.id + '] ' : '') + n.label).join('\n');
+  const linkText = data.links.map(x => x.from + ' → ' + x.to + (x.type ? ' (' + x.type + ')' : '')).join('\n');
   return 'PowerPoint SmartArt — ' + fallbackTitle +
     (nodeText ? '\nLabels:\n' + nodeText : '\nNo accessible node labels were found.') +
     (linkText ? '\nConnections:\n' + linkText : '');
