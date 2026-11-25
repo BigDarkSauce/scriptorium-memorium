@@ -337,6 +337,7 @@ export async function ask(prompt, o = {}) {
       const r = await call(p, m, requestPrompt, { images, signal, onText, onThink: n => onStatus && onStatus(p.name + ' · ' + m + ' is thinking… ' + n.toLocaleString() + ' characters of reasoning') });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
       const webResearch = (r.webSearchCalls || (r.citations && r.citations.length)) ? {
+        callId: Date.now() + ':' + p.id + ':' + m + ':' + round,
         provider: p.name, model: m, searched: r.webSearchCalls || 0,
         citations: (r.citations || []).filter(c => /^https:\/\//i.test(c.url))
       } : null;
