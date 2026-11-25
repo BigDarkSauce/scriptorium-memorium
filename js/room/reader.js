@@ -8,7 +8,7 @@ import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
 import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
 import { chapterPrompt, detailPrompt } from '../ai/prompts.js';
-import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo, roomCtx } from '../ai/pipeline.js';
+import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo, roomCtx, mergeAtlasResearch } from '../ai/pipeline.js';
 import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
@@ -300,23 +300,37 @@ export class Reader {
     const A = this.part.analysis, atlas = A && A.atlas, node = atlas && (atlas.nodes || []).find(n => n.id === nodeId);
     if (!node) throw new Error('The selected concept node no longer exists.');
     if (this._atlasBuildBusy) throw new Error('A diorama for this chapter is already being authored.');
-    const st = (node.stepIds || []).map(id => (A.chain || []).find(x => String(x.id) === String(id))).find(Boolean);
+    const sourceSteps = (node.stepIds || []).map(id => (A.chain || []).find(x => String(x.id) === String(id))).filter(Boolean);
+    const st = sourceSteps[0];
     if (!st) throw new Error('This concept has no source step to anchor the new diorama.');
     this._atlasBuildBusy = true;
     const d = {
       type: 'scene', title: (node.title + ' · Additional view').slice(0, 90),
-      purpose: node.question, technique: 'card',
-      request: 'Create an additional diorama requested by the learner for this concept.\n' +
+      purpose: node.question,
+      request: 'Create an additional explanatory diorama requested by the learner for this concept.\n' +
         'Concept: ' + node.title + '\nQuestion: ' + node.question + '\nSummary: ' + node.summary + '\n' +
-        'Visual intent already planned: ' + node.visualIntent + '\n' +
+        'Planned explanatory intent: ' + node.visualIntent + '\n' +
         'LEARNER REQUEST: ' + request + '\n' +
-        'Source step: ' + st.id + ' — ' + st.title + ': ' + st.statement + '\n' +
-        'Use the learner request as an additional view, not as permission to contradict the source. Keep factual claims, quantities and actors grounded in the supplied source steps. Prefer a meaningful manipulation or comparison over decorative motion.'
+        'COMPLETE SOURCE STEPS FOR THIS CONCEPT: ' + JSON.stringify(sourceSteps.map(x => ({
+          id: x.id, title: x.title, statement: String(x.statement || '').slice(0, 1200),
+          answers: x.answers || '', opens: x.opens || '', math: x.math || '',
+          terms: (x.terms || []).slice(0, 12),
+          explanation: (x.explain || []).map(e => e && e.text).filter(Boolean).join(' ').slice(0, 1200),
+          pages: x.pages || [], figures: x.figures || [], table: x.table || null
+        }))) + '\n' +
+        'Use the learner request as an additional view, not as permission to contradict the source. Ground every factual claim, number and actor in these source steps. Do not invent measurements or mechanisms absent from them. Let the visual grammar and camera technique fit the subject rather than forcing a card-style scene.'
+    };
+    const researchAudit = [];
+    const recordResearch = () => {
+      if (!researchAudit.length) return;
+      A.researchEvidenceCalls = [...(A.researchEvidenceCalls || []), ...researchAudit].slice(-120);
+      mergeAtlasResearch(atlas, researchAudit);
     };
     try {
       onStatus('Planning and authoring the additional diorama…');
-      const researchAudit = [];
-      const how = await authorDemo(this.ctx(), st, d, { onStatus, researchAudit });
+      let how;
+      try { how = await authorDemo(this.ctx(), st, d, { onStatus, researchAudit }); }
+      catch (e) { recordResearch(); this.save(); throw e; }
       st.demos = st.demos || []; st.demos.push(d);
       const index = st.demos.length - 1;
       if (is3D(d)) {
@@ -327,18 +341,7 @@ export class Reader {
         node.generatedFigure = d.figure; node.visualKind = 'diagram';
       }
       atlas.audit = { ...(atlas.audit || {}), linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0) };
-      if (researchAudit.length) {
-        A.researchEvidenceCalls = [...(A.researchEvidenceCalls || []), ...researchAudit].slice(-120);
-        const W = atlas.sourceIndex.webResearch || { provider: '', model: '', searched: 0, tasks: [], citations: [] };
-        const all = [...(W.citations || []), ...researchAudit.flatMap(x => x.citations || [])];
-        W.provider = [...new Set([W.provider, ...researchAudit.map(x => x.provider)].filter(Boolean))].join(', ');
-        W.model = [...new Set([W.model, ...researchAudit.map(x => x.model)].filter(Boolean))].join(', ');
-        W.searched = (+W.searched || 0) + researchAudit.reduce((n, x) => n + (+x.searched || 0), 0);
-        W.tasks = [...(W.tasks || []), ...researchAudit.map(x => x.task || 'Learner-requested diorama')];
-        W.citations = all.filter((x, i) => x && x.url && all.findIndex(y => y && y.url === x.url) === i);
-        atlas.sourceIndex.webResearch = W;
-        atlas.audit.webResearch = { provider: W.provider, model: W.model, searches: W.searched, citations: W.citations.length };
-      }
+      recordResearch();
       this.save(); this.room.refreshStation(this.part); this.render();
       toast(is3D(d) ? 'Additional diorama added to the concept sequence.' : 'The request was represented as a 2D explanatory figure rather than a spatial simulation.');
       return how;
