@@ -340,6 +340,7 @@ export class Reader {
               row: state.row,
               slot: state.slot,
               shelfName: shelf.title,
+              rowLabel: row.label,
               association,
               updatedAt: new Date().toISOString(),
               review: previous && previous.review ? previous.review : undefined
