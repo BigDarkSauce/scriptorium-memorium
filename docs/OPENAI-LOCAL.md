@@ -88,6 +88,10 @@ The default is GPT-6.2 Astra, selected for difficult reasoning and code/scene au
 
 A complete chapter can make multiple requests: chain writing, targeted repairs, missing figures, diorama storyboards, scene authoring, critique, semantic atlas, and possibly learner-requested additional scenes. It can therefore be significantly more expensive than one chat response. Monitor usage in the OpenAI Platform. ChatGPT Plus/Pro/etc. subscriptions do not include OpenAI API usage.
 
+## Regression coverage
+
+CI includes both a pure Open XML unit test and a real-browser synthetic-deck test. The browser test constructs a small PowerPoint ZIP in Chromium and calls the same `splitPresentation`, `presentationSections` and `extractPresentationFigures` functions used by the app. It checks that presentation order is taken from relationships rather than slide filenames, notes and chart/SmartArt structures are retained, and image bytes are decoded with slide/media provenance. It does not send those images to an external model.
+
 ## Honest extraction limits
 
 - **PPTX embedded images:** package-internal images actually referenced by a slide are extracted, compressed and attached to the chapter-authoring request when the selected model accepts image input and the configured image limit permits it. Each image retains its slide number, media path, and accessible label/caption where present. This does not mean every picture is interpreted: image attachments are bounded by per-image, per-part and total-byte limits, and a text-only provider cannot inspect their pixels.
