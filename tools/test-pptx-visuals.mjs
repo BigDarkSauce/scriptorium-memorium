@@ -12,7 +12,7 @@ const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/20
   <Relationship Id="rIdUnused" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/unused.png"/>
 </Relationships>`;
 const slide = `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">
-  <p:pic><p:nvPicPr><p:cNvPr id="4" name="Picture 4" descr="A labelled cross-section of a leaf"/></p:nvPicPr><p:blipFill><a:blip r:embed="rId5"/></p:blipFill></p:pic>
+  <p:pic><p:nvPicPr><p:cNvPr id="4" name="Picture 4" descr="A labelled leaf &amp; stem cross-section"/></p:nvPicPr><p:blipFill><a:blip r:embed="rId5"/></p:blipFill></p:pic>
   <p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Chart 5" descr="Annual yield by treatment"/></p:nvGraphicFramePr><c:chart r:id="rId6"/></p:graphicFrame>
   <p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="6" name="Diagram 6" descr="The feedback cycle"/></p:nvGraphicFramePr><dgm:relIds r:dm="rId7"/></p:graphicFrame>
   <p:pic><p:nvPicPr><p:cNvPr id="7" name="External picture"/></p:nvPicPr><p:blipFill><a:blip r:link="rId8"/></p:blipFill></p:pic>
@@ -21,7 +21,7 @@ const refs = pptxSlideAssets(slide, rels, slidePath, 3);
 assert.equal(resolvePptTarget(slidePath, '../media/image2.png'), 'ppt/media/image2.png');
 assert.equal(refs.images.length, 1, 'only referenced, embedded images are admitted');
 assert.equal(refs.images[0].path, 'ppt/media/image2.png');
-assert.equal(refs.images[0].caption, 'A labelled cross-section of a leaf');
+assert.equal(refs.images[0].caption, 'A labelled leaf & stem cross-section');
 assert.equal(refs.images[0].slide, 3);
 assert.equal(refs.charts.length, 1);
 assert.equal(refs.charts[0].path, 'ppt/charts/chart2.xml');
