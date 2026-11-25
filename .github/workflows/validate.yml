@@ -23,6 +23,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile and exercise the localhost OpenAI adapter
+        run: |
+          python -m py_compile launcher/serve.py tools/test-openai-proxy.py
+          python tools/test-openai-proxy.py
+
       - name: Test source-mapped simulation contracts
         run: node tools/test-model-contract.mjs
 
