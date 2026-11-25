@@ -107,6 +107,30 @@ oversizedRecallHistory.memoryPlaces = [{
 }];
 assert.match(validateAtlas(oversizedRecallHistory, ['S1', 'S2'], steps), /at most twelve attempts/);
 
+const invalidRecallRating = makeAtlas();
+invalidRecallRating.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage',
+  review: { response: 'I remembered.', confidence: 'High', rating: 'maybe' }
+}];
+assert.match(validateAtlas(invalidRecallRating, ['S1', 'S2'], steps), /recall rating is invalid/);
+
+const invalidHistoryRating = makeAtlas();
+invalidHistoryRating.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage',
+  review: { history: [{ response: 'I remembered.', confidence: 'High', rating: 'perfect' }] }
+}];
+assert.match(validateAtlas(invalidHistoryRating, ['S1', 'S2'], steps), /history contains an invalid rating/);
+
+const invalidReviewDate = makeAtlas();
+invalidReviewDate.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage',
+  review: { gradedAt: 'yesterday-ish' }
+}];
+assert.match(validateAtlas(invalidReviewDate, ['S1', 'S2'], steps), /recall timestamp is invalid/);
+
 const foreignLocus = makeAtlas();
 foreignLocus.memoryPlaces = [{
   nodeId: 'missing-concept', caseId: 'bookcase-1', row: 0, slot: 2,
