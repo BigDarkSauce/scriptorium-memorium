@@ -131,6 +131,8 @@ export class Reader {
         atlas: P.analysis.atlas, part: P,
         onOpenDiorama: (ref, challenge) => this.openAtlasDiorama(ref, challenge),
         onGenerate: (request, nodeId, status) => this.generateAtlasDiorama(request, nodeId, status),
+        onAssignMemoryPlace: node => this.assignAtlasMemoryPlace(node),
+        onVisitMemoryRoute: node => this.visitAtlasMemoryRoute(node),
         onSave: () => this.save()
       }));
       return;
@@ -271,6 +273,126 @@ export class Reader {
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
   // ---------- chapter atlas actions ----------
+  async assignAtlasMemoryPlace(node) {
+    const app = this.app, book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    if (!atlas || !node || !node.id) return;
+    try {
+      await app.openHub();
+      const hub = app.mode;
+      if (!hub || typeof hub.listShelves !== 'function') throw new Error('The library hall could not be opened.');
+      const shelves = hub.listShelves();
+      if (!shelves.length) throw new Error('Add a bookcase before assigning a memory place.');
+      const previous = (atlas.memoryPlaces || []).find(p => p.nodeId === node.id);
+      const state = {
+        caseId: shelves.some(s => s.caseId === (previous && previous.caseId)) ? previous.caseId : shelves[0].caseId,
+        row: previous ? Number(previous.row) : null,
+        slot: previous ? Number(previous.slot) : null
+      };
+      const panel = el('aside', { class: 'memory-locus-assign-panel glass', role: 'dialog', 'aria-label': 'Assign a memory place' });
+      hub.ui.append(panel);
+      const resumeAtlas = () => app.openRoom(book.id, { openPart: part.id });
+      const render = () => {
+        panel.innerHTML = '';
+        const shelf = shelves.find(s => s.caseId === state.caseId) || shelves[0];
+        state.caseId = shelf.caseId;
+        const rows = shelf.rows || [];
+        if (!rows.some(r => r.row === state.row)) state.row = rows[0] ? rows[0].row : null;
+        const row = rows.find(r => r.row === state.row) || rows[0];
+        if (row && !(row.slots || []).some(s => s.slot === state.slot)) state.slot = (row.slots[0] || {}).slot;
+        const current = row && (row.slots || []).find(s => s.slot === state.slot);
+        const cue = el('textarea', { class: 'memory-locus-cue', rows: 3, maxlength: 240, placeholder: 'Choose a distinctive image, event, sound, movement or verbal cue for this concept. Keep the cue separate from the answer.', 'aria-label': 'Memory association' });
+        cue.value = previous && previous.association || '';
+        const shelfSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase' }, shelves.map(s => el('option', { value: s.caseId, text: s.title })));
+        shelfSelect.value = state.caseId;
+        shelfSelect.addEventListener('change', () => { state.caseId = shelfSelect.value; state.row = null; state.slot = null; render(); });
+        const rowSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase row' }, rows.map(r => el('option', { value: String(r.row), text: 'Row ' + r.label })));
+        if (row) rowSelect.value = String(row.row);
+        rowSelect.addEventListener('change', () => { state.row = Number(rowSelect.value); state.slot = null; render(); });
+        const slotOptions = (row && row.slots || []).map(slot => {
+          const occupant = slot.bookId && app.lib.books.find(b => b.id === slot.bookId);
+          return el('option', { value: String(slot.slot), text: 'Place ' + (slot.slot + 1) + (occupant ? ' · scroll: ' + occupant.title : ' · empty') });
+        });
+        const slotSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase place' }, slotOptions);
+        if (current) slotSelect.value = String(current.slot);
+        slotSelect.addEventListener('change', () => { state.slot = Number(slotSelect.value); render(); });
+        const status = el('span', { class: 'memory-locus-status', role: 'status' });
+        const preview = el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: 'Preview this place',
+          disabled: !row || !current,
+          onclick: () => {
+            const result = hub.showMemoryAnchor(state.caseId, state.row, state.slot, { frame: true });
+            status.textContent = result.ok ? 'The gold marker shows the selected location.' : result.reason;
+          }
+        });
+        const save = el('button', {
+          class: 'btn primary small',
+          type: 'button',
+          text: previous ? 'Update memory place' : 'Save memory place',
+          disabled: !row || !current || !cue.value.trim(),
+          onclick: async () => {
+            const association = cue.value.trim().slice(0, 240);
+            if (!association) { status.textContent = 'Add a distinct memory cue before saving.'; cue.focus(); return; }
+            const next = {
+              nodeId: node.id,
+              caseId: state.caseId,
+              row: state.row,
+              slot: state.slot,
+              shelfName: shelf.title,
+              association,
+              updatedAt: new Date().toISOString(),
+              review: previous && previous.review ? previous.review : undefined
+            };
+            atlas.memoryPlaces = [...(atlas.memoryPlaces || []).filter(p => p.nodeId !== node.id), next];
+            await roomCtx(app, book.id).save(part);
+            await resumeAtlas();
+            toast('Memory place saved to the library.');
+          }
+        });
+        cue.addEventListener('input', () => { save.disabled = !cue.value.trim() || !row || !current; });
+        panel.append(
+          el('div', { class: 'memory-route-overline', text: 'ANCHOR A CONCEPT IN THE LIBRARY' }),
+          el('h3', { text: node.title || 'Concept' }),
+          el('p', { class: 'memory-locus-description', text: 'Choose a stable bookcase row and place. The anchor follows the case when it is moved or rotated; it is a retrieval cue, not a source claim.' }),
+          el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Bookcase' }), shelfSelect]),
+          el('div', { class: 'row wrap memory-locus-row' }, [
+            el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Row' }), rowSelect]),
+            el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Place' }), slotSelect])
+          ]),
+          el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Your association / mnemonic cue' }), cue]),
+          el('p', { class: 'memory-locus-occupant', text: current && current.bookId ? 'This place currently contains a scroll. The locus marks the bookcase position, not the scroll identity.' : 'This place is currently empty.' }),
+          el('div', { class: 'row wrap' }, [preview, save, status]),
+          el('div', { class: 'row end' }, [el('button', { class: 'btn small', type: 'button', text: 'Cancel', onclick: () => resumeAtlas() })])
+        );
+      };
+      render();
+    } catch (e) {
+      toast(String(e && (e.message || e.code) || e), 5000);
+      await app.openRoom(book.id, { openPart: part.id });
+    }
+  }
+  async visitAtlasMemoryRoute(node) {
+    const app = this.app, book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    const places = atlas && Array.isArray(atlas.memoryPlaces) ? atlas.memoryPlaces : [];
+    if (!places.length) { toast('Assign a memory place to a concept first.'); return; }
+    try {
+      await app.openHub();
+      const hub = app.mode;
+      if (!hub || typeof hub.showMemoryRoute !== 'function') throw new Error('The library memory route could not be opened.');
+      const ctx = roomCtx(app, book.id);
+      hub.showMemoryRoute({
+        bookId: book.id,
+        partId: part.id,
+        atlas,
+        initialNodeId: node && node.id,
+        onSave: () => ctx.save(part)
+      });
+    } catch (e) {
+      toast(String(e && (e.message || e.code) || e), 5000);
+      await app.openRoom(book.id, { openPart: part.id });
+    }
+  }
   openAtlasDiorama(ref, challengeMode = null) {
     const A = this.part.analysis, st = (A.chain || []).find(x => String(x.id) === String(ref.stepId));
     const d = st && (st.demos || [])[+ref.demoIndex];
