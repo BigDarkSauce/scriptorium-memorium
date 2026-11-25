@@ -120,6 +120,14 @@ assert.ok(reconstruction.reconstructionRules.some(rule => /Do not infer physical
 
 const selectedSourceFigures = selectedSourceVisualFigures(valid.nodes[0], steps, sourceSections);
 assert.equal(selectedSourceFigures.length, 1, 'the atlas should compile only the source visual selected by this concept view');
+const sameEvidenceInTwoViews = selectedSourceVisualFigures({
+  ...valid.nodes[0],
+  dioramaSet: [
+    { ...valid.nodes[0].dioramaSet[0], viewId: 'evidence-view', order: 1, stage: 'orientation' },
+    { ...valid.nodes[0].dioramaSet[0], viewId: 'comparison-view', order: 2, stage: 'comparison' }
+  ]
+}, steps, sourceSections);
+assert.deepEqual(sameEvidenceInTwoViews.map(x => x.viewId), ['evidence-view', 'comparison-view'], 'one source chart may support two distinct teaching views without one view overwriting the other');
 assert.equal(selectedSourceFigures[0].sourceVisualId, 'pptx-chart-s3-1');
 assert.equal(selectedSourceFigures[0].sourceSlide, 3);
 assert.equal(selectedSourceFigures[0].viewId, 'boundary-evidence');

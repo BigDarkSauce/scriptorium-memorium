@@ -570,7 +570,7 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
     explanatoryFigures.push(...selectedSourceVisualFigures(n, analysis.chain, sections));
     const seenFigures = new Set();
     const uniqueFigures = explanatoryFigures.filter(f => {
-      const key = f.sourceVisualId || (f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure));
+      const key = f.sourceVisualId ? f.sourceVisualId + '|' + (f.viewId || '') : (f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure));
       if (seenFigures.has(key)) return false; seenFigures.add(key); return true;
     });
     return {
