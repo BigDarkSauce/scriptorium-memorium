@@ -164,13 +164,15 @@ assert.deepEqual(visualSequence.map(v => [v.viewId, v.order, v.stage, v.medium, 
   ['boundary-evidence', 1, 'orientation', '2d', 'ready'],
   ['mechanism-map', 2, 'mechanism', '2d', 'planned'],
   ['interactive-model', 3, 'reconstruction', '3d', 'ready'],
-  ['prediction-view', 4, 'understanding', '2d', 'planned']
-], 'the concept visual pathway must preserve planned order/stage and distinguish ready from planned views');
+  ['prediction-view', 4, 'understanding', '2d', 'planned'],
+  ['supporting-scene-1', 5, 'understanding', '3d', 'ready']
+], 'the concept visual pathway must preserve planned order/stage and append old step scenes as supporting material');
 assert.deepEqual(visualSequence[0].figures.map(f => f.sourceVisualId), ['pptx-chart-s3-1']);
 assert.equal(visualSequence[2].dioramaRef.title, 'Grouped concept diorama', 'the planned 3D stage must open the concept-level grouped scene, not an older step-level scene');
 assert.equal(visualSequence[2].dioramaRef.atlasNodeId, 'selective-transport');
 assert.equal(visualSequence.some(v => v.title === 'Legacy step-level scene' && v.supporting === true), true, 'older step-level scenes remain accessible as supporting material');
-assert.equal(visualSequence.filter(v => v.medium === '3d').length, 1, 'multiple 3D plans collapse into one coherent interactive model');
+assert.equal(visualSequence.filter(v => v.medium === '3d' && !v.supporting).length, 1, 'multiple planned 3D views collapse into one coherent concept-level interactive model');
+assert.equal(visualSequence.filter(v => v.medium === '3d' && v.supporting).length, 1, 'older step scenes remain separately marked as supporting');
 
 const smartArtOnlyNode = {
   ...valid.nodes[0],
