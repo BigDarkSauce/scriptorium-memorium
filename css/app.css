@@ -1418,6 +1418,32 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-custom-input { min-height: 62px; }
 .atlas-action-status { color: var(--iron-soft); font: 11px var(--f-mono); align-self: center; }
 .atlas-challenge { padding-top: 3px; }
+.atlas-branch-rail { display: flex; gap: 7px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 2px 1px 9px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+.atlas-branch-tab { flex: 0 0 auto; display: grid; grid-template-columns: 27px minmax(0,1fr); align-items: center; gap: 8px; min-width: 164px; max-width: 220px; padding: 8px 10px; border: 1px solid rgba(90,60,30,.2); border-radius: 9px; background: rgba(255,255,255,.35); color: #59432e; text-align: left; cursor: pointer; scroll-snap-align: start; transition: background .16s, border-color .16s, transform .16s; }
+.atlas-branch-tab:hover, .atlas-branch-tab:focus-visible { border-color: rgba(49,91,80,.5); background: rgba(236,243,232,.7); }
+.atlas-branch-tab.active { border-color: rgba(49,91,80,.72); background: linear-gradient(110deg, rgba(224,237,224,.85), rgba(255,255,255,.65)); box-shadow: inset 0 -2px rgba(49,91,80,.2); }
+.atlas-branch-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: rgba(90,60,30,.08); color: #765c3d; font: 10px var(--f-mono); }
+.atlas-branch-name { display: grid; gap: 2px; min-width: 0; }
+.atlas-branch-name b { font: 500 14px var(--f-display); overflow-wrap: anywhere; }
+.atlas-branch-name small { color: #7a6a54; font: 9px var(--f-mono); text-transform: uppercase; letter-spacing: .04em; }
+.atlas-reasoning-path { display: grid; gap: 8px; margin-top: 4px; padding: 10px; border: 1px solid rgba(49,91,80,.19); border-radius: 10px; background: linear-gradient(145deg, rgba(232,240,229,.42), rgba(255,255,255,.36)); }
+.atlas-reasoning-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.atlas-reasoning-count { color: #617267; font: 10px var(--f-mono); white-space: nowrap; }
+.atlas-reasoning-unit { display: grid; gap: 5px; padding: 10px 11px; border-left: 2px solid rgba(49,91,80,.5); border-radius: 5px; background: rgba(255,255,255,.48); animation: atlas-reasoning-in .22s ease-out both; }
+.atlas-reasoning-unit-head { display: flex; align-items: center; gap: 8px; color: #315b50; }
+.atlas-reasoning-unit-head b { font: 500 16px var(--f-display); }
+.atlas-reasoning-number { display: inline-grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; border-radius: 7px; background: rgba(49,91,80,.1); color: #315b50; font: 10px var(--f-mono); }
+.atlas-reasoning-unit p { margin: 0; color: #4f493e; line-height: 1.55; }
+.atlas-reasoning-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; color: #7c715f; font: 9px var(--f-mono); }
+.atlas-source-chip { padding: 2px 6px; border: 1px solid rgba(90,60,30,.2); border-radius: 5px; color: #6a5037; background: rgba(255,255,255,.5); }
+.atlas-unfold-preview { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px dashed rgba(49,91,80,.26); border-radius: 7px; color: #766a56; font: 11px var(--f-mono); }
+.atlas-reasoning-complete { margin: 2px 0; color: #617267; font: 11px var(--f-mono); }
+.atlas-unfold-controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; padding-top: 3px; }
+.atlas-keyboard-hint { margin: 0; color: #83745f; font: 9px var(--f-mono); }
+.atlas-unfold-next:not(:disabled) { min-width: 170px; letter-spacing: .05em; }
+.atlas-unfold-next:disabled { opacity: .55; cursor: default; }
+@keyframes atlas-reasoning-in { from { opacity: .35; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .atlas-reasoning-unit { animation: none; } }
 .atlas-challenge-card { display: grid; gap: 8px; padding: 13px; border: 1px solid rgba(156,58,40,.22); border-radius: 11px; background: linear-gradient(120deg, rgba(255,250,236,.78), rgba(247,232,203,.55)); }
 .atlas-challenge-type { font: 600 10px var(--f-mono); color: #9c3a28; text-transform: uppercase; letter-spacing: .1em; }
 .atlas-challenge-card h4 { margin: 0; color: #34271d; font: 400 18px/1.35 var(--f-display); }
