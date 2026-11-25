@@ -128,7 +128,9 @@ function check(A, sections, figures, label) {
       (node.dioramaRefs || []).forEach(ref => {
         const st = chain.find(x => String(x.id) === String(ref.stepId));
         const demo = st && Array.isArray(st.demos) ? st.demos[+ref.demoIndex] : null;
-        if (!demo || !(demo.type === 'scene' || Array.isArray(demo.bodies))) F('atlas', `${node.id} links to missing/non-3D diorama ${ref.stepId}[${ref.demoIndex}]`);
+        const builtIn3D = new Set(['pendulum','spring','projectile','orbit','collision','incline','wave','gas','surface','custom3d','weatherglass','doublependulum','lever','reaction','efield','circuit','lens']);
+        const is3D = demo && (demo.type === 'scene' || Array.isArray(demo.bodies) || builtIn3D.has(String(demo.type || '').toLowerCase()));
+        if (!is3D) F('atlas', `${node.id} links to missing/non-3D diorama ${ref.stepId}[${ref.demoIndex}]`);
       });
     });
     chain.forEach(st => {
