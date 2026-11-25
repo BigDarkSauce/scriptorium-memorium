@@ -85,7 +85,7 @@ export async function writeChain(ctx, P, M, o) {
   else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
   const meta = ctx.app.ingest.figureMeta(M.figures), unit = ctx.book.sourceType === 'pptx' ? 'slides' : 'pages', chapter = P.title + (P.startPage ? ` (${unit} ${P.startPage}-${P.endPage})` : '');
   const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', deep: !!o.deep, n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
-  o.onStatus && o.onStatus(writer('director') + ' ' + (writer('director') === 'Claude' ? 'is' : 'are') + ' reading and planning. Long parts can take a minute or two.');
+  o.onStatus && o.onStatus(writer('director') + ' is reading and planning. Long parts can take a minute or two.');
   // a chain cut off by the output limit is kept when at least two complete steps came back: the coverage check and its
   // follow-ups (stage 2) write what is missing, which costs less than asking for the whole chain again
   const A = await ask(prompt, { ...o, images, writing: 'Writing the chain', role: 'director', acceptTruncated: true, validate: v => !(v && Array.isArray(v.chain) && v.chain.length) ? 'the answer has no "chain" array of steps' : v._truncated && v.chain.length < 2 ? 'the answer was cut off before two complete steps' : null }, 'Analyse "' + P.title + '" in any AI');
