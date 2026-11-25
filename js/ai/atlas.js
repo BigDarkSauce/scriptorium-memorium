@@ -70,7 +70,7 @@ QUALITY RULES
 `;
 }
 
-export function validateAtlas(A, stepIds, sourceSteps = []) {
+export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive = false) {
   if (!A || typeof A !== 'object' || !Array.isArray(A.nodes) || !A.nodes.length) return 'atlas has no nodes';
   if (!Array.isArray(A.edges)) return 'atlas has no edge array';
   if (A.nodes.length > 36) return 'atlas has too many nodes for one chapter map';
@@ -92,6 +92,7 @@ export function validateAtlas(A, stepIds, sourceSteps = []) {
       if (ch.type === 'structural' && ch.missingBodyIds.some(id => !allowedBodies.has(String(id)))) return 'structural challenge refers to an actor not listed in the node source steps: ' + ch.id;
       // New atlases carry a source-mapped, bitwise reasoning path. Keep the field optional for older saved atlases;
       // the reader supplies a single legacy explanation unit rather than inventing new reasoning.
+      if (requireProgressive && !Array.isArray(ch.reasoning)) return 'newly authored challenge is missing its progressive reasoning path: ' + ch.id;
       if (ch.reasoning != null) {
         if (!Array.isArray(ch.reasoning) || ch.reasoning.length < 1 || ch.reasoning.length > 5) return 'challenge reasoning must contain 1–5 ordered reveal units: ' + ch.id;
         const nodeSteps = new Set(n.stepIds.map(String));
@@ -149,12 +150,12 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
         onResearch: x => { if (!researchAudit.some(y => x.callId && y.callId === x.callId)) researchAudit.push({ ...x, task: 'Semantic chapter atlas' }); },
-        validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain)
+        validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain, true)
       });
       const atlasResearch = response && response._webResearch || null;
       authored = response && (response.atlas || response);
       if (atlasResearch) { authored._atlasWebResearch = atlasResearch; if (!researchAudit.some(y => atlasResearch.callId && y.callId === atlasResearch.callId)) researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
-      const issue = validateAtlas(authored, ids, analysis.chain);
+      const issue = validateAtlas(authored, ids, analysis.chain, true);
       if (issue) throw new Error(issue);
     } catch (e) {
       if (e && e.code === 'cancelled') throw e;
