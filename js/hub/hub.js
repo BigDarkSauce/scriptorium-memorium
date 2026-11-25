@@ -687,7 +687,7 @@ export class Hub {
                 attemptedAt: current.attemptedAt || null,
                 revealedAt: current.revealedAt || null
               });
-              place.review = { history, response: '', confidence: '', committed: false, revealed: false };
+              place.review = { history: history.slice(-12), response: '', confidence: '', committed: false, revealed: false };
               await flushSave();
               render();
             }
