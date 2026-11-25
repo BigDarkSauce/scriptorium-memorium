@@ -242,7 +242,7 @@ try {
   assert.ok(suggestionValues.includes('A diagram showing a selective boundary and its transport route.'), 'autocomplete must include source figure captions');
   const recallTabs = sourceScan.locator('.atlas-scan-recall-tab');
   assert.equal(await recallTabs.count(), 3, 'the scan should adapt its prompt types to the source term, equation and complete worked example records');
-  assert.match(await recallTabs.nth(0).innerText(), /term completion.*S1/i);
+  assert.match(await recallTabs.nth(0).innerText(), /term completion\s+S1/i, 'the term prompt tab must pair its type with source step S1 across separate lines');
   await recallTabs.nth(0).evaluate(el => el.click());
   const recallCard = sourceScan.locator('.atlas-scan-recall-card');
   assert.match(await recallCard.innerText(), /Which term is described by this definition/i);
