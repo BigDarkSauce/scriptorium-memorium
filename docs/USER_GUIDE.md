@@ -43,7 +43,7 @@
 
 The atlas presents a chapter as an interactive concept map. Select a node to see its central question, explanatory views, linked dioramas, figures and source trail. It is intended for question-led exploration rather than reading one long chapter summary.
 
-- **Quick source scan:** expand the collapsed scan above the concept map. It lists the ingested subsections and source-step counts. Search for a concept, term, equation, worked example, table, figure or code fragment; selecting a result opens the concept that owns that validated source step and expands the matching source-trail entry.
+- **Quick source scan:** expand the collapsed scan above the concept map. It lists the ingested subsections and source-step counts. Search for a concept, term, equation, worked example, table, figure or code fragment; the search field also suggests terms, equations, example titles and figure labels/captions extracted from the source. Selecting a result opens the owning concept and expands the matching source-trail entry.
 - **Question branches:** challenges appear in a horizontal scroller. Select a branch to investigate one question at a time. Your other branches keep their own progress.
 - **Predict first:** inspect the stimulus, open a hint only when useful, write your prediction and choose a confidence level, then commit it before revealing the expected reconstruction.
 - **Unfold one move at a time:** after revealing the answer, press **UNFOLD** to expose exactly one next reasoning unit. Earlier units stay visible. **Space** unfolds one more unit; **Ctrl+Z** steps back one unit. Neither action changes the selected question.
