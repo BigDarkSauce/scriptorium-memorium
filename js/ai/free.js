@@ -296,7 +296,7 @@ export const reachable = ({ fresh = false } = {}) => (!fresh && reachP) || (reac
 if (mode() !== 'claude') reachable(); onSettings(S => { if (S.mode !== 'claude') reachable(); });
 // a provider counts only where the page can reach it (inside the Claude app without the extension it cannot: hybrid
 // then uses Claude for all)
-export const hasAny = () => reachOK !== false && active().length > 0;
+export const hasAny = () => { const providers = active(); return providers.some(p => p.local) || (reachOK !== false && providers.length > 0); };
 export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,
 // with the problem named once to the same model first). o.onWait(ms, why) when everything is busy; o.exhausted: throw
