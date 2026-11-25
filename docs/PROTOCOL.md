@@ -34,7 +34,7 @@ This is the whole pipeline. Each stage says what goes in, what comes out, and th
 node tools/verify-chain.mjs chain.json [sections.json]     # exit code 0 = passes
 ```
 
-It runs stage 4 (`verifyChain`, the app's own check) plus the strict schema, the demo checks (lesson threads, built-in lessons waiting for real event texts) and the step links (`from`, coverage), and prints one line per fault. `sections.json` is the part's subsections with their text (as `partSections` returns them); without it, the subsections named in the chain's `coverage` are used and the number check is skipped. A whole `scriptorium-room/1` file is checked part by part.
+It runs stage 4 (`verifyChain`, the app's own check) plus the strict schema, the demo checks (lesson threads, built-in lessons waiting for real event texts), scene model-contract checks and the step links (`from`, coverage), and prints one line per fault. `sections.json` is the part's subsections with their text (as `partSections` returns them); without it, the subsections named in the chain's `coverage` are used and the number check is skipped. A whole `scriptorium-room/1` file is checked part by part.
 
 ### Goal and standard
 
@@ -283,7 +283,9 @@ Where they go: `explain[k].figure` (required for a paragraph of 60+ words), `sta
 
 ## Scene format
 
-See `docs/SCENE_SPEC.md`: bodies (shape + material + transform, role actor/decor), `tour`, `params`, `behaviors`, `code` (dynamics through a small API), `lessons` (with `question` / `opens`). Examples are in `examples/`.
+See `docs/SCENE_SPEC.md`: bodies (shape + material + transform, role actor/decor), `tour`, `params`, `behaviors`, `code` (dynamics through a small API), `lessons` (with `question` / `opens`). New AI-authored 3D scenes also carry `sourceStepIds`, a versioned `modelContract`, deterministic `modelValidation` and an independent `modelAudit`; failed attempts can be retained for inspection. Examples are in `examples/`.
+
+Run `node tools/test-model-contract.mjs` to exercise actor, evidence, unit/range and legacy-compatibility checks.
 
 ### Scene model contract and independent audit
 
