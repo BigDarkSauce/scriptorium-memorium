@@ -81,14 +81,14 @@ export function choosePlace(app, { title = 'Where should it go?', verb = 'Put it
   veil.append(box); document.body.append(veil); veil.onclick = e => { if (e.target === veil) close(); };
 }
 export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null } = {}) {
-  const S = { file: null, split: null, title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true, deep: false };
+  const S = { file: null, split: null, sourceType: 'pdf', title: '', place: null, from: 1, to: 1, picked: new Set(), level: 'complete', n: 24, dioramas: true, deep: false };
   const veil = el('div', { class: 'modal-veil addpdf-veil' }), box = el('div', { class: 'modal glass wide addpdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a PDF scroll' });
   veil.append(box); document.body.append(veil);
   const close = () => { preview(hub, null); veil.remove(); removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape' && !RUN.ctrl) close(); }; addEventListener('keydown', onKey);
   const body = el('div', { class: 'ap-body' }), steps = el('ol', { class: 'ap-steps' }), foot = el('div', { class: 'row end ap-foot' });
   box.append(el('h3', { text: 'Add a PDF scroll' }), steps, body, foot);
-  const STEP = ['The PDF', 'Place', 'Pages', 'Breakdown', 'Analyse']; let at = 0;
+  const STEP = ['The source', 'Place', 'Pages / slides', 'Breakdown', 'Analyse']; let at = 0;
   const go = k => { at = k; render(); };
   // The dialog sits at the bottom of the screen (its bottom edge never moves; js/hub/hub.js frameAt puts a framed place in
   // the upper third, "clear of a dialog at the bottom"), and its height eases from one step to the next instead of jumping.
@@ -112,30 +112,33 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
 
   // 1 · the PDF (and unfinished analyses to resume)
   function stepFile() {
-    const inp = el('input', { type: 'file', accept: 'application/pdf', hidden: true });
-    const drop = el('div', { class: 'ap-drop', tabindex: 0, role: 'button', 'aria-label': 'Choose a PDF' }, [el('b', { text: S.file ? S.file.name : 'Choose a PDF, or drop it here' }), el('span', { class: 'dim small', text: S.split ? `${S.split.pages} pages · ${S.split.parts.length} parts found ${METHOD[S.split.method] || ''}` : 'Books, chapters, papers, slides and infographic handouts.' })]);
+    const inp = el('input', { type: 'file', accept: '.pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation', hidden: true });
+    const unit = S.sourceType === 'pptx' ? 'slides' : 'pages';
+    const drop = el('div', { class: 'ap-drop', tabindex: 0, role: 'button', 'aria-label': 'Choose a PDF or PowerPoint presentation' }, [el('b', { text: S.file ? S.file.name : 'Choose a PDF or PowerPoint (.pptx), or drop it here' }), el('span', { class: 'dim small', text: S.split ? `${S.split.pages} ${unit} · ${S.split.parts.length} topic part${S.split.parts.length === 1 ? '' : 's'} found ${METHOD[S.split.method] || ''}` : 'PDF books, papers, lecture slides and infographic handouts.' })]);
     drop.onclick = () => inp.click(); drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') inp.click(); };
     drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); }; drop.ondragleave = () => drop.classList.remove('over');
-    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = [...(e.dataTransfer.files || [])].find(x => /pdf$/i.test(x.type) || /\.pdf$/i.test(x.name)); if (f) take(f); };
+    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = [...(e.dataTransfer.files || [])].find(x => /\.pdf$/i.test(x.name) || /\.pptx$/i.test(x.name)); if (f) take(f); };
     inp.onchange = () => { if (inp.files[0]) take(inp.files[0]); };
     const st = el('div', { class: 'status' }); body.append(drop, inp, st);
     pendingJobs(app).then(J => { if (!J.length || !box.isConnected || at !== 0) return; body.append(el('div', { class: 'ap-resume' }, [el('h4', { text: 'Unfinished analyses' }), ...J.map(j => el('div', { class: 'row' }, [el('span', { text: `${j.title || 'A book'}: ${j.parts.length} part${j.parts.length > 1 ? 's' : ''}, ${j.status === 'failed' ? 'stopped by an error' : 'paused'}` }), btn('Resume', () => { close(); showProgress(app, j, { resume: true }); }, 'small primary')]))])); });
     nav('Next', !!S.split);
     async function take(f) {
-      S.file = f; S.split = null; drop.querySelector('b').textContent = f.name; st.textContent = 'Reading the outline…';
+      S.file = f; S.split = null; S.sourceType = /\.pptx$/i.test(f.name) ? 'pptx' : 'pdf';
+      drop.querySelector('b').textContent = f.name; st.textContent = 'Reading the ' + (S.sourceType === 'pptx' ? 'presentation structure…' : 'PDF outline…');
       try {
-        const sp = await app.ingest.splitBook(f, { onProgress: k => { st.textContent = 'Reading the outline… ' + Math.round(k * 100) + '%'; } });
-        S.split = sp; S.title = sp.title || f.name.replace(/\.pdf$/i, ''); S.from = 1; S.to = sp.pages; S.picked = new Set(sp.parts.filter(p => !p.front).map((p, i) => i));
+        const progress = k => { st.textContent = 'Reading ' + (S.sourceType === 'pptx' ? 'slide structure… ' : 'the document outline… ') + Math.round(k * 100) + '%'; };
+        const sp = S.sourceType === 'pptx' ? await app.ingest.splitPresentation(f, { onProgress: progress }) : await app.ingest.splitBook(f, { onProgress: progress });
+        S.split = sp; S.title = sp.title || f.name.replace(/\.(pdf|pptx)$/i, ''); S.from = 1; S.to = sp.pages; S.picked = new Set(sp.parts.filter(p => !p.front).map((p, i) => i));
         sp.parts.forEach((p, i) => { p._k = i; });
         st.textContent = ''; render();
-      } catch (e) { st.textContent = 'Could not read this PDF: ' + (e.message || e); }
+      } catch (e) { st.textContent = 'Could not read this ' + (S.sourceType === 'pptx' ? 'PowerPoint presentation' : 'PDF') + ': ' + (e.message || e); }
     }
   }
   // 2 · the place on a bookcase
   function stepPlace() { body.append(...placeUI(app, hub, S, shelfId)); nav('Next'); }
   // 3 · the pages: from–to, or chapters of the outline
   function stepPages() {
-    const sp = S.split, from = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.from, 'aria-label': 'From page' }), to = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.to, 'aria-label': 'To page' });
+    const sp = S.split, unit = S.sourceType === 'pptx' ? 'slide' : 'page', plural = S.sourceType === 'pptx' ? 'slides' : 'pages', from = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.from, 'aria-label': 'From ' + unit }), to = el('input', { type: 'number', class: 'field small num', min: 1, max: sp.pages, value: S.to, 'aria-label': 'To ' + unit });
     const tree = el('div', { class: 'ap-outline' }), sum = el('div', { class: 'dim small ap-sum' });
     const overl = p => p.endPage >= S.from && p.startPage <= S.to;
     const sync = (fromTree) => {
@@ -143,12 +146,12 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
       else S.picked = new Set(sp.parts.filter(p => !p.front && overl(p)).map(p => p._k));
       tree.querySelectorAll('input[data-k]').forEach(c => { c.checked = S.picked.has(+c.dataset.k); });
       const P = sp.parts.filter(p => S.picked.has(p._k)), subs = P.reduce((a, p) => a + (p.subsections || []).filter(s => s.endPage >= S.from && s.startPage <= S.to).length, 0);
-      sum.textContent = `Pages ${S.from}–${S.to} · ${P.length} part${P.length === 1 ? '' : 's'} (one scroll each) · ${subs} subsections to cover`; const nx = foot.querySelector('[data-next]'); if (nx) nx.disabled = !P.length;
+      sum.textContent = `${plural[0].toUpperCase() + plural.slice(1)} ${S.from}–${S.to} · ${P.length} topic part${P.length === 1 ? '' : 's'} · ${subs} source units to map`; const nx = foot.querySelector('[data-next]'); if (nx) nx.disabled = !P.length;
     };
     from.oninput = () => { S.from = Math.max(1, Math.min(+from.value || 1, sp.pages)); if (S.to < S.from) { S.to = S.from; to.value = S.to; } sync(false); };
     to.oninput = () => { S.to = Math.max(S.from, Math.min(+to.value || sp.pages, sp.pages)); sync(false); };
     sp.parts.forEach(p => { if (p.front) return; tree.append(el('details', { class: 'ap-part' }, [el('summary', {}, [el('input', { type: 'checkbox', 'data-k': p._k, 'aria-label': 'Analyse ' + p.title, onclick: e => e.stopPropagation(), onchange: e => { if (e.target.checked) S.picked.add(p._k); else S.picked.delete(p._k); sync(true); } }), el('span', { text: ' ' + p.title }), el('span', { class: 'dim small', text: ` · p. ${p.startPage}${p.endPage > p.startPage ? '–' + p.endPage : ''} · ${(p.subsections || []).length} subsections` })]), el('ul', {}, (p.subsections || []).map(s => el('li', { class: 'dim small', text: `${s.id} ${s.title} · p. ${s.startPage}` })))])); });
-    body.append(el('p', { class: 'dim', text: `Outline ${METHOD[sp.method] || ''}. Tick the chapters to analyse, or type a page range.` }), el('div', { class: 'row' }, [el('label', { text: 'Pages from' }), from, el('label', { text: 'to' }), to, btn('All', () => { S.from = 1; S.to = sp.pages; from.value = 1; to.value = sp.pages; sync(false); }, 'small')]), tree, sum);
+    body.append(el('p', { class: 'dim', text: `${S.sourceType === 'pptx' ? 'Slide structure' : 'Document hierarchy'} ${METHOD[sp.method] || ''}. These are source locators; the later semantic atlas merges concepts across them.` }), el('div', { class: 'row' }, [el('label', { text: plural[0].toUpperCase() + plural.slice(1) + ' from' }), from, el('label', { text: 'to' }), to, btn('All', () => { S.from = 1; S.to = sp.pages; from.value = 1; to.value = sp.pages; sync(false); }, 'small')]), tree, sum);
     nav('Next'); sync(true);
   }
   // 4 · the breakdown level
@@ -162,12 +165,12 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
     const showAlloc = () => { if (S.level !== 'exact') { alloc.textContent = ''; return; } const A = allocateSteps(parts.map((p, i) => ({ ...p, id: 'k' + i })), S.n); alloc.textContent = 'Spread over the parts: ' + parts.map((p, i) => `${p.title.slice(0, 28)} ${A['k' + i]}`).join(' · '); };
     N.oninput = () => { S.n = Math.max(minN, +N.value || minN); showAlloc(); };
     body.append(
-      mk('complete', 'Complete chain', 'Every definition, rule, worked example, table, figure, code block and panel item gets its own explained step. Length from the content; never coarser than the PDF.'),
+      mk('complete', 'Complete chain', 'Every definition, rule, worked example, table, figure, code block and panel item gets its own explained step. Resolution follows the supplied source, not a fixed page count.'),
       mk('essential', 'Essential chain', 'The spine: at least one explained step per subsection, keeping everything later steps build on.'),
       el('div', { class: 'ap-level' + (S.level === 'exact' ? ' on' : ''), onclick: e => { if (S.level !== 'exact' && e.target.tagName !== 'INPUT') { S.level = 'exact'; render(); } } }, [radio('exact'), el('label', { class: 'ap-lt', for: 'aplevel-exact', text: 'Exact number of steps' }), el('span', { class: 'ap-ld' }, [N, ` for the whole range (at least ${minN}: one per subsection).`]), alloc]),
       el('label', { class: 'ap-check ap-deep' }, [el('input', { type: 'checkbox', checked: S.deep, onchange: e => { S.deep = e.target.checked; render(); } }), el('span', {}, [el('b', { text: 'Deepest dive' }), ' (with any of the three): written for a reader with no background who forgets and gets lost. Every claim, assumption, formula and symbol is taken apart down to the principles it rests on and rebuilt from them, step by step, saying why, how and what for. Longer and slower to write.'])]),
       el('label', { class: 'ap-check' }, [el('input', { type: 'checkbox', checked: S.dioramas, onchange: e => { S.dioramas = e.target.checked; } }), ' Build the dioramas each part needs (one per dynamic or spatial idea, more for complex parts)']),
-      el('p', { class: 'dim small', text: aiAvailable() ? `${engineLine()}${evidenceAvailable() && engine() !== 'free' ? ', with your research connectors for sources and extra examples' : ''}; a quality check rewrites any step that pastes the PDF or does not explain, and every paragraph gets a figure.` : 'Claude is not reachable from this view: each part\'s prompt is shown for you to run in any AI and paste back; figures and dioramas are then completed here.' }));
+      el('p', { class: 'dim small', text: aiAvailable() ? `${engineLine()}${evidenceAvailable() && engine() !== 'free' ? ', with connected research sources where enabled' : ''}; every concept map records the steps, slide/page spans and source figures that were actually found.` : 'No AI provider is reachable from this view. Configure the local OpenAI relay or another provider, then retry.' }));
     showAlloc(); nav('Next');
   }
   const chosenParts = () => { const sp = S.split; return app.ingest.restrictParts ? app.ingest.restrictParts(sp.parts.filter(p => S.picked.has(p._k)), S.from, S.to) : sp.parts.filter(p => S.picked.has(p._k)); };
@@ -181,8 +184,9 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
     async function create(analyse) {
       foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
       const id = 'bk-' + uid(), shelf = app.lib.shelves.find(s => s.id === (S.place && S.place.caseId)) || app.firstShelf();
-      const b = { id, title: S.title, shelf: shelf.id, tier: S.place ? S.place.row : 0, slot: S.place ? S.place.slot : 0, color: shelf.color, icon: 'PDF', hasPdf: true, added: Date.now(), size: S.file.size, pages: S.split.pages };
-      try { await app.store.set('pdf:' + id, S.file); } catch (e) { toast('Could not store the PDF: ' + (e.message || e)); foot.querySelectorAll('button').forEach(x => { x.disabled = false; }); return; }
+      const isPresentation = S.sourceType === 'pptx';
+      const b = { id, title: S.title, shelf: shelf.id, tier: S.place ? S.place.row : 0, slot: S.place ? S.place.slot : 0, color: shelf.color, icon: isPresentation ? 'PPTX' : 'PDF', hasPdf: !isPresentation, ...(isPresentation ? { sourceType: 'pptx' } : {}), added: Date.now(), size: S.file.size, pages: S.split.pages };
+      try { await app.store.set((isPresentation ? 'pptx:' : 'pdf:') + id, S.file); } catch (e) { toast('Could not store the ' + (isPresentation ? 'PowerPoint presentation' : 'PDF') + ': ' + (e.message || e)); foot.querySelectorAll('button').forEach(x => { x.disabled = false; }); return; }
       app.lib.books.push(b);
       const P = parts.map(p => { const q = { id: 'p-' + uid(), ...p }; delete q._k; return q; });
       await app.store.set('room:' + id, { dims: { w: 12, d: 10, h: 5.5 }, parts: P, splitMethod: S.split.method, range: { from: S.from, to: S.to } });
@@ -198,7 +202,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
   render();
   return { close, state: S, go };
 }
-const METHOD = { outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows', sheets: '(each page is a sheet; its panels are the subsections)' };
+const METHOD = { outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows', sheets: '(each page is a sheet; its panels are the subsections)', presentation: '(slide order, shape text, accessible image descriptions and speaker notes; slides remain source locators)' };
 
 // ---- the progress view (a dialog that can be closed into a chip; the job keeps running)
 export function showProgress(app, job, { resume = false } = {}) {
