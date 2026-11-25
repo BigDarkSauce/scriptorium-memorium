@@ -268,7 +268,9 @@ export function buildConceptVisualSequence(node) {
     order: Number.isInteger(+view.order) && +view.order > 0 ? +view.order : index + 1,
     stage: VIEW_STAGES.has(view.stage) ? view.stage : 'orientation'
   })).sort((a, b) => a.order - b.order);
-  const figures = Array.isArray(node && node.explanatoryFigures) ? node.explanatoryFigures : [];
+  const figures = Array.isArray(node && node.explanatoryFigures) && node.explanatoryFigures.length
+    ? node.explanatoryFigures
+    : (node && node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
   const sequence = [], consumed = new Set();
   let sceneAdded = false;
   for (const view of plans) {

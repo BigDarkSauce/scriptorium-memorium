@@ -438,7 +438,16 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
   const A = P.analysis, byId = new Map((A.chain || []).map(st => [String(st.id), st]));
   const sourceFigures = Array.isArray(o.sourceFigures) ? o.sourceFigures : [];
   const sourceSections = Array.isArray(o.sourceSections) ? o.sourceSections : [];
+  const viewStages = new Set(['curiosity', 'orientation', 'decomposition', 'inspection', 'mechanism', 'intuition', 'reconstruction', 'understanding']);
   for (const node of atlas.nodes || []) {
+    // Older saved atlases predate stable view IDs/order/stages. Normalize them deterministically
+    // before authoring so resumable rooms can use the same visual-pathway pipeline.
+    node.dioramaSet = (node.dioramaSet || []).map((view, index) => ({
+      ...view,
+      viewId: String(view.viewId || (node.id + '-view-' + (index + 1))),
+      order: Number.isInteger(+view.order) && +view.order > 0 ? +view.order : index + 1,
+      stage: viewStages.has(view.stage) ? view.stage : 'orientation'
+    })).sort((x, y) => x.order - y.order);
     const refs = [];
     (node.stepIds || []).forEach(id => {
       const st = byId.get(String(id)); if (!st) return;
