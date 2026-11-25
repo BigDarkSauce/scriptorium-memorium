@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, compileAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [2] },
@@ -81,6 +81,12 @@ assert.deepEqual(unresolved.unresolvedFigureIds, ['missing-figure'], 'an unindex
 const selectedAttachments = selectSourceFigureAttachments(valid.nodes[0], steps, sourceFigures, 3);
 assert.deepEqual(selectedAttachments.map(f => f.id), ['F1'], 'only image assets cited by a node step may be attached; unrelated indexed images are excluded');
 assert.deepEqual(selectSourceFigureAttachments(valid.nodes[0], steps, sourceFigures, 0), [], 'the attachment budget is enforced');
+const attachmentManifest = sourceFigureAttachmentManifest(valid.nodes[0], steps, sourceFigures, 3);
+assert.deepEqual(attachmentManifest, [{
+  attachmentIndex: 1, id: 'F1', label: 'Membrane transport diagram', kind: 'figure',
+  caption: 'A labelled membrane channel and its direction of transport.', page: 3, stepIds: ['S2']
+}], 'the image manifest must preserve the exact attachment order and source location');
+assert.equal(Object.hasOwn(attachmentManifest[0], 'dataUrl'), false, 'manifest metadata must not duplicate image bytes into saved JSON');
 
 const inventedFigure = makeAtlas();
 inventedFigure.nodes[0].dioramaSet[0].sourceFigureIds = ['F9'];

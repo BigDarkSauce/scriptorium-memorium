@@ -19,7 +19,7 @@ import { partKey, cached } from '../store.js';
 import { validateFigure, figureSlots, setSlotFigure, autoFigure, isPrimitive } from '../room/figspec.js';
 import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
-import { compileAtlas, sourceFigureEvidence, selectSourceFigureAttachments } from './atlas.js';
+import { compileAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest } from './atlas.js';
 
 export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'atlas', 'done'];
 export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas', atlas: 'mapping concepts and diorama sequences' };
@@ -397,7 +397,8 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         const figureEvidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
         const selectedFigures = selectSourceFigureAttachments(node, A.chain || [], sourceFigures, imageLimit());
         const sourceFigureRefs = figureEvidence.figures;
-        const sourceVisualAttachments = selectedFigures.map(f => String(f.id));
+        const sourceVisualAttachmentManifest = sourceFigureAttachmentManifest(node, A.chain || [], sourceFigures, imageLimit());
+        const sourceVisualAttachments = sourceVisualAttachmentManifest.map(f => f.id);
         const sourceEvidenceStatus = {
           referenced: sourceFigureRefs.length + figureEvidence.unresolvedFigureIds.length,
           indexed: sourceFigureRefs.length,
@@ -406,11 +407,12 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         };
         const d = {
           type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true, sourceStepIds: (node.stepIds || []).map(String),
-          sourceFigureRefs, sourceVisualAttachments, sourceEvidenceStatus,
+          sourceFigureRefs, sourceVisualAttachments, sourceVisualAttachmentManifest, sourceEvidenceStatus,
           request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
             'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned explanatory views: ' + JSON.stringify(views) +
             '. COMPLETE SOURCE STEP MATERIAL FOR THIS NODE (use all of it; IDs remain the audit anchors): ' + JSON.stringify(sourceSteps) +
             '. SOURCE-FIGURE EVIDENCE (each record is linked to the listed validated source steps; inspect the attached images but do not claim details that the pixels do not support): ' + JSON.stringify(sourceFigureRefs) +
+            '. ATTACHED IMAGE MANIFEST (image 1, image 2, etc. match the request attachments in this exact order; the manifest records each image ID, caption and source location): ' + JSON.stringify(sourceVisualAttachmentManifest) +
             '. Unresolved source figure references (not attached and not evidence): ' + JSON.stringify(figureEvidence.unresolvedFigureIds) +
             '. Use only these source steps and linked source figures for factual claims, quantities, actors and relationships. Do not infer an unprovided measurement. ' +
             'Choose the most suitable materialisation technique and environment for the domain. Make structures and mechanisms inspectable, make meaningful variables changeable, and sequence 3–6 lessons from global orientation through mechanism to reconstruction and a prediction/check. ' +
@@ -433,6 +435,7 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         d.atlasNodeId = node.id;
         d.sourceFigureRefs = sourceFigureRefs;
         d.sourceVisualAttachments = sourceVisualAttachments;
+        d.sourceVisualAttachmentManifest = sourceVisualAttachmentManifest;
         d.sourceEvidenceStatus = sourceEvidenceStatus;
         st.demos.push(d);
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });

@@ -73,6 +73,15 @@ export function selectSourceFigureAttachments(node, sourceSteps = [], figures = 
   return selected;
 }
 
+/** Metadata manifest for the exact image order passed to a vision-capable request. */
+export function sourceFigureAttachmentManifest(node, sourceSteps = [], figures = [], max = 4) {
+  const evidence = sourceFigureEvidence(node && node.stepIds || [], sourceSteps, figures);
+  return selectSourceFigureAttachments(node, sourceSteps, figures, max).map((asset, index) => {
+    const record = evidence.figures.find(item => item.id === String(asset.id));
+    return record ? { attachmentIndex: index + 1, ...record } : null;
+  }).filter(Boolean);
+}
+
 export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [] }) {
   const sourceUnit = sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
   const S = (analysis.chain || []).map(st => ({

@@ -718,6 +718,52 @@
                       }
                     }
                   }
+                },
+                "sourceVisualAttachmentManifest": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "attachmentIndex",
+                      "id",
+                      "stepIds"
+                    ],
+                    "properties": {
+                      "attachmentIndex": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "caption": {
+                        "type": "string"
+                      },
+                      "page": {
+                        "type": "integer"
+                      },
+                      "slide": {
+                        "type": "integer"
+                      },
+                      "mediaPath": {
+                        "type": "string"
+                      },
+                      "stepIds": {
+                        "type": "array",
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "description": "Image-to-attachment ordering and source provenance for the vision request; contains metadata only, never image bytes."
                 }
               },
               "description": "a 2D diagram, a built-in 3D model, or a scene (full spec or {type:'scene',request} to be authored later)"
