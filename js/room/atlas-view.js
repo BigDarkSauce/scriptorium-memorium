@@ -195,6 +195,15 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       atlas.audit?.fallbackReason ? el('p', { class: 'atlas-audit-warning', text: 'AI semantic mapping failed; this is a deterministic subsection grouping. Reason: ' + atlas.audit.fallbackReason }) : null
     ]);
     detail.append(trail);
+    const research = atlas.sourceIndex && atlas.sourceIndex.webResearch;
+    const citations = research && Array.isArray(research.citations) ? research.citations : [];
+    const web = el('div', { class: 'atlas-web-sources' }, [
+      el('div', { class: 'atlas-section-label', text: 'EXTERNAL RESEARCH' }),
+      el('p', { class: 'atlas-audit-line', text: research ? (research.searched || 0) + ' live web-search tool calls recorded · ' + citations.length + ' source citations captured' : 'No web-search audit data was returned for this chapter.' }),
+      el('p', { class: 'atlas-audit-line', text: 'These are chapter-level citations. They are not automatically assigned to individual concepts unless a chain step also names the source.' }),
+      ...(citations.length ? citations.map(c => el('a', { class: 'atlas-web-link', href: c.url, target: '_blank', rel: 'noopener noreferrer', text: c.title || c.url })) : [el('span', { class: 'atlas-audit-line', text: 'No external URLs were captured in the structured response.' })])
+    ]);
+    detail.append(web);
   }
 
   if (activeId) select(activeId);
