@@ -73,9 +73,9 @@ try {
   }
   Assert-True $ready 'the PowerShell fallback server must bind and serve the application on localhost'
 
-  $home = Invoke-SmokeRequest -Path '/'
-  Assert-True ([int]$home.StatusCode -eq 200) 'GET / must serve index.html'
-  Assert-True ($home.Content -match '<title>Scriptorium Memorialium</title>') 'the root response must be the Scriptorium application document'
+  $homeResponse = Invoke-SmokeRequest -Path '/'
+  Assert-True ([int]$homeResponse.StatusCode -eq 200) 'GET / must serve index.html'
+  Assert-True ($homeResponse.Content -match '<title>Scriptorium Memorialium</title>') 'the root response must be the Scriptorium application document'
 
   $asset = Invoke-SmokeRequest -Path '/css/app.css'
   Assert-True ([int]$asset.StatusCode -eq 200) 'GET /css/app.css must serve a static asset'
