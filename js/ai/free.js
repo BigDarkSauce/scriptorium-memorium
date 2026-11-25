@@ -285,7 +285,12 @@ export const lastBad = [];   // the last answers that did not parse (for the pan
 // every (provider, model) that could take this request, best first
 export async function candidates({ images = 0, minRank = 0 } = {}) {
   const out = [];
-  await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) out.push({ p, m: m.id, rank: m.rank + (p.local && !p.discover ? -6 : p.discover ? 2 : 0) })   /* through FreeLLMAPI a model has every key behind it: a little ahead of the same model direct */; }); }));
+  await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) {
+    // The local OpenAI adapter is the configured primary engine, not merely another candidate in the fallback pool.
+    // Give it absolute precedence; if its request fails, the normal tried-set moves on to the other providers.
+    const priority = p.id === 'openai-local' ? 100000 : m.rank + (p.local && !p.discover ? -6 : p.discover ? 2 : 0);
+    out.push({ p, m: m.id, rank: priority });
+  } }); }));
   return out.sort((a, b) => b.rank - a.rank);
 }
 // can this page reach the free providers? Outside the Claude app: one keyless provider's model list; inside it: is the
