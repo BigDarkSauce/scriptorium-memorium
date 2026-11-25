@@ -80,9 +80,36 @@ try {
         knowledgeKinds: ['causal'],
         visualIntent: 'Test view',
         explanatoryFigures: [{
-          stepId: 'S2', title: 'Yield by treatment', purpose: 'Faithful reconstruction of the source chart.',
-          sourceVisualId: 'pptx-chart-s3-1', sourceSlide: 3, sourceKind: 'chart',
+          viewId: 'yield-evidence', viewOrder: 1, viewStage: 'orientation',
+          stepId: 'S2', sourceStepIds: ['S2'], title: 'Yield by treatment', purpose: 'Faithful reconstruction of the source chart.',
+          sourceVisualId: 'pptx-chart-s3-1', sourceVisualIds: ['pptx-chart-s3-1'], sourceFigureIds: [],
+          sourceSlide: 3, sourceKind: 'chart',
           figure: { kind: 'bars', caption: 'Source chart · cached values; no axis unit inferred.', categories: ['Control', 'Fertiliser'], series: [{ name: 'Grain yield', values: [3.2, 4.8] }] }
+        }, {
+          viewId: 'transport-mechanism', viewOrder: 2, viewStage: 'mechanism',
+          stepId: 'S2', sourceStepIds: ['S1', 'S2'], title: 'Transport mechanism', purpose: 'Show the route and the direction of movement.',
+          sourceVisualIds: [], sourceFigureIds: [],
+          figure: { kind: 'flow', caption: 'Conceptual route through the channel.', nodes: [{ id: 'outside', label: 'Outside' }, { id: 'channel', label: 'Channel' }, { id: 'inside', label: 'Inside' }], edges: [{ from: 'outside', to: 'channel', label: 'enters' }, { from: 'channel', to: 'inside', label: 'passes through' }] }
+        }],
+        visualSequence: [{
+          id: 'yield-evidence', viewId: 'yield-evidence', order: 1, stage: 'orientation',
+          title: 'Yield by treatment', purpose: 'Compare the values from the source chart.',
+          medium: '2d', status: 'ready', sourceStepIds: ['S2'],
+          figures: [{
+            viewId: 'yield-evidence', stepId: 'S2', sourceStepIds: ['S2'],
+            title: 'Yield by treatment', purpose: 'Faithful reconstruction of the source chart.',
+            sourceVisualId: 'pptx-chart-s3-1', sourceSlide: 3, sourceKind: 'chart',
+            figure: { kind: 'bars', caption: 'Source chart · cached values; no axis unit inferred.', categories: ['Control', 'Fertiliser'], series: [{ name: 'Grain yield', values: [3.2, 4.8] }] }
+          }]
+        }, {
+          id: 'transport-mechanism', viewId: 'transport-mechanism', order: 2, stage: 'mechanism',
+          title: 'Transport mechanism', purpose: 'Show the route and the direction of movement.',
+          medium: '2d', status: 'ready', sourceStepIds: ['S1', 'S2'],
+          figures: [{
+            viewId: 'transport-mechanism', stepId: 'S2', sourceStepIds: ['S1', 'S2'],
+            title: 'Transport mechanism', purpose: 'Show the route and the direction of movement.',
+            figure: { kind: 'flow', caption: 'Conceptual route through the channel.', nodes: [{ id: 'outside', label: 'Outside' }, { id: 'channel', label: 'Channel' }, { id: 'inside', label: 'Inside' }], edges: [{ from: 'outside', to: 'channel', label: 'enters' }, { from: 'channel', to: 'inside', label: 'passes through' }] }
+          }]
         }],
         dioramaSet: [], position: { x: 50, y: 50 },
         challenges: [
@@ -224,11 +251,18 @@ try {
   await sourceVisualDisclosure.locator('summary').click();
   assert.equal(await sourceVisualDisclosure.getAttribute('open'), '', 'the structured visual source record should expand on demand');
   assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
-  const sourceDerivedFigure = page.locator('.atlas-explanatory-figures .atlas-figure-entry');
-  assert.equal(await sourceDerivedFigure.count(), 1, 'the selected source chart must be reconstructed as a visible atlas figure');
-  assert.match(await sourceDerivedFigure.locator('small').innerText(), /Reconstructed from source visual pptx-chart-s3-1.*slide 3.*step S2/i);
-  assert.equal(await sourceDerivedFigure.locator('.fig-bars').count(), 1, 'the chart reconstruction must use the native bars renderer rather than a text-only placeholder');
-  assert.equal(await sourceDerivedFigure.locator('.fig-bad').count(), 0, 'the source-derived figure must validate and render without an error');
+  const visualTabs = page.locator('.atlas-visual-path-tab');
+  assert.equal(await visualTabs.count(), 2, 'the concept pathway must expose its two ordered visual stages');
+  assert.match(await visualTabs.nth(0).innerText(), /ORIENTATION.*Yield by treatment/i);
+  const firstVisualStage = page.locator('.atlas-visual-path-panel');
+  assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-bars').count(), 1, 'the evidence stage must render its native source-chart figure');
+  assert.match(await firstVisualStage.innerText(), /Reconstructed from source visual pptx-chart-s3-1.*slide 3.*S2/i);
+  assert.equal(await firstVisualStage.locator('.fig-bad').count(), 0, 'the source-derived figure must validate and render without an error');
+  await visualTabs.nth(1).click();
+  assert.match(await firstVisualStage.innerText(), /MECHANISM.*Transport mechanism.*route and the direction/i);
+  assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-flow').count(), 1, 'the learner must be able to switch to the separate mechanism view');
+  await visualTabs.nth(0).click();
+  assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-bars').count(), 1, 'switching back must restore the earlier source-evidence view');
   assert.equal(await scanSearch.isVisible(), true, 'the source scan must remain expanded after opening a concept');
   assert.equal(await scanSearch.inputValue(), 'selective permeability', 'the previous source query must survive concept selection');
   await scanSearch.fill('Flux relation');

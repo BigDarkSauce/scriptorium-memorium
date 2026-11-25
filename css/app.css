@@ -1569,3 +1569,19 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-source-step summary { cursor: pointer; color: #59432e; font: 11px var(--f-mono); overflow-wrap: anywhere; }
 .atlas-source-step p { color: #67513a; line-height: 1.45; }
 .atlas-source-step small { color: var(--iron-soft); font: 10px var(--f-mono); }
+
+.atlas-visual-path { display:grid; gap:10px; }
+.atlas-visual-path-intro { margin:0; color:#6a5037; font-size:12px; line-height:1.45; }
+.atlas-visual-path-rail { display:flex; gap:7px; overflow-x:auto; padding:2px 1px 8px; scroll-snap-type:x proximity; }
+.atlas-visual-path-tab { display:grid; grid-template-columns:25px minmax(120px,1fr); gap:8px; align-items:center; flex:0 0 auto; min-width:160px; max-width:220px; padding:8px 10px; border:1px solid rgba(90,60,30,.2); border-radius:9px; background:rgba(255,255,255,.3); color:var(--iron); text-align:left; cursor:pointer; scroll-snap-align:start; }
+.atlas-visual-path-tab.active { border-color:rgba(43,102,86,.65); background:rgba(225,238,229,.55); box-shadow:inset 0 -2px 0 rgba(49,91,80,.65); }
+.atlas-visual-path-index { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; background:rgba(90,60,30,.1); font:10px var(--f-mono); }
+.atlas-visual-path-tab-text { display:grid; gap:2px; min-width:0; }
+.atlas-visual-path-tab-text b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 13px var(--f-display); }
+.atlas-visual-path-tab-text small,.atlas-visual-path-stage-label { color:var(--iron-soft); font:9px var(--f-mono); letter-spacing:.07em; }
+.atlas-visual-path-panel { min-width:0; padding:12px; border:1px solid rgba(90,60,30,.18); border-radius:11px; background:rgba(255,255,255,.25); }
+.atlas-visual-path-head { display:grid; gap:4px; margin-bottom:9px; }
+.atlas-visual-path-head h4 { margin:0; color:var(--iron); font:500 17px var(--f-display); }
+.atlas-visual-path-head p { margin:0; color:#6a5037; font-size:12px; line-height:1.4; }
+.atlas-visual-path-figure { margin:0; }
+.atlas-visual-path-warning { color:var(--rubric); font:10px var(--f-mono); }

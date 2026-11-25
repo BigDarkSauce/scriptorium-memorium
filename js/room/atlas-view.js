@@ -384,6 +384,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   const mapWrap = el('div', { class: 'atlas-map-wrap' }, [svg, el('div', { class: 'atlas-map-hint', text: 'Select a concept node to explore its dioramas, predictions and source trail.' })]);
   root.append(mapWrap);
   const detail = el('div', { class: 'atlas-detail' }); root.append(detail);
+  let visualPathCleanup = () => {};
 
   // Keyboard control is scoped to an active challenge, never to the whole app or text-editing fields.
   root.addEventListener('keydown', e => {
@@ -419,6 +420,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     renderDetail();
   }
   function renderDetail() {
+    visualPathCleanup(); visualPathCleanup = () => {};
     const node = (byId.get(activeId) || {}).node; detail.innerHTML = ''; if (!node) return;
     const top = el('div', { class: 'atlas-detail-head' }, [
       el('div', { class: 'atlas-overline', text: 'CONCEPT NODE' }),
@@ -465,50 +467,131 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     ]);
     detail.append(memory);
 
-    const set = el('div', { class: 'atlas-dioramas' }, [el('div', { class: 'atlas-section-label', text: 'DIORAMA SEQUENCE' })]);
-    (node.dioramaSet || []).forEach((d, i) => set.append(el('div', { class: 'atlas-view-intent' }, [
-      el('b', { text: (i + 1) + '. ' + txt(d.title, 90) }),
-      el('span', { text: txt(d.purpose, 180) }),
-      el('small', { text: (d.medium || '3d').toUpperCase() + ((d.manipulations || []).length ? ' · ' + d.manipulations.join(' · ') : '') })
-    ])));
-    const refs = node.dioramaRefs || [];
-    if (refs.length) refs.forEach((ref, i) => {
-      const b = el('button', { class: 'atlas-open-diorama', type: 'button', onclick: () => onOpenDiorama && onOpenDiorama(ref) }, [
-        el('span', { class: 'atlas-dio-n', text: String(i + 1).padStart(2, '0') }),
-        el('span', { class: 'atlas-dio-main' }, [el('b', { html: mathHTML(ref.title || 'Open diorama') }), el('small', { text: txt(ref.purpose || node.question, 150) })]),
-        el('span', { class: 'atlas-dio-go', text: 'ENTER ↗' })
+    const visualSequence = Array.isArray(node.visualSequence) ? node.visualSequence : [];
+    if (visualSequence.length) {
+      const path = el('div', { class: 'atlas-visual-path' }, [
+        el('div', { class: 'atlas-section-label', text: 'CONCEPT VISUAL PATHWAY' }),
+        el('p', { class: 'atlas-visual-path-intro', text: 'Move through the explanation in order. Each view has a distinct job; the interactive model and evidence diagrams are connected stages of the same concept.' })
       ]);
-      set.append(b);
-    });
-    else if (node.visualKind === 'diagram' || (node.dioramaSet || []).some(d => d.medium === '2d')) {
-      set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented through explanatory diagrams rather than an artificial 3D simulation. The related figures are shown below.' }));
-    } else {
-      set.append(el('div', { class: 'atlas-empty-visual', text: 'No authored 3D scene is linked to this node yet. Add a diorama request below.' }));
-    }
-    detail.append(set);
-
-    // Carry source-linked explanatory visuals into the atlas. A node can have both 3D dioramas and 2D diagrams;
-    // these are complementary views rather than mutually exclusive display modes.
-    const figures = (node.explanatoryFigures && node.explanatoryFigures.length)
-      ? node.explanatoryFigures
-      : (node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
-    if (figures.length) {
-      const figureSet = el('div', { class: 'atlas-explanatory-figures' }, [
-        el('div', { class: 'atlas-section-label', text: 'RELATED EXPLANATORY FIGURES' })
-      ]);
-      figures.forEach((item, i) => {
-        const host = el('div', { class: 'atlas-generated-figure' });
-        renderFigure(item.figure, host);
-        figureSet.append(el('div', { class: 'atlas-figure-entry' }, [
-          el('b', { text: txt(item.title || 'Source explanation', 90) }),
-          el('p', { text: txt(item.purpose || '', 240) }),
-          host,
-          el('small', { text: item.sourceVisualId
-            ? 'Reconstructed from source visual ' + item.sourceVisualId + (item.sourceSlide ? ' · slide ' + item.sourceSlide : '') + ' · linked step ' + String(item.stepId || '')
-            : 'Linked to source step ' + String(item.stepId || '') })
-        ]));
+      const rail = el('div', { class: 'atlas-visual-path-rail', role: 'tablist', 'aria-label': 'Concept visual stages' });
+      const panel = el('div', { class: 'atlas-visual-path-panel', 'aria-live': 'polite' });
+      let selected = 0, cleanups = [];
+      const clearStage = () => {
+        cleanups.forEach(stop => { try { typeof stop === 'function' && stop(); } catch (e) {} });
+        cleanups = [];
+        panel.innerHTML = '';
+      };
+      const tabs = visualSequence.map((item, index) => {
+        const tab = el('button', {
+          class: 'atlas-visual-path-tab' + (index === selected ? ' active' : ''),
+          type: 'button', role: 'tab', 'aria-selected': String(index === selected),
+          onclick: () => {
+            selected = index;
+            tabs.forEach((button, i) => {
+              button.classList.toggle('active', i === selected);
+              button.setAttribute('aria-selected', String(i === selected));
+            });
+            drawStage();
+          }
+        }, [
+          el('span', { class: 'atlas-visual-path-index', text: String(item.order || index + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-visual-path-tab-text' }, [
+            el('b', { text: txt(item.title || 'Visual view', 70) }),
+            el('small', { text: String(item.stage || 'explanation').toUpperCase() + ' · ' + (item.medium || '2d').toUpperCase() })
+          ])
+        ]);
+        return tab;
       });
-      detail.append(figureSet);
+      tabs.forEach(tab => rail.append(tab));
+      const drawStage = () => {
+        clearStage();
+        const item = visualSequence[selected];
+        if (!item) return;
+        panel.append(el('div', { class: 'atlas-visual-path-head' }, [
+          el('span', { class: 'atlas-visual-path-stage-label', text: String(item.stage || 'explanation').toUpperCase() + ' · VIEW ' + String(item.order || selected + 1) }),
+          el('h4', { text: txt(item.title || 'Explanatory view', 100) }),
+          el('p', { text: txt(item.purpose || '', 360) })
+        ]));
+        if (item.medium === '3d') {
+          const ref = item.dioramaRef || (node.dioramaRefs || [])[0] || null;
+          if (ref) panel.append(el('button', { class: 'atlas-open-diorama', type: 'button', onclick: () => onOpenDiorama && onOpenDiorama(ref) }, [
+            el('span', { class: 'atlas-dio-n', text: '3D' }),
+            el('span', { class: 'atlas-dio-main' }, [
+              el('b', { html: mathHTML(ref.title || 'Open interactive diorama') }),
+              el('small', { text: txt(ref.purpose || item.purpose || node.question, 180) })
+            ]),
+            el('span', { class: 'atlas-dio-go', text: 'ENTER ↗' })
+          ]));
+          else panel.append(el('div', { class: 'atlas-empty-visual', text: 'The 3D scene is planned but has not yet been authored.' }));
+        } else if (Array.isArray(item.figures) && item.figures.length) {
+          item.figures.forEach(figureItem => {
+            const host = el('div', { class: 'atlas-generated-figure atlas-visual-path-figure' });
+            const stop = renderFigure(figureItem.figure, host);
+            if (typeof stop === 'function') cleanups.push(stop);
+            panel.append(el('div', { class: 'atlas-figure-entry' }, [
+              el('b', { text: txt(figureItem.title || item.title || 'Source explanation', 90) }),
+              el('p', { text: txt(figureItem.purpose || item.purpose || '', 240) }),
+              host,
+              el('small', { text: figureItem.sourceVisualId
+                ? 'Reconstructed from source visual ' + figureItem.sourceVisualId + (figureItem.sourceSlide ? ' · slide ' + figureItem.sourceSlide : '') + ' · linked step ' + String(figureItem.stepId || '')
+                : 'Linked to source step' + ((figureItem.sourceStepIds || []).length === 1 ? ' ' : 's ') + ((figureItem.sourceStepIds || []).join(', ') || figureItem.stepId || ' not recorded') })
+            ]));
+          });
+        } else {
+          panel.append(el('div', { class: 'atlas-empty-visual', text: 'This explanatory view is planned, but its figure has not yet been authored. Its source references and intended purpose are retained.' }));
+        }
+        if (item.status === 'planned' && item.medium === '2d' && node.viewAuthoring && node.viewAuthoring.error) {
+          panel.append(el('small', { class: 'atlas-visual-path-warning', text: 'Figure authoring note: ' + txt(node.viewAuthoring.error, 240) }));
+        }
+      };
+      path.append(rail, panel);
+      detail.append(path);
+      drawStage();
+      visualPathCleanup = clearStage;
+    } else {
+      const set = el('div', { class: 'atlas-dioramas' }, [el('div', { class: 'atlas-section-label', text: 'DIORAMA SEQUENCE' })]);
+      (node.dioramaSet || []).forEach((d, i) => set.append(el('div', { class: 'atlas-view-intent' }, [
+        el('b', { text: (i + 1) + '. ' + txt(d.title, 90) }),
+        el('span', { text: txt(d.purpose, 180) }),
+        el('small', { text: (d.medium || '3d').toUpperCase() + ((d.manipulations || []).length ? ' · ' + d.manipulations.join(' · ') : '') })
+      ])));
+      const refs = node.dioramaRefs || [];
+      if (refs.length) refs.forEach((ref, i) => {
+        const b = el('button', { class: 'atlas-open-diorama', type: 'button', onclick: () => onOpenDiorama && onOpenDiorama(ref) }, [
+          el('span', { class: 'atlas-dio-n', text: String(i + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-dio-main' }, [el('b', { html: mathHTML(ref.title || 'Open diorama') }), el('small', { text: txt(ref.purpose || node.question, 150) })]),
+          el('span', { class: 'atlas-dio-go', text: 'ENTER ↗' })
+        ]);
+        set.append(b);
+      });
+      else if (node.visualKind === 'diagram' || (node.dioramaSet || []).some(d => d.medium === '2d')) {
+        set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented through explanatory diagrams rather than an artificial 3D simulation. The related figures are shown below.' }));
+      } else {
+        set.append(el('div', { class: 'atlas-empty-visual', text: 'No authored 3D scene is linked to this node yet. Add a diorama request below.' }));
+      }
+      detail.append(set);
+
+      const figures = (node.explanatoryFigures && node.explanatoryFigures.length)
+        ? node.explanatoryFigures
+        : (node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
+      if (figures.length) {
+        const figureSet = el('div', { class: 'atlas-explanatory-figures' }, [
+          el('div', { class: 'atlas-section-label', text: 'RELATED EXPLANATORY FIGURES' })
+        ]);
+        figures.forEach((item, i) => {
+          const host = el('div', { class: 'atlas-generated-figure' });
+          renderFigure(item.figure, host);
+          figureSet.append(el('div', { class: 'atlas-figure-entry' }, [
+            el('b', { text: txt(item.title || 'Source explanation', 90) }),
+            el('p', { text: txt(item.purpose || '', 240) }),
+            host,
+            el('small', { text: item.sourceVisualId
+              ? 'Reconstructed from source visual ' + item.sourceVisualId + (item.sourceSlide ? ' · slide ' + item.sourceSlide : '') + ' · linked step ' + String(item.stepId || '')
+              : 'Linked to source step ' + String(item.stepId || '') })
+          ]));
+        });
+        detail.append(figureSet);
+      }
     }
 
     const customTa = el('textarea', { class: 'field atlas-custom-input', rows: 2, placeholder: 'Describe a particular diorama to add to this concept: viewpoint, mechanisms, objects, variables, events or comparison…' });
