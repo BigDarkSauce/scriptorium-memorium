@@ -1,7 +1,7 @@
-// Every AI request the app makes. These same texts are exported as the portable prompt pack (prompts/*.md, built by
-// `node prompts/build.mjs`), so any AI (any Claude account, ChatGPT, Gemini, a local model) can do the work and the
-// JSON is pasted back into the app. The prompts are procedural on purpose: numbered steps, hard rules, a worked
-// example and a self-check list, so that a small or low-effort model produces the same structure as a large one.
+// Every authoring request the app makes. These same texts are exported as the portable prompt pack (prompts/*.md,
+// built by `node prompts/build.mjs`). OpenAI is the primary route; compatible fallback models use the same schemas,
+// validators and targeted repairs. The prompt pack can also be run manually with another model and its JSON pasted
+// back into the app. Prompts are procedural: numbered steps, hard rules, worked examples and self-checks.
 // This module also holds the pure checks the app runs on every answer (verifyChain) and the targeted follow-up
 // that fills only what is missing (followUpPrompt + mergeFollowUp). See docs/PROTOCOL.md, "Recipe for any AI".
 
