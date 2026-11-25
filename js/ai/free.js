@@ -1,10 +1,11 @@
-// Free models: a router over many free-tier LLM APIs, run in the page (no server needed).
+// Optional provider pool and automatic fallback router for Scriptorium's OpenAI-first workflow.
+// The local OpenAI Responses adapter is ranked ahead of every other provider; this module tries enabled fallbacks
+// when the primary endpoint is missing or a request cannot be completed there. Some fallbacks are free-tier APIs;
+// others are local models or a user-configured OpenAI-compatible endpoint.
 //
-// WHY THIS SHAPE. No single free tier is large or steady enough to write a whole book: each caps requests per minute
-// and per day, changes its model list every few weeks, and some days is down. Pooled, they are large: a dozen free
-// tiers give thousands of requests a day (FreeLLMAPI, github.com/tashfeenahmed/freellmapi, counts ~7.4 billion tokens a
-// month across 34 of them). So every request goes to the best model that is free *now*, and the router keeps going:
-//   1. discover   each provider's live model list (GET /models), so retired models drop out and new ones come in;
+// WHY THIS SHAPE. No single free tier is large or steady enough to be a dependable fallback for a whole book: each
+// caps requests per minute and per day, changes its model list, and can be unavailable. A pool provides alternatives:
+////   1. discover   each provider's live model list (GET /models), so retired models drop out and new ones come in;
 //   2. rank       the models by how well they write long, exact JSON (RANK below; a tested ordering, not a guess);
 //   3. budget     per model: requests this minute and today (learned from the 429s it meets) and cool-downs taken from
 //                 the provider's own reset headers; a daily cap waits for 00:00 UTC, a minute cap for the minute;
@@ -13,7 +14,7 @@
 //   5. cache      an answer that passed is kept (IndexedDB, 30 days): the same request again costs nothing;
 //   6. wait, never fail   when every model is busy the job waits for the earliest reset, saying for what and how long
 //                 (and can be stopped); a model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no quota at all.
-// Keys are the viewer's own, kept only in this browser (localStorage 'sm-ai'), sent only to the provider they belong to.
+// Optional fallback keys are stored in browser AI settings (localStorage 'sm-ai' plus the app's IndexedDB mirror), sent only to their matching provider. The OpenAI key is handled separately by the local server.
 //
 // Browser reach (measured from a page, Nov 2026): Groq, Google Gemini, Cerebras, Mistral, OpenRouter, Cohere, Z.ai,
 // Chutes, Hugging Face, OVHcloud, LLM7 and Pollinations answer cross-origin requests; NVIDIA NIM, GitHub Models,
@@ -293,14 +294,12 @@ export async function candidates({ images = 0, minRank = 0 } = {}) {
   } }); }));
   return out.sort((a, b) => b.rank - a.rank);
 }
-// can this page reach the free providers? Outside the Claude app: one keyless provider's model list; inside it: is the
-// free-models extension installed and running (remembered for the session; the AI panel asks again)
-// (asked only once a free engine is chosen or the panel is opened: nothing is sent anywhere in the Claude mode)
+// Can this host reach optional fallback providers? The older embedded-host path requires the bridge extension;
+// standalone local mode uses the relay, while an ordinary hosted page probes only its allowed direct endpoints.
 let reachP = null, reachOK = null;
 export const reachable = ({ fresh = false } = {}) => (!fresh && reachP) || (reachP = relayP.then(() => via() === 'bridge' ? bridgeReady({ fresh }) : via() === 'relay' ? true : fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', { signal: AbortSignal.timeout(8000) }).then(r => true, () => fetch('https://api.llm7.io/v1/models', { signal: AbortSignal.timeout(8000) }).then(() => true, () => false))).then(v => (reachOK = v)));
 if (mode() !== 'claude') reachable(); onSettings(S => { if (S.mode !== 'claude') reachable(); });
-// a provider counts only where the page can reach it (inside the Claude app without the extension it cannot: hybrid
-// then uses Claude for all)
+// A provider counts only where the current host can actually reach it.
 export const hasAny = () => { const providers = active(); return providers.some(p => p.local) || (reachOK !== false && providers.length > 0); };
 export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,
