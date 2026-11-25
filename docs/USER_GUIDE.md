@@ -50,7 +50,19 @@ The atlas presents a chapter as an interactive concept map. Select a node to see
 - **Dioramas and diagrams:** open a linked diorama to inspect the concept as a manipulable model. Where 3D would mislead, the atlas can show 2D explanatory figures instead.
 - **Legacy atlases:** saved atlases created before the structured reasoning path remain readable. Their existing explanation appears as one reveal unit rather than being rewritten or divided into invented steps.
 
-See [the learning workflow](LEARNING-WORKFLOW.md) for the planned rapid-scan and optional loci-memory layers. Those layers are design targets rather than currently shipped controls.
+See [the learning workflow](LEARNING-WORKFLOW.md) for the planned rapid source-scan layer. The optional loci route described below is available now; due-review scheduling and non-bookcase landmarks remain future work.
+
+## Optional loci memory route
+
+A concept can have a place in the walkable library. This is an optional retrieval cue, not a replacement for the source material.
+
+- In the concept atlas, select a node and choose **Assign a memory place**.
+- Choose a bookcase, row and place. A place may already contain a scroll: the anchor marks the bookcase position, not the scroll's identity. **Preview this place** frames it and shows a gold ring.
+- Write a short, distinctive association of your own, then save. The anchor follows the bookcase if you move or rotate it. Use **Change this memory place** to revise its location or cue.
+- Choose **Visit memory route** to walk the saved places for this chapter. At each stop, use your cue to reconstruct the concept and commit your answer and confidence before revealing the expected reconstruction.
+- After reveal, the attempt is locked and saved with the place. Use **Previous place** and **Next place** to move around the route, or **Return to concept atlas** for the complete source-linked reasoning, diagrams and dioramas.
+
+This first version stores attempts but does not yet schedule due reviews or measure delayed recall. The route is optional; you can continue studying entirely from the concept atlas.
 
 ## A diorama
 
