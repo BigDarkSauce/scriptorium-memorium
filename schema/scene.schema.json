@@ -597,6 +597,337 @@
     "levels": {
       "type": "array",
       "description": "the levels of the multiscale scene graph: names or {name, at:actor}; drives the level indicator"
+    },
+    "sourceStepIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "modelContract": {
+      "type": "object",
+      "required": [
+        "systemBoundary",
+        "entities",
+        "stateVariables",
+        "mechanisms",
+        "constraints",
+        "assumptions",
+        "observables",
+        "uncertainties"
+      ],
+      "properties": {
+        "systemBoundary": {
+          "type": "string",
+          "minLength": 8
+        },
+        "entities": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "required": [
+              "bodyId",
+              "referent",
+              "role",
+              "evidenceStepIds"
+            ],
+            "properties": {
+              "bodyId": {
+                "type": "string"
+              },
+              "referent": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "evidenceStepIds": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "stateVariables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "name",
+              "unit",
+              "provenance",
+              "evidenceStepIds"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "initial": {
+                "type": "number"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "controllable": {
+                "type": "boolean"
+              },
+              "provenance": {
+                "enum": [
+                  "source",
+                  "derived",
+                  "illustrative"
+                ]
+              },
+              "evidenceStepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "mechanisms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "from",
+              "to",
+              "rule",
+              "basis",
+              "evidenceStepIds"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "from": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "to": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rule": {
+                "type": "string"
+              },
+              "basis": {
+                "enum": [
+                  "source",
+                  "standard",
+                  "external",
+                  "hypothesis"
+                ]
+              },
+              "evidenceStepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "statement"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "statement": {
+                "type": "string"
+              },
+              "evidenceStepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "statement",
+              "why"
+            ],
+            "properties": {
+              "statement": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "observables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "unit",
+              "relationship"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "relationship": {
+                "type": "string"
+              },
+              "evidenceStepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "uncertainties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "modelValidation": {
+      "type": "object",
+      "properties": {
+        "checkedAt": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "pass": {
+          "type": "boolean"
+        },
+        "faults": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "modelAudit": {
+      "type": "object",
+      "properties": {
+        "checkedAt": {
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "pass",
+            "revise",
+            "uncertain"
+          ]
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "enum": [
+                  "critical",
+                  "major",
+                  "minor"
+                ]
+              },
+              "area": {
+                "type": "string"
+              },
+              "problem": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "repair": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "unverified": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptionsToSurface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
     }
   },
   "$defs": {
