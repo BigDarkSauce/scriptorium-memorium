@@ -8,10 +8,8 @@ import { bridgeReady, bridgeInfo, inClaudeApp, bridgeVault } from './bridge.js';
 import * as MEDIA from './media.js';
 
 const MODE_TEXT = {
-  claude: ['Claude directs', 'Your Claude reads every chapter, plans and writes every scroll and diorama. The best quality; uses your Claude plan\'s limits.'],
-  hybrid: ['Claude + free models', 'Claude reads each chapter and plans and checks each diorama; the free models write the volume (coverage, repairs, figures, diorama code). Either stands in when the other is at its limit, so a job never stops.'],
-  free: ['OpenAI preferred + fallbacks', 'GPT-6.2 Astra through the local secure relay is tried first. If it is not configured or cannot be reached, the existing model pool takes over. Claude is not required.'],
-};
+  free: ['OpenAI preferred + fallbacks', 'GPT-6.2 Astra through the local secure relay is the primary engine. If it is not configured or available, other enabled providers are tried automatically. Claude is not required.'],
+}
 export function aiButton(app) {
   const btn = el('button', { class: 'ai-btn glass', type: 'button', 'aria-label': 'AI engine settings', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>' });
   btn.onclick = () => openAIPanel(app);
@@ -27,13 +25,10 @@ export function openAIPanel(app) {
   const modes = el('div', { class: 'ai-modes', role: 'radiogroup', 'aria-label': 'AI engine' });
   // an engine this page cannot use is greyed with one line saying why (it stays choosable: Claude directs outside the app
   // still works by pasting each request into any AI)
-  const drawModes = () => { modes.innerHTML = ''; Object.keys(MODE_TEXT).forEach(k => { const [t, d] = MODE_TEXT[k], on = S.mode === k;
-    const na = k !== 'free' && !claudeAvailable(), warn = na ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the Claude app; here it is the same as free models only.' : 'Needs the Claude app; here each request is shown for you to paste into any AI.' })
-      : k !== 'claude' && inClaudeApp() && FREE.reachable && reachState === false ? el('span', { class: 'ai-warn', text: k === 'hybrid' ? 'Needs the free-models extension (details below): until then Claude does all of it.' : 'Needs the free-models extension (details below).' }) : null;
-    modes.append(el('button', { type: 'button', role: 'radio', 'aria-checked': String(on), class: 'ai-mode' + (on ? ' on' : '') + (na ? ' na' : ''), onclick: () => { S = FREE.saveSettings({ mode: k, chosen: true, auto: false }); drawModes(); drawProviders(); } }, [el('b', { text: t }), el('span', { text: d }), warn])); }); };
+  const drawModes = () => { modes.innerHTML = ''; const [t, d] = MODE_TEXT.free; modes.append(el('div', { class: 'ai-mode on', role: 'status' }, [el('b', { text: t }), el('span', { text: d })])); };
   const plist = el('div', { class: 'ai-providers' }), out = el('div', { class: 'ai-test' });
   const use = FREE.usageToday();
-  const drawProviders = () => { plist.innerHTML = ''; plist.hidden = S.mode === 'claude';
+  const drawProviders = () => { plist.innerHTML = ''; plist.hidden = false;
     FREE.PROVIDERS.forEach(p => {
       const on = FREE.isOn(p, S), key = el('input', { class: 'field mono', type: 'password', placeholder: p.key === 'required' ? 'API key (required)' : p.key === 'optional' ? 'key (optional)' : '', value: S.keys[p.id] || '', autocomplete: 'off', spellcheck: 'false', 'aria-label': p.name + ' key', hidden: p.key === 'none' });
       key.onchange = () => { S = FREE.saveSettings({ keys: { ...S.keys, [p.id]: key.value.trim() } }); drawProviders(); };
@@ -75,7 +70,7 @@ export function openAIPanel(app) {
   // itself only when something here needs doing (inside the Claude app without the extension)
   const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Connection, keys and limits' });
   const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), reach,
-    el('p', { class: 'dim small', text: 'Keys stay in this browser only and go only to the provider they belong to. Free tiers have limits per minute and per day; the router moves to the next free model, and when every one is busy it waits for the earliest reset. A model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no limit at all.' })]);
+    el('p', { class: 'dim small', text: 'The OpenAI API key is read from OPENAI_API_KEY by the local Scriptorium server; it is not stored in the browser. Other provider keys are stored in this browser and sent only to their matching provider. API requests may incur charges. If the local OpenAI model is unavailable, configured fallback providers are tried next.' })]);
   modes.after(details);
   // the extension's file, saved through the Claude app (the bundle is published as base64 text: an artifact serves no
   // archives). It says what happened: saved, declined, or where to find the same file instead.
