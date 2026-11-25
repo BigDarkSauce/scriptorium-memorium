@@ -59,6 +59,12 @@ node tools/smoke.mjs                                       # or: node tools/smok
 
 A run takes about 3 minutes on a machine with a GPU and 10–15 minutes with software rendering. `SMOKE_OUT=dir` saves two canvas captures, `SMOKE_SLOW=1` also runs every built-in model through the drawing → real transition, `SMOKE_HEADED=1` shows the browser. Exit code 0 = all checks passed, 1 = a check failed, 2 = it could not start (no server or no playwright).
 
+## Learning workflow
+
+The concept atlas now supports horizontal question branches, prediction-first commitments and source-linked, one-reasoning-unit-at-a-time unfolding. The workflow also specifies a rapid source scan and optional loci-based memory routes as future design targets; those features are explicitly not represented as shipped yet.
+
+See [docs/LEARNING-WORKFLOW.md](docs/LEARNING-WORKFLOW.md) for the scan → question sweep → selective depth model, the optional spatial memory layer, its source-grounding guardrails and evaluation criteria. The [pedagogy guide](docs/PEDAGOGY.md) and [user guide](docs/USER_GUIDE.md) explain the implementation currently available.
+
 ## Three materialisation techniques
 
 These are generalised from Samnang Aing's experiments (see `docs/RESEARCH.md`). The rule they share: *the drawing is the real model*.
