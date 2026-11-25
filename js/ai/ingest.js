@@ -856,7 +856,7 @@ async function pptSlide(zip, slidePath, number) {
     ...(chartSummaries.length ? ['Extracted chart titles, series and cached values:', ...chartSummaries] : []),
     ...(diagramSummaries.length ? ['Extracted SmartArt labels and directed connections:', ...diagramSummaries] : []),
     ...(notes ? ['Speaker notes:', notes] : []),
-    ...(chunks.length || embeddedImages.length || chartSummaries.length || diagramSummaries.length ? [] : ['[No extractable text or embedded visuals found on this slide.]'])
+    ...(chunks.length || alt.length || notes || embeddedImages.length || chartSummaries.length || diagramSummaries.length ? [] : ['[No extractable text or embedded visuals found on this slide.]'])
   ].join('\n\n');
   return { id: 'slide-' + number, num: String(number), title, level: 2, startPage: number, endPage: number, sourceSlide: number, text, inventory: inventory(text) };
 }
