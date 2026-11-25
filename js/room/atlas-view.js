@@ -129,6 +129,26 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
     }
     detail.append(set);
 
+    // Carry source-linked explanatory visuals into the atlas. A node can have both 3D dioramas and 2D diagrams;
+    // these are complementary views rather than mutually exclusive display modes.
+    const figures = node.explanatoryFigures || [];
+    if (figures.length) {
+      const figureSet = el('div', { class: 'atlas-explanatory-figures' }, [
+        el('div', { class: 'atlas-section-label', text: 'RELATED EXPLANATORY FIGURES' })
+      ]);
+      figures.forEach((item, i) => {
+        const host = el('div', { class: 'atlas-generated-figure' });
+        renderFigure(item.figure, host);
+        figureSet.append(el('div', { class: 'atlas-figure-entry' }, [
+          el('b', { text: txt(item.title || 'Source explanation', 90) }),
+          el('p', { text: txt(item.purpose || '', 240) }),
+          host,
+          el('small', { text: 'Linked to source step ' + String(item.stepId || '') })
+        ]));
+      });
+      detail.append(figureSet);
+    }
+
     const customTa = el('textarea', { class: 'field atlas-custom-input', rows: 2, placeholder: 'Describe a particular diorama to add to this concept: viewpoint, mechanisms, objects, variables, events or comparison…' });
     const status = el('div', { class: 'atlas-action-status', role: 'status' });
     const add = el('button', { class: 'btn primary small', type: 'button', text: 'Generate an additional diorama', onclick: async () => {
