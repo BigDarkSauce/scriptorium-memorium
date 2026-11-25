@@ -1456,3 +1456,9 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-figure-entry > p { margin: 0; color: #6a5037; font-size: 12px; line-height: 1.4; }
 .atlas-figure-entry > small { color: var(--iron-soft); font: 10px var(--f-mono); }
 .atlas-figure-entry .fig { margin: 0; }
+
+
+.atlas-source-step { display: grid; gap: 4px; margin: 6px 0; padding: 7px 9px; border-left: 2px solid rgba(104,126,111,.45); background: rgba(255,255,255,.2); border-radius: 5px; }
+.atlas-source-step summary { cursor: pointer; color: #59432e; font: 11px var(--f-mono); overflow-wrap: anywhere; }
+.atlas-source-step p { color: #67513a; line-height: 1.45; }
+.atlas-source-step small { color: var(--iron-soft); font: 10px var(--f-mono); }
