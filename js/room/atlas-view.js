@@ -112,7 +112,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       figureIds
     };
   });
-  const scan = el('details', { class: 'atlas-source-scan' });
+  const scan = el('section', { class: 'atlas-source-scan' });
+  const scanBody = el('div', { class: 'atlas-source-scan-body', id: 'atlas-source-scan-body', hidden: true });
   const sectionItems = sourceSections.map(sec => {
     const entries = scanEntries.filter(x => String(x.step.section) === String(sec.id));
     const categories = [...new Set(entries.flatMap(x => x.tags))];
@@ -135,7 +136,17 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     sourceSteps.length + ' source steps',
     countTags.length ? countTags.join(' · ') : 'source index'
   ].join(' · ');
-  const scanSummaryNode = el('summary', { class: 'atlas-scan-summary' }, [
+  const scanSummaryNode = el('button', {
+    class: 'atlas-scan-summary',
+    type: 'button',
+    'aria-expanded': 'false',
+    'aria-controls': 'atlas-source-scan-body',
+    onclick: () => {
+      const expanded = scanBody.hidden;
+      scanBody.hidden = !expanded;
+      scanSummaryNode.setAttribute('aria-expanded', String(expanded));
+    }
+  }, [
     el('span', { class: 'atlas-section-label', text: 'QUICK SOURCE SCAN' }),
     el('span', { class: 'atlas-scan-count', text: scanSummary })
   ]);
@@ -194,15 +205,32 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         const pages = sec.startPage
           ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
           : '';
-        const sectionDetails = el('details', { class: 'atlas-scan-section' });
-        const sectionSummary = el('summary', { class: 'atlas-scan-section-summary' }, [
+        const sectionDetails = el('section', { class: 'atlas-scan-section' });
+        const stepListId = 'atlas-scan-section-steps-' + sectionItems.indexOf(sectionItems.find(group => group.sec === sec));
+        const stepList = el('div', {
+          class: 'atlas-scan-section-steps',
+          id: stepListId,
+          hidden: true,
+          role: 'list',
+          'aria-label': (sec.title || sec.id) + ' source steps'
+        });
+        const sectionSummary = el('button', {
+          class: 'atlas-scan-section-summary',
+          type: 'button',
+          'aria-expanded': 'false',
+          'aria-controls': stepListId,
+          onclick: () => {
+            const expanded = stepList.hidden;
+            stepList.hidden = !expanded;
+            sectionSummary.setAttribute('aria-expanded', String(expanded));
+          }
+        }, [
           el('span', { class: 'atlas-scan-main' }, [
             el('b', { text: sec.title || sec.id }),
             el('small', { text: entries.length + ' source steps' + (pages ? ' · ' + pages : '') })
           ]),
           el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag })))
         ]);
-        const stepList = el('div', { class: 'atlas-scan-section-steps', role: 'list', 'aria-label': (sec.title || sec.id) + ' source steps' });
         entries.forEach(entry => {
           const st = entry.step;
           const pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
@@ -252,7 +280,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   };
   scanInput.addEventListener('input', () => paintScan(scanInput.value));
   paintScan('');
-  scan.append(scanSummaryNode, scanInput, suggestionList, scanResults);
+  scanBody.append(scanInput, suggestionList, scanResults);
+  scan.append(scanSummaryNode, scanBody);
   root.append(scan);
 
   const graphData = coordinates(atlas.nodes || []), svg = svgEl('svg', { class: 'atlas-svg', viewBox: '0 0 ' + graphData.width + ' ' + graphData.height, role: 'group', 'aria-label': 'Interactive concept mind map' });
