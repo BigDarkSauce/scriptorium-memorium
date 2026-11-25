@@ -422,6 +422,29 @@ try {
   const dueHistory = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review.history);
   assert.equal(dueHistory.length, 2, 'the due revisit must retain both previous attempts');
   assert.equal(dueHistory[1].rating, 'recalled', 'the prior self-rating must remain attached to its archived attempt');
+
+  // A fresh due attempt can reveal its answer and then be self-rated without the due-reset logic
+  // clearing that just-revealed answer on the same route session.
+  await duePanel.locator('.memory-route-response').fill('Movement depends on an available route.');
+  await duePanel.locator('.memory-route-confidence').selectOption('High');
+  await duePanel.getByRole('button', { name: 'Commit recall' }).click();
+  await duePanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
+  assert.equal(await duePanel.locator('.memory-route-feedback.expected').count(), 1, 'the new answer remains visible after its reveal');
+  assert.equal(await duePanel.getByRole('button', { name: 'Recalled accurately' }).count(), 1, 'the fresh answer remains available for self-rating');
+
+  // Leave that fresh answer unrated, then reopen the route: the next due session must hide it
+  // again and archive the unrated response rather than leaking the previous answer.
+  await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
+  await page.evaluate(() => window.__lociUITest.openRoute());
+  const nextDuePanel = page.locator('.memory-route-panel');
+  await nextDuePanel.waitFor();
+  assert.equal(await nextDuePanel.locator('.memory-route-response').inputValue(), '', 'an unrated due attempt is archived and reset on the next route entry');
+  assert.equal(await nextDuePanel.locator('.memory-route-feedback.expected').count(), 0, 'an unrated previous answer is also hidden on the next due entry');
+  const secondDueHistory = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review.history);
+  assert.equal(secondDueHistory.length, 3);
+  assert.equal(secondDueHistory[2].rating, null, 'the unrated response must be retained as an ungraded attempt');
+  assert.equal(secondDueHistory[2].response, 'Movement depends on an available route.');
+  await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
 
   console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, self-rated due scheduling, learner-controlled route order and source-index search');
