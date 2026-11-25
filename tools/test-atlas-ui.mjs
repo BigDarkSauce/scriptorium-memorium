@@ -182,6 +182,20 @@ try {
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'a term search must find its exact source step');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S1.*p\. 2/i);
   await sourceScan.locator('.atlas-scan-row').first().evaluate(el => el.click());
+  const afterSourceSelection = await page.evaluate(() => {
+    const view = document.querySelector('[data-test-atlas="true"]');
+    const scan = view && view.querySelector('.atlas-source-scan');
+    const body = scan && scan.querySelector('.atlas-source-scan-body');
+    return {
+      url: location.href,
+      viewPresent: !!view,
+      scanPresent: !!scan,
+      scanBodyHidden: body ? body.hidden : null,
+      searchPresent: !!(scan && scan.querySelector('.atlas-scan-search')),
+      activeNode: window.__atlasUITest && window.__atlasUITest.atlas.selectedNodeId
+    };
+  });
+  console.log('ATLAS_AFTER_SOURCE_SELECTION', JSON.stringify(afterSourceSelection));
   assert.equal(await page.locator('.atlas-source-trail').getAttribute('open'), '', 'a source search must open the concept source trail');
   const firstSourceTrailStep = await page.locator('.atlas-source-step[open]').innerText();
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
