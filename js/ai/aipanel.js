@@ -68,8 +68,9 @@ export function openAIPanel(app) {
   // free models work together in the same window. Outside the app (the standalone page) they are called directly.
   // the connection status, the extension and the note on keys and limits: one line until opened ("Details"); open by
   // itself only when something here needs doing (inside the Claude app without the extension)
-  const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Connection, keys and limits' });
-  const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), reach,
+  const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Fallback provider connectivity' });
+  const openAIStatus = el('p', { class: 'small ai-openai-status', text: 'OpenAI local relay: checking…' });
+  const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), openAIStatus, reach,
     el('p', { class: 'dim small', text: 'The OpenAI API key is read from OPENAI_API_KEY by the local Scriptorium server; it is not stored in the browser. Other provider keys are stored in this browser and sent only to their matching provider. API requests may incur charges. If the local OpenAI model is unavailable, configured fallback providers are tried next.' })]);
   modes.after(details);
   // the extension's file, saved through the Claude app (the bundle is published as base64 text: an artifact serves no
@@ -93,15 +94,32 @@ export function openAIPanel(app) {
       else if (d && d.error) fl.append('FreeLLMAPI: this page could not ask the extension (' + d.error + ') and found no server on ports 31415 or 3001. ', again());
       else fl.append('FreeLLMAPI: not running on this computer. ', el('a', { href: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', target: '_blank', rel: 'noopener', text: 'Install it ↗' }), ' (the Windows .exe), open it once, then ', again(), '.');
     }).catch(e => { fl.textContent = 'FreeLLMAPI: could not ask (' + ((e && (e.message || e.code)) || e) + ').'; }); };
+  // The local OpenAI endpoint reports configuration status only; never returns or requests the API key.
+  const checkOpenAI = async () => {
+    openAIStatus.textContent = 'OpenAI local relay: checking…';
+    try {
+      const r = await fetch('/__openai/info', { cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error('The local relay is not present at this address.');
+      const info = await r.json();
+      openAIStatus.className = 'small ai-openai-status ' + (info.configured ? 'good' : 'warn');
+      openAIStatus.textContent = info.configured
+        ? '✓ OpenAI local relay configured · ' + String(info.model || 'model configured') + ' · key remains on this computer'
+        : 'OpenAI relay found, but OPENAI_API_KEY is not set. Launch with “Launch Scriptorium with OpenAI.bat”.';
+    } catch (e) {
+      openAIStatus.className = 'small ai-openai-status warn';
+      openAIStatus.textContent = 'OpenAI secure relay not detected. Use “Launch Scriptorium with OpenAI.bat” on Windows or set OPENAI_API_KEY before starting launcher/serve.py.';
+    }
+  };
+  checkOpenAI();
   // pictures: possible from here, or what is missing
   const mediaLine = () => { const p = el('p', { class: 'small ai-media' }, ['Pictures: checking…']);
     MEDIA.mediaStatus().then(m => { p.innerHTML = ''; if (m.ok) p.append(el('b', { text: '✓ Pictures' }), ' through FreeLLMAPI, each admitted only after a strict check (two independent reviewers): the Illustrate button on every step.'); else p.append(el('b', { text: 'Pictures: ' }), m.why); }).catch(() => { p.textContent = ''; }); return p; };
   // the keys kept on this computer: said only once the page has really read that file (the page must be allowed to)
   const vaultNote = () => { const sp = el('span', { text: '' }); bridgeVault('get').then(v => { if (v === null && !((bridgeInfo() || {}).tools || []).includes('vault_get')) return; sp.textContent = ' Your keys are also kept on this computer, so every new version of the app has them.'; }).catch(e => { sp.textContent = ' (Your keys could not be kept on this computer: ' + ((e && (e.code || e.message)) || e) + '. They stay in this browser.)'; }); return sp; };
   const drawReach = ok => { reachState = ok; reach.innerHTML = ''; drawModes();
-    sumT.textContent = ok ? '✓ Free models reachable from here' : inClaudeApp() ? 'Free models: the extension is needed' : 'Free models: not reachable from here'; sumT.className = ok ? 'ok' : 'warn'; if (!ok && inClaudeApp()) details.open = true;
+    sumT.textContent = ok ? '✓ Fallback providers reachable' : inClaudeApp() ? 'Fallback providers: extension needed' : 'Fallback providers: unavailable'; sumT.className = ok ? 'ok' : 'warn'; if (!ok && inClaudeApp()) details.open = true;
     if (!inClaudeApp()) { reach.className = 'ai-reach' + (ok ? ' good' : '');
-      reach.append(el('b', { text: !ok ? 'This page cannot reach the free models (offline?).' : FREE.via() === 'relay' ? '✓ Free models through this computer’s launcher' : 'Free models: called straight from this page.' }), FREE.via() === 'relay' ? ' (its AI relay: FreeLLMAPI, NVIDIA, GitHub Models and the rest all reachable).' : ' Open the app with “Launch Scriptorium.bat” for the AI relay (FreeLLMAPI and the providers a web page may not call).', ' Claude itself is only available inside the Claude app (with the Scriptorium extension the free models work there too).');
+      reach.append(el('b', { text: !ok ? 'Fallback providers cannot be reached from this view.' : FREE.via() === 'relay' ? '✓ Fallback providers through this computer’s launcher' : 'Fallback providers: direct from this page.' }), FREE.via() === 'relay' ? ' (the local relay can reach local and configured provider endpoints).' : ' Use the local launcher for additional providers blocked by browser cross-origin rules.');
       if (FREE.via() === 'relay') { const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
     if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here.`, vaultNote());
@@ -115,7 +133,7 @@ export function openAIPanel(app) {
       el('ol', { class: 'ai-steps' }, [el('li', { text: 'Download it (or take “Scriptorium free models.mcpb” from your Scriptorium Memorium folder).' }), el('li', { text: 'Double-click the file: Claude Desktop opens it; press Install. (Or Settings → Extensions → drag the file in.)' }), el('li', { text: 'Come back here and press Check again.' })]),
       el('p', { class: 'dim small', text: 'Why: inside the Claude app this page may not contact outside addresses; the extension makes the free-model requests from your computer (only to LLM addresses; nothing else) and passes the answers back. It is yours alone: only the page’s owner can use it.' }),
       el('div', { class: 'row' }, [dl, again])); };
-  if (S.mode !== 'claude' || !inClaudeApp()) FREE.reachable().then(drawReach); else { reach.append(el('span', { class: 'dim small', text: 'Choose a free mode to connect the free models.' })); }
-  offS = FREE.onSettings(Sx => { if (Sx.mode !== 'claude' && reachState == null && document.body.contains(reach)) FREE.reachable().then(drawReach); });
+  if (!inClaudeApp()) FREE.reachable().then(drawReach); else { reach.append(el('span', { class: 'dim small', text: 'Fallback provider networking inside the hosted app uses the Scriptorium extension.' })); }
+  offS = FREE.onSettings(Sx => { if (reachState == null && document.body.contains(reach)) FREE.reachable().then(drawReach); });
   try { const last = JSON.parse(localStorage.getItem('sm-ai-test') || 'null'); if (last && last.res) out.append(el('p', { class: 'dim small', text: `Last test ${new Date(last.at).toLocaleString()}: ` + last.res.map(r => `${r.name} — ${r.verdict}`).join(' · ') })); } catch (e) { }
 }
