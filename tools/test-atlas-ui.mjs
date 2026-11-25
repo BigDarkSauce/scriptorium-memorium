@@ -200,16 +200,20 @@ try {
   assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What changes if the route is removed/i);
   await memoryPanel.locator('.memory-route-footer button').nth(0).click();
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i, 'revealed recall state must persist when returning to a route stop');
+  await memoryPanel.getByRole('button', { name: 'Move this place later' }).click();
+  assert.match(await memoryPanel.locator('.memory-route-heading').innerText(), /Selective boundary/i, 'reordering must keep the same place selected');
+  const routeOrder = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.map(p => p.nodeId));
+  assert.deepEqual(routeOrder, ['locus-two', 'locus-one'], 'the learner-defined order must be saved on the atlas');
   const lociSaves = await page.evaluate(() => window.__lociUITest.getSaves());
-  assert.ok(lociSaves >= 2, 'the route must flush the recall draft with the commitment and save the reveal state');
-  const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces[0].review);
+  assert.ok(lociSaves >= 3, 'the route must flush the recall draft with commitment, reveal and explicit route order');
+  const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review);
   assert.equal(persistedReview.committed, true);
   assert.equal(persistedReview.revealed, true);
   await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence and loci recall route');
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, and learner-controlled route order');
 } finally {
   await browser.close();
 }
