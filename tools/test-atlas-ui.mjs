@@ -277,7 +277,17 @@ try {
   });
   console.log('ATLAS_SOURCE_VISUAL_DISCLOSURE', JSON.stringify(sourceVisualGeometry));
   assert.equal(await sourceVisualSummary.isVisible(), true, 'the indexed source-visual disclosure must be visible before interaction');
-  await sourceVisualSummary.click({ timeout: 15000 });
+  const sourceVisualBeforeActivation = await sourceVisualSummary.evaluate(el => ({
+    connected: el.isConnected,
+    parentOpen: el.parentElement && el.parentElement.tagName === 'DETAILS' ? el.parentElement.open : null,
+    text: el.textContent.trim()
+  }));
+  console.log('ATLAS_SOURCE_VISUAL_BEFORE_ACTIVATION', JSON.stringify(sourceVisualBeforeActivation));
+  assert.equal(sourceVisualBeforeActivation.connected, true, 'the source visual summary must remain attached through the visibility check');
+  // Native <summary> activation is already used for the source-scan disclosures above.
+  // Use the same browser-native activation here: Playwright's pointer action intermittently
+  // waits on a detached nested summary after the nested reader has scrolled.
+  await sourceVisualSummary.evaluate(el => el.click());
   assert.equal(await sourceVisualDisclosure.getAttribute('open'), '', 'the structured visual source record should expand on demand');
   assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/is, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
   const visualTabs = page.locator('.atlas-visual-path-tab');
