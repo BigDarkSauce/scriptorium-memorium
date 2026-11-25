@@ -1,6 +1,6 @@
 # Learning workflow: scan, discover, remember, transfer
 
-Status: progressive question branches and a first loci-memory route are implemented. The rapid source-scan layer and spaced-review scheduling for loci remain design targets, not shipped features.
+Status: progressive question branches, a first loci-memory route and a compact source-orientation scan are implemented. Advanced autocomplete-style scanning and spaced-review scheduling for loci remain design targets.
 
 The learning surface should let a learner move quickly across a whole source, stop at the question that matters, and then uncover only as much reasoning as they need. It should not turn a PDF into another long article to read.
 
@@ -8,14 +8,9 @@ The learning surface should let a learner move quickly across a whole source, st
 
 ### Pass A — orientation scan
 
-Show the document's real structure and evidence before generating explanations:
+Show the document's real structure and evidence before generating explanations. The first atlas scan now lists detected subsections and source-step counts, then lets the learner search the validated chain for titles, terms, equations, worked examples, tables, figures and code. Each result retains its step ID and page location and opens the concept node to which that exact source step was assigned.
 
-- detected chapters, sections, slides or infographic panels;
-- key terms, equations, worked examples, tables and figures, with their page/slide references;
-- the source's own question thread where the text states one;
-- uncertainty where extraction is weak, for example an image-led slide with no accessible description.
-
-This is an index, not a chapter summary. It should be possible to see the scope of a source without opening every explanation. Never silently drop a subsection or treat an inaccessible picture as interpreted content.
+The scan is intentionally an index, not a second lesson or a generated chapter summary. It is collapsed by default, can be searched without changing the selected question branch, and only shows categories found in the ingested chain. Advanced autocomplete suggestions, adaptive preview prompts and richer per-section inventory facets remain future work. Never silently drop a subsection or treat an inaccessible picture as interpreted content.
 
 ### Pass B — question sweep
 
