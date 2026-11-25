@@ -264,10 +264,11 @@ async function authorDemo0(ctx, st, d, o = {}) {
               s.modelValidation = { checkedAt: new Date().toISOString(), method: 'deterministic scene-to-contract checks', pass: !local.faults.length, faults: local.faults, warnings: local.warnings };
               if (local.faults.length) { fail = 'scene-to-model contract validation failed: ' + local.faults.slice(0, 8).join('; '); continue; }
             }
-            if (!simple) {
-              await critiqueDemo(s, s.plan, { ...o, sourceStepIds });
-              const major = (s.modelAudit && s.modelAudit.issues || []).filter(x => x.severity === 'critical' || x.severity === 'major');
-              if (s.modelAudit && s.modelAudit.verdict === 'revise' && major.length) { fail = 'independent model audit: ' + major.slice(0, 5).map(x => x.problem + (x.repair ? ' — ' + x.repair : '')).join('; '); continue; }
+            await critiqueDemo(s, s.plan, { ...o, sourceStepIds });
+            const major = (s.modelAudit && s.modelAudit.issues || []).filter(x => x.severity === 'critical' || x.severity === 'major');
+            if (s.modelAudit && s.modelAudit.verdict === 'revise' && major.length) {
+              fail = 'independent model audit: ' + major.slice(0, 5).map(x => x.problem + (x.repair ? ' — ' + x.repair : '')).join('; ');
+              continue;
             }
           }
           Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored;
