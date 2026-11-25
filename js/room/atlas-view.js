@@ -742,6 +742,14 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       el('p', { class: 'atlas-audit-line', text: 'Subsections: ' + ((node.sourceRefs?.subsectionIds || []).join(', ')) }),
       el('p', { class: 'atlas-audit-line', text: 'Source spans (' + (atlas.sourceIndex?.sourceUnit === 'slide' ? 'slides' : 'pages') + '): ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Figures: ' + ((node.sourceRefs?.figureIds || []).join(', ') || 'none linked') }),
+      ...((node.sourceRefs?.figureRecords || []).map(f => el('p', {
+        class: 'atlas-audit-line atlas-source-figure',
+        text: (f.label || f.id) + ' · ' + f.id + ' · ' + sourcePointLabel(f, sourceType) + ' · linked step' + ((f.stepIds || []).length === 1 ? ' ' : 's ') + ((f.stepIds || []).join(', ') || 'not mapped')
+      }))),
+      ...((node.sourceRefs?.unresolvedFigureIds || []).length ? [el('p', {
+        class: 'atlas-audit-warning',
+        text: 'Referenced but not present in the extracted figure index: ' + node.sourceRefs.unresolvedFigureIds.join(', ')
+      })] : []),
       ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', {
         class: 'atlas-source-step',
         open: String(st.stepId) === selectedSourceStepId

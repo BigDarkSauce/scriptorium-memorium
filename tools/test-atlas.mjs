@@ -5,12 +5,21 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [2] },
-  { id: 'S2', bodies: ['membrane', 'channel'], section: '1.1', pages: [3] }
+  { id: 'S2', bodies: ['membrane', 'channel'], section: '1.1', pages: [3], figureRefs: [{ id: 'F1' }] }
 ];
+const sourceFigures = [{
+  id: 'F1', label: 'Membrane transport diagram', kind: 'figure',
+  caption: 'A labelled membrane channel and its direction of transport.',
+  page: 3, dataUrl: 'data:image/png;base64,aGVsbG8='
+}, {
+  id: 'F2', label: 'Unlinked visual', kind: 'figure',
+  caption: 'This is indexed but no source step cites it.',
+  page: 4, dataUrl: 'data:image/png;base64,d29ybGQ='
+}];
 
 const makeAtlas = () => ({
   version: 'scriptorium-atlas/1',
@@ -29,7 +38,8 @@ const makeAtlas = () => ({
       purpose: 'Make selective passage and its constraint visible.',
       mustShow: ['membrane', 'channel', 'solute'],
       manipulations: ['channel availability'],
-      medium: '2d'
+      medium: '2d',
+      sourceFigureIds: ['F1']
     }],
     position: { x: 50, y: 50 },
     challenges: [{
@@ -56,6 +66,44 @@ const makeAtlas = () => ({
 
 const valid = makeAtlas();
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps), null, 'a complete source-mapped atlas should pass');
+assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true, sourceFigures, true), null, 'new atlas views may cite only a source figure linked to their own steps');
+
+const figureEvidence = sourceFigureEvidence(['S1', 'S2'], steps, sourceFigures);
+assert.deepEqual(figureEvidence.figures.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
+  { id: 'F1', stepIds: ['S2'], page: 3 }
+], 'the evidence index must map extracted figure provenance back to the exact chain step');
+assert.deepEqual(figureEvidence.unresolvedFigureIds, [], 'a figure with a valid extracted record is resolved');
+const unresolved = sourceFigureEvidence(['S1'], [
+  { id: 'S1', figures: ['missing-figure'] }
+], sourceFigures);
+assert.deepEqual(unresolved.unresolvedFigureIds, ['missing-figure'], 'an unindexed source reference must remain unresolved');
+
+const selectedAttachments = selectSourceFigureAttachments(valid.nodes[0], steps, sourceFigures, 3);
+assert.deepEqual(selectedAttachments.map(f => f.id), ['F1'], 'only image assets cited by a node step may be attached; unrelated indexed images are excluded');
+assert.deepEqual(selectSourceFigureAttachments(valid.nodes[0], steps, sourceFigures, 0), [], 'the attachment budget is enforced');
+
+const inventedFigure = makeAtlas();
+inventedFigure.nodes[0].dioramaSet[0].sourceFigureIds = ['F9'];
+assert.match(validateAtlas(inventedFigure, ['S1', 'S2'], steps, true, sourceFigures, true), /unknown or unlinked source figure/);
+const crossNodeFigure = makeAtlas();
+crossNodeFigure.nodes[0].stepIds = ['S1'];
+assert.match(validateAtlas(crossNodeFigure, ['S1'], steps, true, sourceFigures, true), /unknown or unlinked source figure/);
+const missingFigureField = makeAtlas();
+delete missingFigureField.nodes[0].dioramaSet[0].sourceFigureIds;
+assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, sourceFigures, true), /complete explanatory-view plan/);
+
+const deterministicAtlas = await compileAtlas({
+  book: 'Test source', sourceType: 'pptx', part: 'Transport',
+  analysis: { question: 'How is transport controlled?', chain: steps.map(st => ({ ...st, title: st.id, statement: st.id, answers: 'A', opens: 'B', explain: [] })) },
+  sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }],
+  figures: sourceFigures, auto: false
+});
+assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.figureRecords.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
+  { id: 'F1', stepIds: ['S2'], page: 3 }
+], 'the deterministic fallback must preserve figure-to-step provenance');
+assert.deepEqual(deterministicAtlas.sourceIndex.pdfFigureIndex.find(f => f.id === 'F2').stepIds, [], 'unlinked indexed figures remain explicitly unlinked');
+assert.match(deterministicAtlas.sourceIndex.sourceUnit, /slide/);
+
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true), null, 'newly authored progressive challenges should pass');
 
 const singleUnitLegacy = makeAtlas();
@@ -186,10 +234,14 @@ const prompt = atlasPrompt({
   book: 'Test source',
   part: 'Transport',
   analysis: { chain: steps.map(st => ({ ...st, title: st.id, statement: st.id, answers: 'A', opens: 'B', explain: [] })) },
-  sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }]
+  sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }],
+  figures: sourceFigures
 });
 assert.match(prompt, /reasoning array of 2–5 short, ordered reveal units/);
 assert.match(prompt, /sourceStepIds/);
+assert.match(prompt, /SOURCE FIGURE INDEX/);
+assert.match(prompt, /sourceFigureIds/);
+assert.match(prompt, /F1/);
 assert.match(prompt, /each UNFOLD action exposes exactly one next unit/);
 assert.match(prompt, /Never use an UNFOLD action to advance to another challenge/);
 

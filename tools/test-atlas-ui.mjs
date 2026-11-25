@@ -57,6 +57,13 @@ try {
         stepIds: ['S1', 'S2', 'S3'],
         sourceRefs: {
           stepIds: ['S1', 'S2', 'S3'], subsectionIds: ['1.1'],
+          figureIds: ['F1'],
+          figureRecords: [{
+            id: 'F1', label: 'Membrane permeability diagram',
+            caption: 'A diagram showing a selective boundary and its transport route.',
+            page: 3, stepIds: ['S2']
+          }],
+          unresolvedFigureIds: [],
           stepSummaries: [
             { stepId: 'S1', title: 'Membrane boundary', statement: 'The membrane separates two regions.', pages: [2] },
             { stepId: 'S2', title: 'Flux relation', statement: 'The rate depends on the stated gradient and permeability.', pages: [3] },
@@ -199,6 +206,7 @@ try {
   assert.equal(await page.locator('.atlas-source-trail').getAttribute('open'), '', 'a source search must open the concept source trail');
   const firstSourceTrailStep = await page.locator('.atlas-source-step[open]').innerText();
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
+  assert.match(await page.locator('.atlas-source-trail').innerText(), /Membrane permeability diagram.*F1.*p\. 3.*S2/i, 'the concept trail must expose the exact indexed source figure, page and linked step');
   assert.equal(await scanSearch.isVisible(), true, 'the source scan must remain expanded after opening a concept');
   assert.equal(await scanSearch.inputValue(), 'selective permeability', 'the previous source query must survive concept selection');
   await scanSearch.fill('Flux relation');

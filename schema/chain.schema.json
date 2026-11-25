@@ -650,6 +650,74 @@
                 },
                 "levels": {
                   "type": "array"
+                },
+                "sourceFigureRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "caption": {
+                        "type": "string"
+                      },
+                      "page": {
+                        "type": "integer"
+                      },
+                      "slide": {
+                        "type": "integer"
+                      },
+                      "mediaPath": {
+                        "type": "string"
+                      },
+                      "stepIds": {
+                        "type": "array",
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "sourceVisualAttachments": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Source image IDs passed to the vision-capable authoring request; this records only IDs, never binary image data."
+                },
+                "sourceEvidenceStatus": {
+                  "type": "object",
+                  "properties": {
+                    "referenced": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "indexed": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "attached": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unresolved": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               },
               "description": "a 2D diagram, a built-in 3D model, or a scene (full spec or {type:'scene',request} to be authored later)"

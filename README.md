@@ -52,6 +52,12 @@ The source parser has two complementary checks:
 
 The browser fixture does not call an AI provider or incur API charges. It verifies ingestion mechanics, not the scientific accuracy of a model's later interpretation.
 
+## Evidence-linked visual compilation
+
+Concept-level diorama plans may cite only figure IDs that are present in the extracted source index and explicitly referenced by one of that concept's validated steps. The atlas records each figure's caption, page or slide, package media path and linked step IDs. The grouped authoring and model-audit calls receive only those linked image assets, subject to the configured image budget; unindexed references are recorded as unresolved and never attached as evidence.
+
+Run `node tools/test-atlas.mjs` for the pure provenance, attachment-selection and strict figure-reference checks. The browser atlas test also verifies that the source trail displays the linked figure and its source location. These tests validate the provenance/selection pipeline without calling a live vision model; a real uploaded deck still needs a manual end-to-end authoring check.
+
 ## Simulation contract regression test
 
 Run `node tools/test-model-contract.mjs` (Node 18 or later, no installs) to exercise the source-evidence, actor identity, parameter range/unit and legacy-compatibility checks used by the scene authoring pipeline.

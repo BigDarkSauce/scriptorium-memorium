@@ -120,6 +120,14 @@
                     "3d",
                     "2d"
                   ]
+                },
+                "sourceFigureIds": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Exact source figure IDs explicitly linked to this concept's validated steps; empty when no source visual is used."
                 }
               }
             }
@@ -361,6 +369,53 @@
                       }
                     }
                   }
+                }
+              },
+              "figureRecords": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "stepIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "caption": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "slide": {
+                      "type": "integer"
+                    },
+                    "mediaPath": {
+                      "type": "string"
+                    },
+                    "stepIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "unresolvedFigureIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
                 }
               }
             }
