@@ -181,7 +181,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return True
 
-        if q.path != '/__openai/v1/chat/completions' or self.command != 'POST':
+        if q.path not in ('/__openai/v1/chat/completions', '/__openai/v1/responses') or self.command != 'POST':
             self.send_error(404, 'Unknown OpenAI adapter route')
             return True
         key = os.environ.get('OPENAI_API_KEY', '').strip()
@@ -200,14 +200,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         data = self.rfile.read(n)
         try:
             payload = json.loads(data)
-            if not isinstance(payload, dict) or not isinstance(payload.get('model'), str) or not isinstance(payload.get('messages'), list):
-                raise ValueError('Expected a chat-completions object with model and messages')
+            if not isinstance(payload, dict) or not isinstance(payload.get('model'), str) or not (isinstance(payload.get('messages'), list) or payload.get('input') is not None):
+                raise ValueError('Expected a model and either messages or input')
         except (ValueError, UnicodeDecodeError) as e:
             self.send_error(400, str(e))
             return True
 
         req = urllib.request.Request(
-            'https://api.openai.com/v1/chat/completions',
+            'https://api.openai.com/v1/responses' if q.path.endswith('/responses') else 'https://api.openai.com/v1/chat/completions',
             data=data,
             headers={
                 'Authorization': 'Bearer ' + key,
