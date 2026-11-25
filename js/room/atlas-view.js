@@ -180,25 +180,38 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         return;
       }
       sectionItems.forEach(({ sec, entries, categories }) => {
-        const first = entries.find(x => x.node);
         const pages = sec.startPage
           ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
           : '';
-        const item = el('button', {
-          class: 'atlas-scan-row',
-          type: 'button',
-          role: 'listitem',
-          disabled: !first,
-          onclick: () => openNode(first && first.node, first && first.step.id)
-        }, [
+        const sectionDetails = el('details', { class: 'atlas-scan-section' });
+        const sectionSummary = el('summary', { class: 'atlas-scan-section-summary' }, [
           el('span', { class: 'atlas-scan-main' }, [
             el('b', { text: sec.title || sec.id }),
             el('small', { text: entries.length + ' source steps' + (pages ? ' · ' + pages : '') })
           ]),
-          el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
-          el('span', { class: 'atlas-scan-open', text: first ? 'OPEN CONCEPT ↗' : 'NO LINKED STEP' })
+          el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag })))
         ]);
-        scanResults.append(item);
+        const stepList = el('div', { class: 'atlas-scan-section-steps', role: 'list', 'aria-label': (sec.title || sec.id) + ' source steps' });
+        entries.forEach(entry => {
+          const st = entry.step;
+          const pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
+          stepList.append(el('button', {
+            class: 'atlas-scan-row',
+            type: 'button',
+            role: 'listitem',
+            disabled: !entry.node,
+            onclick: () => openNode(entry.node, st.id)
+          }, [
+            el('span', { class: 'atlas-scan-main' }, [
+              el('b', { text: st.title || st.id }),
+              el('small', { text: st.id + ' · ' + pageText })
+            ]),
+            el('span', { class: 'atlas-scan-tags' }, entry.tags.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
+            el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
+          ]));
+        });
+        sectionDetails.append(sectionSummary, stepList);
+        scanResults.append(sectionDetails);
       });
       return;
     }
