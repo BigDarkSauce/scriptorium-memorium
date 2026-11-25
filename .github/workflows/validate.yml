@@ -33,6 +33,17 @@ jobs:
           python -m py_compile launcher/serve.py tools/test-openai-proxy.py
           python tools/test-openai-proxy.py
 
+      - name: Parse the PowerShell fallback server
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "launcher/serve.ps1"), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Host $_.Message }
+            exit 1
+          }
+
       - name: Test source-mapped simulation contracts
         run: node tools/test-model-contract.mjs
 
