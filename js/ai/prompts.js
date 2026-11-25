@@ -127,9 +127,7 @@ RULES: choose each technique by the kind of knowledge (structure → explode; in
 export function planPrompt(req, context = '') {
   return `Plan a 3D explanatory demo BEFORE it is built (no scene yet: only the plan).
 WHAT IT MUST SHOW: ${req.request || req.title}
-${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}${req.issues ? 'FIX THESE PROBLEMS OF THE LAST PLAN: ' + req.issues + '\n' : ''}${PLAN_FORMAT}
-Return ONLY the JSON plan.`;
-}
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\\n' : ''}${context ? 'CONTEXT: ' + context + '\\n' : ''}${req.issues ? 'FIX THESE PROBLEMS OF THE LAST PLAN: ' + req.issues + '\\n' : ''}SOURCE STEP IDS (the only permitted evidence IDs): ${JSON.stringify(req.sourceStepIds || [])}\\n${PLAN_FORMAT}\\n${MODEL_CONTRACT_FORMAT}\\nReturn ONLY the JSON plan with version=\"scriptorium-model-plan/1\".`
 // the self-critique: can someone explain the concept after watching? (weighed above attractiveness); a short answer that only
 // patches lesson texts, never the scene
 export function critiquePrompt(plan, spec) {
@@ -142,9 +140,85 @@ Return ONLY JSON: {"canExplain":0-1,"attractive":0-1,"verdict":"pass|revise","is
 }
 const ACT = n => String(n || '').toLowerCase().split(' · ')[0].trim();
 // a plan's faults and warnings; lessons (optional) are the demo's lessons, names (optional) its actors
-export function checkPlan(plan, lessons = null, names = null) {
+
+export const MODEL_CONTRACT_VERSION = 'scriptorium-model-contract/1';
+export const MODEL_CONTRACT_FORMAT = `Every new plan MUST include:
+ "version":"scriptorium-model-plan/1",
+ "modelContract":{
+   "systemBoundary":"what is inside this model and what is deliberately outside",
+   "entities":[{"bodyId":"exact scene actor id","referent":"the real entity or explicitly named conceptual stand-in","role":"what it does in this system","evidenceStepIds":["S1"]}],
+   "stateVariables":[{"key":"scene parameter key","name":"quantity","unit":"unit or dimensionless","initial":1,"min":0,"max":2,"controllable":true,"provenance":"source|derived|illustrative","evidenceStepIds":["S1"]}],
+   "mechanisms":[{"id":"rule-id","from":["actor id"],"to":["actor id"],"rule":"conditional cause → consequence, including direction","basis":"source|standard|external|hypothesis","evidenceStepIds":["S1"],"source":"title/URL only for external basis"}],
+   "constraints":[{"kind":"conservation|causal|geometric|temporal|logical|other","statement":"a rule the scene must never violate","evidenceStepIds":["S1"]}],
+   "assumptions":[{"statement":"simplification or assumed condition","why":"what it enables and what it excludes"}],
+   "observables":[{"name":"readout or visible outcome","unit":"unit","relationship":"how it follows from model state","evidenceStepIds":["S1"]}],
+   "uncertainties":["what the source does not establish; do not silently fill it in"]
+ }
+Use ONLY the supplied source step IDs in evidenceStepIds. Entity bodyIds must match the scene's actor IDs exactly. Every controllable state variable has one numeric range and initial value, and becomes a scene parameter with the same key and unit. Give unsupported illustrative parameters provenance="illustrative" and state the simplification in assumptions; never disguise them as measured values. Mechanism "basis" must distinguish what the source states from standard theory, external evidence, and a hypothesis. A hypothesis is visibly labelled as such. Constraints describe invariants or causal/geometric limits that must hold. For inherently non-deterministic or underspecified systems, state that limit instead of manufacturing precise dynamics.`;
+function modelContractIssues(plan, sourceStepIds = null) {
+  const out = [], m = plan && plan.modelContract;
+  const F = s => out.push(s);
+  if (!m || typeof m !== 'object') { F('modelContract is missing'); return out; }
+  if (!String(m.systemBoundary || '').trim()) F('modelContract.systemBoundary is missing');
+  const entities = Array.isArray(m.entities) ? m.entities : [];
+  if (entities.length < 2 || entities.length > 7) F('modelContract.entities must define 2–7 scene actors');
+  const ids = new Set();
+  entities.forEach((e, i) => {
+    if (!e || !String(e.bodyId || '').trim() || !String(e.referent || '').trim() || !String(e.role || '').trim()) F(`entity ${i + 1} needs bodyId, referent and role`);
+    if (e && e.bodyId && ids.has(String(e.bodyId))) F(`duplicate entity bodyId "${e.bodyId}"`);
+    if (e && e.bodyId) ids.add(String(e.bodyId));
+    if (!e || !Array.isArray(e.evidenceStepIds) || !e.evidenceStepIds.length) F(`entity ${i + 1} needs source evidenceStepIds`);
+  });
+  const vars = Array.isArray(m.stateVariables) ? m.stateVariables : [];
+  vars.forEach((v, i) => {
+    if (!v || !v.key || !v.name || !v.unit || !['source', 'derived', 'illustrative'].includes(v.provenance)) F(`stateVariable ${i + 1} needs key, name, unit and provenance`);
+    if (v && v.controllable && (![v.initial, v.min, v.max].every(x => Number.isFinite(+x)) || !(+v.min < +v.max) || +v.initial < +v.min || +v.initial > +v.max)) F(`controllable stateVariable ${i + 1} needs a finite range containing its initial value`);
+    if (v && !Array.isArray(v.evidenceStepIds)) F(`stateVariable ${i + 1} needs evidenceStepIds (use [] only for a clearly illustrative variable)`);
+  });
+  const mechanisms = Array.isArray(m.mechanisms) ? m.mechanisms : [];
+  if (!mechanisms.length) F('modelContract needs at least one causal or transformation mechanism');
+  mechanisms.forEach((x, i) => {
+    if (!x || !x.id || !x.rule || !['source', 'standard', 'external', 'hypothesis'].includes(x.basis)) F(`mechanism ${i + 1} needs id, rule and basis`);
+    if (!x || !Array.isArray(x.from) || !x.from.length || !Array.isArray(x.to) || !x.to.length) F(`mechanism ${i + 1} needs explicit from/to actor IDs`);
+    if (x && [...(x.from || []), ...(x.to || [])].some(id => !ids.has(String(id)))) F(`mechanism ${i + 1} references an undeclared actor`);
+    if (x && !Array.isArray(x.evidenceStepIds)) F(`mechanism ${i + 1} needs evidenceStepIds`);
+    if (x && x.basis === 'external' && !String(x.source || '').trim()) F(`external mechanism ${i + 1} needs a source`);
+  });
+  ['constraints', 'assumptions', 'observables', 'uncertainties'].forEach(k => { if (!Array.isArray(m[k])) F(`modelContract.${k} must be an array (empty is allowed)`); });
+  (m.constraints || []).forEach((x, i) => { if (!x || !x.statement || !x.kind) F(`constraint ${i + 1} needs kind and statement`); });
+  (m.assumptions || []).forEach((x, i) => { if (!x || !x.statement || !x.why) F(`assumption ${i + 1} needs statement and why`); });
+  (m.observables || []).forEach((x, i) => { if (!x || !x.name || !x.unit || !x.relationship) F(`observable ${i + 1} needs name, unit and relationship`); });
+  if (Array.isArray(sourceStepIds) && sourceStepIds.length) {
+    const allowed = new Set(sourceStepIds.map(String));
+    [...entities, ...vars, ...mechanisms, ...(m.constraints || []), ...(m.observables || [])].forEach((x, i) => {
+      (x && x.evidenceStepIds || []).forEach(id => { if (!allowed.has(String(id))) F(`evidenceStepIds contains unknown source step "${id}"`); });
+    });
+  }
+  return out;
+}
+export function checkSceneContract(scene, plan, sourceStepIds = null) {
+  const faults = modelContractIssues(plan, sourceStepIds);
+  if (!scene || !Array.isArray(scene.bodies)) return { faults: [...faults, 'scene bodies are missing'], warnings: [] };
+  const m = plan && plan.modelContract, actors = scene.bodies.filter(b => b && b.role === 'actor');
+  if (!m) return { faults, warnings: ['no model contract is available for comparison'] };
+  const declared = (m.entities || []).map(e => String(e.bodyId));
+  const actual = actors.map(b => String(b.id));
+  declared.filter(id => !actual.includes(id)).forEach(id => faults.push(`planned actor "${id}" is missing from the scene`));
+  actual.filter(id => !declared.includes(id)).forEach(id => faults.push(`scene actor "${id}" is absent from the model contract`));
+  const params = new Map((scene.params || []).map(p => [String(p.key), p]));
+  (m.stateVariables || []).filter(v => v && v.controllable).forEach(v => {
+    const p = params.get(String(v.key));
+    if (!p) faults.push(`controllable variable "${v.key}" has no matching scene param`);
+    else if (+p.min < +v.min - 1e-9 || +p.max > +v.max + 1e-9 || +p.value < +v.min - 1e-9 || +p.value > +v.max + 1e-9) faults.push(`scene param "${v.key}" exceeds its model-contract range`);
+  });
+  if (scene.modelContract && JSON.stringify(scene.modelContract) !== JSON.stringify(m)) faults.push('scene.modelContract does not preserve the approved plan contract');
+  return { faults, warnings: [] };
+}
+
+export function checkPlan(plan, lessons = null, names = null, sourceStepIds = null) {
   const out = [], F = issue => out.push({ level: 'fault', issue }), W = issue => out.push({ level: 'warn', issue });
   if (!plan || typeof plan !== 'object') { F('no plan'); return out; }
+  if (plan.version === 'scriptorium-model-plan/1') modelContractIssues(plan, sourceStepIds).forEach(F);
   if (!plan.question || String(plan.question).trim().length < 5) F('"question" is missing: the plan starts from the question the demo answers');
   const kinds = [].concat(plan.knowledgeKind || []).map(String); if (!kinds.length) F('"knowledgeKind" is missing'); kinds.forEach(k => { if (!KNOWLEDGE_KINDS.includes(k)) F(`knowledgeKind "${k}" is not one of ${KNOWLEDGE_KINDS.join(', ')}`); });
   if (plan.levels != null && (!Array.isArray(plan.levels) || plan.levels.some(x => !(typeof x === 'string' ? x : x && x.name)))) F('"levels" must be a list of level names (or {name, at})');
@@ -925,9 +999,11 @@ export function grammarIssues(A) {
 }
 // ---------------------------------------------------------------- other prompts
 export function authorPrompt(req, context = '', { simple = false } = {}) {
-  if (simple) return `Author a SIMPLE interactive 3D diorama (a second try: the first one failed${req.failure ? ': ' + req.failure : ''}). Keep it small and robust.
+  if (simple) return `Author a SIMPLE but mechanistically faithful interactive 3D diorama. This is a bounded retry: ${req.failure || 'the first attempt was not accepted'}. Keep the geometry and code small; do not remove or contradict the model contract.
 WHAT IT MUST SHOW: ${req.request || req.title}
-${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}LIMITS: 3–6 bodies from the basic shapes (box, sphere, cylinder, cone, arrow, text, bars, curve, plane, disc); motion through "behaviors" or at most 40 lines of "code" using only api.onFrame, api.param, api.body, api.event, api.readout; 3 lessons with question/opens; studio environment.
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\\n' : ''}${context ? 'CONTEXT: ' + context + '\\n' : ''}${req.plan ? 'APPROVED PLAN AND CONTRACT: ' + JSON.stringify(req.plan) + '\\nCopy req.plan.modelContract exactly into scene.modelContract. ' : ''}SOURCE STEP IDS: ${JSON.stringify(req.sourceStepIds || [])}
+LIMITS: 3–6 bodies from basic shapes; restrained dynamics; no more than 40 lines of code; 3 lessons with question/opens; studio environment. Keep actor IDs exactly equal to modelContract.entities[].bodyId. Every controllable state variable maps to a matching parameter with the contract's range and unit.
+${MODEL_CONTRACT_FORMAT}
 ${SCENE_SPEC}
 Return ONLY the JSON scene spec.`;
   return `Author a high-fidelity interactive 3D diorama that embodies an idea through bodies, events and processes.
@@ -935,7 +1011,7 @@ WHAT IT MUST SHOW: ${req.request || req.title}
 ${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT (the study step it illustrates): ' + context : ''}
 Preferred technique: ${req.technique || 'choose the best'}.
 Make it beautiful and alive like a living miniature under glass: a composed scene with 2–7 actors (the bodies the idea is about, each with a clear label and one-line "describe"), scenic decor that gives place and scale and reacts to the simulation through behaviors, scene-appropriate environment and lighting, correct dynamics in code, events at the meaningful moments, readouts and a live plot of the telling quantity, and 3–6 lessons that each change something and say what to watch.
-${req.plan ? 'DIDACTIC PLAN (written first; follow it): ' + JSON.stringify(req.plan) + '\nBuild the scene and its lessons FROM this plan: one lesson per beat (or per few beats), in its order; each lesson gives the beat\'s "cameraMode" and its operation as the lesson field of the same name (explode, assemble, inspect, section, compare, progression, scaleTo, zoom, track, chain, pov); its "question" is the beat\'s "answers", its "opens" the beat\'s "opens"; the last lesson carries "explainBack" = the plan\'s comprehensionCheck.explainBack and its "explain" rules out the misconception. Copy the plan into the spec as "plan" and its levels as "levels". Background motion stays calm (behaviors); explanatory motion happens in the lesson that explains it.\n' : ''}Use the numbers of the study step (the book's own values) for params and readouts. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
+${req.plan ? 'DIDACTIC PLAN + APPROVED MODEL CONTRACT (written first; follow them): ' + JSON.stringify(req.plan) + '\nCopy req.plan.modelContract exactly into scene.modelContract. Match actor IDs exactly. Map each controllable state variable to the matching param, range and unit. Build the scene and its lessons FROM this plan: one lesson per beat (or per few beats), in its order; each lesson gives the beat\'s "cameraMode" and its operation as the lesson field of the same name (explode, assemble, inspect, section, compare, progression, scaleTo, zoom, track, chain, pov); its "question" is the beat\'s "answers", its "opens" the beat\'s "opens"; the last lesson carries "explainBack" = the plan\'s comprehensionCheck.explainBack and its "explain" rules out the misconception. Copy the plan into the spec as "plan" and its levels as "levels". Background motion stays calm (behaviors); explanatory motion happens in the lesson that explains it.\n' : ''}Use the numbers of the study step (the book's own values) for params and readouts. Do not create precise dynamics where the source is under-specified; declare any necessary simplification as an assumption. Include sourceStepIds exactly as supplied. Lessons form a question thread: each lesson's "question" is the one it settles, its "opens" the next lesson's question; the first lesson's question is the question the step answers, the last lesson's "opens" is the question the step opens.
 ${OUT.gr}
 ${SCENE_SPEC}
 ${EXPLAINER_RULES}
@@ -946,6 +1022,24 @@ ${PRIMITIVE_FIELDS}
 Return ONLY the JSON scene spec (or that figure).`;
 }
 
+export function modelAuditPrompt(plan, spec, sourceStepIds = []) {
+  const scene = { title: spec.title, environment: spec.environment, bodies: spec.bodies, params: spec.params, behaviors: spec.behaviors, code: String(spec.code || '').slice(0, 14000), readouts: spec.readouts, lessons: (spec.lessons || []).map(l => ({ title: l.title, set: l.set, run: l.run, until: l.until, explain: l.explain })) };
+  return `You are an independent scientific/model-fidelity reviewer. This is a separate audit from pedagogical quality. Do not reward visual polish. Assess whether the authored model actually represents the stated system and whether its behaviour is defensible.
+SOURCE STEP IDS ALLOWED: ${JSON.stringify(sourceStepIds)}
+APPROVED MODEL CONTRACT: ${JSON.stringify(plan && plan.modelContract || {})}
+DIDACTIC PLAN: ${JSON.stringify(plan || {})}
+AUTHORED SCENE (including executable dynamics where supplied): ${JSON.stringify(scene)}
+AUDIT EACH ITEM:
+1. Entity fidelity: every actor maps to a declared real referent; no undeclared causal actor is smuggled in; decor is not treated as evidence.
+2. Causal fidelity: every behaviour/code update follows a stated mechanism and correct direction; event timing and cause/effect order are coherent. Flag arbitrary animation presented as causal.
+3. Quantitative fidelity: parameters, units, initial conditions, bounds, readouts and formulas are dimensionally and numerically coherent. Distinguish source values, derived values and illustrative normalisations.
+4. Constraint fidelity: identify violated conservation laws, impossible states, geometry, boundary conditions, sign conventions, scale errors or hidden assumptions relevant to the represented domain.
+5. Intervention fidelity: every control changes the variable it claims to change; the response is causally connected, not merely decorative.
+6. Scope: what the scene deliberately omits, what it simplifies, and whether those omissions change the lesson. Never certify details the source and declared standard model do not establish.
+Do not invent an error merely because the source is incomplete. Classify unresolved support as "unverified", not "false". If a relationship has no evidence and cannot be safely treated as standard, it must be labelled hypothesis/illustrative and surfaced in uncertainties.
+Return ONLY JSON:
+{"verdict":"pass|revise|uncertain","score":0-1,"issues":[{"severity":"critical|major|minor","area":"entity|causal|quantitative|constraint|intervention|scope","problem":"specific issue","evidence":"scene field and/or contract clause","repair":"specific correction"}],"unverified":["claims you cannot verify from supplied source/contract"],"assumptionsToSurface":["missing assumptions that materially affect interpretation"],"summary":"one sentence; never say scientifically proven"}.`;
+}
 export function editPrompt(spec, sel, request, context = '') {
   return `You are editing an interactive 3D diorama spec.
 ${context ? 'STUDY CONTEXT: ' + context + '\n' : ''}CURRENT SPEC: ${JSON.stringify(spec)}
