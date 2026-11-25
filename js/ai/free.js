@@ -40,7 +40,7 @@ const net = async (url, init) => {
 export const PROVIDERS = [
   // Local OpenAI API adapter: the API key remains in OPENAI_API_KEY on the local Python server.
   // No key or billable request is sent until that server is configured and the user starts an AI task.
-  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', local: true, json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
+  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', local: true, api: 'responses', json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
 
   // no key needed: work from the first minute (slow: small per-IP limits)
   { id: 'ovh', name: 'OVHcloud AI Endpoints', base: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', key: 'optional', keyUrl: 'https://endpoints.ai.cloud.ovh.net/', rpm: 2, rpd: 2000, perModel: true, note: 'No key: 2 requests a minute per model, from EU data centres.' },
