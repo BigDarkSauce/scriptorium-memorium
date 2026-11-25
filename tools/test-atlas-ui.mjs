@@ -111,6 +111,12 @@ try {
       onRemoveMemoryPlace: () => { memoryRemovals++; },
       onVisitMemoryRoute: () => { memoryVisits++; }
     });
+    const beforeAppend = {
+      rootTag: view && view.tagName,
+      rootClass: view && view.className,
+      scanCount: view && view.querySelectorAll('.atlas-source-scan').length,
+      childClasses: view ? [...view.children].map(x => x.className) : []
+    };
     view.dataset.testAtlas = 'true';
     // This is an isolated browser UI surface over the running 3D hall, not an element appended underneath its canvas.
     // Give it a real pointer-interactive layer so Playwright exercises the same clicks a learner can make.
@@ -124,9 +130,20 @@ try {
       atlas, getSaves: () => saves,
       memoryAssignments: () => memoryAssignments,
       memoryRemovals: () => memoryRemovals,
-      memoryVisits: () => memoryVisits
+      memoryVisits: () => memoryVisits,
+      beforeAppend
     };
   });
+
+  const mountDiagnostics = await page.evaluate(() => ({
+    ...(window.__atlasUITest && window.__atlasUITest.beforeAppend || {}),
+    mountedViews: document.querySelectorAll('[data-test-atlas="true"]').length,
+    mountedScanCount: document.querySelectorAll('[data-test-atlas="true"] .atlas-source-scan').length,
+    mountedChildClasses: [...(document.querySelector('[data-test-atlas="true"]') || {}).children || []].map(x => x.className)
+  }));
+  console.log('ATLAS_TEST_MOUNT', JSON.stringify(mountDiagnostics));
+  assert.equal(mountDiagnostics.scanCount, 1, 'renderAtlasView must create the source scan before mounting');
+  assert.equal(mountDiagnostics.mountedScanCount, 1, 'the mounted atlas view must retain the source scan');
 
   const branches = page.locator('.atlas-branch-tab');
   assert.equal(await branches.count(), 2, 'two questions should appear as horizontal branches');
