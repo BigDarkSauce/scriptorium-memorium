@@ -1,6 +1,6 @@
 # Protocol: how any AI can build Scriptorium rooms
 
-Scriptorium Memorialium uses OpenAI as its primary authoring engine when the standalone local server is configured. The browser sends a same-origin request to the local adapter; the adapter reads `OPENAI_API_KEY` from its process environment and forwards it over HTTPS. Enabled non-Claude providers are automatic fallbacks. The portable prompt/JSON workflow remains available for inspection and recovery.
+Scriptorium Memorialium uses OpenAI as its primary authoring engine when the standalone local server is configured. The browser sends a same-origin request to the local adapter; the adapter reads `OPENAI_API_KEY` from its process environment and forwards it over HTTPS. The configured provider pool is available as automatic fallbacks. The portable prompt/JSON workflow remains available for inspection and recovery.
 - The prompts live in `js/ai/prompts.js`. `node prompts/build.mjs` exports them unchanged to `prompts/*.md`.
 
 ## Files
@@ -91,7 +91,7 @@ Figure ids are deterministic (see *Ids* above), so any AI can cite them without 
 
 ### Stage 3 · Analyse each part (one AI call) — `chapterPrompt` → `prompts/02-analyse-part.md`
 
-In: the book and part titles; the BREAKDOWN level (complete, essential, or exactly N steps); the SUBSECTIONS list (marked as the panels of one sheet when the part is a sheet) (id, title, pages, size and what each contains); the FIGURES list (id, label, page, caption; inside claude.ai, up to 6 figure images are attached when the model accepts images); and the PART TEXT, marked `=== [id] title (pages) ===` per subsection. When the text exceeds about 170,000 characters, whole subsections that do not fit are marked DEFERRED and written by stage 5.
+In: the book and part titles; the BREAKDOWN level (complete, essential, or exactly N steps); the SUBSECTIONS list (marked as the panels of one sheet when the part is a sheet) (id, title, pages, size and what each contains); the FIGURES list (id, label, page, caption; figure images may be attached when the selected model accepts image input); and the PART TEXT, marked `=== [id] title (pages) ===` per subsection. When the text exceeds about 170,000 characters, whole subsections that do not fit are marked DEFERRED and written by stage 5.
 
 Out: one chain JSON (`schema/chain.schema.json`). The fields that matter for coverage:
 
@@ -172,9 +172,9 @@ In: the gap list (missing, coarse, or holding an uncited figure), only those sub
 - a **coarse** subsection (it already has steps; its last one is L): the new steps go right after L; the first answers a *new* question that L leads to, and the app rewrites L's `opens` to that question; the last opens what L opened before, which the step after L already answers;
 - consecutive gaps with no existing step between them chain to each other; a run that starts at a coarse gap ends with L's old `opens`.
 
-Out: `{"steps":[… ids G1, G2 … with "section"], "coverage":[…]}`. `mergeFollowUp` first renames incoming ids that collide with existing ones (an answer that reuses S1, S2 gets G1, G2, and a `from` naming an earlier incoming step follows the rename), inserts each new step after the last step of the same or an earlier subsection, rewrites a coarse subsection's last old `opens`, renumbers S1…Sn, remaps `from`, records `renumbered`, and rebuilds the coverage map. Stage 4 runs again; at most two rounds run automatically. Outside claude.ai the coverage panel's *Write the missing steps* button shows the same prompt for copy and paste.
+Out: `{"steps":[… ids G1, G2 … with "section"], "coverage":[…]}`. `mergeFollowUp` first renames incoming ids that collide with existing ones (an answer that reuses S1, S2 gets G1, G2, and a `from` naming an earlier incoming step follows the rename), inserts each new step after the last step of the same or an earlier subsection, rewrites a coarse subsection's last old `opens`, renumbers S1…Sn, remaps `from`, records `renumbered`, and rebuilds the coverage map. Stage 4 runs again; at most two rounds run automatically. If the selected provider cannot complete a follow-up in the app, the coverage panel's *Write the missing steps* button exposes the same prompt for copy and paste.
 
-If an answer was cut off by the output limit, the app keeps every complete value (`repairTruncatedJSON` in `js/ai/claude.js`), drops the last, incomplete step, and lets stage 5 write the rest. No call is ever repeated.
+If an answer was cut off by the output limit, the shared response parser keeps every complete value with `repairTruncatedJSON`, drops the last incomplete step, and lets stage 5 write the rest. No call is ever repeated.
 
 ### Stage 5b · Figures (one small call, only for what is missing) — `figuresPrompt` → `prompts/09-figures.md`
 
