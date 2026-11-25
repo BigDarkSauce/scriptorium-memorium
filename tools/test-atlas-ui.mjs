@@ -220,7 +220,10 @@ try {
   const firstSourceTrailStep = await page.locator('.atlas-source-step[open]').innerText();
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
   assert.match(await page.locator('.atlas-source-trail').innerText(), /Membrane permeability diagram.*F1.*p\. 3.*S2/i, 'the concept trail must expose the exact indexed source figure, page and linked step');
-  assert.match(await page.locator('.atlas-source-visual').innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the concept source trail must reveal structured chart values and their linked source slide');
+  const sourceVisualDisclosure = page.locator('.atlas-source-visual');
+  await sourceVisualDisclosure.locator('summary').click();
+  assert.equal(await sourceVisualDisclosure.getAttribute('open'), '', 'the structured visual source record should expand on demand');
+  assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
   const sourceDerivedFigure = page.locator('.atlas-explanatory-figures .atlas-figure-entry');
   assert.equal(await sourceDerivedFigure.count(), 1, 'the selected source chart must be reconstructed as a visible atlas figure');
   assert.match(await sourceDerivedFigure.locator('small').innerText(), /Reconstructed from source visual pptx-chart-s3-1.*slide 3.*step S2/i);
