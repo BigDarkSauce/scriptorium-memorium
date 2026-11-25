@@ -14,7 +14,7 @@ const steps = [
 const sourceFigures = [{
   id: 'F1', label: 'Membrane transport diagram', kind: 'figure',
   caption: 'A labelled membrane channel and its direction of transport.',
-  page: 3, dataUrl: 'data:image/png;base64,aGVsbG8='
+  page: 3, slide: 3, mediaPath: 'ppt/media/image1.png', dataUrl: 'data:image/png;base64,aGVsbG8='
 }, {
   id: 'F2', label: 'Unlinked visual', kind: 'figure',
   caption: 'This is indexed but no source step cites it.',
@@ -70,7 +70,7 @@ assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true, sourceFigures, true
 
 const figureEvidence = sourceFigureEvidence(['S1', 'S2'], steps, sourceFigures);
 assert.deepEqual(figureEvidence.figures.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
-  { id: 'F1', stepIds: ['S2'], page: 3 }
+  { id: 'F1', stepIds: ['S2'], page: 3, slide: 3 }
 ], 'the evidence index must map extracted figure provenance back to the exact chain step');
 assert.deepEqual(figureEvidence.unresolvedFigureIds, [], 'a figure with a valid extracted record is resolved');
 const unresolved = sourceFigureEvidence(['S1'], [
@@ -84,7 +84,7 @@ assert.deepEqual(selectSourceFigureAttachments(valid.nodes[0], steps, sourceFigu
 const attachmentManifest = sourceFigureAttachmentManifest(valid.nodes[0], steps, sourceFigures, 3);
 assert.deepEqual(attachmentManifest, [{
   attachmentIndex: 1, id: 'F1', label: 'Membrane transport diagram', kind: 'figure',
-  caption: 'A labelled membrane channel and its direction of transport.', page: 3, stepIds: ['S2']
+  caption: 'A labelled membrane channel and its direction of transport.', page: 3, slide: 3, mediaPath: 'ppt/media/image1.png', stepIds: ['S2']
 }], 'the image manifest must preserve the exact attachment order and source location');
 assert.equal(Object.hasOwn(attachmentManifest[0], 'dataUrl'), false, 'manifest metadata must not duplicate image bytes into saved JSON');
 
@@ -105,9 +105,11 @@ const deterministicAtlas = await compileAtlas({
   figures: sourceFigures, auto: false
 });
 assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.figureRecords.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page })), [
-  { id: 'F1', stepIds: ['S2'], page: 3 }
+  { id: 'F1', stepIds: ['S2'], page: 3, slide: 3 }
 ], 'the deterministic fallback must preserve figure-to-step provenance');
 assert.deepEqual(deterministicAtlas.sourceIndex.pdfFigureIndex.find(f => f.id === 'F2').stepIds, [], 'unlinked indexed figures remain explicitly unlinked');
+assert.equal(deterministicAtlas.sourceIndex.pdfFigureIndex.find(f => f.id === 'F1').mediaPath, 'ppt/media/image1.png', 'PowerPoint package media provenance must survive atlas compilation');
+assert.equal(deterministicAtlas.nodes[0].sourceRefs.figureRecords[0].slide, 3, 'slide provenance must survive the concept-node evidence map');
 assert.match(deterministicAtlas.sourceIndex.sourceUnit, /slide/);
 
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true), null, 'newly authored progressive challenges should pass');
