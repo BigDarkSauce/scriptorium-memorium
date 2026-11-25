@@ -48,7 +48,7 @@ function svgText(text, x, y, cls, max = 27) {
   return el0;
 }
 
-export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave }) {
+export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssignMemoryPlace, onVisitMemoryRoute, onSave }) {
   atlas.attempts = atlas.attempts || {};
   const root = el('section', { class: 'atlas-view' });
   const header = el('div', { class: 'atlas-intro' }, [
@@ -131,6 +131,37 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       el('div', { class: 'atlas-node-tags' }, (node.knowledgeKinds || []).slice(0, 5).map(k => el('span', { class: 'atlas-tag', text: titleCase(k) })))
     ]);
     detail.append(top);
+
+    // Loci are optional spatial retrieval cues over stable library locations. They never replace the source trail or
+    // the concept's explanation, and an association is authored by the learner rather than generated as a fact.
+    const memoryPlaces = Array.isArray(atlas.memoryPlaces) ? atlas.memoryPlaces : [];
+    const ownLocus = memoryPlaces.find(place => place && String(place.nodeId) === String(node.id));
+    const memory = el('section', { class: 'atlas-memory-locus' }, [
+      el('div', { class: 'atlas-section-label', text: 'OPTIONAL LOCI MEMORY PLACE' }),
+      el('p', { class: 'atlas-memory-description', text: ownLocus
+        ? 'This concept has a saved location in the walkable library. The place is a retrieval cue; the source-linked explanation stays in the atlas.'
+        : 'Choose a distinctive place in the library for this concept. Later, visit it and reconstruct the idea before revealing the expected explanation.' }),
+      ownLocus ? el('div', { class: 'atlas-memory-cue' }, [
+        el('b', { text: 'Your association' }),
+        el('p', { text: ownLocus.association || 'No cue text saved' }),
+        el('small', { text: (ownLocus.shelfName || ownLocus.caseId) + ' · row ' + (Number(ownLocus.row) + 1) + ' · place ' + (Number(ownLocus.slot) + 1) })
+      ]) : null,
+      el('div', { class: 'row wrap' }, [
+        el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: ownLocus ? 'Change this memory place' : 'Assign a memory place',
+          onclick: () => onAssignMemoryPlace && onAssignMemoryPlace(node)
+        }),
+        memoryPlaces.length ? el('button', {
+          class: 'btn primary small',
+          type: 'button',
+          text: 'Visit memory route · ' + memoryPlaces.length + ' place' + (memoryPlaces.length === 1 ? '' : 's'),
+          onclick: () => onVisitMemoryRoute && onVisitMemoryRoute(node)
+        }) : null
+      ])
+    ]);
+    detail.append(memory);
 
     const set = el('div', { class: 'atlas-dioramas' }, [el('div', { class: 'atlas-section-label', text: 'DIORAMA SEQUENCE' })]);
     (node.dioramaSet || []).forEach((d, i) => set.append(el('div', { class: 'atlas-view-intent' }, [
