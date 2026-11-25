@@ -61,7 +61,7 @@ A run takes about 3 minutes on a machine with a GPU and 10–15 minutes with sof
 
 ## Learning workflow
 
-The concept atlas now supports horizontal question branches, prediction-first commitments and source-linked, one-reasoning-unit-at-a-time unfolding. The workflow also specifies a rapid source scan and optional loci-based memory routes as future design targets; those features are explicitly not represented as shipped yet.
+The concept atlas now supports horizontal question branches, prediction-first commitments and source-linked, one-reasoning-unit-at-a-time unfolding. An optional loci route is also available: learners can anchor a concept to a bookcase row/slot, add their own memory cue, and practise recall at that place. The rapid source-scan layer and due-review scheduling for loci remain future design targets.
 
 See [docs/LEARNING-WORKFLOW.md](docs/LEARNING-WORKFLOW.md) for the scan → question sweep → selective depth model, the optional spatial memory layer, its source-grounding guardrails and evaluation criteria. The [pedagogy guide](docs/PEDAGOGY.md) and [user guide](docs/USER_GUIDE.md) explain the implementation currently available.
 
