@@ -194,12 +194,22 @@ export function validScene(s) {
 // The didactic plan (docs/PEDAGOGY.md): a short storyboard written BEFORE the scene, checked by checkPlan; one retry with
 // the faults named. Small and tool-free (about 1.5k tokens out); null when there is no AI or it cannot produce a valid plan.
 export async function planDemo(ctx, st, d, context, o = {}) {
-  if (d.plan && d.plan.version === 'scriptorium-model-plan/1') return d.plan; let issues = '';
   const sourceStepIds = (d.sourceStepIds || [st.id]).map(String);
+  let issues = '';
+  if (d.plan && d.plan.version === 'scriptorium-model-plan/1') {
+    const cachedFaults = checkPlan(d.plan, null, null, sourceStepIds).filter(x => x.level === 'fault');
+    if (!cachedFaults.length) return d.plan;
+    issues = 'Saved plan needs correction: ' + cachedFaults.slice(0, 6).map(x => x.issue).join('; ');
+  }
   for (let k = 0; k < 2; k++) {
     check(o.signal); o.onStatus && o.onStatus(`Planning the explanation: diorama “${d.title || st.title}”${k ? ' (second try)' : ''}…`);
-    try { const p = await ask(planPrompt({ ...d, issues, sourceStepIds }, context), { ...o, tools: false, writing: 'Planning the explanation', role: 'director' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
-      const faults = checkPlan(plan, null, null, sourceStepIds).filter(x => x.level === 'fault'); if (!faults.length) return plan; issues = faults.slice(0, 6).map(x => x.issue).join('; ');
+    try {
+      const p = await ask(planPrompt({ ...d, issues, sourceStepIds }, context), { ...o, tools: false, writing: 'Planning the explanation', role: 'director' }, 'Plan this diorama in any AI');
+      const plan = p && (p.plan || p);
+      const faults = checkPlan(plan, null, null, sourceStepIds).filter(x => x.level === 'fault');
+      if (!plan || plan.version !== 'scriptorium-model-plan/1') faults.push({ level: 'fault', issue: 'plan must use version scriptorium-model-plan/1 and include its source-mapped modelContract' });
+      if (!faults.length) return plan;
+      issues = faults.slice(0, 6).map(x => x.issue).join('; ');
     } catch (e) { if (e && e.code === 'cancelled') throw e; return null; }
   }
   return null;
