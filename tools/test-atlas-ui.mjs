@@ -158,6 +158,7 @@ try {
   await page.locator('.atlas-prediction').fill('This is a saved draft for the second branch.');
   await page.locator('.atlas-confidence').selectOption('Medium');
 
+  await branches.nth(1).focus();
   await page.keyboard.press('ArrowLeft');
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
   assert.equal(await page.locator('.atlas-reasoning-unit').count(), 1, 'arrow navigation must return to the previous branch and restore its saved reveal cursor');
