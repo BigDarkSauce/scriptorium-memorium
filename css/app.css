@@ -1460,6 +1460,13 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .memory-route-stops { display: flex; gap: 6px; overflow-x: auto; padding: 2px 1px 8px; scrollbar-width: thin; }
 .memory-route-stop { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; max-width: 180px; padding: 7px 9px; border: 1px solid rgba(255,235,197,.18); border-radius: 8px; color: rgba(255,249,236,.82); background: rgba(255,255,255,.045); text-align: left; font: 12px var(--f-body); cursor: pointer; }
 .memory-route-stop.active { border-color: rgba(242,198,110,.7); background: rgba(242,198,110,.13); color: #fff0ca; }
+.memory-route-stop-main { display: grid; gap: 2px; min-width: 0; }
+.memory-route-stop-due { color: rgba(255,239,211,.52); font: 9px var(--f-mono); }
+.memory-route-schedule { display: grid; gap: 5px; padding: 10px 11px; border: 1px solid rgba(242,198,110,.22); border-radius: 9px; background: rgba(242,198,110,.07); }
+.memory-route-schedule > b { color: #f5d79e; font: 500 15px var(--f-display); }
+.memory-route-schedule > small { color: rgba(255,239,211,.62); font: 10px var(--f-mono); }
+.memory-route-schedule > p { margin: 0; color: rgba(255,248,232,.76); font: 12px/1.45 var(--f-body); }
+.memory-route-rating-prompt { margin-top: 3px !important; }
 .memory-route-stop-n { color: var(--brass); font: 10px var(--f-mono); }
 .memory-route-association, .memory-route-question, .memory-route-feedback { display: grid; gap: 5px; padding: 10px 11px; border-radius: 9px; background: rgba(255,255,255,.055); }
 .memory-route-label { color: rgba(242,198,110,.82); font: 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; }
