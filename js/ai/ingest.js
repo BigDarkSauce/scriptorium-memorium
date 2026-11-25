@@ -808,7 +808,8 @@ async function pptNotes(zip, slidePath) {
 }
 async function pptSlide(zip, slidePath, number) {
   const d = await pptXml(zip, slidePath);
-  const shapes = [...d.getElementsByTagNameNS(PPT_P, 'sp')].map(shape => {
+  // Tables and text inside graphic frames are also part of the slide's source content.
+  const shapes = [...d.getElementsByTagNameNS(PPT_P, 'sp'), ...d.getElementsByTagNameNS(PPT_P, 'graphicFrame'), ...d.getElementsByTagNameNS(PPT_P, 'cxnSp')].map(shape => {
     const ph = shape.getElementsByTagNameNS(PPT_P, 'ph')[0];
     const phType = ph && ph.getAttribute('type') || '';
     const off = shape.getElementsByTagNameNS(PPT_A, 'off')[0];
