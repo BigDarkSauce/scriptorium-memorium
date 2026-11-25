@@ -648,10 +648,46 @@
                         "null"
                       ],
                       "format": "date-time"
+                    },
+                    "rating": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "again",
+                        "recalled",
+                        null
+                      ]
+                    },
+                    "gradedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
                     }
                   }
                 },
                 "maxItems": 12
+              },
+              "rating": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "again",
+                  "recalled",
+                  null
+                ]
+              },
+              "gradedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
               }
             }
           }
