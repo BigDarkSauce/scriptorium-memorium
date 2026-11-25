@@ -1,12 +1,8 @@
-// AI connector. Three engines, chosen in the AI settings (js/ai/free.js, js/ai/aipanel.js):
-//   claude   Claude directs: inside claude.ai the page asks the viewer's own Claude (sample capability);
-//   hybrid   Claude + free models: Claude takes the director's requests (reading a chapter into its chain, planning
-//            and checking each diorama: role 'director'), the pool of free models the volume work (coverage, repairs,
-//            figures, diorama authoring, expansions: role 'worker'). Each stands in for the other when it is at its
-//            limit or unreachable, so a job never stops for want of an engine;
-//   free     free models only (the router in free.js: many providers, budgets, waits for the next reset, never fails).
-// With no engine reachable, every request can be exported as a prompt and the JSON answer pasted back — see
-// docs/PROTOCOL.md. The prompts and the JSON formats are the same whichever engine answers.
+// Shared request coordinator: activity wrapper, streaming, JSON parsing and the portable manual relay.
+// Current authoring is OpenAI-first. FREE.mode() is fixed to 'free', and free.js gives the local OpenAI
+// Responses adapter absolute priority before trying enabled fallback providers. The old window.claude host
+// adapter below is retained only for compatibility with older embedded hosts; it is not the primary route.
+// If no configured provider can answer, the app can expose the same portable prompt for manual completion.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { startJob, currentJob, anyOf } from './activity.js';
@@ -17,7 +13,7 @@ export function initAI() {
   return ready;
 }
 export const claudeAvailable = () => !!SAMPLE;
-// Claude asked directly (the picture reviewer in js/ai/media.js): pictures go only where this page may send them
+// Legacy embedded-host image budget; it is not used by the OpenAI-first authoring route.
 export const claudeImageCount = () => (SAMPLE && LIMITS && LIMITS.images ? LIMITS.images.maxCount || 0 : 0);
 export async function claudeSample(prompt, opts) { await ready; if (!SAMPLE) throw { code: 'unavailable' }; return SAMPLE(prompt, opts); }
 export const engine = () => FREE.mode();
@@ -89,7 +85,7 @@ async function askJSON0(prompt, { onText, onTool, onStatus, onResearch, images, 
     try { return await viaFree(false); }
     catch (e) { if (e && e.code === 'free_none') return manualRelay(prompt, manualTitle); throw e; }
   }
-  // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other
+  // Legacy hybrid branch retained for old saved settings; the current router fixes mode to OpenAI-first.
   const STANDIN = /rate_limited|unavailable|not_granted|session_expired|invalid_json|refused|timeout|overloaded|server/;
   if (role === 'director') {
     try { return await viaClaude(); } catch (e) { if (e && e.code === 'cancelled') throw e; if (!(e && STANDIN.test(e.code || ''))) throw e; onStatus && onStatus('Claude is not available for this one (' + (errCopy(e) || e.code) + '): the free models take it.'); return viaFree(false); }
