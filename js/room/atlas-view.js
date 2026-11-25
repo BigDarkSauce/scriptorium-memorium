@@ -1,6 +1,7 @@
 // Chapter atlas UI: a transitionable 2D concept graph whose nodes lead to linked diorama sets.
 // The validated reasoning chain remains the source of truth, but is not rendered as a long text scroll here.
 import { el, mathHTML, toast } from '../util.js';
+import { renderFigure } from './diagrams.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}) => {
@@ -120,7 +121,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       set.append(b);
     });
     else if (node.visualKind === 'diagram' && node.generatedFigure) {
-      set.append(el('div', { class: 'atlas-empty-visual', text: 'The authoring route judged this idea best expressed as a 2D explanatory figure rather than a spatial simulation.' }));
+      const figureHost = el('div', { class: 'atlas-generated-figure' });
+      renderFigure(node.generatedFigure, figureHost);
+      set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented as an explanatory 2D figure rather than an artificial 3D simulation.' }), figureHost);
     } else {
       set.append(el('div', { class: 'atlas-empty-visual', text: 'No authored 3D scene is linked to this node yet. Add a diorama request below.' }));
     }
@@ -190,7 +193,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       el('p', { class: 'atlas-audit-line', text: 'Indexing method: ' + (atlas.sourceIndex?.method || atlas.audit?.method || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Source steps: ' + ((node.sourceRefs?.stepIds || []).join(', ')) }),
       el('p', { class: 'atlas-audit-line', text: 'Subsections: ' + ((node.sourceRefs?.subsectionIds || []).join(', ')) }),
-      el('p', { class: 'atlas-audit-line', text: 'Pages found: ' + ((node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
+      el('p', { class: 'atlas-audit-line', text: 'Source spans: ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Figures: ' + ((node.sourceRefs?.figureIds || []).join(', ') || 'none linked') }),
       atlas.audit?.fallbackReason ? el('p', { class: 'atlas-audit-warning', text: 'AI semantic mapping failed; this is a deterministic subsection grouping. Reason: ' + atlas.audit.fallbackReason }) : null
     ]);
