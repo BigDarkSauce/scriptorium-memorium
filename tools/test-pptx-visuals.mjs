@@ -49,13 +49,13 @@ assert.match(diagramSummary, /Stimulus/);
 assert.match(diagramSummary, /Response/);
 assert.match(diagramSummary, /node-1 → node-2/);
 
-const slide = { id: 'slide-3', title: 'Plant response', level: 2, startPage: 3, endPage: 3, text: 'A response follows a stimulus.' };
-assert.match(sectionList([slide], 'pptx'), /slide 3/);
+const slideUnit = { id: 'slide-3', title: 'Plant response', level: 2, startPage: 3, endPage: 3, text: 'A response follows a stimulus.' };
+assert.match(sectionList([slideUnit], 'pptx'), /slide 3/);
 const figureLabel = figureList([{ id: 'fig-s3-1', label: 'Leaf cross-section', slide: 3, page: 3, caption: 'Vascular bundle' }]);
 assert.match(figureLabel, /slide 3/);
 const prompt = chapterPrompt({
-  book: 'Test deck', chapter: 'Plant response (slides 3–3)', text: slide.text, sourceType: 'pptx',
-  sections: [{ ...slide, inventory: { chars: 32 } }],
+  book: 'Test deck', chapter: 'Plant response (slides 3–3)', text: slideUnit.text, sourceType: 'pptx',
+  sections: [{ ...slideUnit, inventory: { chars: 32 } }],
   figures: [{ id: 'fig-s3-1', label: 'Leaf cross-section', slide: 3, page: 3, caption: 'Vascular bundle' }],
   attached: ['fig-s3-1'], images: 1
 });
