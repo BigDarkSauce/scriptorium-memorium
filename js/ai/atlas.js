@@ -138,7 +138,7 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
   return null;
 }
 
-function sourceIndex(analysis, sections, figures) {
+function sourceIndex(analysis, sections, figures, sourceType = 'pdf') {
   const byId = new Map((sections || []).map(s => [String(s.id), s]));
   const steps = (analysis.chain || []).map(st => {
     const sec = byId.get(String(st.section));
@@ -146,14 +146,15 @@ function sourceIndex(analysis, sections, figures) {
       stepId: String(st.id), sectionId: st.section || null,
       sectionTitle: sec ? sec.title : null,
       pages: unique([...(st.pages || []), ...(sec ? [sec.startPage, sec.endPage] : [])].filter(Boolean)).map(Number).filter(Number.isFinite),
+      ...(sourceType === 'pptx' ? { slides: unique([...(st.pages || []), ...(sec ? [sec.startPage, sec.endPage] : [])].filter(Boolean)).map(Number).filter(Number.isFinite) } : {}),
       figureIds: unique([...(st.figures || []), ...(st.figureRefs || []).map(x => x && x.id)].filter(Boolean)),
       externalSources: (st.sources || []).map(s => ({ title: s.title || '', doi: s.doi || '', url: s.url || '' }))
     };
   });
   return {
     method: 'Locally extracted source hierarchy + subsection text + validated chain step mappings',
-    sourceSubsections: (sections || []).map(s => ({ id: s.id, title: s.title, startPage: s.startPage, endPage: s.endPage })),
-    pdfFigureIndex: (figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, caption: f.caption || '' })),
+    sourceSubsections: (sections || []).map(s => ({ id: s.id, title: s.title, startPage: s.startPage, endPage: s.endPage, ...(sourceType === 'pptx' ? { slide: s.sourceSlide || s.startPage } : {}) })),
+    pdfFigureIndex: (figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, ...(f.slide != null ? { slide: f.slide } : {}), ...(f.mediaPath ? { mediaPath: f.mediaPath } : {}), caption: f.caption || '' })),
     stepMappings: steps,
     completeness: {
       chainSteps: steps.length,
@@ -265,7 +266,7 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
       }
     };
   });
-  const index = sourceIndex(analysis, sections, figures);
+  const index = sourceIndex(analysis, sections, figures, sourceType);
   index.sourceType = sourceType === 'pptx' ? 'pptx' : 'pdf';
   index.sourceUnit = index.sourceType === 'pptx' ? 'slide' : 'page';
   // One research record per actual API call. The pipeline's in-memory audit also sees calls that happened
