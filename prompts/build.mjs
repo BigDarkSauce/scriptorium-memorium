@@ -17,7 +17,7 @@ const demoFigures = [{ id: '<fig-1-1>', label: '<Figure 1.1>', page: 3, caption:
 
 w('prompts/00-README.md', `# Prompt pack
 
-These are the exact prompts Scriptorium Memorialium sends to Claude (generated from \`js/ai/prompts.js\` by \`node prompts/build.mjs\`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
+These are the prompt texts Scriptorium Memorialium uses in its OpenAI-first authoring pipeline (and portable templates for any capable AI), generated from \`js/ai/prompts.js\` by \`node prompts/build.mjs\`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
 
 Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` → "Recipe for any AI"):
 1. \`01-split-book.md\`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).
@@ -30,6 +30,7 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 4b. \`03-author-diorama.md\`: create the scene from the approved plan and preserve its actor IDs, parameter ranges and units exactly.
 4c. \`11-self-critique.md\`: check whether a newcomer can explain the concept; this review may patch lesson text only.
 4d. \`13-model-audit.md\`: independently inspect entity, causal, quantitative, constraint, intervention and scope fidelity. The app stores this review and its uncertainties.
+5. \`04-edit-diorama.md\`: change an existing diorama.
 6. \`05-sub-scroll.md\`: expand one step into a detailed sub-scroll.
 7. \`06-whole-room.md\`: everything in one answer (for AIs with large outputs).
 
