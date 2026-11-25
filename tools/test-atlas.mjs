@@ -151,7 +151,7 @@ assert.deepEqual(nonNumericChart.rows, [['A', 'not reported'], ['B', '3.4']]);
 
 const misalignedChart = sourceVisualFigure({
   ...sourceSections[0].sourceVisuals[0],
-  data: { ...sourceSections[0].sourceVisuals[0], chartKind: 'bar', series: [{
+  data: { ...sourceSections[0].sourceVisuals[0].data, chartKind: 'bar', series: [{
     name: 'Flux', points: [{ index: 0, category: null, rawValue: '2.1', value: 2.1 }, { index: 1, category: 'B', rawValue: '3.4', value: 3.4 }]
   }] }
 });
