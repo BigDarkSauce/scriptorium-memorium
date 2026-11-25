@@ -84,7 +84,6 @@ export function validateAtlas(A, stepIds, sourceSteps = []) {
     if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations))) return 'node is missing a complete explanatory-view plan: ' + n.id;
     if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.id || !c.question || !c.stimulus || !c.hint || !c.answer || !c.why || !c.feedback || !Array.isArray(c.missingBodyIds))) return 'node has an incomplete or unsupported challenge: ' + n.id;
     if (n.challenges.length > 3) return 'node has more than three challenges: ' + n.id;
-    const nodeSteps = n.stepIds.map(id => String(id));
     const allowedBodies = new Set(n.stepIds.flatMap(id => bodyIndex.get(String(id)) || []));
     for (const ch of n.challenges) {
       if (challengeIds.has(ch.id)) return 'atlas has a duplicate challenge id: ' + ch.id;
@@ -213,7 +212,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     ? analysis.researchEvidenceCalls
     : [analysis.researchEvidence].filter(Boolean);
   const researchParts = [...recorded, ...(researchAudit || []) , authored._atlasWebResearch].filter(Boolean);
-  const signature = x => [x.provider || '', x.model || '', +x.searched || 0, (x.citations || []).map(c => c && c.url || '').filter(Boolean).sort().join('|')].join('::');
+  const signature = x => x.callId || [x.provider || '', x.model || '', +x.searched || 0, (x.citations || []).map(c => c && c.url || '').filter(Boolean).sort().join('|')].join('::');
   const uniqueResearch = researchParts.filter((x, i, all) => all.findIndex(y => signature(y) === signature(x)) === i);
   const researchCitations = uniqueResearch.flatMap(x => x.citations || []).filter(c => c && /^https:\/\//i.test(c.url));
   index.webResearch = uniqueResearch.length ? {
