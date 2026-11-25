@@ -187,9 +187,9 @@ function modelContractIssues(plan, sourceStepIds = null) {
     if (x && x.basis === 'external' && !String(x.source || '').trim()) F(`external mechanism ${i + 1} needs a source`);
   });
   ['constraints', 'assumptions', 'observables', 'uncertainties'].forEach(k => { if (!Array.isArray(m[k])) F(`modelContract.${k} must be an array (empty is allowed)`); });
-  (m.constraints || []).forEach((x, i) => { if (!x || !x.statement || !x.kind) F(`constraint ${i + 1} needs kind and statement`); });
+  (m.constraints || []).forEach((x, i) => { if (!x || !x.statement || !x.kind) F(`constraint ${i + 1} needs kind and statement`); if (!x || !Array.isArray(x.evidenceStepIds) || !x.evidenceStepIds.length) F(`constraint ${i + 1} needs supporting source step IDs`); });
   (m.assumptions || []).forEach((x, i) => { if (!x || !x.statement || !x.why) F(`assumption ${i + 1} needs statement and why`); });
-  (m.observables || []).forEach((x, i) => { if (!x || !x.name || !x.unit || !x.relationship) F(`observable ${i + 1} needs name, unit and relationship`); });
+  (m.observables || []).forEach((x, i) => { if (!x || !x.name || !x.unit || !x.relationship) F(`observable ${i + 1} needs name, unit and relationship`); if (!x || !Array.isArray(x.evidenceStepIds) || !x.evidenceStepIds.length) F(`observable ${i + 1} needs supporting source step IDs`); });
   if (Array.isArray(sourceStepIds) && sourceStepIds.length) {
     const allowed = new Set(sourceStepIds.map(String));
     [...entities, ...vars, ...mechanisms, ...(m.constraints || []), ...(m.observables || [])].forEach((x, i) => {
