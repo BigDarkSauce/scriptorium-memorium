@@ -201,12 +201,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No subsection index is available for this saved atlas.' }));
         return;
       }
-      sectionItems.forEach(({ sec, entries, categories }) => {
+      sectionItems.forEach(({ sec, entries, categories }, sectionIndex) => {
         const pages = sec.startPage
           ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
           : '';
         const sectionDetails = el('section', { class: 'atlas-scan-section' });
-        const stepListId = 'atlas-scan-section-steps-' + sectionItems.indexOf(sectionItems.find(group => group.sec === sec));
+        const stepListId = 'atlas-scan-section-steps-' + sectionIndex;
         const stepList = el('div', {
           class: 'atlas-scan-section-steps',
           id: stepListId,
