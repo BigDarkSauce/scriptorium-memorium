@@ -153,6 +153,18 @@ A diorama is valuable when its spatial or temporal structure helps explain the c
 
 The chapter atlas is compiled from validated reasoning steps, not directly from page count. A concept can span several subsections or slides; a source subsection can contain several concepts. The atlas validator checks that every supplied source step belongs to exactly one concept node, that edge endpoints exist, and that challenge records are complete. These deterministic checks protect coverage and graph integrity, but they cannot prove the model's semantic interpretation or scientific correctness. The source trail and uncertainty notes remain visible for review.
 
+### Question branches and bitwise reconstruction
+
+The atlas presents its challenges as a horizontal set of question branches rather than a vertical list of finished explanations. A learner selects one branch, sees its question and stimulus, writes a prediction and confidence, and commits before the expected reconstruction appears. The explanation is an ordered, source-mapped sequence of reasoning units: one UNFOLD action reveals exactly one unit, earlier units remain visible, Space reveals the next unit, and Ctrl+Z steps back. Switching branches preserves each branch's own prediction and reveal cursor. UNFOLD never advances to another question.
+
+Newly authored reasoning units cite exact source-step IDs from their concept node. The validator rejects empty reasoning units and references outside that node. Older stored atlases without the structured sequence use their existing explanation as a single legacy reveal unit; the app does not invent missing intermediate reasoning. Implementation: `js/ai/atlas.js`, `js/room/atlas-view.js`, and `tools/test-atlas.mjs` / `tools/test-atlas-ui.mjs`.
+
+### Rapid scanning and optional loci routes
+
+The next workflow layer is specified in [Learning workflow](LEARNING-WORKFLOW.md). The orientation scan exposes the real source inventory (sections, terms, equations, examples, tables and figures) without pretending that a short index is a complete explanation. A question sweep then presents source-answerable prompts such as term completion, relationship completion, mechanism bridges, next-state prediction, equation anticipation, figure reading and worked-step reconstruction. The learner selectively opens depth one question at a time.
+
+Loci routes are an optional spatial memory layer over the atlas, not a replacement for it. A distinct, editable place anchors a concept and cues retrieval; the answer and reasoning remain hidden until the learner attempts recall. Every location links back to its source-step IDs. Routes reuse the existing retrieval schedule and are evaluated by delayed recall and transfer, not by time spent, streaks or route completion. These loci and rapid-scan specifications are design targets, not features claimed as shipped by this branch.
+
 ### Evaluate learning, not only engagement
 
 The relevant outcome is not how immersive a scene feels. Evaluate whether the learner can later reconstruct the idea without cues, explain the mechanism, calibrate confidence, diagnose a misconception and transfer the principle to a changed context. Engagement is useful when it supports these outcomes, not as a substitute for them.
