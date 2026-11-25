@@ -57,6 +57,128 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     el('div', { class: 'atlas-meta', text: (atlas.nodes || []).length + ' concepts · ' + (atlas.audit?.linkedDioramas ?? 0) + ' linked dioramas · ' + (atlas.audit?.certainty || 'AI-generated map') })
   ]);
   root.append(header);
+
+  // A compact orientation scan exposes the real ingested structure and validated source steps.
+  // It is an index for retrieval, not a generated chapter summary or a replacement for the source trail.
+  const sourceSteps = part.analysis && Array.isArray(part.analysis.chain) ? part.analysis.chain : [];
+  const sourceSections = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.sourceSubsections) ? atlas.sourceIndex.sourceSubsections : [];
+  const nodeForStep = stepId => (atlas.nodes || []).find(n => (n.stepIds || []).some(id => String(id) === String(stepId)));
+  const tagsForStep = st => {
+    const tags = [];
+    if (/definition|term/.test(String(st.kind || '').toLowerCase())) tags.push('definition');
+    if (st.math || (st.derivation || []).length) tags.push('equation / derivation');
+    if (st.examples && st.examples.length || String(st.kind || '').toLowerCase() === 'example') tags.push('worked example');
+    if (st.table) tags.push('table');
+    if ((st.figures || []).length || (st.figureRefs || []).length) tags.push('figure');
+    if (st.code) tags.push('code');
+    if ((st.terms || []).length) tags.push('terms');
+    return tags;
+  };
+  const scanEntries = sourceSteps.map(st => {
+    const section = sourceSections.find(s => String(s.id) === String(st.section));
+    const searchable = [
+      st.id, st.kind, st.title, st.statement, st.math,
+      (st.derivation || []).map(x => x.expr || '').join(' '),
+      (st.terms || []).map(x => [x.term, x.meaning].join(' ')).join(' '),
+      (st.examples || []).map(x => [x.title, x.problem, x.answer].join(' ')).join(' '),
+      st.table && [st.table.caption, ...(st.table.columns || []), ...(st.table.rows || []).flat()].join(' '),
+      (st.figures || []).join(' '), (st.figureRefs || []).map(x => x && x.id).join(' '),
+      st.code && [st.code.lang, (st.code.lines || []).map(x => x.code).join(' ')].join(' '),
+      section && section.title
+    ].filter(Boolean).join(' ').toLowerCase();
+    return {
+      step: st,
+      node: nodeForStep(st.id),
+      section,
+      tags: tagsForStep(st),
+      pages: (st.pages || []).length ? st.pages : section ? [section.startPage, section.endPage].filter(Boolean) : [],
+      searchable
+    };
+  });
+  const scan = el('details', { class: 'atlas-source-scan' });
+  const sectionItems = sourceSections.map(sec => {
+    const entries = scanEntries.filter(x => String(x.step.section) === String(sec.id));
+    const categories = [...new Set(entries.flatMap(x => x.tags))];
+    return { sec, entries, categories };
+  });
+  const countTags = [...new Set(scanEntries.flatMap(x => x.tags))];
+  const scanSummary = [
+    sourceSections.length + ' subsections',
+    sourceSteps.length + ' source steps',
+    countTags.length ? countTags.join(' · ') : 'source index'
+  ].join(' · ');
+  const scanSummaryNode = el('summary', { class: 'atlas-scan-summary' }, [
+    el('span', { class: 'atlas-section-label', text: 'QUICK SOURCE SCAN' }),
+    el('span', { class: 'atlas-scan-count', text: scanSummary })
+  ]);
+  const scanInput = el('input', {
+    class: 'atlas-scan-search',
+    inputType: 'search',
+    placeholder: 'Search concepts, terms, equations, examples, tables, figures or code…',
+    'aria-label': 'Search source steps'
+  });
+  const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
+  const openNode = node => { if (node) select(node.id); };
+  const paintScan = query => {
+    const q = String(query || '').trim().toLowerCase();
+    scanResults.innerHTML = '';
+    if (!q) {
+      if (!sectionItems.length) {
+        scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No subsection index is available for this saved atlas.' }));
+        return;
+      }
+      sectionItems.forEach(({ sec, entries, categories }) => {
+        const first = entries.find(x => x.node);
+        const pages = sec.startPage
+          ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
+          : '';
+        const item = el('button', {
+          class: 'atlas-scan-row',
+          type: 'button',
+          role: 'listitem',
+          disabled: !first,
+          onclick: () => openNode(first && first.node)
+        }, [
+          el('span', { class: 'atlas-scan-main' }, [
+            el('b', { text: sec.title || sec.id }),
+            el('small', { text: entries.length + ' source steps' + (pages ? ' · ' + pages : '') })
+          ]),
+          el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
+          el('span', { class: 'atlas-scan-open', text: first ? 'OPEN CONCEPT ↗' : 'NO LINKED STEP' })
+        ]);
+        scanResults.append(item);
+      });
+      return;
+    }
+    const matches = scanEntries.filter(x => x.searchable.includes(q)).slice(0, 40);
+    if (!matches.length) {
+      scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No source step matched that search. Try a term, a symbol, a step title or a figure/table ID.' }));
+      return;
+    }
+    matches.forEach(entry => {
+      const st = entry.step, pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
+      scanResults.append(el('button', {
+        class: 'atlas-scan-row',
+        type: 'button',
+        role: 'listitem',
+        disabled: !entry.node,
+        onclick: () => openNode(entry.node)
+      }, [
+        el('span', { class: 'atlas-scan-main' }, [
+          el('b', { text: st.title || st.id }),
+          el('small', { text: st.id + ' · ' + (entry.section && entry.section.title || st.section || 'unsectioned') + ' · ' + pageText })
+        ]),
+        el('span', { class: 'atlas-scan-tags' }, entry.tags.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
+        el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
+      ]));
+    });
+    if (matches.length === 40) scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'Showing the first 40 matches. Refine your search to narrow the source inventory.' }));
+  };
+  scanInput.addEventListener('input', () => paintScan(scanInput.value));
+  paintScan('');
+  scan.append(scanSummaryNode, scanInput, scanResults);
+  root.append(scan);
+
   const graphData = coordinates(atlas.nodes || []), svg = svgEl('svg', { class: 'atlas-svg', viewBox: '0 0 ' + graphData.width + ' ' + graphData.height, role: 'group', 'aria-label': 'Interactive concept mind map' });
   const defs = svgEl('defs'), marker = svgEl('marker', { id: 'atlas-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' });
   marker.append(svgEl('path', { d: 'M0 0 L10 5 L0 10 z', class: 'atlas-arrowhead' })); defs.append(marker); svg.append(defs);
