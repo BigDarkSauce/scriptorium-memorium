@@ -344,7 +344,11 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         d.atlasNodeId = node.id;
         st.demos.push(d);
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });
-        else if (d.type === 'figure' && d.figure) node.generatedFigure = d.figure;
+        else if (d.type === 'figure' && d.figure) {
+          node.generatedFigure = d.figure;
+          node.explanatoryFigures = node.explanatoryFigures || [];
+          node.explanatoryFigures.push({ stepId: String(st.id), title: d.title || node.title, purpose: d.purpose || node.question, figure: d.figure });
+        }
         node.dioramaBuild = how;
         if (ctx.save) await ctx.save(P);
       }
