@@ -12,7 +12,7 @@
 // and fallback dioramas (each keeps its request, so "Build this diorama with AI" can still author it later).
 import { askJSON, aiAvailable, imageLimit, writer } from './claude.js';
 import { startJob, currentJob } from './activity.js';
-import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, rewritable, BUILTIN_MODELS, planPrompt, critiquePrompt, checkPlan, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
+import { chapterPrompt, verifyChain, gapsOf, followUpPrompt, mergeFollowUp, qualityGate, repairPrompt, mergeRepair, figuresPrompt, mergeFigures, planDioramas, authorPrompt, rewritable, BUILTIN_MODELS, planPrompt, critiquePrompt, modelAuditPrompt, checkPlan, checkSceneContract, domainPrompt, mergeDomains, placePrimitive, grammarIssues } from './prompts.js';
 import { classifyStep, autoPrimitive } from '../dio/domains.js';
 import { evidenceTools } from './evidence.js';
 import { partKey, cached } from '../store.js';
@@ -178,7 +178,7 @@ export function planAndInsertDioramas(A, sections) {
     while (k-- > 0) {
       const st = steps.slice().sort((a, b) => score(b) - score(a))[0]; st.demos = st.demos || [];
       if (score(st) < -6) break;   // every step of this subsection is explained by its own primitive: no 3D decoration
-      const d = { type: 'scene', title: st.title.slice(0, 70), purpose: st.answers || `How does “${st.title}” work?`, technique: 'card', request: `Embody "${st.title}" as a living miniature: ${st.statement} ${(st.explain || []).map(e => e && e.text).join(' ').slice(0, 600)} Actors: the bodies this step is about (${(st.bodies || []).join(', ') || 'choose 2–5'}); variables the learner can change with the source's numbers; events at the meaningful moments; 3–6 lessons, the first answering "${st.answers || st.title}", the last opening "${st.opens || 'the next question'}".`, auto: true, planned: p.why };
+      const d = { type: 'scene', title: st.title.slice(0, 70), purpose: st.answers || `How does “${st.title}” work?`, technique: 'card', sourceStepIds: [String(st.id)], request: `Embody "${st.title}" as a living miniature: ${st.statement} ${(st.explain || []).map(e => e && e.text).join(' ').slice(0, 600)} Actors: the bodies this step is about (${(st.bodies || []).join(', ') || 'choose 2–5'}); variables the learner can change with the source's numbers; events at the meaningful moments; 3–6 lessons, the first answering "${st.answers || st.title}", the last opening "${st.opens || 'the next question'}".`, auto: true, planned: p.why };
       st.demos.push(d); added.push({ step: st.id, subsection: p.subsection });
     }
   });
@@ -194,11 +194,12 @@ export function validScene(s) {
 // The didactic plan (docs/PEDAGOGY.md): a short storyboard written BEFORE the scene, checked by checkPlan; one retry with
 // the faults named. Small and tool-free (about 1.5k tokens out); null when there is no AI or it cannot produce a valid plan.
 export async function planDemo(ctx, st, d, context, o = {}) {
-  if (d.plan) return d.plan; let issues = '';
+  if (d.plan && d.plan.version === 'scriptorium-model-plan/1') return d.plan; let issues = '';
+  const sourceStepIds = (d.sourceStepIds || [st.id]).map(String);
   for (let k = 0; k < 2; k++) {
     check(o.signal); o.onStatus && o.onStatus(`Planning the explanation: diorama “${d.title || st.title}”${k ? ' (second try)' : ''}…`);
-    try { const p = await ask(planPrompt({ ...d, issues }, context), { ...o, tools: false, writing: 'Planning the explanation', role: 'director' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
-      const faults = checkPlan(plan).filter(x => x.level === 'fault'); if (!faults.length) return plan; issues = faults.slice(0, 6).map(x => x.issue).join('; ');
+    try { const p = await ask(planPrompt({ ...d, issues, sourceStepIds }, context), { ...o, tools: false, writing: 'Planning the explanation', role: 'director' }, 'Plan this diorama in any AI'); const plan = p && (p.plan || p);
+      const faults = checkPlan(plan, null, null, sourceStepIds).filter(x => x.level === 'fault'); if (!faults.length) return plan; issues = faults.slice(0, 6).map(x => x.issue).join('; ');
     } catch (e) { if (e && e.code === 'cancelled') throw e; return null; }
   }
   return null;
@@ -206,7 +207,8 @@ export async function planDemo(ctx, st, d, context, o = {}) {
 // The self-critique: could a newcomer explain the concept after these lessons (weighed above "is it attractive")? A short,
 // tool-free call that may only patch lesson texts; the deterministic plan check runs first and is stored with it.
 export async function critiqueDemo(s, plan, o = {}) {
-  const names = (s.bodies || []).flatMap(b => [b.id, b.name, b.label].filter(Boolean)), local = checkPlan(plan, s.lessons || [], names);
+  const sourceStepIds = (o.sourceStepIds || s.sourceStepIds || []).map(String);
+  const names = (s.bodies || []).flatMap(b => [b.id, b.name, b.label].filter(Boolean)), local = checkPlan(plan, s.lessons || [], names, sourceStepIds);
   s.critique = { local: local.length, faults: local.filter(x => x.level === 'fault').map(x => x.issue).slice(0, 8) };
   try {
     check(o.signal); o.onStatus && o.onStatus('Checking the explanation: could a newcomer explain it after watching?');
@@ -216,6 +218,16 @@ export async function critiqueDemo(s, plan, o = {}) {
     let n = 0; if (ans.verdict === 'revise' && Array.isArray(ans.patch)) ans.patch.forEach(P => { const l = P && (s.lessons || [])[+P.i]; if (!l) return; ['text', 'explain', 'explainBack'].forEach(k => { if (typeof P[k] === 'string' && P[k].trim().length > 8 && P[k].length < 1400) { l[k] = P[k].trim(); n++; } }); });
     s.critique.patched = n;
   } catch (e) { if (e && e.code === 'cancelled') throw e; s.critique.error = (e && (e.code || e.message)) || 'failed'; }
+  try {
+    check(o.signal); o.onStatus && o.onStatus('Auditing the scene model: entities, mechanisms, units, constraints and controls…');
+    const audit = await ask(modelAuditPrompt(plan, s, sourceStepIds), { ...o, tools: false, writing: 'Auditing the simulation model', role: 'director' }, 'Independently audit this simulation model');
+    if (audit && typeof audit === 'object') s.modelAudit = {
+      checkedAt: new Date().toISOString(), verdict: ['pass', 'revise', 'uncertain'].includes(audit.verdict) ? audit.verdict : 'uncertain',
+      score: Number.isFinite(+audit.score) ? Math.max(0, Math.min(1, +audit.score)) : null,
+      issues: (audit.issues || []).slice(0, 12).map(x => ({ severity: x.severity || 'minor', area: x.area || 'scope', problem: String(x.problem || '').slice(0, 500), evidence: String(x.evidence || '').slice(0, 500), repair: String(x.repair || '').slice(0, 500) })),
+      unverified: (audit.unverified || []).slice(0, 12).map(String), assumptionsToSurface: (audit.assumptionsToSurface || []).slice(0, 12).map(String), summary: String(audit.summary || '').slice(0, 500)
+    };
+  } catch (e) { if (e && e.code === 'cancelled') throw e; s.modelAudit = { checkedAt: new Date().toISOString(), verdict: 'uncertain', error: (e && (e.code || e.message)) || 'audit failed' }; }
   return s.critique;
 }
 // Author one scene request in place: plan → full prompt (from the plan) → self-critique; then a simpler one; then a fallback.
@@ -224,25 +236,41 @@ export async function authorDemo(ctx, st, d, o = {}) {
   // it is part of that job's "building the dioramas" stage
   if (currentJob() && !o._own) return authorDemo0(ctx, st, d, o);
   const J = startJob('Diorama “' + String(d.title || st.title || st.id).slice(0, 50) + '”', { stages: ['plan', 'author', 'check'], names: { plan: 'planning what it must show', author: 'writing the scene', check: 'checking it against the plan' }, signal: o.signal });
-  try { return await authorDemo0(ctx, st, d, { ...o, signal: J.signal, onStatus: t => { J.status(t); if (/^Authoring|^Retrying/.test(t)) J.stage('author'); else if (/critique|check/i.test(t)) J.stage('check'); o.onStatus && o.onStatus(t); } }); }
+  try { return await authorDemo0(ctx, st, d, { ...o, signal: J.signal, onStatus: t => { J.status(t); if (/^Authoring|^Retrying/.test(t)) J.stage('author'); else if (/critique|check|audit/i.test(t)) J.stage('check'); o.onStatus && o.onStatus(t); } }); }
   finally { J.end(); }
 }
 async function authorDemo0(ctx, st, d, o = {}) {
   const context = `${st.title}: ${st.statement || ''}${st.answers ? ' | the step answers: ' + st.answers : ''}${st.opens ? ' | and opens: ' + st.opens : ''}`;
   let fail = '';
   if (o.auto !== false && aiAvailable()) {
+    const sourceStepIds = (d.sourceStepIds || [st.id]).map(String);
     const plan = o.plan === false ? null : await planDemo(ctx, st, d, context, o);
     for (const simple of [false, true]) {
       check(o.signal); o.onStatus && o.onStatus(`${simple ? 'Retrying, simpler' : 'Authoring'}: diorama “${d.title || st.title}” for ${st.id}…`);
       try {
-        const spec = await ask(authorPrompt({ ...d, plan: simple ? null : plan, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
+        const spec = await ask(authorPrompt({ ...d, plan, sourceStepIds, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
         const s = spec && (spec.spec || spec);
         // the author may answer that the idea is not spatial, with the primitive of its structure (prompts/03)
         if (s && s.type === 'figure' && s.figure) { const v = validateFigure(s.figure); if (v.ok && isPrimitive(v.fig.kind)) { const req = { request: d.request, title: d.title, purpose: d.purpose }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'figure', title: s.title || req.title, purpose: s.purpose || req.purpose, figure: v.fig, request: req.request, authored: 'primitive' }); return 'primitive'; } fail = 'figure: ' + v.errors.join('; '); continue; }
         const why = validScene(s);
-        if (!why) { s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; s.purpose = s.purpose || d.purpose; s.request = d.request; s.authored = simple ? 'simple' : 'full';
-          if (plan) { s.plan = s.plan && s.plan.sequence ? s.plan : plan; if (!s.levels && plan.levels) s.levels = plan.levels; if (!simple) await critiqueDemo(s, s.plan, o); }
-          Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored; }
+        if (!why) {
+          s.type = 'scene'; s.technique = s.technique || d.technique || 'card'; s.title = s.title || d.title; s.purpose = s.purpose || d.purpose; s.request = d.request; s.sourceStepIds = sourceStepIds; s.authored = simple ? 'simple' : 'full';
+          if (plan) {
+            s.plan = s.plan && s.plan.sequence ? s.plan : plan; if (!s.levels && plan.levels) s.levels = plan.levels;
+            if (plan.version === 'scriptorium-model-plan/1') {
+              s.modelContract = JSON.parse(JSON.stringify(plan.modelContract));
+              const local = checkSceneContract(s, plan, sourceStepIds);
+              s.modelValidation = { checkedAt: new Date().toISOString(), method: 'deterministic scene-to-contract checks', pass: !local.faults.length, faults: local.faults, warnings: local.warnings };
+              if (local.faults.length) { fail = 'scene-to-model contract validation failed: ' + local.faults.slice(0, 8).join('; '); continue; }
+            }
+            if (!simple) {
+              await critiqueDemo(s, s.plan, { ...o, sourceStepIds });
+              const major = (s.modelAudit && s.modelAudit.issues || []).filter(x => x.severity === 'critical' || x.severity === 'major');
+              if (s.modelAudit && s.modelAudit.verdict === 'revise' && major.length) { fail = 'independent model audit: ' + major.slice(0, 5).map(x => x.problem + (x.repair ? ' — ' + x.repair : '')).join('; '); continue; }
+            }
+          }
+          Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored;
+        }
         fail = why;
       } catch (e) { if (e && e.code === 'cancelled') throw e; fail = (e && (e.code || e.message)) || 'failed'; }
     }
@@ -332,7 +360,7 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
           pages: step.pages || [], figures: step.figures || [], table: step.table || null
         }));
         const d = {
-          type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true,
+          type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true, sourceStepIds: (node.stepIds || []).map(String),
           request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
             'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned explanatory views: ' + JSON.stringify(views) +
             '. COMPLETE SOURCE STEP MATERIAL FOR THIS NODE (use all of it; IDs remain the audit anchors): ' + JSON.stringify(sourceSteps) +
