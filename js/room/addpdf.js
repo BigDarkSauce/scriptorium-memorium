@@ -10,7 +10,7 @@
 import { el, toast, uid, esc } from '../util.js';
 import { aiAvailable, engine } from '../ai/claude.js';
 // who writes, as the dialog says it (the AI settings choose: js/ai/aipanel.js)
-const engineLine = () => ({ claude: 'Claude writes each part', hybrid: 'Claude directs and the fallback models write', free: 'OpenAI is preferred, with configured fallback models' })[engine()] || 'OpenAI is preferred, with configured fallback models';
+const engineLine = () => 'OpenAI is preferred, with configured fallback models';
 import { evidenceAvailable } from '../ai/evidence.js';
 import { runJob, saveJob, pendingJobs, allocateSteps, STAGES } from '../ai/pipeline.js';
 
