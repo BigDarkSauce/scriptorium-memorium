@@ -60,6 +60,8 @@ A concept can have a place in the walkable library. This is an optional retrieva
 - Choose a bookcase, row and place. A place may already contain a scroll: the anchor marks the bookcase position, not the scroll's identity. **Preview this place** frames it and shows a gold ring.
 - Write a short, distinctive association of your own, then save. The anchor follows the bookcase if you move or rotate it. Use **Change this memory place** to revise its location or cue.
 - Choose **Visit memory route** to walk the saved places for this chapter. At each stop, use your cue to reconstruct the concept and commit your answer and confidence before revealing the expected reconstruction.
+- Use **Move this place earlier/later** to arrange the route in your own order. The app labels this as your route order; it does not imply that the concepts are causally or logically dependent in that sequence.
+- Use **Change this memory place** to revise a cue or location, or **Remove memory place** to delete the anchor and its recall record without deleting the concept.
 - After reveal, the attempt is locked and saved with the place. Use **Previous place** and **Next place** to move around the route, or **Return to concept atlas** for the complete source-linked reasoning, diagrams and dioramas.
 
 This first version stores attempts but does not yet schedule due reviews or measure delayed recall. The route is optional; you can continue studying entirely from the concept atlas.
