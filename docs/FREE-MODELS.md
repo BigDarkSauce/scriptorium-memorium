@@ -1,123 +1,40 @@
-# Free models: the three AI engines
+# Optional fallback model providers
 
-Scriptorium Memorialium writes scrolls (chains of steps), figures and dioramas with a language model. The **AI engine**
-button (the sparkle under the graphics button, on every screen) chooses who writes:
+Scriptorium's primary authoring engine is OpenAI through the local secure relay. The model router gives the `openai-local` provider absolute priority. If the local endpoint is unavailable or a request cannot be completed there, the router can try other providers that are enabled in the AI settings panel.
 
-| Mode | Who writes | Limits |
-|---|---|---|
-| **Claude directs** | Your Claude does everything (inside claude.ai). | Your Claude plan's limits. |
-| **Claude + free models** | Claude reads each chapter into its chain and plans and checks each diorama (the *director's* requests); the free models write the volume: coverage follow-ups, repairs, figures, diorama code, step expansions (the *worker's* requests). | Each stands in for the other: Claude at its limit → the free models take the request; every free model at its limit → Claude takes it. A job never stops. |
-| **Free models only** | The pool of free models does everything, the best one free at that moment first. | When every free model is at its limit, the job **waits** for the earliest reset (it says which and how long, and can be stopped) instead of failing. |
+This document describes that **fallback pool**. It is not a list of alternative primary modes. The older Claude Artifact/Claude Desktop bridge instructions are legacy compatibility material; they are not needed for the local OpenAI-first workflow.
 
-The prompts, the JSON formats and the quality checks are the same whichever engine answers (js/ai/prompts.js): a free
-model gets exactly the request Claude would get, and its answer goes through the same parser, the same `qualityGate`,
-the same repairs and the same diorama checks.
+## How the fallback router works
 
-## How the router never runs out (js/ai/free.js)
+The provider router (`js/ai/free.js`) discovers available model lists where supported, applies a tested ranking for this app's long structured JSON tasks, respects provider budgets and reset headers, and tries the next eligible provider after a failed or invalid response. Successful validated responses can be cached. A fallback model's output still passes through the caller's parser and quality checks; those checks do not prove that its scientific claims are true.
 
-No single free tier is big or steady enough for a whole book, but pooled they are large (FreeLLMAPI counts about
-7.4 billion tokens a month across 34 free tiers). For every request the router:
+The OpenAI local provider is given absolute precedence over the fallback pool. The pool is therefore a continuity option, not a reason to send every document to every provider. You can enable or disable fallback providers individually in **AI settings**.
 
-1. **discovers** each provider's live model list (`GET /models`, kept a day), so retired models drop out and new ones
-   come in without an update of the app;
-2. **ranks** the models by how well they write long, exact JSON (the `RANK` table; unknown names are tried after the
-   known ones);
-3. **budgets** each model: requests this minute and today, learned from the 429 answers it meets, and cool-downs read
-   from the provider's own headers (`Retry-After`, `x-ratelimit-reset-*`); a daily cap waits for 00:00 UTC;
-4. **validates** the answer (parsed as JSON, not cut off, plus the caller's check, e.g. "has a chain of steps"); a
-   wrong answer is named back to the same model once, then the next model gets the request;
-5. **caches** answers that passed (IndexedDB, 30 days): running the same request again costs nothing;
-6. **waits, never fails**: when every model is busy it waits for the earliest reset. A model on your own computer
-   (Ollama, LM Studio, FreeLLMAPI) has no quota at all.
+## Configuring optional fallbacks
 
-Honest limits: free tiers change their rules without notice, and the best free models are not as strong as Claude at
-very long, exact answers (see the test results below). "Never runs out" means the job always finishes; when every free
-quota is spent for the day it finishes after the reset, unless a local model or Claude (hybrid mode) is there.
+1. Start Scriptorium with **Launch Scriptorium.bat** or **Launch Scriptorium with OpenAI.bat**.
+2. Open the AI settings panel.
+3. Enable only providers you are comfortable using and supply their own keys, base URLs or model names where required.
+4. Use **Test AI providers** to check reachability and whether a provider can produce a response that passes the app's actual validation path.
+5. Keep OpenAI enabled as the primary provider if you want the normal OpenAI-first route.
 
-## What works from a web page (measured, November 2026)
+The panel lists supported provider endpoints and their current configuration. Provider catalogues, quotas, pricing, free tiers and regional availability change frequently; treat the panel and each provider's current terms as authoritative rather than relying on a static allowance quoted in this document.
 
-Cross-origin requests from the app's page were tried against each provider (the standalone page; inside the Claude
-app the extension makes the requests and none of this applies):
+## Local model routers
 
-* **answer from the page:** Groq, Google Gemini, Cerebras, Mistral, OpenRouter, Cohere, Z.ai, Chutes, Hugging Face,
-  OVHcloud, LLM7, Pollinations;
-* **blocked from a page** (no CORS): NVIDIA NIM, GitHub Models, SambaNova, Cloudflare Workers AI, Kilo. These are
-  reached through **FreeLLMAPI**, which runs as a small server on your computer and has no such restriction.
+FreeLLMAPI, Ollama and LM Studio can be configured as optional local fallbacks. FreeLLMAPI can expose several upstream providers behind one local OpenAI-compatible endpoint. A local model can avoid sending a document to a third-party model provider, but its speed and output quality depend on the hardware and model you choose.
 
-## Setting it up (best first)
+The FreeLLMAPI route is optional. It does not replace the OpenAI relay, and it does not automatically inherit OpenAI's native Responses API tools such as hosted web search.
 
-1. **No key at all**: OVHcloud (gpt-oss-120b, Qwen3.5-397B, Llama 3.3 70B; 2 requests a minute per model), LLM7
-   (two small models without a key) and Pollinations (one reply per 45 s) work at once. Slow, but the app can write a
-   whole scroll with nothing set up.
-2. **Google AI Studio** key (aistudio.google.com/apikey, no card): the strongest free models (Gemini Flash), and they
-   can read PDF page images.
-3. **Groq** key (console.groq.com/keys) and **Cerebras** key (cloud.cerebras.ai): very fast, about a thousand requests
-   a day per model.
-4. **Mistral** (console.mistral.ai, free Experiment plan) and **OpenRouter** (openrouter.ai/keys, 50 free requests a
-   day): more reserve.
-5. **FreeLLMAPI** (github.com/tashfeenahmed/freellmapi; on Windows the `.exe` installer from its Releases page; or
-   `curl -fsSL https://freellmapi.co/install.sh | bash` with Docker): add your provider keys in its dashboard
-   (http://localhost:5173), then turn on "FreeLLMAPI (local router)" in the AI panel and paste its unified
-   `freellmapi-…` key. It pools 34 providers (NVIDIA NIM, GitHub Models and Cloudflare included) behind one address,
-   `http://localhost:3001/v1`, with its own rotation.
-6. **Ollama** (ollama.com): a model on your own computer, no limit and private. Start it with `OLLAMA_ORIGINS=*` so a
-   web page may call it, pull a model (`ollama pull qwen3:8b`), turn on "Ollama / LM Studio" and type the model name.
-   On a laptop GPU it is slow; it is the reserve that cannot run out.
+## Key and data handling
 
-Keys stay in this browser (localStorage `sm-ai`) and are sent only to the provider they belong to. Some free tiers
-may use prompts to improve their models (Google outside the EEA/UK/Switzerland, Mistral's free plan unless you opt
-out, some OpenRouter providers); the panel says so beside each one.
+- The OpenAI key is read by the local Scriptorium server from `OPENAI_API_KEY`. It is not stored in browser localStorage or sent to JavaScript.
+- Optional fallback-provider keys and settings are stored in the browser's AI settings, mirrored in the app's local IndexedDB store, and may be synchronised through the optional host bridge when that bridge is present.
+- Fallback requests are sent to the configured provider or local router. Their retention, training, processing location and privacy terms are not controlled by Scriptorium.
+- Do not enable a provider for confidential material unless its terms and your organisation's rules allow that document to be sent there.
 
-## Where the app runs, and the bridge that makes “Claude + free models” work in the Claude app
+## Limits and troubleshooting
 
-Inside the Claude app Scriptorium is an Artifact, and an Artifact's page **may not call outside addresses** (tested:
-every provider, even the keyless ones, is unreachable from it). Claude, on the other hand, is only reachable from
-inside the Claude app. So without help, “Claude + free models” had no place where both halves worked.
+Free tiers and provider rate limits change without notice. A provider can also disappear, reject a key, remove a model or stop supporting vision. The app reports the reachability and validation result it actually observed; it does not guarantee that a free provider will always complete a chapter.
 
-The help is **the Scriptorium free-models extension** (`bridge/`, packed as `Scriptorium free models.mcpb`): a tiny
-MCP server that runs on your own computer inside Claude Desktop. An Artifact may call such a server (its `mcp`
-capability, server `host:scriptorium-free`); the page hands it each free-model request, it makes the request with
-Node's own fetch (no browser rules: NVIDIA NIM, GitHub Models, SambaNova and Cloudflare are reachable too) and passes
-the answer back as it streams (`http_start`, then `http_poll` every few seconds, so a long answer never meets the
-app's ~130 s limit per call). It only calls LLM-shaped addresses (`https://…/models`, `…/chat/completions`),
-servers on your own computer and (1.2, GET only) a picture link whose answer is an image; its tools are read-only, so the app does not ask to confirm each request.
-
-| Where | Claude | Free models |
-|---|---|---|
-| **Claude app, extension installed** | yes | yes, through the extension: all three modes work |
-| Claude app, no extension | yes | no: “Claude + free models” uses Claude for everything; the panel offers the extension |
-| Standalone page (Launch Scriptorium.bat, or GitHub) | no (Claude lives in the Claude app) | yes, straight from the page |
-
-Install: double-click `Scriptorium free models.mcpb` (your Scriptorium Memorium folder, or **Download the extension**
-in the AI panel) → Claude Desktop → **Install**; then **Check again** in the panel. Claude Desktop runs it with its
-own Node.js. (By hand: bridge/README.md.) Only the Artifact's owner can use a server on their computer.
-
-The standalone page still works on its own (free models only):
-* **Launch Scriptorium.bat** in your Scriptorium Memorium folder (http://localhost:8000);
-* or from GitHub: https://bigdarksauce.github.io/scriptorium-memorium/
-
-Each place keeps its own library in its browser storage: move it with **Import / export**.
-
-## Pictures and speech (js/ai/media.js), admitted only past a strict check
-
-Through FreeLLMAPI on your computer (its image, speech and transcription endpoints, the same unified key), each step of
-a scroll has **Illustrate (checked)** and **Read aloud (checked)**. A generated picture or reading is used only if it
-passes every check; otherwise the step keeps none, and **the check** shows why.
-
-| | The check | Admitted when |
-|---|---|---|
-| Picture | 0. can this step be pictured truthfully, with no writing? (a writer model; definitions, equations and proofs cannot) | suitable, with a brief: must show / must not show |
-| | 1. pixels | ≥ 512 px a side; not blank, washed out or flat |
-| | 2. two independent reviewers, different model families (Claude in the Claude app; free vision models) | each: accurate 5/5, clean (no writing) 5/5, faithful, coherent, helpful, style ≥ 4/5 |
-| Reading | 0. formulas written out as spoken words | no symbols left |
-| | 1. the audio | 1.6–4.2 words/s, < 0.2 % clipped, no silence > 2 s inside, loud enough, one voice throughout |
-| | 2. heard back by speech-to-text (Whisper) | ≤ 8 % words wrong per piece, ≤ 5 % over the reading, length within 15 % |
-
-Three attempts each (a picture's brief is rewritten against the reviewers' objections). Needs extension 1.2 inside the
-Claude app (it carries bytes), or the launcher's relay on your computer.
-
-## The live test
-
-"Test the free models" in the panel runs, for every provider in play: its model list (reach), a tiny exact answer
-(alive, latency), then this app's real chapter request (`chapterPrompt`) on a short original passage, put through the
-app's own `normalizeChain` and `qualityGate`. Results so far are in docs/ARCHITECTURE.md (round 18).
+If no usable provider is available, inspect the AI panel, check the provider's own status page and key settings, or use the portable prompt/JSON workflow described in [the protocol](PROTOCOL.md). For the primary local route, see [OpenAI-first local engine](OPENAI-LOCAL.md).
