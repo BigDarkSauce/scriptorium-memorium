@@ -164,7 +164,7 @@ export function pptxDiagramData(diagramXml, fallbackTitle = 'SmartArt') {
     links: links.slice(0, 150),
     omittedNodes: Math.max(0, nodes.length - 100),
     omittedLinks: Math.max(0, links.length - 150),
-    limitations: ['Connections preserve the Open XML source and are not reinterpreted as causal relationships.', 'Original SmartArt layout and styling are not reconstructed by this data extraction.']
+    limitations: ['Connections preserve the Open XML source and are not automatically interpreted as causal relationships.', 'Original SmartArt layout and styling are not reconstructed by this data extraction.']
   };
 }
 export function pptxDiagramSummary(diagramXml, fallbackTitle = 'SmartArt') {
