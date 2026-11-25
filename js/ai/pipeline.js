@@ -57,7 +57,7 @@ export async function material(ctx, part, { onStatus } = {}) {
 
 // ---------------------------------------------------------------- the stages
 async function ask(prompt, o = {}, title) {
-  return askJSON(prompt, {
+  const answer = await askJSON(prompt, {
     tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images,
     onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`),
     onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'),
@@ -66,6 +66,9 @@ async function ask(prompt, o = {}, title) {
     role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated,
     fresh: !!(o.fresh || o.force), manualTitle: title
   });
+  // Cache hits retain the original search metadata but do not trigger onResearch again.
+  if (answer && answer._webResearch && Array.isArray(o.researchAudit)) o.researchAudit.push({ ...answer._webResearch, task: title || o.writing || 'AI authoring call' });
+  return answer;
 }
 // stage 1: one structured call for the whole part
 export async function writeChain(ctx, P, M, o) {
