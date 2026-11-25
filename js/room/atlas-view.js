@@ -2,6 +2,7 @@
 // The validated reasoning chain remains the source of truth, but is not rendered as a long text scroll here.
 import { el, mathHTML, toast } from '../util.js';
 import { renderFigure } from './diagrams.js';
+import { sourcePointLabel, sourcePointsLabel, sourceRangeLabel } from './source-label.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}) => {
@@ -60,6 +61,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
 
   // A compact orientation scan exposes the real ingested structure and validated source steps.
   // It is an index for retrieval, not a generated chapter summary or a replacement for the source trail.
+  const sourceType = atlas.sourceIndex && atlas.sourceIndex.sourceType || (part.sourceType === 'pptx' ? 'pptx' : 'pdf');
   const sourceSteps = part.analysis && Array.isArray(part.analysis.chain) ? part.analysis.chain : [];
   const sourceSections = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.sourceSubsections) ? atlas.sourceIndex.sourceSubsections : [];
   const nodeForStep = stepId => (atlas.nodes || []).find(n => (n.stepIds || []).some(id => String(id) === String(stepId)));
@@ -74,7 +76,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     if ((st.terms || []).length) tags.push('terms');
     return tags;
   };
-  const sourceFigureIndex = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.pdfFigureIndex) ? atlas.sourceIndex.pdfFigureIndex : [];
+  const indexedFigureList = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.pdfFigureIndex) ? atlas.sourceIndex.pdfFigureIndex : [];
+  const sourceFigureIndex = indexedFigureList.length ? indexedFigureList : Array.isArray(part.figureIndex) ? part.figureIndex : [];
   const sourceText = value => {
     if (value == null) return '';
     if (Array.isArray(value)) return value.map(sourceText).join(' ');
@@ -138,7 +141,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     .filter(figure => figure && String(figure.id || '').trim() && !linkedFigureIds.has(String(figure.id)))
     .map(figure => ({
       figure,
-      searchable: [figure.id, figure.label, figure.caption, figure.page].filter(Boolean).join(' ').toLowerCase()
+      searchable: [figure.id, figure.label, figure.caption, figure.page, figure.slide, figure.mediaPath].filter(Boolean).join(' ').toLowerCase()
     }));
   if (unlinkedFigureEntries.length) {
     sectionItems.push({
@@ -225,9 +228,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         return;
       }
       sectionItems.forEach(({ sec, entries, categories, figureEntries }, sectionIndex) => {
-        const pages = sec.startPage
-          ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
-          : '';
+        const pages = sourceRangeLabel(sec, sourceType);
         const inventoryCount = figureEntries ? figureEntries.length : entries.length;
         const inventoryLabel = figureEntries ? ' indexed figures' : ' source steps';
         const sectionDetails = el('section', { class: 'atlas-scan-section' });
@@ -258,7 +259,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         ]);
         entries.forEach(entry => {
           const st = entry.step;
-          const pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
+          const pageText = sourcePointsLabel(entry.pages, sourceType);
           stepList.append(el('button', {
             class: 'atlas-scan-row',
             type: 'button',
@@ -275,7 +276,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           ]));
         });
         (figureEntries || []).forEach(({ figure }) => {
-          const pageText = figure.page ? 'p. ' + figure.page : 'page not indexed';
+          const pageText = sourcePointLabel(figure, sourceType);
           stepList.append(el('button', {
             class: 'atlas-scan-row atlas-scan-row-unlinked',
             type: 'button',
@@ -307,7 +308,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     matches.forEach(match => {
       if (match.kind === 'figure') {
         const figure = match.entry.figure;
-        const pageText = figure.page ? 'p. ' + figure.page : 'page not indexed';
+        const pageText = sourcePointLabel(figure, sourceType);
         scanResults.append(el('button', {
           class: 'atlas-scan-row atlas-scan-row-unlinked',
           type: 'button',
@@ -325,7 +326,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         return;
       }
       const entry = match.entry;
-      const st = entry.step, pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
+      const st = entry.step, pageText = sourcePointsLabel(entry.pages, sourceType);
       scanResults.append(el('button', {
         class: 'atlas-scan-row',
         type: 'button',
