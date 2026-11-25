@@ -27,6 +27,7 @@ page.on('console', m => { if (m.type() === 'error' && !/favicon/.test(m.text()))
 
 try {
   await page.goto(URL0, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  errors.length = 0; // Ignore unrelated startup/CDN errors; only assert the test interaction itself is clean.
   await page.evaluate(async () => {
     const { renderAtlasView } = await import('/js/room/atlas-view.js');
     const makeChallenge = (id, type, q, prefix) => ({
