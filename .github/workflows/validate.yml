@@ -47,6 +47,9 @@ jobs:
       - name: Test source-mapped simulation contracts
         run: node tools/test-model-contract.mjs
 
+      - name: Test semantic atlas and progressive challenge reveals
+        run: node tools/test-atlas.mjs
+
       - name: Verify built-in diorama plans
         run: node tools/verify-chain.mjs --builtins
 
