@@ -26,10 +26,10 @@ export const aiAvailable = () => { const m = FREE.mode(); return m === 'claude' 
 // hybrid mode; a free vision model, Gemini, otherwise)
 export const imageLimit = () => { const c = LIMITS && LIMITS.images ? LIMITS.images.maxCount : 0, m = FREE.mode(), fv = FREE.hasVision() ? 6 : 0; return m === 'claude' ? c : m === 'hybrid' ? (SAMPLE ? c : fv) : fv; };
 // who writes, in words, for the status lines
-export const writer = () => 'OpenAI (configured fallback providers if unavailable)';
+export const writer = () => 'The AI engine';
 export function errCopy(err) {
   const code = err && err.code;
-  return ({ cancelled: 'Stopped.', not_granted: 'Claude access was declined for this page.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'Claude declined this request.', session_expired: 'Your session expired. Sign in again on claude.ai.', unavailable: 'Claude is not reachable from this view. Use "Copy prompt" to run it in any AI, then paste the answer back.', images_unavailable: 'This view cannot send images to Claude.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
+  return ({ cancelled: 'Stopped.', not_granted: 'Permission to use the AI provider was declined.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'The selected AI provider declined this request.', session_expired: 'The hosted session expired. Reopen the app and try again.', unavailable: 'The selected AI provider is not reachable from this view. Use "Copy prompt" to run it in ChatGPT or another AI, then paste the answer back.', images_unavailable: 'This view cannot send images to the selected AI provider.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
 }
 export function parseJSONLoose(text) {
   let s = String(text || '').trim(); const fence = s.match(/```(?:json)?\s*([\s\S]*?)(```|$)/); if (fence && fence[1].trim()) s = fence[1];
@@ -109,7 +109,7 @@ export function manualRelay(prompt, title) {
     const copy = el('button', { class: 'btn', text: 'Copy prompt', onclick: async () => { try { await navigator.clipboard.writeText(prompt); toast('Prompt copied'); } catch (e) { pre.select(); toast('Select the text and copy it'); } } });
     const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide' }, [
       el('h3', { text: title }),
-      el('p', { class: 'dim', text: 'Copy the prompt into Claude (any account), ChatGPT, Gemini or another AI together with your file, then paste the JSON it returns.' }),
+      el('p', { class: 'dim', text: 'Copy the prompt into ChatGPT, Gemini or another compatible AI together with your file, then paste the JSON it returns.' }),
       pre, el('div', { class: 'row' }, [copy]), ta,
       el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: () => close(rej, { code: 'cancelled' }) }),
         el('button', { class: 'btn primary', text: 'Use this answer', onclick: () => { try { close(res, parseJSONLoose(ta.value)); } catch (e) { toast('That is not valid JSON yet'); } } })])])]);
