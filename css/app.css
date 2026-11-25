@@ -1463,6 +1463,12 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .memory-route-order .row { gap: 6px; }
 .memory-route-footer { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 .memory-route-progress { color: rgba(255,239,211,.68); font: 10px var(--f-mono); }
+.memory-route-history { padding: 8px 10px; border: 1px solid rgba(255,235,197,.14); border-radius: 8px; background: rgba(255,255,255,.035); }
+.memory-route-history > summary { color: rgba(255,239,211,.82); cursor: pointer; font: 10px var(--f-mono); }
+.memory-route-history-item { display: grid; gap: 3px; padding: 8px 0; border-top: 1px solid rgba(255,235,197,.1); }
+.memory-route-history-item b { color: #e8cf9e; font: 11px var(--f-mono); }
+.memory-route-history-item p { margin: 0; color: rgba(255,248,232,.82); font: 12px/1.45 var(--f-body); }
+.memory-route-history-item small { color: rgba(255,239,211,.48); font: 9px var(--f-mono); }
 .memory-route-feedback b { color: #f1ce88; font: 500 13px var(--f-display); }
 .memory-route-feedback.expected { border-left: 2px solid rgba(114,169,139,.75); background: rgba(86,139,112,.12); }
 .memory-route-feedback small { color: rgba(255,239,211,.58); font: 10px var(--f-mono); }
