@@ -3,7 +3,7 @@
 const TAG_PREFIX = '(?:[A-Za-z_][\\w.-]*:)?';
 const attrMap = tag => {
   const out = {};
-  for (const m of String(tag || '').matchAll(/([^\\s=]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)')/g)) out[m[1]] = m[2] ?? m[3] ?? '';
+  for (const m of String(tag || '').matchAll(/([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) out[m[1]] = m[2] ?? m[3] ?? '';
   return out;
 };
 const localTags = (xml, local) => {
@@ -13,7 +13,7 @@ const localTags = (xml, local) => {
 };
 const openTag = block => (String(block || '').match(/^<[^>]+>/) || [''])[0];
 const decodeXml = value => String(value || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-const textValues = (xml, local = 't') => localTags(xml, local).map(x => decodeXml(x.replace(/^<[^>]*>/, '').replace(/<\\/[^>]+>$/i, '').replace(/<[^>]+>/g, ''))).filter(Boolean);
+const textValues = (xml, local = 't') => localTags(xml, local).map(x => decodeXml(x.replace(/^<[^>]*>/, '').replace(/<\/[^>]+>$/i, '').replace(/<[^>]+>/g, ''))).filter(Boolean);
 const relMap = xml => {
   const out = new Map();
   localTags(xml, 'Relationship').forEach(tag => {
@@ -25,9 +25,9 @@ const relMap = xml => {
 
 export function resolvePptTarget(sourcePart, target) {
   if (!target) return '';
-  const raw = String(target).replace(/\\\\/g, '/');
+  const raw = String(target).replace(/\\/g, '/');
   const stack = raw.startsWith('/') ? [] : String(sourcePart || '').split('/').slice(0, -1);
-  for (const part of raw.replace(/^\\/+/, '').split('/')) {
+  for (const part of raw.replace(/^\/+/, '').split('/')) {
     if (!part || part === '.') continue;
     if (part === '..') stack.pop();
     else stack.push(part);
@@ -89,7 +89,7 @@ const valuesIn = xml => {
   const pts = localTags(xml, 'pt').map(tag => {
     const a = attrMap(openTag(tag));
     const v = localTags(tag, 'v')[0];
-    const value = v ? decodeXml(v.replace(/^<[^>]*>/, '').replace(/<\\/[^>]+>$/i, '').replace(/<[^>]+>/g, '')) : '';
+    const value = v ? decodeXml(v.replace(/^<[^>]*>/, '').replace(/<\/[^>]+>$/i, '').replace(/<[^>]+>/g, '')) : '';
     return { index: Number.isFinite(Number(a.idx)) ? Number(a.idx) : 0, value };
   }).filter(x => x.value !== '').sort((a, b) => a.index - b.index);
   return pts.map(x => x.value);
@@ -107,8 +107,8 @@ export function pptxChartSummary(chartXml, fallbackTitle = 'Chart') {
     const pairs = val.map((v, k) => (cat[k] != null ? cat[k] : String(k + 1)) + ' = ' + v);
     return { name, pairs };
   });
-  const details = series.map(s => s.name + (s.pairs.length ? ': ' + s.pairs.slice(0, 40).join('; ') : ': no cached point values')).join('\\n');
-  return 'PowerPoint chart — ' + title + (details ? '\\n' + details : '\\nNo cached series data was found in the chart XML.');
+  const details = series.map(s => s.name + (s.pairs.length ? ': ' + s.pairs.slice(0, 40).join('; ') : ': no cached point values')).join('\n');
+  return 'PowerPoint chart — ' + title + (details ? '\n' + details : '\nNo cached series data was found in the chart XML.');
 }
 
 // SmartArt labels and directed connections are taken from the diagram data part, not inferred from a decorative image.
@@ -121,9 +121,9 @@ export function pptxDiagramSummary(diagramXml, fallbackTitle = 'SmartArt') {
     const a = attrMap(openTag(tag));
     return { from: a.srcId || '', to: a.destId || '', type: a.type || '' };
   }).filter(x => x.from && x.to);
-  const nodeText = nodes.slice(0, 100).map(n => (n.id ? '[' + n.id + '] ' : '') + n.label).join('\\n');
-  const linkText = links.slice(0, 150).map(x => x.from + ' → ' + x.to + (x.type ? ' (' + x.type + ')' : '')).join('\\n');
+  const nodeText = nodes.slice(0, 100).map(n => (n.id ? '[' + n.id + '] ' : '') + n.label).join('\n');
+  const linkText = links.slice(0, 150).map(x => x.from + ' → ' + x.to + (x.type ? ' (' + x.type + ')' : '')).join('\n');
   return 'PowerPoint SmartArt — ' + fallbackTitle +
-    (nodeText ? '\\nLabels:\\n' + nodeText : '\\nNo accessible node labels were found.') +
-    (linkText ? '\\nConnections:\\n' + linkText : '');
+    (nodeText ? '\nLabels:\n' + nodeText : '\nNo accessible node labels were found.') +
+    (linkText ? '\nConnections:\n' + linkText : '');
 }
