@@ -1,5 +1,11 @@
 name: Validate Scriptorium
 
+# Push and pull_request events for the same feature branch share one group. New commits
+# cancel older, slower browser jobs instead of consuming runners on stale snapshots.
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
