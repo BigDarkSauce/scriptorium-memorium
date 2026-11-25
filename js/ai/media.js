@@ -13,8 +13,8 @@
 //   1. technical    the file decodes; at least 512 px a side; not blank, not washed out, not a flat field (contrast and
 //                   detail measured on the pixels; set to catch broken output only: a sparse ink drawing on parchment,
 //                   the asked-for style, measures contrast 0.07 and detail 0.007 and passes; a blank square measures 0).
-//   2. two judges   two independent vision models of different families (Claude inside the Claude app, and a free
-//                   vision model; or two free ones) each score the picture against the step: faithful, accurate,
+//   2. two judges   two independent vision models from different model families score the picture against the step:
+//                   faithful, accurate,
 //                   clean (no text, letters, watermarks), coherent (no melted shapes, extra limbs), helpful, style.
 //                   Admitted only if EVERY judge gives accurate = 5, clean = 5 and every other score >= 4. The app
 //                   decides from the scores, not from a judge's own "pass". With fewer than two judges available
@@ -23,7 +23,7 @@
 import * as FREE from './free.js';
 import * as store from '../store.js';
 import { bridgeFetchBytes, bridgeReady, bridgeBinary } from './bridge.js';
-import { askJSON, parseJSONLoose, claudeSample, claudeImageCount } from './claude.js';
+import { askJSON, parseJSONLoose } from './claude.js';
 
 export const RULES = { imgMin: 512, judges: 2, minScore: 4, styleMin: 3, strictKeys: ['accurate', 'clean'], imgTries: 3 };
 const SCORE_KEYS = ['faithful', 'accurate', 'clean', 'coherent', 'helpful', 'style'];
@@ -145,17 +145,16 @@ export function scoreOK(J) {
   const iss = [].concat(J.issues || []).map(String).filter(x => x.trim() && !/^(none|no issues?|n\/a)\.?$/i.test(x.trim())); if (iss.length) bad.push('lists issues');
   return bad;
 }
-// the reviewers: Claude (inside the Claude app) and free vision models, at most one per model family
+// the reviewers: enabled vision models from distinct model families, at most one reviewer per family
 async function judges() {
   const out = [];
-  if (claudeImageCount() > 0) out.push({ id: 'claude', name: 'Claude', fam: 'claude' });
   const C = await FREE.candidates({ images: 1, minRank: 55 }).catch(() => []);
   for (const c of C) { const f = family(c.m); if (out.some(j => j.fam === f) || /^auto/.test(c.m)) continue; out.push({ id: c.p.id + '|' + c.m, name: c.p.name + ' · ' + c.m, fam: f, c }); }
   return out;
 }
 async function ask1(j, prompt, img, signal) {
-  if (j.id === 'claude') { const { text } = await claudeSample(prompt, { ...(img ? { images: [img] } : {}), modelTier: 'default', cache: false, signal }); return parseJSONLoose(text); }
-  const r = await FREE.call(j.c.p, j.c.m, prompt, { images: img ? [img] : [], signal, maxTokens: 1500, timeoutMs: 120000 }); return parseJSONLoose(r.text);
+  const r = await FREE.call(j.c.p, j.c.m, prompt, { images: img ? [img] : [], signal, maxTokens: 1500, timeoutMs: 120000, json: true });
+  return parseJSONLoose(r.text);
 }
 // does this reviewer really see pictures? A blank page must be described as blank (once per reviewer per session)
 const SIGHT = new Map();
@@ -232,7 +231,7 @@ export async function illustrate(st, A, { signal, onStatus } = {}) {
     const need = RULES.judges + (k > 0 ? 1 : 0);   // a second or third draw meets one more reviewer: best-of-three must not become luck
     const { done: R, skipped } = await review(st, brief, g.blob, signal, onStatus, need); att.reviews = R; if (skipped.length) att.skipped = skipped;
     const failed = R.filter(r => r.failed.length);
-    if (!failed.length && R.length < need) { att.verdict = `only ${R.length} independent reviewer${R.length === 1 ? '' : 's'} could look at it (${need} are required)${skipped.length ? '; ' + skipped.join(', ') : ''}`; throw { code: 'rejected', message: 'Not admitted: ' + att.verdict + '. Add a vision model (a Google or another free vision key), or try again when the reviewers are free.', report }; }
+    if (!failed.length && R.length < need) { att.verdict = `only ${R.length} independent reviewer${R.length === 1 ? '' : 's'} could look at it (${need} are required)${skipped.length ? '; ' + skipped.join(', ') : ''}`; throw { code: 'rejected', message: 'Not admitted: ' + att.verdict + '. Add a second independent vision model (for example, a Gemini vision provider), or try again when two reviewers are available.', report }; }
     if (!failed.length) { att.verdict = 'admitted'; report.admitted = { model: g.model, provider: g.provider, judges: R.map(r => r.judge) }; return { blob: await compact(g.blob), report }; }
     att.verdict = 'rejected: ' + failed.map(r => r.judge + ' (' + r.failed.join(', ') + ')').join('; ');
     failed.forEach(r => avoid.push(...r.issues.slice(0, 3)));
