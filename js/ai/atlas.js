@@ -11,8 +11,69 @@ export const INCOMPLETENESS = [
 const clean = (x, n = 500) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim().slice(0, n);
 const unique = xs => [...new Set((xs || []).filter(x => x != null).map(String))];
 const isScene = d => !!(d && (d.type === 'scene' || Array.isArray(d.bodies) || (typeof d.type === 'string' && d.type !== 'figure')));
+const stepFigureIds = step => unique([
+  ...(step && Array.isArray(step.figures) ? step.figures.map(x => typeof x === 'string' ? x : x && x.id) : []),
+  ...(step && Array.isArray(step.figureRefs) ? step.figureRefs.map(x => typeof x === 'string' ? x : x && x.id) : [])
+].filter(Boolean));
 
-export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [] }) {
+/**
+ * Build an auditable map from validated chain steps to figures that were actually extracted.
+ * References absent from the extracted index remain unresolved; they are never silently promoted
+ * into image attachments or presented as verified source evidence.
+ */
+export function sourceFigureEvidence(stepIds, sourceSteps = [], figures = []) {
+  const wantedSteps = unique(stepIds);
+  const byStep = new Map((sourceSteps || []).map(step => [String(step.id), step]));
+  const figureSteps = new Map();
+  wantedSteps.forEach(stepId => {
+    const step = byStep.get(stepId);
+    if (!step) return;
+    stepFigureIds(step).forEach(figureId => {
+      if (!figureSteps.has(figureId)) figureSteps.set(figureId, []);
+      figureSteps.get(figureId).push(stepId);
+    });
+  });
+  const indexed = new Map((figures || []).filter(f => f && f.id != null).map(f => [String(f.id), f]));
+  const metadata = figureId => {
+    const f = indexed.get(figureId);
+    if (!f) return null;
+    return {
+      id: figureId,
+      label: clean(f.label || f.id, 180),
+      ...(f.kind ? { kind: String(f.kind) } : {}),
+      caption: clean(f.caption || '', 500),
+      ...(f.page != null && Number.isFinite(+f.page) ? { page: +f.page } : {}),
+      ...(f.slide != null && Number.isFinite(+f.slide) ? { slide: +f.slide } : {}),
+      ...(f.mediaPath ? { mediaPath: String(f.mediaPath) } : {}),
+      stepIds: unique(figureSteps.get(figureId) || [])
+    };
+  };
+  const referencedIds = [...figureSteps.keys()];
+  return {
+    figures: referencedIds.map(metadata).filter(Boolean),
+    unresolvedFigureIds: referencedIds.filter(id => !indexed.has(id))
+  };
+}
+
+/** Select only indexed, step-linked image assets, prioritising IDs explicitly requested by the concept plan. */
+export function selectSourceFigureAttachments(node, sourceSteps = [], figures = [], max = 4) {
+  const evidence = sourceFigureEvidence(node && node.stepIds || [], sourceSteps, figures);
+  const linked = new Map(evidence.figures.map(record => [record.id, record]));
+  const requested = unique((node && node.dioramaSet || []).flatMap(view => Array.isArray(view && view.sourceFigureIds) ? view.sourceFigureIds : []));
+  const priority = [...requested, ...evidence.figures.map(record => record.id)];
+  const byId = new Map((figures || []).filter(f => f && f.id != null).map(f => [String(f.id), f]));
+  const limit = Number.isFinite(+max) ? Math.max(0, Math.floor(+max)) : 0;
+  const selected = [];
+  for (const id of unique(priority)) {
+    if (selected.length >= limit) break;
+    const record = linked.get(id), asset = byId.get(id);
+    if (!record || !asset || typeof asset.dataUrl !== 'string' || !/^data:image\//i.test(asset.dataUrl)) continue;
+    selected.push(asset);
+  }
+  return selected;
+}
+
+export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [] }) {
   const sourceUnit = sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
   const S = (analysis.chain || []).map(st => ({
     id: st.id, kind: st.kind, title: st.title, statement: st.statement,
@@ -22,6 +83,7 @@ export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections
     figures: st.figures, pages: st.pages, sources: st.sources
   }));
   const C = sections.map(s => ({ id: s.id, title: s.title, level: s.level, startPage: s.startPage, endPage: s.endPage, summary: clean(s.text, 650) }));
+  const figureEvidence = sourceFigureEvidence((analysis.chain || []).map(st => st.id), analysis.chain || [], figures);
   return `You are compiling a semantic chapter atlas for Scriptorium Memorialium. Do NOT write a conventional lesson, article, page-by-page summary, or long prose scroll. The output is a compact, accurate, auditable topic graph that will be rendered as a 2D mind map. Each map node represents a coherent explanatory diorama set.
 
 SOURCE
@@ -32,12 +94,17 @@ ${JSON.stringify(C)}
 Validated reasoning steps (the IDs are authoritative; preserve them exactly):
 ${JSON.stringify(S)}
 
+SOURCE FIGURE INDEX (only locally extracted figures actually referenced by a validated source step; sourceFigureIds must be selected from this list):
+${JSON.stringify(figureEvidence.figures)}
+Unresolved figure references (not attachable, not valid sourceFigureIds):
+${JSON.stringify(figureEvidence.unresolvedFigureIds)}
+
 TASK
 1. Discover the conceptual structure across the whole part. Group steps by meaning, mechanism, purpose and prerequisite—not by page boundaries, equal-sized batches or superficial word similarity. Treat a subsection as a source locator, not automatically a concept. A concept may span subsections; one subsection may contain several distinct concepts.
 2. Create an appropriate number of topic nodes for the information's true breadth and depth. Prefer a small map of coherent, sufficiently deep concepts over a long flat list. Split a node when its steps explain meaningfully different mechanisms, states, scales or questions. Merge nodes only when they genuinely form one explanatory unit. Preserve prerequisites and dependencies.
 3. Assign every supplied step ID to exactly one node. No invented or missing step IDs. The map must account for the complete source chain.
 4. Create typed directed edges between nodes: prerequisite, part-of, causes, enables, constrains, transforms-into, regulates, contrasts-with, evidence-for, temporal-before, spatial-within, or application-of. Direction must mean something; do not add decorative edges. Include a short relationship label.
-5. For each node, formulate one strong learner-facing question and a short explanation of the conceptual territory (not an essay). Also propose a diorama set: the 3D / 2D explanatory views that would make the concept intelligible, what each view must show, and what can be manipulated. Never force 3D for intrinsically abstract material: use an explanatory 2D map/diagram when spatial simulation would mislead. The app will connect these intentions to authored dioramas.
+5. For each node, formulate one strong learner-facing question and a short explanation of the conceptual territory (not an essay). Also propose a diorama set: the 3D / 2D explanatory views that would make the concept intelligible, what each view must show, and what can be manipulated. Each view MUST include sourceFigureIds (an array; use [] when no directly relevant source figure exists). Select only IDs in the SOURCE FIGURE INDEX above, and only when the figure is referenced by a step assigned to this node. Never infer a figure link from visual similarity, invent an ID, or use an unresolved reference. Never force 3D for intrinsically abstract material: use an explanatory 2D map/diagram when spatial simulation would mislead. The app will connect these intentions to authored dioramas.
 6. Add controlled generative incompleteness. Select one to three useful challenges across the part, only where the missing information is inferable. Use the six types:
    - structural: conceal a meaningful component of a structure;
    - mechanistic: show an initial and final state, with the mechanism withheld;
@@ -53,7 +120,7 @@ Return ONLY JSON:
  "version":"scriptorium-atlas/1",
  "question":"the central question this part resolves",
  "nodes":[
-  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"title":"view title","purpose":"explanatory job","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d"}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","reasoning":[{"title":"first inferential move","text":"one short reasoning unit","sourceStepIds":["S1"]},{"title":"next inferential move","text":"the next linked unit","sourceStepIds":["S2"]}],"missingBodyIds":["only grounded IDs, otherwise []"]}]}
+  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"title":"view title","purpose":"explanatory job","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d","sourceFigureIds":["only exact, indexed IDs referenced by this node's steps; otherwise []"]}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","reasoning":[{"title":"first inferential move","text":"one short reasoning unit","sourceStepIds":["S1"]},{"title":"next inferential move","text":"the next linked unit","sourceStepIds":["S2"]}],"missingBodyIds":["only grounded IDs, otherwise []"]}]}
  ],
  "edges":[{"from":"node-id","to":"node-id","type":"prerequisite|part-of|causes|enables|constrains|transforms-into|regulates|contrasts-with|evidence-for|temporal-before|spatial-within|application-of","label":"short precise relation"}],
  "uncertainties":["explicit limits or ambiguity in the source"],
@@ -70,7 +137,7 @@ QUALITY RULES
 `;
 }
 
-export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive = false) {
+export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive = false, sourceFigures = [], requireVisualEvidence = false) {
   if (!A || typeof A !== 'object' || !Array.isArray(A.nodes) || !A.nodes.length) return 'atlas has no nodes';
   if (!Array.isArray(A.edges)) return 'atlas has no edge array';
   if (A.nodes.length > 36) return 'atlas has too many nodes for one chapter map';
@@ -82,7 +149,14 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
     ids.add(n.id);
     if (!clean(n.title, 100) || !clean(n.question, 300) || !clean(n.summary, 500) || !Array.isArray(n.stepIds) || !n.stepIds.length) return 'node is missing a title, question, summary or stepIds: ' + n.id;
     assigned.push(...n.stepIds.map(String));
-    if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations))) return 'node is missing a complete explanatory-view plan: ' + n.id;
+    if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations) || (requireVisualEvidence && !Array.isArray(v.sourceFigureIds)))) return 'node is missing a complete explanatory-view plan: ' + n.id;
+    if (requireVisualEvidence) {
+      const linkedFigureIds = new Set(sourceFigureEvidence(n.stepIds, sourceSteps, sourceFigures).figures.map(f => f.id));
+      for (const view of n.dioramaSet) {
+        if (view.sourceFigureIds.some(id => !linkedFigureIds.has(String(id)))) return 'view cites an unknown or unlinked source figure: ' + n.id + '/' + (view.title || 'untitled');
+        if (unique(view.sourceFigureIds).length !== view.sourceFigureIds.length) return 'view repeats a source figure ID: ' + n.id + '/' + (view.title || 'untitled');
+      }
+    }
     if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.id || !c.question || !c.stimulus || !c.hint || !c.answer || !c.why || !c.feedback || !Array.isArray(c.missingBodyIds))) return 'node has an incomplete or unsupported challenge: ' + n.id;
     if (n.challenges.length > 3) return 'node has more than three challenges: ' + n.id;
     const allowedBodies = new Set(n.stepIds.flatMap(id => bodyIndex.get(String(id)) || []));
@@ -147,14 +221,18 @@ function sourceIndex(analysis, sections, figures, sourceType = 'pdf') {
       sectionTitle: sec ? sec.title : null,
       pages: unique([...(st.pages || []), ...(sec ? [sec.startPage, sec.endPage] : [])].filter(Boolean)).map(Number).filter(Number.isFinite),
       ...(sourceType === 'pptx' ? { slides: unique([...(st.pages || []), ...(sec ? [sec.startPage, sec.endPage] : [])].filter(Boolean)).map(Number).filter(Number.isFinite) } : {}),
-      figureIds: unique([...(st.figures || []), ...(st.figureRefs || []).map(x => x && x.id)].filter(Boolean)),
+      figureIds: stepFigureIds(st),
       externalSources: (st.sources || []).map(s => ({ title: s.title || '', doi: s.doi || '', url: s.url || '' }))
     };
   });
   return {
     method: 'Locally extracted source hierarchy + subsection text + validated chain step mappings',
     sourceSubsections: (sections || []).map(s => ({ id: s.id, title: s.title, startPage: s.startPage, endPage: s.endPage, ...(sourceType === 'pptx' ? { slide: s.sourceSlide || s.startPage } : {}) })),
-    pdfFigureIndex: (figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, ...(f.slide != null ? { slide: f.slide } : {}), ...(f.mediaPath ? { mediaPath: f.mediaPath } : {}), caption: f.caption || '' })),
+    pdfFigureIndex: (figures || []).map(f => {
+      const links = sourceFigureEvidence((analysis.chain || []).map(st => st.id), analysis.chain || [], [f]).figures[0];
+      return { id: f.id, label: f.label, kind: f.kind, page: f.page, ...(f.slide != null ? { slide: f.slide } : {}), ...(f.mediaPath ? { mediaPath: f.mediaPath } : {}), caption: f.caption || '', stepIds: links ? links.stepIds : [] };
+    }),
+    unresolvedFigureIds: sourceFigureEvidence((analysis.chain || []).map(st => st.id), analysis.chain || [], figures).unresolvedFigureIds,
     stepMappings: steps,
     completeness: {
       chainSteps: steps.length,
@@ -172,17 +250,17 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
   if (auto) {
     try {
       onStatus && onStatus('Mapping the chapter’s concepts and dependencies…');
-      const prompt = atlasPrompt({ book, sourceType, part, analysis, sections });
+      const prompt = atlasPrompt({ book, sourceType, part, analysis, sections, figures });
       const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
         onResearch: x => { if (!researchAudit.some(y => x.callId && y.callId === x.callId)) researchAudit.push({ ...x, task: 'Semantic chapter atlas' }); },
-        validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain, true)
+        validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain, true, figures, true)
       });
       const atlasResearch = response && response._webResearch || null;
       authored = response && (response.atlas || response);
       if (atlasResearch) { authored._atlasWebResearch = atlasResearch; if (!researchAudit.some(y => atlasResearch.callId && y.callId === atlasResearch.callId)) researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
-      const issue = validateAtlas(authored, ids, analysis.chain, true);
+      const issue = validateAtlas(authored, ids, analysis.chain, true, figures, true);
       if (issue) throw new Error(issue);
     } catch (e) {
       if (e && e.code === 'cancelled') throw e;
@@ -255,12 +333,14 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
           const sec = bySection.get(String(id));
           return sec ? { subsectionId: String(id), startPage: Number(sec.startPage), endPage: Number(sec.endPage) } : null;
         }).filter(Boolean),
-        figureIds: unique(refs.flatMap(st => st.figures || [])),
+        figureIds: [...sourceFigureEvidence(stepIds, analysis.chain, figures).figures.map(f => f.id), ...sourceFigureEvidence(stepIds, analysis.chain, figures).unresolvedFigureIds],
+        figureRecords: sourceFigureEvidence(stepIds, analysis.chain, figures).figures,
+        unresolvedFigureIds: sourceFigureEvidence(stepIds, analysis.chain, figures).unresolvedFigureIds,
         stepSummaries: refs.map(st => ({
           stepId: String(st.id), title: clean(st.title, 120), statement: clean(st.statement, 900),
           answers: clean(st.answers, 260), opens: clean(st.opens, 260),
           pages: unique([...(st.pages || []), ...(bySection.get(String(st.section)) ? [bySection.get(String(st.section)).startPage, bySection.get(String(st.section)).endPage] : [])].filter(Number.isFinite)).map(Number),
-          figureIds: unique(st.figures || [])
+          figureIds: stepFigureIds(st)
         })),
         externalSources: refs.flatMap(st => (st.sources || []).map(s => ({ title: s.title || '', doi: s.doi || '', url: s.url || '' })))
       }

@@ -19,7 +19,7 @@ import { partKey, cached } from '../store.js';
 import { validateFigure, figureSlots, setSlotFigure, autoFigure, isPrimitive } from '../room/figspec.js';
 import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
-import { compileAtlas } from './atlas.js';
+import { compileAtlas, sourceFigureEvidence, selectSourceFigureAttachments } from './atlas.js';
 
 export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'atlas', 'done'];
 export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas', atlas: 'mapping concepts and diorama sequences' };
@@ -355,6 +355,7 @@ export function mergeAtlasResearch(atlas, records = []) {
 // Existing step-level dioramas remain linked as supporting views; abstract material stays 2D.
 async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
   const A = P.analysis, byId = new Map((A.chain || []).map(st => [String(st.id), st]));
+  const sourceFigures = Array.isArray(o.sourceFigures) ? o.sourceFigures : [];
   for (const node of atlas.nodes || []) {
     const refs = [];
     (node.stepIds || []).forEach(id => {
@@ -384,36 +385,55 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
       if (st) {
         check(o.signal);
         const views = (node.dioramaSet || []).filter(v => v && v.medium === '3d').slice(0, 6).map(v => ({
-          title: v.title, purpose: v.purpose, mustShow: v.mustShow, manipulations: v.manipulations
+          title: v.title, purpose: v.purpose, mustShow: v.mustShow, manipulations: v.manipulations,
+          sourceFigureIds: Array.isArray(v.sourceFigureIds) ? v.sourceFigureIds : []
         }));
         const sourceSteps = (node.stepIds || []).map(id => byId.get(String(id))).filter(Boolean).map(step => ({
           id: step.id, title: step.title, statement: String(step.statement || '').slice(0, 1200),
           answers: step.answers || '', opens: step.opens || '', math: step.math || '',
           terms: (step.terms || []).slice(0, 12), explanation: (step.explain || []).map(x => x && x.text).filter(Boolean).join(' ').slice(0, 1400),
-          pages: step.pages || [], figures: step.figures || [], table: step.table || null
+          pages: step.pages || [], figures: step.figures || [], figureRefs: step.figureRefs || [], table: step.table || null
         }));
+        const figureEvidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
+        const selectedFigures = selectSourceFigureAttachments(node, A.chain || [], sourceFigures, imageLimit());
+        const sourceFigureRefs = figureEvidence.figures;
+        const sourceVisualAttachments = selectedFigures.map(f => String(f.id));
+        const sourceEvidenceStatus = {
+          referenced: sourceFigureRefs.length + figureEvidence.unresolvedFigureIds.length,
+          indexed: sourceFigureRefs.length,
+          attached: sourceVisualAttachments.length,
+          unresolved: figureEvidence.unresolvedFigureIds
+        };
         const d = {
           type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true, sourceStepIds: (node.stepIds || []).map(String),
+          sourceFigureRefs, sourceVisualAttachments, sourceEvidenceStatus,
           request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
             'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned explanatory views: ' + JSON.stringify(views) +
             '. COMPLETE SOURCE STEP MATERIAL FOR THIS NODE (use all of it; IDs remain the audit anchors): ' + JSON.stringify(sourceSteps) +
-            '. Use only these source steps for factual claims, quantities, actors and relationships. Do not infer an unprovided measurement. ' +
+            '. SOURCE-FIGURE EVIDENCE (each record is linked to the listed validated source steps; inspect the attached images but do not claim details that the pixels do not support): ' + JSON.stringify(sourceFigureRefs) +
+            '. Unresolved source figure references (not attached and not evidence): ' + JSON.stringify(figureEvidence.unresolvedFigureIds) +
+            '. Use only these source steps and linked source figures for factual claims, quantities, actors and relationships. Do not infer an unprovided measurement. ' +
             'Choose the most suitable materialisation technique and environment for the domain. Make structures and mechanisms inspectable, make meaningful variables changeable, and sequence 3–6 lessons from global orientation through mechanism to reconstruction and a prediction/check. ' +
-            'This scene belongs to concept "' + node.title + '" and is connected to source steps ' + node.stepIds.join(', ') + '. Keep the source claims separate from any externally researched additions.'
+            'This scene belongs to concept "' + node.title + '" and is connected to source steps ' + node.stepIds.join(', ') + '. Keep source claims separate from externally researched additions.'
         };
         st.demos = st.demos || [];
         sayAtlasStatus(o, 'Authoring the concept-level diorama for "' + node.title + '"…');
         const auditBefore = (o.researchAudit || []).length;
         let how;
+        const images = selectedFigures.map(f => dataUrlBlob(f.dataUrl));
         try {
-          how = await authorDemo(ctx, st, d, o);
+          how = await authorDemo(ctx, st, d, { ...o, images: images.length ? images : o.images });
         } catch (e) {
           mergeAtlasResearch(atlas, (o.researchAudit || []).slice(auditBefore));
           if (ctx.save) await ctx.save(P);
           throw e;
         }
         mergeAtlasResearch(atlas, (o.researchAudit || []).slice(auditBefore));
+        // authorDemo replaces its draft object; restore the audit metadata after that in-place rewrite.
         d.atlasNodeId = node.id;
+        d.sourceFigureRefs = sourceFigureRefs;
+        d.sourceVisualAttachments = sourceVisualAttachments;
+        d.sourceEvidenceStatus = sourceEvidenceStatus;
         st.demos.push(d);
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });
         else if (d.type === 'figure' && d.figure) {
@@ -430,10 +450,20 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
     node.dioramaRefs = refs;
     node.visualKind = refs.length ? 'diorama' : node.generatedFigure ? 'diagram' : (node.dioramaSet || []).some(d => d.medium === '2d') ? 'diagram' : 'concept';
     node.figureRefs = (node.stepIds || []).flatMap(id => {
-      const st = byId.get(String(id)); return st ? (st.figures || []).map(figId => ({ stepId: st.id, id: figId })) : [];
+      const step = byId.get(String(id));
+      return step ? stepFigureIdsSafe(step).map(figureId => ({ stepId: step.id, id: figureId })) : [];
     });
+    const evidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
+    node.sourceFigureRecords = evidence.figures;
+    node.unresolvedFigureIds = evidence.unresolvedFigureIds;
   }
   atlas.audit = { ...(atlas.audit || {}), conceptNodes: (atlas.nodes || []).length, linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0), nodesWithout3D: (atlas.nodes || []).filter(x => !x.dioramaRefs || !x.dioramaRefs.length).map(x => x.id) };
+}
+function stepFigureIdsSafe(step) {
+  return [
+    ...(step && Array.isArray(step.figures) ? step.figures.map(x => typeof x === 'string' ? x : x && x.id) : []),
+    ...(step && Array.isArray(step.figureRefs) ? step.figureRefs.map(x => typeof x === 'string' ? x : x && x.id) : [])
+  ].filter(Boolean).map(String);
 }
 function sayAtlasStatus(o, message) { o.onStatus && o.onStatus(message); }
 
@@ -509,7 +539,7 @@ async function analyseOne(ctx, P, o) {
       P.analysis.atlas = await compileAtlas({ book: bookName(ctx), sourceType: ctx.book.sourceType || 'pdf', part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, researchAudit, onStatus: say });
       save(); show();
     }
-    if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, onStatus: say });
+    if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, sourceFigures: M.figures || [], onStatus: say });
     stage('done'); save(); show();
   }
   // the final gate result (figures, dioramas and semantic atlas now in place) is what the quality panel shows
