@@ -41,3 +41,50 @@ jobs:
 
       - name: Verify a standalone diorama scene
         run: node tools/verify-chain.mjs examples/scene-osmosis.json
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install headless Chromium
+        run: |
+          npm install --global playwright
+          playwright install --with-deps chromium
+
+      - name: Run browser and WebGL smoke test
+        run: |
+          python launcher/serve.py 8000 >"$RUNNER_TEMP/scriptorium-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          SMOKE_OUT="$RUNNER_TEMP/scriptorium-smoke" node tools/smoke.mjs http://127.0.0.1:8000/
+
+      - name: Upload smoke captures and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptorium-browser-smoke
+          path: |
+            ${{ runner.temp }}/scriptorium-smoke
+            ${{ runner.temp }}/scriptorium-server.log
+          if-no-files-found: ignore
+          retention-days: 7
