@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary, resolvePptTarget } from '../js/ai/pptx.js';
 import { sectionList, figureList, chapterPrompt } from '../js/ai/prompts.js';
+import { sourcePointLabel, sourcePointsLabel, sourceRangeLabel } from '../js/room/source-label.js';
 
 const slidePath = 'ppt/slides/slide3.xml';
 const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -62,5 +63,10 @@ const prompt = chapterPrompt({
 assert.match(prompt, /\(slide 3\)/);
 assert.match(prompt, /FIGURES, TABLES AND EMBEDDED IMAGES FROM THE SOURCE/);
 assert.match(prompt, /PowerPoint presentation's own examples/);
+assert.equal(sourceRangeLabel({ startPage: 3, endPage: 5 }, 'pptx'), 'slides 3–5');
+assert.equal(sourcePointLabel({ page: 3, slide: 3 }, 'pptx'), 'slide 3');
+assert.equal(sourcePointsLabel([2, 4], 'pptx'), 'slides 2, 4');
+assert.equal(sourcePointLabel({ page: 4 }, 'pdf'), 'p. 4');
+
 
 console.log('PASS  PowerPoint visual relationships resolve in slide order; linked/unused images are excluded; chart values, SmartArt edges and slide provenance are recoverable');
