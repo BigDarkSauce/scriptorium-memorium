@@ -656,7 +656,30 @@ export class Reader {
   renderDemo(d, st, i, demos) {
     const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d);
       // a fallback (authoring failed, or no AI here): say so, and offer to author the requested diorama again
-      const fb = d.requested ? el('div', { class: 'demo-fallback' }, [el('span', { text: (d.type === 'figure' ? 'A diagram stands in' : 'A ready-made model stands in') + ' for the requested diorama “' + (d.requested.title || '') + '”' + (d.fallback ? ' (' + d.fallback + ')' : '') + '. ' }), aiAvailable() ? el('button', { class: 'linkbtn', text: 'Try building it with AI', onclick: async ev => { ev.target.disabled = true; const keep = { ...d }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'scene', ...keep.requested }); try { await authorDemo(this.ctx(), st, d, {}); } catch (e) { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, keep); } this.save(); this.room.refreshStation(this.part); const w = ev.target.closest('.demo-wrap'); if (w) demos.replaceChild(this.renderDemo(d, st, i, demos), w); } }) : null]) : null; const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb]); };
+      const fb = d.requested ? el('div', { class: 'demo-fallback' }, [el('span', { text: (d.type === 'figure' ? 'A diagram stands in' : 'A ready-made model stands in') + ' for the requested diorama “' + (d.requested.title || '') + '”' + (d.fallback ? ' (' + d.fallback + ')' : '') + '. ' }), aiAvailable() ? el('button', { class: 'linkbtn', text: 'Try building it with AI', onclick: async ev => { ev.target.disabled = true; const keep = { ...d }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'scene', ...keep.requested }); try { await authorDemo(this.ctx(), st, d, {}); } catch (e) { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, keep); } this.save(); this.room.refreshStation(this.part); const w = ev.target.closest('.demo-wrap'); if (w) demos.replaceChild(this.renderDemo(d, st, i, demos), w); } }) : null]) : null; const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null;
+      const audit = d.modelAudit || d.modelValidation || (d.rejectedAttempts || []).length ? (() => {
+        const a = d.modelAudit || {}, v = d.modelValidation || {};
+        const label = a.verdict === 'pass' ? 'Model review: passed' : a.verdict === 'revise' ? 'Model review: revision suggested' : a.verdict === 'uncertain' ? 'Model review: uncertain' : v.pass ? 'Model structure checked' : 'Model authoring checks';
+        const notes = [];
+        if (a.summary) notes.push(a.summary);
+        (v.faults || []).forEach(x => notes.push('Structure: ' + x));
+        (a.issues || []).forEach(x => notes.push(String(x.severity || 'Note').toUpperCase() + ' · ' + (x.problem || '') + (x.repair ? ' Suggested repair: ' + x.repair : '')));
+        (a.unverified || []).forEach(x => notes.push('Unverified: ' + x));
+        (a.assumptionsToSurface || []).forEach(x => notes.push('Assumption to inspect: ' + x));
+        if (a.error) notes.push('The separate model review could not complete: ' + a.error);
+        (d.rejectedAttempts || []).forEach(x => {
+          notes.push('Rejected ' + (x.attempt || 'scene') + ' attempt (' + (x.stage || 'check') + ').');
+          (x.faults || []).forEach(y => notes.push('Rejected attempt: ' + y));
+          (x.issues || []).forEach(y => notes.push('Rejected attempt · ' + String(y.severity || 'issue').toUpperCase() + ': ' + (y.problem || '') + (y.repair ? ' Repair: ' + y.repair : '')));
+        });
+        if (!notes.length) notes.push('The structural contract matched. This AI review is a quality-control aid, not scientific proof or formal verification.');
+        return el('details', { class: 'model-audit' }, [
+          el('summary', { text: label }),
+          el('p', { class: 'dim small', text: 'A generated-model review is a quality-control aid, not formal verification.' }),
+          el('ul', { class: 'model-audit-list' }, notes.map(x => el('li', { text: x })))
+        ]);
+      })() : null;
+      return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb, audit]);
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {
