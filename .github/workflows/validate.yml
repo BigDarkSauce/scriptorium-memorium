@@ -26,8 +26,8 @@ jobs:
       - name: Test source-mapped simulation contracts
         run: node tools/test-model-contract.mjs
 
-      - name: Verify representative source chain
-        run: node tools/verify-chain.mjs tools/fixtures/byu-stub/chain-01.json
-
       - name: Verify built-in diorama plans
         run: node tools/verify-chain.mjs --builtins
+
+      - name: Verify a standalone diorama scene
+        run: node tools/verify-chain.mjs examples/scene-osmosis.json
