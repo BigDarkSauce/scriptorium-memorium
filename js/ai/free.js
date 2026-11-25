@@ -79,15 +79,16 @@ export const rankOf = id => { for (const [re, s] of RANK) if (re.test(id)) retur
 const SKEY = 'sm-ai', UKEY = 'sm-ai-use';
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
-export const MODES = { claude: 'Claude directs', hybrid: 'Claude + free models', free: 'OpenAI preferred + fallback providers' };
-// chosen: the reader picked the engine in the AI panel; auto: the engine was set by autoMode (what is available here)
-export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'free', chosen: !!s.chosen, auto: !!s.auto, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: { 'openai-local': true, ...(s.on || {}) } }; }
-// The default engine is the first one available here: Claude inside the Claude app, else the free models. A choice the
-// reader made is never changed: one made in the panel (chosen), or, from before this flag, any engine other than the old
-// default ('claude') that autoMode did not set itself.
-export function autoMode(claudeOK) {
-  const S = settings(); if (S.chosen || (S.mode !== 'claude' && !S.auto)) return S.mode;
-  const want = 'free'; if (S.mode !== want) saveSettings({ mode: want, auto: true }); return want;
+// OpenAI is the single primary engine. Other configured providers remain available as automatic fallbacks.
+export const MODES = { free: 'OpenAI preferred + fallback providers' };
+export function settings() {
+  const s = read(SKEY, {});
+  return { mode: 'free', chosen: true, auto: false, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: { 'openai-local': true, ...(s.on || {}) } };
+}
+export function autoMode() {
+  const S = read(SKEY, {});
+  if (S.mode !== 'free' || S.chosen !== true) saveSettings({ mode: 'free', chosen: true, auto: false });
+  return 'free';
 }
 export function saveSettings(patch, { quiet = false } = {}) { const s = { ...settings(), ...patch, at: Date.now() }; write(SKEY, s); persist(s); if (!quiet) listeners.forEach(f => { try { f(s); } catch (e) { } }); return s; }
 // Keys and choices survive every new version of the app: kept in this browser (localStorage), mirrored in its
