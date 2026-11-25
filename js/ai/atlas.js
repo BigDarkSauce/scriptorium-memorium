@@ -138,6 +138,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
+        onResearch: x => researchAudit.push({ ...x, task: 'Semantic chapter atlas' }),
         validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain)
       });
       const atlasResearch = response && response._webResearch || null;
