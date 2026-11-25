@@ -285,6 +285,16 @@ Where they go: `explain[k].figure` (required for a paragraph of 60+ words), `sta
 
 See `docs/SCENE_SPEC.md`: bodies (shape + material + transform, role actor/decor), `tour`, `params`, `behaviors`, `code` (dynamics through a small API), `lessons` (with `question` / `opens`). Examples are in `examples/`.
 
+### Scene model contract and independent audit
+
+Before each new 3D scene, the didactic plan includes a source-mapped model contract. It records the system boundary; exact actor identities and referents; state variables, ranges, units and provenance; directed causal mechanisms and whether they are source-grounded, standard, externally sourced or hypothetical; constraints; assumptions; observables; and uncertainties.
+
+The author must copy the approved contract into the scene without changing it. The pipeline deterministically checks actor identity, parameter keys/ranges/initial values/units, extra parameters, contract equality and evidence-step membership. A mismatch receives one simpler retry; if that also fails, the existing fallback is kept with its reason.
+
+A separate model-fidelity review assesses causal, quantitative, constraint, intervention and scope issues after the deterministic check. The result is saved as `modelAudit` with severity-ranked issues, unverified claims and assumptions to surface. Critical/major findings with a `revise` verdict trigger the bounded retry. The offline verifier reports deterministic faults and the stored audit verdict.
+
+This is a traceability and quality-control layer, not a proof system: the reviewer is an AI, not an experiment or formal verifier. Code that parses may still behave incorrectly; source-step mapping does not validate the source itself. Real runtime execution and domain-expert review remain necessary. See [the detailed contract design](research/simulation-model-contract.md).
+
 ## Rules every AI must follow
 
 - Cover every subsection at the source's resolution or finer. Never merge two subsections into one step.
