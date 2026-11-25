@@ -133,12 +133,12 @@ try {
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
 
   const sourceScan = page.locator('.atlas-source-scan');
-  await sourceScan.locator('.atlas-scan-summary').click({ force: true });
+  await sourceScan.locator('.atlas-scan-summary').evaluate(el => el.click());
   assert.equal(await sourceScan.evaluate(el => el.open), true, 'the native source-scan disclosure must open');
   assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
   const sectionBrowse = sourceScan.locator('.atlas-scan-section').first();
   assert.match(await sectionBrowse.innerText(), /Membrane transport.*2 source steps/s);
-  await sectionBrowse.locator('.atlas-scan-section-summary').click({ force: true });
+  await sectionBrowse.locator('.atlas-scan-section-summary').evaluate(el => el.click());
   assert.equal(await sectionBrowse.evaluate(el => el.open), true, 'each subsection should expand independently');
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row').count(), 2, 'expanded subsections must expose their source-step inventory');
   assert.match(await sectionBrowse.innerText(), /S1.*Membrane boundary/i);
@@ -146,7 +146,7 @@ try {
   assert.equal(await sourceScan.locator('.atlas-scan-section').count(), 2, 'unsectioned source steps must have an explicit inventory group');
   const unmappedBrowse = sourceScan.locator('.atlas-scan-section').nth(1);
   assert.match(await unmappedBrowse.locator('.atlas-scan-section-summary').innerText(), /Unmapped \/ unsectioned source steps.*1 source steps/i);
-  await unmappedBrowse.locator('.atlas-scan-section-summary').click({ force: true });
+  await unmappedBrowse.locator('.atlas-scan-section-summary').evaluate(el => el.click());
   assert.match(await unmappedBrowse.innerText(), /S3.*Supplemental observation.*p\. 4/i);
   const scanSearch = sourceScan.locator('.atlas-scan-search');
   assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
