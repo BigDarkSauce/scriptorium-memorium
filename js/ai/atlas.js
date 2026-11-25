@@ -137,12 +137,12 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
-        onResearch: x => researchAudit.push({ ...x, task: 'Semantic chapter atlas' }),
+        onResearch: x => { if (!researchAudit.some(y => x.callId && y.callId === x.callId)) researchAudit.push({ ...x, task: 'Semantic chapter atlas' }); },
         validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain)
       });
       const atlasResearch = response && response._webResearch || null;
       authored = response && (response.atlas || response);
-      if (atlasResearch) { authored._atlasWebResearch = atlasResearch; researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
+      if (atlasResearch) { authored._atlasWebResearch = atlasResearch; if (!researchAudit.some(y => atlasResearch.callId && y.callId === atlasResearch.callId)) researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
       const issue = validateAtlas(authored, ids, analysis.chain);
       if (issue) throw new Error(issue);
     } catch (e) {
