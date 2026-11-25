@@ -293,6 +293,15 @@ export class Reader {
       const panel = el('aside', { class: 'memory-locus-assign-panel glass', role: 'dialog', 'aria-label': 'Assign a memory place' });
       hub.ui.append(panel);
       const resumeAtlas = () => app.openRoom(book.id, { openPart: part.id });
+      const memoryOwnerAt = (caseId, row, slot) => {
+        const place = (atlas.memoryPlaces || []).find(p =>
+          String(p.nodeId) !== String(node.id) &&
+          String(p.caseId) === String(caseId) &&
+          Number(p.row) === Number(row) &&
+          Number(p.slot) === Number(slot)
+        );
+        return place ? (atlas.nodes || []).find(n => String(n.id) === String(place.nodeId)) || { title: place.nodeId } : null;
+      };
       const render = () => {
         panel.innerHTML = '';
         const shelf = shelves.find(s => s.caseId === state.caseId) || shelves[0];
@@ -300,8 +309,13 @@ export class Reader {
         const rows = shelf.rows || [];
         if (!rows.some(r => r.row === state.row)) state.row = rows[0] ? rows[0].row : null;
         const row = rows.find(r => r.row === state.row) || rows[0];
-        if (row && !(row.slots || []).some(s => s.slot === state.slot)) state.slot = (row.slots[0] || {}).slot;
+        if (row) {
+          const chosen = (row.slots || []).find(s => s.slot === state.slot && !memoryOwnerAt(state.caseId, state.row, s.slot));
+          const firstFree = chosen || (row.slots || []).find(s => !memoryOwnerAt(state.caseId, state.row, s.slot));
+          state.slot = firstFree ? firstFree.slot : null;
+        }
         const current = row && (row.slots || []).find(s => s.slot === state.slot);
+        const locationOwner = current && memoryOwnerAt(state.caseId, state.row, current.slot);
         const cue = el('textarea', { class: 'memory-locus-cue', rows: 3, maxlength: 240, placeholder: 'Choose a distinctive image, event, sound, movement or verbal cue for this concept. Keep the cue separate from the answer.', 'aria-label': 'Memory association' });
         cue.value = state.association;
         const shelfSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase' }, shelves.map(s => el('option', { value: s.caseId, text: s.title })));
@@ -312,7 +326,14 @@ export class Reader {
         rowSelect.addEventListener('change', () => { state.row = Number(rowSelect.value); state.slot = null; render(); });
         const slotOptions = (row && row.slots || []).map(slot => {
           const occupant = slot.bookId && app.lib.books.find(b => b.id === slot.bookId);
-          return el('option', { value: String(slot.slot), text: 'Place ' + (slot.slot + 1) + (occupant ? ' · scroll: ' + occupant.title : ' · empty') });
+          const memoryOwner = memoryOwnerAt(state.caseId, row.row, slot.slot);
+          return el('option', {
+            value: String(slot.slot),
+            disabled: !!memoryOwner,
+            text: 'Place ' + (slot.slot + 1) +
+              (memoryOwner ? ' · memory place: ' + (memoryOwner.title || 'another concept') :
+                occupant ? ' · scroll: ' + occupant.title : ' · empty')
+          });
         });
         const slotSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase place' }, slotOptions);
         if (current) slotSelect.value = String(current.slot);
@@ -322,8 +343,10 @@ export class Reader {
           class: 'btn small',
           type: 'button',
           text: 'Preview this place',
-          disabled: !row || !current,
+          disabled: !row || !current || !!locationOwner,
           onclick: () => {
+            const conflict = current && memoryOwnerAt(state.caseId, state.row, current.slot);
+            if (conflict) { status.textContent = 'That location already anchors ' + (conflict.title || 'another concept') + '.'; return; }
             const result = hub.showMemoryAnchor(state.caseId, state.row, state.slot, { frame: true });
             status.textContent = result.ok ? 'The gold marker shows the selected location.' : result.reason;
           }
@@ -332,8 +355,10 @@ export class Reader {
           class: 'btn primary small',
           type: 'button',
           text: previous ? 'Update memory place' : 'Save memory place',
-          disabled: !row || !current || !cue.value.trim(),
+          disabled: !row || !current || !!locationOwner || !cue.value.trim(),
           onclick: async () => {
+            const conflict = current && memoryOwnerAt(state.caseId, state.row, current.slot);
+            if (conflict) { status.textContent = 'That location already anchors ' + (conflict.title || 'another concept') + '. Choose a different place.'; return; }
             const association = state.association.trim().slice(0, 240);
             if (!association) { status.textContent = 'Add a distinct memory cue before saving.'; cue.focus(); return; }
             const next = {
@@ -353,7 +378,7 @@ export class Reader {
             toast('Memory place saved to the library.');
           }
         });
-        cue.addEventListener('input', () => { state.association = cue.value.slice(0, 240); save.disabled = !state.association.trim() || !row || !current; });
+        cue.addEventListener('input', () => { state.association = cue.value.slice(0, 240); save.disabled = !state.association.trim() || !row || !current || !!locationOwner; });
         panel.append(
           el('div', { class: 'memory-route-overline', text: 'ANCHOR A CONCEPT IN THE LIBRARY' }),
           el('h3', { text: node.title || 'Concept' }),
@@ -364,7 +389,10 @@ export class Reader {
             el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Place' }), slotSelect])
           ]),
           el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Your association / mnemonic cue' }), cue]),
-          el('p', { class: 'memory-locus-occupant', text: current && current.bookId ? 'This place currently contains a scroll. The locus marks the bookcase position, not the scroll identity.' : 'This place is currently empty.' }),
+          el('p', { class: 'memory-locus-occupant', text: locationOwner
+            ? 'This position already anchors ' + (locationOwner.title || 'another concept') + '. Each concept needs its own distinct place.'
+            : current && current.bookId ? 'This place currently contains a scroll. The locus marks the bookcase position, not the scroll identity.'
+              : current ? 'This place is currently empty.' : 'All places in this row are already assigned to other concepts.' }),
           el('div', { class: 'row wrap' }, [preview, save, status]),
           el('div', { class: 'row end' }, [el('button', { class: 'btn small', type: 'button', text: 'Cancel', onclick: () => resumeAtlas() })])
         );
