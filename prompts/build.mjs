@@ -94,11 +94,11 @@ For 3D scenes not covered by the built-in models, put {"type":"scene","title":st
 Import the file in the app with *Import / export → Import JSON*. It appears as a new scroll on your first bookcase. Open each scroll once with the PDF attached to the book to run the coverage check.
 `);
 // the didactic planner (docs/PEDAGOGY.md, "The didactic planner") and the self-critique, shown with placeholders
-w('prompts/10-didactic-plan.md', \`# Plan a 3D demo and model contract before building it
+w('prompts/10-didactic-plan.md', `# Plan a 3D demo and model contract before building it
 
 The app plans the explanatory sequence and a source-mapped model contract before authoring a scene. The contract names the system boundary, actors, state variables and units, causal mechanisms and evidence basis, constraints, assumptions, observables and uncertainties. Illustrative parameters must be labelled and justified; do not present them as source measurements. Evidence IDs must come only from the supplied source-step IDs.
 
-\` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>', sourceStepIds: ['S1'] }, '<the study step it illustrates>')));
+` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>', sourceStepIds: ['S1'] }, '<the study step it illustrates>')));
 w('prompts/11-self-critique.md', `# Check a demo against its plan
 
 Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the verdict on the scene as \`critique\`.
