@@ -199,9 +199,9 @@
                 },
                 "reasoning": {
                   "type": "array",
-                  "minItems": 1,
+                  "minItems": 2,
                   "maxItems": 5,
-                  "description": "Ordered, source-mapped reasoning units revealed one at a time after a committed prediction.",
+                  "description": "Two to five ordered, source-mapped reasoning units, revealed one at a time for newly authored challenges.",
                   "items": {
                     "type": "object",
                     "required": [
