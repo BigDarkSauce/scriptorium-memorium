@@ -1,6 +1,6 @@
 # Learning workflow: scan, discover, remember, transfer
 
-Status: progressive question branches, a first loci-memory route and a compact source-orientation scan are implemented. Advanced autocomplete-style scanning and spaced-review scheduling for loci remain design targets.
+Status: progressive question branches, a first loci-memory route, a compact source-orientation scan, source-derived autocomplete and shared spaced-review scheduling are implemented. Adaptive scan prompts, ranked cross-source suggestions and arbitrary room landmarks remain design targets.
 
 The learning surface should let a learner move quickly across a whole source, stop at the question that matters, and then uncover only as much reasoning as they need. It should not turn a PDF into another long article to read.
 
@@ -52,7 +52,7 @@ The library and its book rooms already provide stable, navigable places. The ini
 
 ### Retrieval and spacing
 
-The current route stores the learner's attempt, confidence and reveal state with its locus, and now also creates a stable card in the existing retrieval ledger. After the expected reconstruction is revealed, the learner self-rates **Needs another pass** or **Recalled accurately**. The first schedules a one-day interval; the second expands the interval by 2.5× up to 120 days. The stop and route rail show the next due date and current interval. Loci cards are marked as self-rated recall, so their history is excluded from objective transfer-accuracy totals. This is a schedule, not automatic grading of free-text answers; route completion, time spent and streaks are not learning scores.
+The current route stores the learner's attempt, confidence and reveal state with its locus, and now also creates a stable card in the existing retrieval ledger. After the expected reconstruction is revealed, the learner self-rates **Needs another pass** or **Recalled accurately**. The first schedules a one-day interval; the second expands the interval by 2.5× up to 120 days. The stop and route rail show the next due date and current interval. When a revealed attempt becomes due, the next route entry archives that attempt and returns to a blank recall prompt with the answer hidden; this also applies to an attempt left unrated. Loci cards are marked as self-rated recall, so their history is excluded from objective transfer-accuracy totals. This is a schedule, not automatic grading of free-text answers; route completion, time spent and streaks are not learning scores.
 
 A route can be walked without the labels after the learner has practised it. That is the test of whether the place has become a retrieval cue rather than a decorative list. The route remains optional because spatial imagery is not a universal requirement for understanding.
 
