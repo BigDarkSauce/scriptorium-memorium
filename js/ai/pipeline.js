@@ -258,6 +258,38 @@ export async function buildDioramas(ctx, P, M, o = {}) {
   A.dioramaReport = { plan: ins.plan.map(p => ({ subsection: p.subsection, need: p.need, why: p.why })), added: ins.added, made };
 }
 
+// Extend an existing atlas with real search records from later scene authoring or learner-requested builds.
+// The call IDs make this idempotent across save/resume cycles and keep a failed/retried model call auditable.
+export function mergeAtlasResearch(atlas, records = []) {
+  if (!atlas || !Array.isArray(records) || !records.length) return;
+  atlas.sourceIndex = atlas.sourceIndex || {};
+  const W = atlas.sourceIndex.webResearch || { provider: '', model: '', searched: 0, tasks: [], records: [], citations: [] };
+  W.records = Array.isArray(W.records) ? W.records : [];
+  W.tasks = Array.isArray(W.tasks) ? W.tasks : [];
+  W.citations = Array.isArray(W.citations) ? W.citations : [];
+  const key = x => x.callId || [x.provider || '', x.model || '', +x.searched || 0, (x.citations || []).map(c => c && c.url || '').sort().join('|')].join('::');
+  const seen = new Set(W.records.map(key));
+  const fresh = records.filter(x => x && !seen.has(key(x)) && (seen.add(key(x)), true));
+  if (!fresh.length) return;
+  fresh.forEach(x => {
+    W.records.push({ callId: x.callId || null, provider: x.provider || '', model: x.model || '', searched: +x.searched || 0,
+      task: x.task || 'AI authoring call', citations: (x.citations || []).filter(c => c && /^https:\/\//i.test(c.url)) });
+  });
+  W.provider = [...new Set([W.provider, ...fresh.map(x => x.provider)].filter(Boolean))].join(', ');
+  W.model = [...new Set([W.model, ...fresh.map(x => x.model)].filter(Boolean))].join(', ');
+  W.searched = (+W.searched || 0) + fresh.reduce((n, x) => n + (+x.searched || 0), 0);
+  W.tasks = [...W.tasks, ...fresh.map(x => x.task || 'AI authoring call')];
+  const allCitations = [...W.citations, ...fresh.flatMap(x => x.citations || [])];
+  W.citations = allCitations.filter((c, i) => c && c.url && allCitations.findIndex(y => y && y.url === c.url) === i);
+  atlas.sourceIndex.webResearch = W;
+  atlas.audit = atlas.audit || {};
+  atlas.audit.webResearch = {
+    provider: W.provider || null, model: W.model || null,
+    searches: W.searched || 0, citations: W.citations.length,
+    callIds: W.records.map(x => x.callId).filter(Boolean)
+  };
+}
+
 // Give every concept node its own grouped visual model when the concept genuinely benefits from 3D.
 // Existing step-level dioramas remain linked as supporting views; abstract material stays 2D.
 async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
@@ -299,13 +331,22 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         };
         st.demos = st.demos || [];
         sayAtlasStatus(o, 'Authoring the concept-level diorama for "' + node.title + '"…');
-        const how = await authorDemo(ctx, st, d, o);
+        const auditBefore = (o.researchAudit || []).length;
+        let how;
+        try {
+          how = await authorDemo(ctx, st, d, o);
+        } catch (e) {
+          mergeAtlasResearch(atlas, (o.researchAudit || []).slice(auditBefore));
+          if (ctx.save) await ctx.save(P);
+          throw e;
+        }
+        mergeAtlasResearch(atlas, (o.researchAudit || []).slice(auditBefore));
         d.atlasNodeId = node.id;
         st.demos.push(d);
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });
         else if (d.type === 'figure' && d.figure) node.generatedFigure = d.figure;
         node.dioramaBuild = how;
-        ctx.save && ctx.save(P);
+        if (ctx.save) await ctx.save(P);
       }
     }
     node.dioramaRefs = refs;
