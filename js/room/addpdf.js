@@ -202,7 +202,7 @@ export function openAddPdf(app, { hub = hubOf(app), shelfId = null, file = null 
   render();
   return { close, state: S, go };
 }
-const METHOD = { outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows', sheets: '(each page is a sheet; its panels are the subsections)', presentation: '(slide order, shape text, accessible image descriptions and speaker notes; slides remain source locators)' };
+const METHOD = { outline: 'from the PDF bookmarks', headings: 'from the headings', contents: 'from the contents page', windows: 'in fixed page windows', sheets: '(each page is a sheet; its panels are the subsections)', presentation: '(Open XML slide order, shape/table text, speaker notes, embedded images, cached chart data and SmartArt structure; slides remain source locators)' };
 
 // ---- the progress view (a dialog that can be closed into a chip; the job keeps running)
 export function showProgress(app, job, { resume = false } = {}) {
