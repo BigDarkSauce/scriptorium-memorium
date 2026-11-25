@@ -103,6 +103,42 @@ function check(A, sections, figures, label) {
   const pos = new Map(); chain.forEach((st, k) => { if (pos.has(st.id)) F('links', `step id ${st.id} is used twice`); else pos.set(st.id, k); if (st.id !== 'S' + (k + 1)) W('links', `step ${k + 1} has id ${st.id} (expected S${k + 1})`); });
   chain.forEach((st, k) => (st.from || []).forEach(f => { if (!pos.has(String(f))) F('links', `${st.id}.from names ${f}, which is not a step`); else if (pos.get(String(f)) >= k) F('links', `${st.id}.from names ${f}, which comes later`); }));
   (A.coverage || []).forEach(c => (c.steps || []).forEach(id => { const st = chain.find(x => x.id === String(id)); if (!st) F('links', `coverage of ${c.subsection} lists ${id}, which is not a step`); else if (st.section && String(st.section) !== String(c.subsection)) F('links', `coverage puts ${id} under ${c.subsection}, but its "section" is ${st.section}`); }));
+  // semantic atlas: every chain step belongs to exactly one concept; source references and actor IDs must be real
+  if (A.atlas) {
+    const atlas = A.atlas, mapNodes = Array.isArray(atlas.nodes) ? atlas.nodes : [];
+    const nodeIds = new Set(), assigned = new Map();
+    mapNodes.forEach(node => {
+      if (!node || !node.id) { F('atlas', 'concept node has no stable id'); return; }
+      if (nodeIds.has(node.id)) F('atlas', `concept node id ${node.id} is duplicated`);
+      nodeIds.add(node.id);
+      (node.stepIds || []).forEach(id => {
+        const key = String(id);
+        if (!pos.has(key)) F('atlas', `${node.id} assigns unknown source step ${key}`);
+        assigned.set(key, (assigned.get(key) || 0) + 1);
+      });
+      const actorIds = new Set((node.stepIds || []).flatMap(id => {
+        const st = chain.find(x => String(x.id) === String(id));
+        return (st && Array.isArray(st.bodies) ? st.bodies : []).map(String);
+      }));
+      (node.challenges || []).forEach(ch => {
+        if (ch && ch.type === 'structural') (ch.missingBodyIds || []).forEach(id => {
+          if (!actorIds.has(String(id))) F('atlas', `${node.id} structural challenge ${ch.id || '(unnamed)'} hides unknown actor ${id}`);
+        });
+      });
+      (node.dioramaRefs || []).forEach(ref => {
+        const st = chain.find(x => String(x.id) === String(ref.stepId));
+        const demo = st && Array.isArray(st.demos) ? st.demos[+ref.demoIndex] : null;
+        if (!demo || !(demo.type === 'scene' || Array.isArray(demo.bodies))) F('atlas', `${node.id} links to missing/non-3D diorama ${ref.stepId}[${ref.demoIndex}]`);
+      });
+    });
+    chain.forEach(st => {
+      const count = assigned.get(String(st.id)) || 0;
+      if (count !== 1) F('atlas', `source step ${st.id} is assigned to ${count} concept nodes (expected exactly one)`);
+    });
+    (atlas.edges || []).forEach(edge => {
+      if (!edge || !nodeIds.has(String(edge.from)) || !nodeIds.has(String(edge.to))) F('atlas', 'concept edge has a missing node endpoint');
+    });
+  }
   // the app's own check (on a copy: verifyChain rebuilds coverage and normalises figure ids)
   const B = JSON.parse(JSON.stringify(A));
   const secs = sections && sections.length ? sections : (A.coverage || []).map(c => ({ id: String(c.subsection), title: '', text: '' }));
