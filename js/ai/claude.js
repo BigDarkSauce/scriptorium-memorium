@@ -84,7 +84,11 @@ async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tool
   };
   const viaFree = exhausted => FREE.ask(prompt, { promptForProvider: id => id === 'openai-local' ? prompt : forFreeModels(prompt), images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
   if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
-  if (m === 'free' || !SAMPLE) { if (!FREE.hasAny()) return manualRelay(prompt, manualTitle); return viaFree(false); }
+  if (m === 'free' || !SAMPLE) {
+    if (!FREE.hasAny()) return manualRelay(prompt, manualTitle);
+    try { return await viaFree(false); }
+    catch (e) { if (e && e.code === 'free_none') return manualRelay(prompt, manualTitle); throw e; }
+  }
   // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other
   const STANDIN = /rate_limited|unavailable|not_granted|session_expired|invalid_json|refused|timeout|overloaded|server/;
   if (role === 'director') {
