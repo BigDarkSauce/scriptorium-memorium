@@ -88,6 +88,18 @@ const extraParam = structuredClone(scene);
 extraParam.params.push({ key: 'unplanned', min: 0, max: 1, value: 0.5, unit: 'ratio' });
 assert.ok(checkSceneContract(extraParam, plan, ['S1']).faults.some(x => x.includes('absent from modelContract')), 'undeclared scene parameter must be rejected');
 
+const duplicateVariable = structuredClone(plan);
+duplicateVariable.modelContract.stateVariables.push({ ...duplicateVariable.modelContract.stateVariables[0] });
+assert.ok(faults(checkPlan(duplicateVariable, null, null, ['S1'])).some(x => x.issue.includes('duplicate stateVariable key')), 'duplicate variable keys must be rejected');
+
+const duplicateMechanism = structuredClone(plan);
+duplicateMechanism.modelContract.mechanisms.push({ ...duplicateMechanism.modelContract.mechanisms[0] });
+assert.ok(faults(checkPlan(duplicateMechanism, null, null, ['S1'])).some(x => x.issue.includes('duplicate mechanism id')), 'duplicate mechanism IDs must be rejected');
+
+const duplicateParam = structuredClone(scene);
+duplicateParam.params.push({ ...duplicateParam.params[0] });
+assert.ok(checkSceneContract(duplicateParam, plan, ['S1']).faults.some(x => x.includes('parameter keys are not unique')), 'duplicate parameter keys must be rejected');
+
 const legacyPlan = structuredClone(plan);
 delete legacyPlan.version;
 delete legacyPlan.modelContract;
