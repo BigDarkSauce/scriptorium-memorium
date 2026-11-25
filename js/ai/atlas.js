@@ -4,6 +4,7 @@
 // the deterministic source index and validation report show what was grouped and what could not be mapped.
 import { askJSON } from './claude.js';
 import { lastRoute } from './free.js';
+import { validateFigure } from '../room/figspec.js';
 
 export const INCOMPLETENESS = [
   'structural', 'mechanistic', 'temporal', 'explanatory', 'relational', 'counterfactual'
@@ -155,6 +156,72 @@ export function buildVisualReconstructionBrief(node, sourceSteps = [], sections 
       'Keep unresolved figure references unresolved and separate any standard-theory additions from source claims.'
     ]
   };
+}
+
+/**
+ * Convert supported source visuals into a faithful, locally rendered 2D figure.
+ * No category/value is interpolated, no physical unit is invented, and SmartArt
+ * connections are carried as source links rather than causal claims.
+ */
+export function sourceVisualFigure(record) {
+  if (!record || !record.data) return null;
+  const data = record.data, slide = Number(record.slide) || null;
+  const captionBase = clean(record.label || data.title || record.id, 180);
+  let spec = null;
+  if (record.kind === 'chart') {
+    const series = Array.isArray(data.series) ? data.series : [];
+    const first = series[0];
+    const categories = first && Array.isArray(first.points) ? first.points.map(p => p && p.category) : [];
+    const complete = categories.length > 0 && categories.length <= 24 && series.length > 0 && series.length <= 4 &&
+      categories.every(x => x != null && String(x).trim() !== '') &&
+      series.every(s => Array.isArray(s.points) && s.points.length === categories.length &&
+        s.points.every((p, i) => p && String(p.category) === String(categories[i]) && Number.isFinite(p.value) && p.rawValue != null));
+    if (data.chartKind === 'bar' && complete) {
+      spec = {
+        kind: 'bars',
+        caption: 'Source chart: ' + captionBase + (slide ? ' · slide ' + slide : '') + '. Cached values; no axis unit inferred.',
+        categories: categories.map(String),
+        series: series.map(s => ({ name: s.name || 'Series', values: s.points.map(p => p.value) }))
+      };
+    } else if (categories.length > 0 && categories.length <= 14 && series.length > 0 && series.length <= 7 &&
+      series.every(s => Array.isArray(s.points) && s.points.length === categories.length && s.points.every(p => p && p.rawValue != null))) {
+      spec = {
+        kind: 'table',
+        caption: 'Source chart data: ' + captionBase + (slide ? ' · slide ' + slide : '') + '. Raw cached values; original chart type: ' + (data.chartKind || 'unknown') + '.',
+        columns: ['Category', ...series.map(s => clean(s.name || 'Series', 30))],
+        rows: categories.map((category, i) => [String(category == null ? '' : category), ...series.map(s => String(s.points[i].rawValue))])
+      };
+    }
+  } else if (record.kind === 'smartart') {
+    const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+    const links = Array.isArray(data.links) ? data.links : [];
+    const nodeIds = new Set(nodes.map(n => String(n && n.id || '')).filter(Boolean));
+    const complete = nodes.length >= 2 && nodes.length <= 12 && links.length > 0 && links.length <= 24 &&
+      !(+data.omittedNodes || 0) && !(+data.omittedLinks || 0) &&
+      nodes.every(n => n && n.id && n.label) &&
+      links.every(e => e && nodeIds.has(String(e.from)) && nodeIds.has(String(e.to)));
+    if (complete) {
+      spec = {
+        kind: 'flow',
+        caption: 'SmartArt source structure: ' + captionBase + (slide ? ' · slide ' + slide : '') + '. Layout redrawn; source node IDs and connection types retained.',
+        dir: 'LR',
+        nodes: nodes.map(n => ({ id: String(n.id), label: String(n.label) })),
+        edges: links.map(e => ({ from: String(e.from), to: String(e.to), ...(e.type ? { label: String(e.type) } : {}) }))
+      };
+    } else if (nodes.length >= 2 && nodes.length <= 14) {
+      // When original connections are absent or truncated, show only the node inventory.
+      // Never let the flow renderer's convenience fallback invent a chain of edges.
+      spec = {
+        kind: 'table',
+        caption: 'SmartArt source node inventory: ' + captionBase + (slide ? ' · slide ' + slide : '') + '. Original connections are absent or incomplete; none are inferred.',
+        columns: ['Source node ID', 'Label', 'Source type'],
+        rows: nodes.map(n => [String(n.id || ''), String(n.label || ''), String(n.type || '')])
+      };
+    }
+  }
+  if (!spec) return null;
+  const checked = validateFigure(spec);
+  return checked.ok ? checked.fig : null;
 }
 
 export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [] }) {
@@ -404,9 +471,23 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
     });
     // Preserve source-linked explanatory diagrams in the atlas itself. PDF crop IDs remain in sourceRefs rather
     // than being copied here, because their binary image assets live in the document's local figure store.
+    // Only render a structured source object as a generated diagram when the semantic atlas
+    // explicitly selected it for one of this node's explanatory views.
+    const selectedVisualIds = new Set((n.dioramaSet || []).flatMap(view => Array.isArray(view && view.sourceVisualIds) ? view.sourceVisualIds.map(String) : []));
+    sourceVisualEvidence(stepIds, analysis.chain, sections).visuals.forEach(visual => {
+      if (!selectedVisualIds.has(visual.id)) return;
+      const figure = sourceVisualFigure(visual);
+      if (!figure) return;
+      explanatoryFigures.push({
+        stepId: visual.stepIds[0] || stepIds[0],
+        title: clean(visual.label || visual.kind, 100),
+        purpose: visual.kind === 'chart' ? 'A faithful 2D reconstruction of the source chart cache.' : 'A 2D reconstruction of the source SmartArt nodes and connections.',
+        figure, sourceVisualId: visual.id, sourceSlide: visual.slide, sourceKind: visual.kind
+      });
+    });
     const seenFigures = new Set();
     const uniqueFigures = explanatoryFigures.filter(f => {
-      const key = f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure);
+      const key = f.sourceVisualId || (f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure));
       if (seenFigures.has(key)) return false; seenFigures.add(key); return true;
     });
     return {
