@@ -165,7 +165,18 @@ function check(A, sections, figures, label) {
   // demo data provenance: outside data needs a source
   (P.checkCues ? P.checkCues(A) : []).forEach(c => (c.level === 'fault' ? F : W)('cues', `${c.step} demo ${c.demo + 1} (${c.type}) lesson ${c.lesson}: ${c.issue}`));
   (P.checkPlans ? P.checkPlans(A) : []).forEach(c => (c.level === 'fault' ? F : W)('plan', `${c.step} demo ${c.demo + 1} (${c.type}): ${c.issue}`));
-  chain.forEach(st => (st.demos || []).forEach((d, i) => { const ex = Array.isArray(d.extra) ? d.extra : []; if (ex.some(e => !e || !e.source || !(e.source.title || e.source.doi || e.source.url))) F('demos', `${st.id} demo ${i + 1}: outside data ("extra") without a source`); }));
+  chain.forEach(st => (st.demos || []).forEach((d, i) => {
+    if (d && d.type === 'scene' && d.plan && d.plan.version === 'scriptorium-model-plan/1' && P.checkSceneContract) {
+      const v = P.checkSceneContract(d, d.plan, d.sourceStepIds || [st.id]);
+      v.faults.forEach(x => F('model', `${st.id} demo ${i + 1}: ${x}`));
+      v.warnings.forEach(x => W('model', `${st.id} demo ${i + 1}: ${x}`));
+      if (!d.modelAudit) W('model', `${st.id} demo ${i + 1}: no independent model-audit record`);
+      else if (d.modelAudit.verdict === 'revise') F('model', `${st.id} demo ${i + 1}: independent model audit requested revision`);
+      else if (d.modelAudit.verdict === 'uncertain') W('model', `${st.id} demo ${i + 1}: model audit uncertain; inspect unverified claims`);
+    }
+    const ex = Array.isArray(d && d.extra) ? d.extra : [];
+    if (ex.some(e => !e || !e.source || !(e.source.title || e.source.doi || e.source.url))) F('demos', `${st.id} demo ${i + 1}: outside data ("extra") without a source`);
+  }));
   out.pass = !out.faults.length;
   return out;
 }
@@ -175,7 +186,10 @@ function check(A, sections, figures, label) {
 function checkAlone(label, plan, lessons, names, scene) {
   const out = { part: label, faults: [], warnings: [] }, F = (...a) => out.faults.push(a.join(' ')), W = (...a) => out.warnings.push(a.join(' '));
   if (scene) { if (!Array.isArray(scene.lessons) || scene.lessons.length < 3 || scene.lessons.length > 6) W('lessons', `${(scene.lessons || []).length} lessons (3–6)`); P.checkCues({ chain: [{ id: 'S1', demos: [scene] }] }).forEach(c => (c.level === 'fault' ? F : W)('cues', `lesson ${c.lesson}: ${c.issue}`)); (scene.lessons || []).forEach((l, k) => { if (k && l.question && scene.lessons[k - 1].opens && P.similar(l.question, scene.lessons[k - 1].opens) < .6) W('thread', `lesson ${k + 1} asks "${l.question}" but lesson ${k} opens "${scene.lessons[k - 1].opens}"`); }); }
-  if (plan) P.checkPlan(plan, lessons, names).forEach(c => (c.level === 'fault' ? F : W)('plan', c.issue)); else W('plan', 'no didactic "plan" (docs/PEDAGOGY.md)');
+  if (plan) {
+    P.checkPlan(plan, lessons, names, scene && scene.sourceStepIds || ['S1']).forEach(c => (c.level === 'fault' ? F : W)('plan', c.issue));
+    if (scene && P.checkSceneContract) { const v = P.checkSceneContract(scene, plan, scene.sourceStepIds || ['S1']); v.faults.forEach(x => F('model', x)); v.warnings.forEach(x => W('model', x)); if (scene.modelAudit && scene.modelAudit.verdict === 'revise') F('model', 'independent model audit requested revision'); else if (scene.modelAudit && scene.modelAudit.verdict === 'uncertain') W('model', 'model audit uncertain; inspect unverified claims'); else if (!scene.modelAudit && plan.version === 'scriptorium-model-plan/1') W('model', 'no independent model-audit record'); }
+  } else W('plan', 'no didactic "plan" (docs/PEDAGOGY.md)');
   out.pass = !out.faults.length; return out;
 }
 function printAlone(results) {
