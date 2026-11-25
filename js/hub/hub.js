@@ -541,6 +541,11 @@ export class Hub {
     return { ok: true, caseId, row, slot };
   }
   closeMemoryRoute() {
+    if (this._memoryRouteFlush) {
+      const flush = this._memoryRouteFlush;
+      this._memoryRouteFlush = null;
+      void flush();
+    }
     if (this.memoryRoutePanel) { this.memoryRoutePanel.remove(); this.memoryRoutePanel = null; }
     this.clearMemoryAnchor();
   }
@@ -556,7 +561,16 @@ export class Hub {
     this.memoryRoutePanel = panel;
     this.ui.append(panel);
 
-    const save = async () => { try { await onSave(); } catch (e) { console.warn('memory route save', e); } };
+    let saveTimer = null;
+    const flushSave = async () => {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      try { await onSave(); } catch (e) { console.warn('memory route save', e); }
+    };
+    const scheduleSave = () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { saveTimer = null; void flushSave(); }, 450);
+    };
+    this._memoryRouteFlush = flushSave;
     const render = () => {
       panel.innerHTML = '';
       const place = stops[index], node = nodes.get(String(place.nodeId)), review = place.review || {};
@@ -568,7 +582,7 @@ export class Hub {
             el('h3', { text: node.title || 'Concept' }),
             el('p', { text: (shelf ? shelf.name : place.shelfName || 'Missing bookcase') + ' · row ' + (place.rowLabel || Number(place.row) + 1) + ' · slot ' + (Number(place.slot) + 1) })
           ]),
-          el('button', { class: 'ibtn dark tiny', type: 'button', text: '×', title: 'Close route panel', 'aria-label': 'Close route panel', onclick: () => this.closeMemoryRoute() })
+          el('button', { class: 'ibtn dark tiny', type: 'button', text: '×', title: 'Close route panel', 'aria-label': 'Close route panel', onclick: async () => { await flushSave(); this.closeMemoryRoute(); } })
         ])
       );
       const rail = el('div', { class: 'memory-route-stops', role: 'group', 'aria-label': 'Memory places in this chapter' });
@@ -616,11 +630,11 @@ export class Hub {
       const status = el('span', { class: 'memory-route-status', role: 'status' });
       response.addEventListener('input', () => {
         place.review = { ...(place.review || {}), response: response.value.slice(0, 1200) };
-        void save();
+        scheduleSave();
       });
       confidence.addEventListener('change', () => {
         place.review = { ...(place.review || {}), confidence: confidence.value || '' };
-        void save();
+        scheduleSave();
       });
       const commit = el('button', {
         class: 'btn primary small',
@@ -630,7 +644,7 @@ export class Hub {
         onclick: async () => {
           const current = place.review || {};
           place.review = { ...current, response: response.value.trim(), confidence: confidence.value || '', committed: true, attemptedAt: new Date().toISOString() };
-          await save();
+          await flushSave();
           render();
         }
       });
@@ -649,7 +663,7 @@ export class Hub {
             text: 'Reveal expected reconstruction',
             onclick: async () => {
               place.review = { ...(place.review || {}), revealed: true, revealedAt: new Date().toISOString() };
-              await save();
+              await flushSave();
               render();
             }
           }));
@@ -672,7 +686,7 @@ export class Hub {
         class: 'btn primary small memory-route-return',
         type: 'button',
         text: 'Return to concept atlas',
-        onclick: () => this.app.openRoom(bookId, { openPart: partId })
+        onclick: async () => { await flushSave(); this.closeMemoryRoute(); await this.app.openRoom(bookId, { openPart: partId }); }
       }));
     };
     render();
