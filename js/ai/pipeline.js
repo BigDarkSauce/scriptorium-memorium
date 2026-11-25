@@ -258,8 +258,8 @@ export async function buildDioramas(ctx, P, M, o = {}) {
   A.dioramaReport = { plan: ins.plan.map(p => ({ subsection: p.subsection, need: p.need, why: p.why })), added: ins.added, made };
 }
 
-// Give every concept node a fitting visual target. Reuse a source-linked diorama when one already exists;
-// author one grouped scene only when the node's own visual plan calls for 3D. Abstract material stays 2D.
+// Give every concept node its own grouped visual model when the concept genuinely benefits from 3D.
+// Existing step-level dioramas remain linked as supporting views; abstract material stays 2D.
 async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
   const A = P.analysis, byId = new Map((A.chain || []).map(st => [String(st.id), st]));
   for (const node of atlas.nodes || []) {
@@ -270,25 +270,39 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: i, title: d.title || st.title, purpose: d.purpose || st.answers || st.title });
       });
     });
-    if (!refs.length && (node.dioramaSet || []).some(d => d && d.medium === '3d')) {
+    const needsGroupedScene = (node.dioramaSet || []).some(v => v && v.medium === '3d');
+    const alreadyGrouped = (node.stepIds || []).some(id => {
+      const st = byId.get(String(id));
+      return (st && st.demos || []).some(d => d && d.atlasNodeId === node.id && isThreeD(d) && !needsAuthoring(d));
+    });
+    if (needsGroupedScene && !alreadyGrouped) {
       const st = (node.stepIds || []).map(id => byId.get(String(id))).find(Boolean);
       if (st) {
         check(o.signal);
-        const views = (node.dioramaSet || []).slice(0, 4).map(v => ({
+        const views = (node.dioramaSet || []).filter(v => v && v.medium === '3d').slice(0, 6).map(v => ({
           title: v.title, purpose: v.purpose, mustShow: v.mustShow, manipulations: v.manipulations
         }));
+        const sourceSteps = (node.stepIds || []).map(id => byId.get(String(id))).filter(Boolean).map(step => ({
+          id: step.id, title: step.title, statement: String(step.statement || '').slice(0, 1200),
+          answers: step.answers || '', opens: step.opens || '', math: step.math || '',
+          terms: (step.terms || []).slice(0, 12), explanation: (step.explain || []).map(x => x && x.text).filter(Boolean).join(' ').slice(0, 1400),
+          pages: step.pages || [], figures: step.figures || [], table: step.table || null
+        }));
         const d = {
-          type: 'scene', title: node.title, purpose: node.question, technique: 'card', auto: true, planned: true,
+          type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true,
           request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
-            'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned views: ' + JSON.stringify(views) +
-            '. Use only the attached source steps for factual claims, values and relationships. Make the main causal or structural mechanism inspectable, make the most meaningful variables changeable, and design 3–6 lessons that move from orientation to mechanism to reconstruction and a prediction/check. ' +
-            'This scene belongs to concept "' + node.title + '" and is connected to source steps ' + node.stepIds.join(', ') + '.'
+            'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned explanatory views: ' + JSON.stringify(views) +
+            '. COMPLETE SOURCE STEP MATERIAL FOR THIS NODE (use all of it; IDs remain the audit anchors): ' + JSON.stringify(sourceSteps) +
+            '. Use only these source steps for factual claims, quantities, actors and relationships. Do not infer an unprovided measurement. ' +
+            'Choose the most suitable materialisation technique and environment for the domain. Make structures and mechanisms inspectable, make meaningful variables changeable, and sequence 3–6 lessons from global orientation through mechanism to reconstruction and a prediction/check. ' +
+            'This scene belongs to concept "' + node.title + '" and is connected to source steps ' + node.stepIds.join(', ') + '. Keep the source claims separate from any externally researched additions.'
         };
         st.demos = st.demos || [];
-        sayAtlasStatus(o, 'Authoring the grouped diorama for "' + node.title + '"…');
+        sayAtlasStatus(o, 'Authoring the concept-level diorama for "' + node.title + '"…');
         const how = await authorDemo(ctx, st, d, o);
+        d.atlasNodeId = node.id;
         st.demos.push(d);
-        if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question });
+        if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });
         else if (d.type === 'figure' && d.figure) node.generatedFigure = d.figure;
         node.dioramaBuild = how;
         ctx.save && ctx.save(P);
