@@ -191,9 +191,62 @@ export async function models(p, { fresh = false } = {}) {
 }
 
 // ---------------------------------------------------------------- one call
-const SYSTEM = 'You write content for Scriptorium Memorialium, a study app that turns textbook chapters into logical chains of steps, figures and interactive 3D dioramas. Follow the request exactly. Answer with ONE JSON value in exactly the requested format: no prose before or after it, no markdown fences, no comments. Use only facts supported by the given text or well established knowledge.';
+const SYSTEM = 'You write content for Scriptorium Memorialium, a study app that turns source documents into logically connected concepts and explanatory dioramas. Follow the request exactly. Answer with ONE JSON value in exactly the requested format: no prose before or after it, no markdown fences, no comments. Keep claims grounded in the supplied source. When a factual gap, current fact, or specialist simulation detail genuinely needs supplementation, use the enabled live web_search tool and cite actual sources in the requested JSON fields. Never invent a search, source, DOI, URL, or claim. Clearly distinguish uploaded-source facts from external evidence. Do not search merely to decorate an answer when the source is sufficient.';
 async function blobToDataUrl(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
+async function callResponses(p, model, prompt, { images = [], signal, onText, maxTokens, json = true, timeoutMs = 420000 } = {}) {
+  const S = settings(), key = keyOf(p, S), headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (key) headers.Authorization = 'Bearer ' + key;
+  const content = images.length
+    ? [{ type: 'input_text', text: prompt }, ...(await Promise.all(images.map(async b => ({ type: 'input_image', image_url: typeof b === 'string' ? b : await blobToDataUrl(b) }))))]
+    : prompt;
+  const body = {
+    model, instructions: SYSTEM, input: [{ role: 'user', content }],
+    tools: [{ type: 'web_search', search_context_size: 'medium' }], tool_choice: 'auto',
+    max_output_tokens: maxTokens || p.out || 16384, reasoning: { effort: 'high' },
+    ...(json && p.json ? { text: { format: { type: 'json_object' } } } : {})
+  };
+  const ctl = new AbortController(), stop = () => ctl.abort();
+  if (signal) { if (signal.aborted) throw { code: 'cancelled' }; signal.addEventListener('abort', stop, { once: true }); }
+  const hard = setTimeout(stop, timeoutMs), t0 = performance.now();
+  try {
+    let res;
+    try { res = await net(baseOf(p, S) + '/responses', { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
+    catch (e) { if (signal && signal.aborted) throw { code: 'cancelled' }; throw { code: 'network', message: String(e && e.message || e) }; }
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 1000), res }; }
+    const j = await res.json(), output = Array.isArray(j.output) ? j.output : [];
+    const messages = output.filter(x => x && x.type === 'message');
+    const chunks = messages.flatMap(x => (x.content || []).filter(c => c && c.type === 'output_text').map(c => c.text || ''));
+    const text = String(j.output_text || chunks.join('') || '');
+    const citations = messages.flatMap(x => (x.content || []).flatMap(c => (c.annotations || []).filter(a => a && a.type === 'url_citation').map(a => ({
+      title: String(a.title || ''), url: String(a.url || ''),
+      start: Number.isFinite(a.start_index) ? a.start_index : null,
+      end: Number.isFinite(a.end_index) ? a.end_index : null
+    }))));
+    const webSearchCalls = output.filter(x => x && x.type === 'web_search_call').length;
+    if (!text) {
+      const refusal = messages.flatMap(x => x.content || []).find(c => c && c.type === 'refusal');
+      if (refusal) throw { code: 'refused', message: String(refusal.refusal || 'The model refused this request.') };
+      throw { code: 'invalid_json', message: 'The Responses API returned no text output.' };
+    }
+    onText && onText(text);
+    const incomplete = j.status !== 'completed' || !!j.incomplete_details;
+    return {
+      text, finish: incomplete && j.incomplete_details && j.incomplete_details.reason === 'max_output_tokens' ? 'length' : 'stop',
+      usage: j.usage ? { total_tokens: (j.usage.input_tokens || 0) + (j.usage.output_tokens || 0), input_tokens: j.usage.input_tokens, output_tokens: j.usage.output_tokens } : null,
+      citations, webSearchCalls, ms: performance.now() - t0, model, provider: p.id
+    };
+  } catch (e) {
+    if (ctl.signal.aborted && !(signal && signal.aborted)) throw { code: 'timeout' };
+    if (signal && signal.aborted) throw { code: 'cancelled' };
+    throw e;
+  } finally {
+    clearTimeout(hard);
+    if (signal) signal.removeEventListener('abort', stop);
+  }
+}
+
 export async function call(p, model, prompt, { images = [], signal, onText, onThink, maxTokens, json = true, timeoutMs = 420000 } = {}) {
+  if (p.api === 'responses') return callResponses(p, model, prompt, { images, signal, onText, maxTokens, json, timeoutMs });
   const S = settings(), key = keyOf(p, S), H = { 'Content-Type': 'application/json' }; if (key) H.Authorization = 'Bearer ' + key;
   if (p.id === 'openrouter') { H['HTTP-Referer'] = location.origin; H['X-Title'] = 'Scriptorium Memorialium'; }
   const content = images.length ? [{ type: 'text', text: prompt }, ...(await Promise.all(images.map(async b => ({ type: 'image_url', image_url: { url: typeof b === 'string' ? b : await blobToDataUrl(b) } }))))] : prompt;
@@ -226,6 +279,7 @@ export async function call(p, model, prompt, { images = [], signal, onText, onTh
 const hash = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length; };
 const est = s => Math.ceil(String(s).length / 3.6);
 export const lastRoute = { provider: null, model: null };
+export const researchLog = [];
 export const lastBad = [];   // the last answers that did not parse (for the panel's diagnostics)
 // every (provider, model) that could take this request, best first
 export async function candidates({ images = 0, minRank = 0 } = {}) {
@@ -277,7 +331,9 @@ export async function ask(prompt, o = {}) {
     onStatus && onStatus(`Writing with ${p.name} · ${m}…`);
     spend(p, m, 0);
     try {
-      const r = await call(p, m, fixNote ? prompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : prompt, { images, signal, onText, onThink: n => onStatus && onStatus(`${p.name} · ${m} is thinking… ${n.toLocaleString()} characters of reasoning`) });
+      const providerPrompt = typeof o.promptForProvider === 'function' ? o.promptForProvider(p.id) : prompt;
+      const requestPrompt = fixNote ? providerPrompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : providerPrompt;
+      const r = await call(p, m, requestPrompt, { images, signal, onText, onThink: n => onStatus && onStatus(p.name + ' · ' + m + ' is thinking… ' + n.toLocaleString() + ' characters of reasoning') });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
       let v; try { v = parseJSONLoose(r.text); } catch (e) { lastBad.push({ at: Date.now(), provider: p.id, model: m, finish: r.finish, text: r.text.slice(0, 1500) + (r.text.length > 1500 ? ' … ' + r.text.slice(-500) : '') }); if (lastBad.length > 6) lastBad.shift(); throw { code: 'invalid_json' }; }
       const cut = r.finish === 'length' || !!(v && v._truncated);
@@ -286,6 +342,11 @@ export async function ask(prompt, o = {}) {
       if (cut && v && typeof v === 'object') v._truncated = true;
       const bad = validate ? validate(v) : null; if (bad) { if (cut) throw { code: 'truncated', message: bad }; if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
       fixNote = null; lastRoute.provider = p.name; lastRoute.model = m;
+      if (r.webSearchCalls || (r.citations && r.citations.length)) {
+        v._webResearch = { provider: p.name, model: m, searched: r.webSearchCalls || 0, citations: (r.citations || []).filter(c => /^https:\/\//i.test(c.url)) };
+        researchLog.push({ at: Date.now(), provider: p.name, model: m, searched: r.webSearchCalls || 0, citations: v._webResearch.citations });
+        if (researchLog.length > 120) researchLog.shift();
+      }
       if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {
