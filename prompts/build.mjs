@@ -17,7 +17,7 @@ const demoFigures = [{ id: '<fig-1-1>', label: '<Figure 1.1>', page: 3, caption:
 
 w('prompts/00-README.md', `# Prompt pack
 
-These are the prompt texts Scriptorium Memorialium uses in its OpenAI-first authoring pipeline (generated from \`js/ai/prompts.js\` by \`node prompts/build.mjs\`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
+These are the prompt templates used by Scriptorium's OpenAI-first authoring pipeline, with portable versions for other AIs. The files are generated from js/ai/prompts.js by node prompts/build.mjs; edit the source prompts, not these generated files.
 
 Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` → "Recipe for any AI"):
 1. \`01-split-book.md\`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).
