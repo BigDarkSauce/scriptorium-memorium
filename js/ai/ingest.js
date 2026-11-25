@@ -753,3 +753,127 @@ export function restrictParts(parts, from, to, only = null) {
 }
 // metadata only (what the prompt and the room file carry; images stay in IndexedDB)
 export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page }));
+
+
+
+// ---------------------------------------------------------------- PowerPoint (.pptx) ingestion
+// A PPTX is an Open Packaging Conventions ZIP archive. We resolve slide order from presentation.xml relationships
+// (not file numbering), then extract shape/table text, slide notes and accessible image descriptions. Slides remain
+// source locators only; the later semantic atlas groups their ideas across the deck into concept nodes.
+const PPT_P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+const PPT_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const PPT_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PPT_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const xmlDoc = (source, label) => {
+  const d = new DOMParser().parseFromString(String(source || ''), 'application/xml');
+  if (d.getElementsByTagName('parsererror').length) throw new Error('Invalid PowerPoint XML in ' + label);
+  return d;
+};
+function pptText(node) {
+  return [...node.getElementsByTagNameNS(PPT_A, 'p')].map(p =>
+    [...p.getElementsByTagNameNS(PPT_A, 't')].map(t => t.textContent || '').join('')
+  ).map(t => t.trim()).filter(Boolean);
+}
+function resolvePptTarget(sourcePart, target) {
+  if (!target) return '';
+  const raw = String(target).replace(/\\/g, '/');
+  const stack = raw.startsWith('/') ? [] : sourcePart.split('/').slice(0, -1);
+  for (const p of raw.replace(/^\/+/, '').split('/')) {
+    if (!p || p === '.') continue;
+    if (p === '..') stack.pop(); else stack.push(p);
+  }
+  return stack.join('/');
+}
+async function pptXml(zip, path, optional = false) {
+  const file = zip.file(path);
+  if (!file) { if (optional) return null; throw new Error('PowerPoint package is missing ' + path); }
+  return xmlDoc(await file.async('string'), path);
+}
+async function pptNotes(zip, slidePath) {
+  const bits = slidePath.split('/'), file = bits.pop(), relPath = bits.join('/') + '/_rels/' + file + '.rels';
+  const rel = await pptXml(zip, relPath, true); if (!rel) return '';
+  const noteRel = [...rel.getElementsByTagNameNS(PPT_REL, 'Relationship')].find(r => /\/notesSlide$/.test(r.getAttribute('Type') || ''));
+  if (!noteRel) return '';
+  const notePath = resolvePptTarget(slidePath, noteRel.getAttribute('Target'));
+  const notes = await pptXml(zip, notePath, true); if (!notes) return '';
+  const out = [];
+  for (const shape of [...notes.getElementsByTagNameNS(PPT_P, 'sp')]) {
+    const ph = shape.getElementsByTagNameNS(PPT_P, 'ph')[0];
+    const kind = ph && ph.getAttribute('type');
+    if (['sldNum', 'dt', 'hdr', 'ftr'].includes(kind)) continue;
+    const t = pptText(shape).join(' ');
+    if (t && !/^\d+$/.test(t)) out.push(t);
+  }
+  return out.join('\n');
+}
+async function pptSlide(zip, slidePath, number) {
+  const d = await pptXml(zip, slidePath);
+  const shapes = [...d.getElementsByTagNameNS(PPT_P, 'sp')].map(shape => {
+    const ph = shape.getElementsByTagNameNS(PPT_P, 'ph')[0];
+    const phType = ph && ph.getAttribute('type') || '';
+    const off = shape.getElementsByTagNameNS(PPT_A, 'off')[0];
+    const x = off ? Number(off.getAttribute('x')) : 0, y = off ? Number(off.getAttribute('y')) : 0;
+    return { shape, phType, x, y, text: pptText(shape).join('\n') };
+  }).filter(x => x.text).sort((a, b) => a.y - b.y || a.x - b.x);
+  const titleShape = shapes.find(x => ['title', 'ctrTitle'].includes(x.phType)) || shapes.find(x => x.text);
+  const title = (titleShape && titleShape.text.split('\n').find(Boolean) || '').trim() || 'Slide ' + number;
+  const chunks = shapes.map(x => x.text).filter(Boolean);
+  // Accessible alternative text for pictures/charts/SmartArt: do not pretend to have interpreted the embedded pixels.
+  const descriptions = [...d.getElementsByTagNameNS(PPT_P, 'cNvPr')]
+    .map(x => (x.getAttribute('descr') || x.getAttribute('title') || '').trim())
+    .filter(Boolean);
+  const alt = [...new Set(descriptions)];
+  const notes = await pptNotes(zip, slidePath);
+  const text = [
+    '[slide ' + number + ']',
+    'Slide title: ' + title,
+    ...chunks.filter(t => t !== title),
+    ...(alt.length ? ['Accessible image / object descriptions:', ...alt.map(x => '- ' + x)] : []),
+    ...(notes ? ['Speaker notes:', notes] : []),
+    ...(chunks.length ? [] : ['[No extractable text found. The slide may be primarily visual; its embedded images are not represented as interpreted facts.]'])
+  ].join('\n\n');
+  return { id: 'slide-' + number, num: String(number), title, level: 2, startPage: number, endPage: number, sourceSlide: number, text, inventory: inventory(text) };
+}
+export async function splitPresentation(blob, { onProgress } = {}) {
+  if (typeof window === 'undefined' || !window.JSZip || typeof window.JSZip.loadAsync !== 'function') {
+    throw new Error('PowerPoint support could not load JSZip. Check the connection to the JSZip CDN and try again.');
+  }
+  if (!blob || !/\.pptx$/i.test(blob.name || '') && blob.type !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+    throw new Error('Choose a PowerPoint .pptx file. Older .ppt files are not supported by this reader yet.');
+  }
+  const zip = await window.JSZip.loadAsync(blob, { checkCRC32: false });
+  const presentation = await pptXml(zip, 'ppt/presentation.xml');
+  const relationships = await pptXml(zip, 'ppt/_rels/presentation.xml.rels');
+  const rels = new Map([...relationships.getElementsByTagNameNS(PPT_REL, 'Relationship')].map(r => [r.getAttribute('Id'), r]));
+  const slideIds = [...presentation.getElementsByTagNameNS(PPT_P, 'sldIdLst')].flatMap(x => [...x.getElementsByTagNameNS(PPT_P, 'sldId')]);
+  const slidePaths = slideIds.map(x => {
+    const rid = x.getAttributeNS(PPT_R, 'id') || x.getAttribute('r:id');
+    const rel = rels.get(rid);
+    if (!rel || !/\/slide$/.test(rel.getAttribute('Type') || '')) return null;
+    return resolvePptTarget('ppt/presentation.xml', rel.getAttribute('Target'));
+  }).filter(Boolean);
+  if (!slidePaths.length) throw new Error('No presentation slides were found in the PowerPoint package.');
+  if (slidePaths.length > 600) throw new Error('This presentation has more than 600 slides. Split it into smaller decks for reliable analysis.');
+  const slides = [];
+  for (let i = 0; i < slidePaths.length; i++) {
+    slides.push(await pptSlide(zip, slidePaths[i], i + 1));
+    if (onProgress) onProgress((i + 1) / slidePaths.length);
+  }
+  const titleDoc = await pptXml(zip, 'docProps/core.xml', true);
+  const titleEl = titleDoc && titleDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'title')[0];
+  const title = (titleEl && titleEl.textContent || '').trim() || String(blob.name || 'PowerPoint presentation').replace(/\.pptx$/i, '');
+  const part = {
+    title, num: '1', level: 1, startPage: 1, endPage: slides.length,
+    summary: 'PowerPoint presentation with ' + slides.length + ' slides. Semantic topic grouping is performed after the source-grounded chain has been validated.',
+    sourceType: 'pptx', subsections: slides
+  };
+  return { pages: slides.length, parts: [part], method: 'presentation', title, sourceType: 'pptx' };
+}
+export async function presentationSections(blob, part) {
+  const sections = (part.subsections || []).map(s => {
+    const text = String(s.text || '');
+    return { ...s, inventory: s.inventory || inventory(text), text };
+  });
+  const text = sections.map(s => '\n=== [' + s.id + '] ' + s.title + ' (slide ' + s.startPage + ') ===\n' + s.text).join('\n');
+  return { sections, text, truncated: false };
+}
