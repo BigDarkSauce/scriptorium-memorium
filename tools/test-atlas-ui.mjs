@@ -62,11 +62,32 @@ try {
         ]
       }],
       edges: [],
+      sourceIndex: {
+        sourceSubsections: [{ id: '1.1', title: 'Membrane transport', startPage: 2, endPage: 3 }]
+      },
       audit: { certainty: 'test atlas' }
+    };
+    const part = {
+      title: 'Test part',
+      analysis: {
+        chain: [
+          {
+            id: 'S1', section: '1.1', kind: 'definition', title: 'Membrane boundary',
+            statement: 'The membrane separates two regions.',
+            terms: [{ term: 'selective permeability', meaning: 'The boundary permits some movements and not others.' }],
+            pages: [2]
+          },
+          {
+            id: 'S2', section: '1.1', kind: 'equation', title: 'Flux relation',
+            statement: 'The rate of movement depends on the stated gradient and permeability.',
+            math: 'J = P (C1 - C2)', pages: [3]
+          }
+        ]
+      }
     };
     let saves = 0;
     const view = renderAtlasView({
-      atlas, part: { title: 'Test part' },
+      atlas, part,
       onSave: () => { saves++; },
       onAssignMemoryPlace: () => { memoryAssignments++; },
       onRemoveMemoryPlace: () => { memoryRemovals++; },
@@ -85,6 +106,18 @@ try {
   const branches = page.locator('.atlas-branch-tab');
   assert.equal(await branches.count(), 2, 'two questions should appear as horizontal branches');
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
+
+  const sourceScan = page.locator('.atlas-source-scan');
+  await sourceScan.locator('summary').click();
+  assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
+  const scanSearch = sourceScan.locator('.atlas-scan-search');
+  await scanSearch.fill('selective permeability');
+  assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'a term search must find its exact source step');
+  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S1.*p\. 2/i);
+  await sourceScan.locator('.atlas-scan-row').first().click();
+  await scanSearch.fill('Flux relation');
+  assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'an equation step must be searchable by its source title');
+  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /equation \/ derivation/i);
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
   await page.getByRole('button', { name: 'Remove memory place' }).click();
@@ -217,7 +250,7 @@ try {
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, and learner-controlled route order');
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, learner-controlled route order and source-index search');
 } finally {
   await browser.close();
 }
