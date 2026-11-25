@@ -286,7 +286,8 @@ export class Reader {
       const state = {
         caseId: shelves.some(s => s.caseId === (previous && previous.caseId)) ? previous.caseId : shelves[0].caseId,
         row: previous ? Number(previous.row) : null,
-        slot: previous ? Number(previous.slot) : null
+        slot: previous ? Number(previous.slot) : null,
+        association: previous && previous.association || ''
       };
       const panel = el('aside', { class: 'memory-locus-assign-panel glass', role: 'dialog', 'aria-label': 'Assign a memory place' });
       hub.ui.append(panel);
@@ -301,7 +302,7 @@ export class Reader {
         if (row && !(row.slots || []).some(s => s.slot === state.slot)) state.slot = (row.slots[0] || {}).slot;
         const current = row && (row.slots || []).find(s => s.slot === state.slot);
         const cue = el('textarea', { class: 'memory-locus-cue', rows: 3, maxlength: 240, placeholder: 'Choose a distinctive image, event, sound, movement or verbal cue for this concept. Keep the cue separate from the answer.', 'aria-label': 'Memory association' });
-        cue.value = previous && previous.association || '';
+        cue.value = state.association;
         const shelfSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase' }, shelves.map(s => el('option', { value: s.caseId, text: s.title })));
         shelfSelect.value = state.caseId;
         shelfSelect.addEventListener('change', () => { state.caseId = shelfSelect.value; state.row = null; state.slot = null; render(); });
@@ -332,7 +333,7 @@ export class Reader {
           text: previous ? 'Update memory place' : 'Save memory place',
           disabled: !row || !current || !cue.value.trim(),
           onclick: async () => {
-            const association = cue.value.trim().slice(0, 240);
+            const association = state.association.trim().slice(0, 240);
             if (!association) { status.textContent = 'Add a distinct memory cue before saving.'; cue.focus(); return; }
             const next = {
               nodeId: node.id,
@@ -351,7 +352,7 @@ export class Reader {
             toast('Memory place saved to the library.');
           }
         });
-        cue.addEventListener('input', () => { save.disabled = !cue.value.trim() || !row || !current; });
+        cue.addEventListener('input', () => { state.association = cue.value.slice(0, 240); save.disabled = !state.association.trim() || !row || !current; });
         panel.append(
           el('div', { class: 'memory-route-overline', text: 'ANCHOR A CONCEPT IN THE LIBRARY' }),
           el('h3', { text: node.title || 'Concept' }),
