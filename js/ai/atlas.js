@@ -223,6 +223,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     model: [...new Set(uniqueResearch.map(x => x.model).filter(Boolean))].join(', '),
     searched: uniqueResearch.reduce((n, x) => n + (+x.searched || 0), 0),
     tasks: uniqueResearch.map(x => x.task || 'AI authoring call'),
+    records: uniqueResearch.map(x => ({ callId: x.callId || null, provider: x.provider || '', model: x.model || '', searched: +x.searched || 0, task: x.task || 'AI authoring call', citations: (x.citations || []).filter(c => c && /^https:\/\//i.test(c.url)) })),
     citations: researchCitations.filter((c, i, a) => a.findIndex(y => y.url === c.url) === i)
   } : null;
   const { _atlasWebResearch, ...authoredAtlas } = authored;
@@ -238,7 +239,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       assignedStepCount: unique(authored.nodes.flatMap(n => n.stepIds)).length,
       fallbackReason: failure || null,
       certainty: failure ? 'low: section grouping only' : 'AI-generated; inspect the source links and uncertainty notes',
-      webResearch: index.webResearch ? { provider: index.webResearch.provider || null, model: index.webResearch.model || null, searches: index.webResearch.searched || 0, citations: index.webResearch.citations.length } : { status: 'no web-search citations recorded' }
+      webResearch: index.webResearch ? { provider: index.webResearch.provider || null, model: index.webResearch.model || null, searches: index.webResearch.searched || 0, citations: index.webResearch.citations.length, callIds: (index.webResearch.records || []).map(x => x.callId).filter(Boolean) } : { status: 'no web-search citations recorded' }
     }
   };
   return atlas;
