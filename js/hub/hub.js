@@ -677,6 +677,41 @@ export class Hub {
         }
       }
 
+      panel.append(el('div', { class: 'memory-route-order' }, [
+        el('span', { class: 'memory-route-status', text: 'YOUR ROUTE ORDER · NOT A CLAIM ABOUT CONCEPT DEPENDENCY' }),
+        el('div', { class: 'row wrap' }, [
+          el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Move this place earlier',
+            disabled: index === 0,
+            onclick: async () => {
+              const current = stops[index];
+              stops.splice(index, 1);
+              index -= 1;
+              stops.splice(index, 0, current);
+              atlas.memoryPlaces = [...stops, ...(atlas.memoryPlaces || []).filter(p => !stops.includes(p))];
+              await flushSave();
+              render();
+            }
+          }),
+          el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Move this place later',
+            disabled: index >= stops.length - 1,
+            onclick: async () => {
+              const current = stops[index];
+              stops.splice(index, 1);
+              index += 1;
+              stops.splice(index, 0, current);
+              atlas.memoryPlaces = [...stops, ...(atlas.memoryPlaces || []).filter(p => !stops.includes(p))];
+              await flushSave();
+              render();
+            }
+          })
+        ])
+      ]));
       panel.append(el('div', { class: 'memory-route-footer' }, [
         el('button', { class: 'btn small', type: 'button', text: '← Previous place', disabled: index === 0, onclick: () => { index = Math.max(0, index - 1); render(); } }),
         el('span', { class: 'memory-route-progress', text: (index + 1) + ' / ' + stops.length }),
