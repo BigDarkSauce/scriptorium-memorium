@@ -121,6 +121,9 @@ wrongPartition.nodes[0].challenges = []; // keep the fixture focused on the part
 assert.match(validateAtlas(wrongPartition, ['S1', 'S2'], steps), /does not partition all source steps/);
 
 const duplicateChallenge = makeAtlas();
+duplicateChallenge.nodes[0].stepIds = ['S1'];
+duplicateChallenge.nodes[0].challenges[0].reasoning = duplicateChallenge.nodes[0].challenges[0].reasoning
+  .map(unit => ({ ...unit, sourceStepIds: ['S1'] }));
 duplicateChallenge.nodes.push({
   ...duplicateChallenge.nodes[0],
   id: 'second-concept',
