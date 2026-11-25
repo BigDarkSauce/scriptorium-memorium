@@ -292,7 +292,10 @@ export class Reader {
       };
       const panel = el('aside', { class: 'memory-locus-assign-panel glass', role: 'dialog', 'aria-label': 'Assign a memory place' });
       hub.ui.append(panel);
-      const resumeAtlas = () => app.openRoom(book.id, { openPart: part.id });
+      const resumeAtlas = () => {
+        if (hub && typeof hub.clearMemoryAnchor === 'function') hub.clearMemoryAnchor();
+        return app.openRoom(book.id, { openPart: part.id });
+      };
       const memoryOwnerAt = (caseId, row, slot) => {
         const place = (atlas.memoryPlaces || []).find(p =>
           String(p.nodeId) !== String(node.id) &&
