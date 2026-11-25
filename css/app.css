@@ -1434,6 +1434,12 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-scan-section-summary::after { content: '＋'; flex: 0 0 auto; color: #78907d; font: 12px var(--f-mono); }
 .atlas-scan-section-summary[aria-expanded="true"] { border-bottom: 1px solid rgba(90,60,30,.12); background: rgba(255,255,255,.38); }
 .atlas-scan-section-summary[aria-expanded="true"]::after { content: '−'; }
+.atlas-scan-facets { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 7px 8px 2px; background: rgba(255,255,255,.16); }
+.atlas-scan-facets[hidden] { display: none; }
+.atlas-scan-facet { padding: 4px 7px; border: 1px solid rgba(90,60,30,.18); border-radius: 6px; background: rgba(255,255,255,.42); color: #675640; font: 10px var(--f-mono); cursor: pointer; }
+.atlas-scan-facet:hover, .atlas-scan-facet:focus-visible { border-color: rgba(49,91,80,.48); outline: none; }
+.atlas-scan-facet[aria-pressed="true"] { border-color: rgba(49,91,80,.56); background: rgba(49,91,80,.13); color: #315b50; }
+.atlas-scan-facet-status { margin-left: auto; color: #81745e; font: 9px var(--f-mono); }
 .atlas-scan-section-steps { display: grid; gap: 5px; padding: 7px; }
 .atlas-scan-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 12px; width: 100%; padding: 8px 10px; border: 1px solid rgba(90,60,30,.12); border-radius: 7px; background: rgba(255,255,255,.4); color: #4d4334; text-align: left; cursor: pointer; }
 .atlas-scan-row:hover:not(:disabled), .atlas-scan-row:focus-visible:not(:disabled) { border-color: rgba(49,91,80,.5); background: rgba(231,239,225,.75); }

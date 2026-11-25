@@ -206,7 +206,17 @@ try {
   await sectionBrowse.locator('.atlas-scan-section-summary').evaluate(el => el.click());
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-summary').getAttribute('aria-expanded'), 'true', 'each subsection control must expose its expanded state');
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps').evaluate(el => el.hidden), false, 'the subsection step list must be revealed');
-  assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row').count(), 2, 'expanded subsections must expose their source-step inventory');
+  const facetBar = sectionBrowse.locator('.atlas-scan-facets');
+  assert.equal(await facetBar.isVisible(), true, 'multi-type subsections must expose content-type filters');
+  assert.equal(await facetBar.locator('.atlas-scan-facet').count(), 5, 'the section must expose All plus one filter for each detected content type');
+  const equationFacet = facetBar.locator('[data-facet="equation / derivation"]');
+  await equationFacet.evaluate(el => el.click());
+  const visibleSectionRows = sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row:not([hidden])');
+  assert.equal(await visibleSectionRows.count(), 1, 'an equation filter must show only source steps tagged with equations or derivations');
+  assert.match(await visibleSectionRows.first().innerText(), /Flux relation.*S2 · p\. 3/s);
+  assert.equal(await equationFacet.getAttribute('aria-pressed'), 'true', 'the active content-type filter must expose its state');
+  await facetBar.locator('[data-facet="*"]').evaluate(el => el.click());
+  assert.equal(await visibleSectionRows.count(), 2, 'the All filter must restore every source step');
   const sectionText = await sectionBrowse.innerText();
   assert.ok(sectionText.includes('Membrane boundary') && sectionText.includes('S1 · p. 2'), 'the subsection inventory must show the first source title and ID/page');
   assert.ok(sectionText.includes('Flux relation') && sectionText.includes('S2 · p. 3'), 'the subsection inventory must show the second source title and ID/page');

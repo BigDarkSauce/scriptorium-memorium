@@ -241,6 +241,45 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           role: 'list',
           'aria-label': (sec.title || sec.id) + (figureEntries ? ' source figures' : ' source steps')
         });
+        const facetBar = el('div', {
+          class: 'atlas-scan-facets',
+          hidden: true,
+          role: 'group',
+          'aria-label': 'Filter source steps by content type'
+        });
+        const facetButtons = [];
+        const facetStatus = el('span', {
+          class: 'atlas-scan-facet-status',
+          'aria-live': 'polite',
+          text: entries.length + ' source steps'
+        });
+        const applyFacet = selectedTag => {
+          let visible = 0;
+          stepList.querySelectorAll('.atlas-scan-row').forEach(row => {
+            const tags = String(row.getAttribute('data-scan-tags') || '').split('|').filter(Boolean);
+            const show = selectedTag === '*' || tags.includes(selectedTag);
+            row.hidden = !show;
+            if (show) visible++;
+          });
+          facetButtons.forEach(({ tag, button }) => {
+            button.setAttribute('aria-pressed', String(tag === selectedTag));
+          });
+          facetStatus.textContent = selectedTag === '*'
+            ? visible + ' source steps'
+            : visible + ' of ' + entries.length + ' source steps · ' + selectedTag;
+        };
+        const addFacet = (tag, label, count) => {
+          const button = el('button', {
+            class: 'atlas-scan-facet',
+            type: 'button',
+            'data-facet': tag,
+            'aria-pressed': String(tag === '*'),
+            text: label + ' · ' + count,
+            onclick: () => applyFacet(tag)
+          });
+          facetButtons.push({ tag, button });
+          facetBar.append(button);
+        };
         const sectionSummary = el('button', {
           class: 'atlas-scan-section-summary',
           type: 'button',
@@ -249,6 +288,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           onclick: () => {
             const expanded = stepList.hidden;
             stepList.hidden = !expanded;
+            facetBar.hidden = !expanded;
             sectionSummary.setAttribute('aria-expanded', String(expanded));
           }
         }, [
@@ -265,6 +305,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
             class: 'atlas-scan-row',
             type: 'button',
             role: 'listitem',
+            'data-scan-tags': entry.tags.join('|'),
             disabled: !entry.node,
             onclick: () => openNode(entry.node, st.id)
           }, [
@@ -276,6 +317,15 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
             el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
           ]));
         });
+        if (entries.length > 1 && categories.length > 1) {
+          addFacet('*', 'All', entries.length);
+          categories.forEach(tag => {
+            const count = entries.filter(entry => entry.tags.includes(tag)).length;
+            if (count) addFacet(tag, tag, count);
+          });
+          facetBar.append(facetStatus);
+          applyFacet('*');
+        }
         (figureEntries || []).forEach(({ figure }) => {
           const pageText = sourcePointLabel(figure, sourceType);
           stepList.append(el('button', {
@@ -293,7 +343,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
             el('span', { class: 'atlas-scan-open', text: 'INDEXED FIGURE · NO LINKED SOURCE STEP' })
           ]));
         });
-        sectionDetails.append(sectionSummary, stepList);
+        sectionDetails.append(sectionSummary, ...(facetButtons.length ? [facetBar] : []), stepList);
         scanResults.append(sectionDetails);
       });
       return;
