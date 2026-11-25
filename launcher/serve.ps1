@@ -38,7 +38,7 @@ $handler = {
       $origin = $req.Headers['Origin']
       if ($origin) { try { $o = [Uri]$origin; if ($o.Scheme -ne 'http' -or $o.Authority -ne $req.Url.Authority) { $res.StatusCode = 403; return } } catch { $res.StatusCode = 403; return } }
       $fetchSite = $req.Headers['Sec-Fetch-Site']
-      if ($fetchSite -and $fetchSite -notin @('same-origin', 'none')) { $res.StatusCode = 403; return } }
+      if ($fetchSite -and $fetchSite -notin @('same-origin', 'none')) { $res.StatusCode = 403; return }
       $key = [string]$env:OPENAI_API_KEY
       $model = [string]$env:OPENAI_MODEL
       if (-not $model) { $model = 'gpt-6.2-astra' }
