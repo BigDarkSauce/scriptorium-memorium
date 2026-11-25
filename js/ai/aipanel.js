@@ -1,6 +1,5 @@
-// The AI settings: which engine writes (Claude / Claude + free models / free models only), the free providers with
-// their keys, today's use, and the live test. Opened from the round "AI" button under the graphics button, on every
-// screen. Everything here is kept in this browser only (js/ai/free.js).
+// AI settings: OpenAI is the primary model route, with the configured provider pool as automatic fallbacks. The
+// OpenAI API key remains in the local server environment; it is never stored by the browser.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { claudeAvailable } from './claude.js';
@@ -8,7 +7,7 @@ import { bridgeReady, bridgeInfo, inClaudeApp, bridgeVault } from './bridge.js';
 import * as MEDIA from './media.js';
 
 const MODE_TEXT = {
-  free: ['OpenAI preferred + fallbacks', 'GPT-6.2 Astra through the local secure relay is the primary engine. If it is not configured or available, other enabled providers are tried automatically. Claude is not required.'],
+  free: ['OpenAI preferred + fallbacks', 'GPT-6.2 Astra through the local secure relay is the primary engine. If it is not configured or available, other enabled providers are tried automatically.'],
 }
 export function aiButton(app) {
   const btn = el('button', { class: 'ai-btn glass', type: 'button', 'aria-label': 'AI engine settings', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>' });
@@ -16,15 +15,14 @@ export function aiButton(app) {
   const sync = () => { btn.dataset.mode = FREE.mode(); btn.setAttribute('aria-label', 'AI engine: ' + FREE.MODES[FREE.mode()]); };   /* the label shows on hover and focus (css: the round buttons' labels) */
   FREE.onSettings(sync); sync(); document.body.append(btn); return btn;
 }
-// the engine left at its default follows what is available (free.js autoMode): called once Claude's availability is known
+// the primary engine is fixed to the OpenAI-first route; provider availability determines the fallback chain
 export function autoEngine() { try { return FREE.autoMode(claudeAvailable()); } catch (e) { return null; } }
 export function openAIPanel(app) {
   if (document.querySelector('.ai-panel')) return;
   autoEngine();
   let S = FREE.settings(), reachState = null, offS = null; const close = () => { if (offS) offS(); veil.remove(); document.removeEventListener('keydown', esc); }, esc = e => { if (e.key === 'Escape') close(); };
   const modes = el('div', { class: 'ai-modes', role: 'radiogroup', 'aria-label': 'AI engine' });
-  // an engine this page cannot use is greyed with one line saying why (it stays choosable: Claude directs outside the app
-  // still works by pasting each request into any AI)
+  // one fixed primary route is displayed; all enabled providers are tried by the model router
   const drawModes = () => { modes.innerHTML = ''; const [t, d] = MODE_TEXT.free; modes.append(el('div', { class: 'ai-mode on', role: 'status' }, [el('b', { text: t }), el('span', { text: d })])); };
   const plist = el('div', { class: 'ai-providers' }), out = el('div', { class: 'ai-test' });
   const use = FREE.usageToday();
@@ -63,22 +61,19 @@ export function openAIPanel(app) {
     el('div', { class: 'row' }, [testBtn, stopBtn, forget]), out])]);
   veil.addEventListener('pointerdown', e => { if (e.target === veil) close(); }); document.addEventListener('keydown', esc);
   drawModes(); drawProviders(); document.body.append(veil);
-  // how the free models are reached from here. Inside the Claude app the page may not contact outside addresses: the
-  // Scriptorium free-models extension on this computer makes the requests for it (js/ai/bridge.js), so Claude and the
-  // free models work together in the same window. Outside the app (the standalone page) they are called directly.
-  // the connection status, the extension and the note on keys and limits: one line until opened ("Details"); open by
-  // itself only when something here needs doing (inside the Claude app without the extension)
+  // Fallback providers are called directly from the standalone page, through the local relay, or via the optional
+  // host extension when an embedded host restricts outbound networking.
+  // connectivity and key information: one line until opened ("Details").
   const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Fallback provider connectivity' });
   const openAIStatus = el('p', { class: 'small ai-openai-status', text: 'OpenAI local relay: checking…' });
   const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), openAIStatus, reach,
     el('p', { class: 'dim small', text: 'The OpenAI API key is read from OPENAI_API_KEY by the local Scriptorium server; it is not stored in the browser. Other provider keys are stored in this browser and sent only to their matching provider. API requests may incur charges. If the local OpenAI model is unavailable, configured fallback providers are tried next.' })]);
   modes.after(details);
-  // the extension's file, saved through the Claude app (the bundle is published as base64 text: an artifact serves no
-  // archives). It says what happened: saved, declined, or where to find the same file instead.
+  // Optional host-networking extension. It is not required for the local OpenAI-first workflow.
   const dlBtn = label => { const b = el('button', { class: 'btn small primary', type: 'button', text: label, onclick: async () => { b.disabled = true; const was = b.textContent; b.textContent = 'Preparing…';
     try { const b64 = (await (await fetch('bridge/scriptorium-free-models.mcpb.b64.txt', { cache: 'no-store' })).text()).trim(), bin = atob(b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const D = window.claude && claude.use ? await claude.use('downloads') : null;
-      if (D) { await D.save({ filename: 'Scriptorium free models.mcpb', data: new Blob([bytes], { type: 'application/octet-stream' }) }); toast('Saved. Open your Downloads folder and double-click “Scriptorium free models.mcpb”; Claude Desktop installs it.', 9000); }
+      if (D) { await D.save({ filename: 'Scriptorium free models.mcpb', data: new Blob([bytes], { type: 'application/octet-stream' }) }); toast('Saved. Open your Downloads folder and double-click “Scriptorium free models.mcpb”; the desktop host installs it.', 9000); }
       else { const u = URL.createObjectURL(new Blob([bytes])), a = el('a', { href: u, download: 'Scriptorium free models.mcpb' }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); toast('If nothing was saved: the same file is in your Scriptorium Memorium folder, bridge\\Scriptorium free models.mcpb.', 9000); } }
     catch (e) { toast(e && e.code === 'declined' ? 'Not saved. The same file is in your Scriptorium Memorium folder: bridge\\Scriptorium free models.mcpb' : 'This view could not save it (' + ((e && (e.message || e.code)) || e) + '). The same file is in your Scriptorium Memorium folder: bridge\\Scriptorium free models.mcpb', 10000); }
     finally { b.disabled = false; b.textContent = was; } } }); return b; };
@@ -122,16 +117,16 @@ export function openAIPanel(app) {
       reach.append(el('b', { text: !ok ? 'Fallback providers cannot be reached from this view.' : FREE.via() === 'relay' ? '✓ Fallback providers through this computer’s launcher' : 'Fallback providers: direct from this page.' }), FREE.via() === 'relay' ? ' (the local relay can reach local and configured provider endpoints).' : ' Use the local launcher for additional providers blocked by browser cross-origin rules.');
       if (FREE.via() === 'relay') { const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
-    if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium extension on this computer${I.version ? ' (v' + I.version + ')' : ''}: Claude and the free models work together here.`, vaultNote());
-      if (!(I.tools || []).includes('freellmapi_detect')) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.1) is ready: ' }), 'it keeps your keys on this computer and connects FreeLLMAPI by itself. ', dlBtn('Download the new one'), ' then double-click it (Claude Desktop replaces the old one).']));
-      else { if (!MEDIA.bridgeBinaryOK()) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.2) is ready: ' }), 'it carries pictures (checked before use). ', dlBtn('Download the new one'), ' then double-click it; Claude Desktop replaces the old one.'])); const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
+    if (ok) { const I = bridgeInfo() || {}; reach.className = 'ai-reach good'; reach.append(el('b', { text: '✓ Free models connected' }), ` through the Scriptorium host-networking extension${I.version ? ' (v' + I.version + ')' : ''}.`, vaultNote());
+      if (!(I.tools || []).includes('freellmapi_detect')) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.1) is ready: ' }), 'it keeps your keys on this computer and connects FreeLLMAPI by itself. ', dlBtn('Download the new one'), ' then double-click it to replace the old version.']));
+      else { if (!MEDIA.bridgeBinaryOK()) reach.append(el('p', { class: 'small' }, [el('b', { text: 'A newer extension (1.2) is ready: ' }), 'it carries pictures (checked before use). ', dlBtn('Download the new one'), ' then double-click it to replace the old version.'])); const fl = el('p', { class: 'small ai-fla' }); reach.append(fl, mediaLine()); fillFla(fl); }
       return; }
     reach.className = 'ai-reach';
     const dl = dlBtn('Download the extension');
     const again = el('button', { class: 'btn small', type: 'button', text: 'Check again', onclick: async () => { again.disabled = true; again.textContent = 'Checking…'; const v = await FREE.reachable({ fresh: true }); again.disabled = false; again.textContent = 'Check again'; drawReach(v); if (v) toast('Free models connected'); } });
-    reach.append(el('b', { text: 'To use free models inside the Claude app, add the Scriptorium free-models extension.' }),
-      el('ol', { class: 'ai-steps' }, [el('li', { text: 'Download it (or take “Scriptorium free models.mcpb” from your Scriptorium Memorium folder).' }), el('li', { text: 'Double-click the file: Claude Desktop opens it; press Install. (Or Settings → Extensions → drag the file in.)' }), el('li', { text: 'Come back here and press Check again.' })]),
-      el('p', { class: 'dim small', text: 'Why: inside the Claude app this page may not contact outside addresses; the extension makes the free-model requests from your computer (only to LLM addresses; nothing else) and passes the answers back. It is yours alone: only the page’s owner can use it.' }),
+    reach.append(el('b', { text: 'To use fallback providers inside a restricted embedded host, add the optional Scriptorium networking extension.' }),
+      el('ol', { class: 'ai-steps' }, [el('li', { text: 'Download it (or take “Scriptorium free models.mcpb” from your Scriptorium Memorium folder).' }), el('li', { text: 'Open the .mcpb file in a supported desktop host and install it. (The exact install step depends on the host.)' }), el('li', { text: 'Come back here and press Check again.' })]),
+      el('p', { class: 'dim small', text: 'Why: some embedded hosts restrict outbound addresses. The optional extension routes fallback-provider requests through your computer; the local OpenAI server remains the recommended primary route.' }),
       el('div', { class: 'row' }, [dl, again])); };
   if (!inClaudeApp()) FREE.reachable().then(drawReach); else { reach.append(el('span', { class: 'dim small', text: 'Fallback provider networking inside the hosted app uses the Scriptorium extension.' })); }
   offS = FREE.onSettings(Sx => { if (reachState == null && document.body.contains(reach)) FREE.reachable().then(drawReach); });
