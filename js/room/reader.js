@@ -238,7 +238,7 @@ export class Reader {
     if (A && (A.chain || []).length) pop.append(el('div', { class: 'rm-sep', role: 'separator' }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Analyse again…', disabled: !!this._improving, onclick: () => { this.toggleMenu(false); this.showAuthoring(); } }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Paste JSON from another AI', onclick: () => { this.toggleMenu(false); this.pasteJSON(); } }));
-    if (A && !evidenceAvailable()) pop.append(el('p', { class: 'rm-note', text: 'Sources are checked against OpenAlex, Consensus, PubMed, SciSpace, Hugging Face or ClinicalTrials.gov when one is connected in claude.ai.' }));
+    if (A && !evidenceAvailable()) pop.append(el('p', { class: 'rm-note', text: 'OpenAI web-search citations and chapter source indexing are shown in the concept atlas. Optional specialist research connectors depend on the host and provider configuration.' }));
   }
   // the authoring bar (depth, Re-analyse, Paste JSON) unfolded at the top of the sheet, from the ⋯ menu
   showAuthoring() {
