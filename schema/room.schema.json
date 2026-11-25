@@ -22,6 +22,14 @@
             "integer",
             "null"
           ]
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "pdf",
+            "pptx"
+          ],
+          "description": "Original uploaded source format; pptx slide content is stored as source units."
         }
       }
     },
