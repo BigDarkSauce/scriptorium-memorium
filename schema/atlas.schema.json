@@ -196,6 +196,40 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "reasoning": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 5,
+                  "description": "Ordered, source-mapped reasoning units revealed one at a time after a committed prediction.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "text",
+                      "sourceStepIds"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 700
+                      },
+                      "sourceStepIds": {
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
