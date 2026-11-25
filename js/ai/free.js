@@ -336,6 +336,15 @@ export async function ask(prompt, o = {}) {
       const requestPrompt = fixNote ? providerPrompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : providerPrompt;
       const r = await call(p, m, requestPrompt, { images, signal, onText, onThink: n => onStatus && onStatus(p.name + ' · ' + m + ' is thinking… ' + n.toLocaleString() + ' characters of reasoning') });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
+      const webResearch = (r.webSearchCalls || (r.citations && r.citations.length)) ? {
+        provider: p.name, model: m, searched: r.webSearchCalls || 0,
+        citations: (r.citations || []).filter(c => /^https:\/\//i.test(c.url))
+      } : null;
+      if (webResearch) {
+        researchLog.push({ at: Date.now(), ...webResearch });
+        if (researchLog.length > 120) researchLog.shift();
+        if (typeof o.onResearch === 'function') { try { o.onResearch(webResearch); } catch (e) { } }
+      }
       let v; try { v = parseJSONLoose(r.text); } catch (e) { lastBad.push({ at: Date.now(), provider: p.id, model: m, finish: r.finish, text: r.text.slice(0, 1500) + (r.text.length > 1500 ? ' … ' + r.text.slice(-500) : '') }); if (lastBad.length > 6) lastBad.shift(); throw { code: 'invalid_json' }; }
       const cut = r.finish === 'length' || !!(v && v._truncated);
       // a cut-off answer: its complete elements are kept (parseJSONLoose) when the caller can use them and its check passes
@@ -343,11 +352,7 @@ export async function ask(prompt, o = {}) {
       if (cut && v && typeof v === 'object') v._truncated = true;
       const bad = validate ? validate(v) : null; if (bad) { if (cut) throw { code: 'truncated', message: bad }; if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
       fixNote = null; lastRoute.provider = p.name; lastRoute.model = m;
-      if (r.webSearchCalls || (r.citations && r.citations.length)) {
-        v._webResearch = { provider: p.name, model: m, searched: r.webSearchCalls || 0, citations: (r.citations || []).filter(c => /^https:\/\//i.test(c.url)) };
-        researchLog.push({ at: Date.now(), provider: p.name, model: m, searched: r.webSearchCalls || 0, citations: v._webResearch.citations });
-        if (researchLog.length > 120) researchLog.shift();
-      }
+      if (webResearch) v._webResearch = webResearch;
       if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {
