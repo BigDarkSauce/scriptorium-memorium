@@ -452,7 +452,11 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
     (node.stepIds || []).forEach(id => {
       const st = byId.get(String(id)); if (!st) return;
       (st.demos || []).forEach((d, i) => {
-        if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: i, title: d.title || st.title, purpose: d.purpose || st.answers || st.title });
+        if (isThreeD(d) && !needsAuthoring(d)) refs.push({
+          stepId: st.id, demoIndex: i, title: d.title || st.title,
+          purpose: d.purpose || st.answers || st.title,
+          ...(d.atlasNodeId ? { atlasNodeId: String(d.atlasNodeId) } : {})
+        });
       });
     });
     const sourceSteps = (node.stepIds || []).map(id => byId.get(String(id))).filter(Boolean).map(step => ({

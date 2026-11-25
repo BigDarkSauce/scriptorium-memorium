@@ -1041,6 +1041,13 @@
           }
         }
       }
+    },
+    "selectedVisualViews": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Last selected visual stage ID per concept node, persisted so learners resume their place in a multi-view explanation."
     }
   }
 }

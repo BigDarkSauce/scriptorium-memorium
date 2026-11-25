@@ -51,6 +51,7 @@ function svgText(text, x, y, cls, max = 27) {
 
 export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssignMemoryPlace, onRemoveMemoryPlace, onVisitMemoryRoute, onSave }) {
   atlas.attempts = atlas.attempts || {};
+  atlas.selectedVisualViews = atlas.selectedVisualViews || {};
   const root = el('section', { class: 'atlas-view' });
   const header = el('div', { class: 'atlas-intro' }, [
     el('div', { class: 'atlas-overline', text: 'CHAPTER CONCEPT ATLAS' }),
@@ -475,7 +476,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       ]);
       const rail = el('div', { class: 'atlas-visual-path-rail', role: 'tablist', 'aria-label': 'Concept visual stages' });
       const panel = el('div', { class: 'atlas-visual-path-panel', 'aria-live': 'polite' });
-      let selected = 0, cleanups = [];
+      const savedViewId = atlas.selectedVisualViews[node.id];
+      let selected = Math.max(0, visualSequence.findIndex(item => item.viewId === savedViewId));
+      let cleanups = [];
       const clearStage = () => {
         cleanups.forEach(stop => { try { typeof stop === 'function' && stop(); } catch (e) {} });
         cleanups = [];
@@ -487,6 +490,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           type: 'button', role: 'tab', 'aria-selected': String(index === selected),
           onclick: () => {
             selected = index;
+            atlas.selectedVisualViews[node.id] = visualSequence[index].viewId;
+            onSave && onSave();
             tabs.forEach((button, i) => {
               button.classList.toggle('active', i === selected);
               button.setAttribute('aria-selected', String(i === selected));
@@ -497,7 +502,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           el('span', { class: 'atlas-visual-path-index', text: String(item.order || index + 1).padStart(2, '0') }),
           el('span', { class: 'atlas-visual-path-tab-text' }, [
             el('b', { text: txt(item.title || 'Visual view', 70) }),
-            el('small', { text: String(item.stage || 'explanation').toUpperCase() + ' · ' + (item.medium || '2d').toUpperCase() })
+            el('small', { text: String(item.stage || 'explanation').toUpperCase() + ' · ' + (item.medium || '2d').toUpperCase() + ' · ' + (item.status === 'ready' ? 'READY' : 'PLANNED') })
           ])
         ]);
         return tab;

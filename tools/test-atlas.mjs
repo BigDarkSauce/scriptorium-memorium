@@ -148,8 +148,17 @@ const stagedNode = {
     { viewId: 'prediction-view', order: 4, stage: 'understanding', title: 'Predict the outcome', purpose: 'Test the mechanism.', medium: '2d', mustShow: ['outcome'], manipulations: [], sourceFigureIds: [], sourceVisualIds: [] }
   ],
   explanatoryFigures: selectedSourceFigures,
-  dioramaRefs: [{ stepId: 'S1', demoIndex: 0, title: 'Transport diorama', purpose: 'Inspect the route.' }]
+  dioramaRefs: [
+    { stepId: 'S1', demoIndex: 0, title: 'Legacy step-level scene', purpose: 'Supporting source scene.' },
+    { stepId: 'S2', demoIndex: 1, title: 'Grouped concept diorama', purpose: 'Inspect the complete transport system.', atlasNodeId: 'selective-transport' }
+  ]
 };
+const noGroupedSequence = buildConceptVisualSequence({
+  ...stagedNode,
+  dioramaRefs: [{ stepId: 'S1', title: 'Legacy scene', purpose: 'Old child scene.' }]
+});
+assert.equal(noGroupedSequence.find(v => v.medium === '3d' && !v.supporting).status, 'planned', 'an older step-level scene must not falsely satisfy the grouped concept scene');
+assert.equal(noGroupedSequence.some(v => v.medium === '3d' && v.supporting && v.dioramaRef.title === 'Legacy scene'), true);
 const visualSequence = buildConceptVisualSequence(stagedNode);
 assert.deepEqual(visualSequence.map(v => [v.viewId, v.order, v.stage, v.medium, v.status]), [
   ['boundary-evidence', 1, 'orientation', '2d', 'ready'],
@@ -158,7 +167,9 @@ assert.deepEqual(visualSequence.map(v => [v.viewId, v.order, v.stage, v.medium, 
   ['prediction-view', 4, 'understanding', '2d', 'planned']
 ], 'the concept visual pathway must preserve planned order/stage and distinguish ready from planned views');
 assert.deepEqual(visualSequence[0].figures.map(f => f.sourceVisualId), ['pptx-chart-s3-1']);
-assert.equal(visualSequence[2].dioramaRef.title, 'Transport diorama', 'all 3D intentions resolve through the single grouped scene');
+assert.equal(visualSequence[2].dioramaRef.title, 'Grouped concept diorama', 'the planned 3D stage must open the concept-level grouped scene, not an older step-level scene');
+assert.equal(visualSequence[2].dioramaRef.atlasNodeId, 'selective-transport');
+assert.equal(visualSequence.some(v => v.title === 'Legacy step-level scene' && v.supporting === true), true, 'older step-level scenes remain accessible as supporting material');
 assert.equal(visualSequence.filter(v => v.medium === '3d').length, 1, 'multiple 3D plans collapse into one coherent interactive model');
 
 const smartArtOnlyNode = {

@@ -271,6 +271,9 @@ export function buildConceptVisualSequence(node) {
   const figures = Array.isArray(node && node.explanatoryFigures) && node.explanatoryFigures.length
     ? node.explanatoryFigures
     : (node && node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
+  const dioramaRefs = Array.isArray(node && node.dioramaRefs) ? node.dioramaRefs : [];
+  const groupedDioramaRef = dioramaRefs.find(ref => String(ref && ref.atlasNodeId || '') === String(node && node.id || '')) || null;
+  const supportingDioramaRefs = dioramaRefs.filter(ref => ref !== groupedDioramaRef);
   const sequence = [], consumed = new Set();
   let sceneAdded = false;
   for (const view of plans) {
@@ -278,7 +281,7 @@ export function buildConceptVisualSequence(node) {
       if (sceneAdded) continue;
       sceneAdded = true;
       const sceneViews = plans.filter(x => x.medium === '3d');
-      const dioramaRef = (node.dioramaRefs || [])[0] || null;
+      const dioramaRef = groupedDioramaRef;
       sequence.push({
         id: String((node.id || 'concept') + '-interactive-3d'),
         viewId: view.viewId, viewIds: sceneViews.map(x => x.viewId),
@@ -307,10 +310,17 @@ export function buildConceptVisualSequence(node) {
       figures: entries
     });
   }
+  supportingDioramaRefs.forEach((ref, index) => sequence.push({
+    id: String((node && node.id || 'concept') + '-supporting-scene-' + (index + 1)),
+    viewId: 'supporting-scene-' + (index + 1), order: plans.length + index + 1,
+    stage: 'understanding', title: clean(ref.title || 'Supporting step-level diorama', 100),
+    purpose: clean(ref.purpose || 'An earlier scene linked to a source step.', 220),
+    medium: '3d', status: 'ready', dioramaRef: ref, figures: [], supporting: true
+  }));
   const supporting = figures.filter((_, index) => !consumed.has(index));
   if (supporting.length) sequence.push({
     id: String((node && node.id || 'concept') + '-supporting-figures'),
-    viewId: 'supporting-figures', order: plans.length + 1,
+    viewId: 'supporting-figures', order: plans.length + supportingDioramaRefs.length + 1,
     stage: 'understanding', title: 'Supporting explanations',
     purpose: 'Additional figures linked to the concept’s validated source steps.',
     medium: '2d', status: 'ready', sourceStepIds: unique(supporting.flatMap(x => x.sourceStepIds || (x.stepId ? [x.stepId] : []))),

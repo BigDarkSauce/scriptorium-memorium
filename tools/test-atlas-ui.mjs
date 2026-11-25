@@ -261,8 +261,14 @@ try {
   await visualTabs.nth(1).click();
   assert.match(await firstVisualStage.innerText(), /MECHANISM.*Transport mechanism.*route and the direction/is);
   assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-flow').count(), 1, 'the learner must be able to switch to the separate mechanism view');
-  await visualTabs.nth(0).click();
-  assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-bars').count(), 1, 'switching back must restore the earlier source-evidence view');
+  assert.equal(await visualTabs.nth(1).getAttribute('aria-selected'), 'true');
+  await page.locator('.atlas-branch-tab').nth(1).click();
+  await page.locator('.atlas-branch-tab').nth(0).click();
+  const restoredVisualTabs = page.locator('.atlas-visual-path-tab');
+  assert.equal(await restoredVisualTabs.nth(1).getAttribute('aria-selected'), 'true', 'the selected visual stage must survive a question-branch rerender');
+  assert.match(await page.locator('.atlas-visual-path-panel').innerText(), /Transport mechanism/);
+  await restoredVisualTabs.nth(0).click();
+  assert.equal(await page.locator('.atlas-visual-path-panel .atlas-visual-path-figure .fig-bars').count(), 1, 'switching back must restore the earlier source-evidence view');
   assert.equal(await scanSearch.isVisible(), true, 'the source scan must remain expanded after opening a concept');
   assert.equal(await scanSearch.inputValue(), 'selective permeability', 'the previous source query must survive concept selection');
   await scanSearch.fill('Flux relation');
