@@ -80,7 +80,10 @@ duplicateChallenge.nodes.push({
   ...duplicateChallenge.nodes[0],
   id: 'second-concept',
   stepIds: ['S2'],
-  challenges: [{ ...duplicateChallenge.nodes[0].challenges[0] }]
+  challenges: [{
+    ...duplicateChallenge.nodes[0].challenges[0],
+    reasoning: duplicateChallenge.nodes[0].challenges[0].reasoning.map(unit => ({ ...unit, sourceStepIds: ['S2'] }))
+  }]
 });
 assert.match(validateAtlas(duplicateChallenge, ['S1', 'S2'], steps), /duplicate challenge id/);
 
