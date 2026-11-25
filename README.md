@@ -85,13 +85,13 @@ js/gfx/               renderer + post chain, procedural textures, materials, roo
 js/dio/               diorama: scene builder (shapes & macros), environments, built-in models, runtime (tour, lessons, edit)
 js/hub/               library room and its props
 js/room/              book room, reading scroll, 2D diagrams
-js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
+js/ai/                OpenAI-first provider router, optional fallbacks, evidence connectors, prompts, PDF/PPTX ingestion
 prompts/              the portable prompt pack (same text the app sends; regenerate with `node prompts/build.mjs`)
 schema/               JSON Schemas: chain (coverage, question thread, figures, extra), strict profile, semantic atlas, scene and room
 tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test), polish.mjs (layout and
                       colour gate), test-math / test-prose / test-seeds (unit checks), seed-history.mjs (regenerates js/seeds-history.js)
 examples/             example scenes, a room file, and a complete chain with its coverage map
-skill/                a Claude skill that turns a PDF into a room file
+skill/                optional portable ingest skill that turns a PDF into an importable room file
 docs/                 architecture, protocol, scene spec, user guide, pedagogy & grounding, research notes
 launcher/             Windows launcher helpers (local server, shortcut maker)
 assets/               app icon (scriptorium.ico / .png)
