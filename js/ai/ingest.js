@@ -1,3 +1,5 @@
+import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary } from './pptx.js';
+
 // PDF ingestion in the browser (pdf.js), without AI. It finds the book's hierarchy, keeps every subsection's text
 // with its pages, and cuts the book's own figures out of the pages.
 //
@@ -752,7 +754,7 @@ export function restrictParts(parts, from, to, only = null) {
   });
 }
 // metadata only (what the prompt and the room file carry; images stay in IndexedDB)
-export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page }));
+export const figureMeta = figs => (figs || []).map(f => ({ id: f.id, label: f.label, kind: f.kind, caption: f.caption, page: f.page, ...(Number.isFinite(f.slide) ? { slide: f.slide } : {}) }));
 
 
 
@@ -807,7 +809,13 @@ async function pptNotes(zip, slidePath) {
   return out.join('\n');
 }
 async function pptSlide(zip, slidePath, number) {
-  const d = await pptXml(zip, slidePath);
+  const slideFile = zip.file(slidePath);
+  const slideRaw = await slideFile.async('string');
+  const relPath = slidePath.split('/').slice(0, -1).join('/') + '/_rels/' + slidePath.split('/').pop() + '.rels';
+  const relFile = zip.file(relPath);
+  const relRaw = relFile ? await relFile.async('string') : '';
+  const d = xmlDoc(slideRaw, slidePath);
+  const assets = pptxSlideAssets(slideRaw, relRaw, slidePath, number);
   // Tables and text inside graphic frames are also part of the slide's source content.
   const shapes = [...d.getElementsByTagNameNS(PPT_P, 'sp'), ...d.getElementsByTagNameNS(PPT_P, 'graphicFrame'), ...d.getElementsByTagNameNS(PPT_P, 'cxnSp')].map(shape => {
     const ph = shape.getElementsByTagNameNS(PPT_P, 'ph')[0];
@@ -825,13 +833,30 @@ async function pptSlide(zip, slidePath, number) {
     .filter(Boolean);
   const alt = [...new Set(descriptions)];
   const notes = await pptNotes(zip, slidePath);
+  const chartSummaries = [], diagramSummaries = [];
+  for (const chart of assets.charts) {
+    try {
+      const file = zip.file(chart.path);
+      if (file) chartSummaries.push(pptxChartSummary(await file.async('string'), chart.caption || 'Chart on slide ' + number));
+    } catch (e) { /* an unreadable chart is not silently converted into invented data */ }
+  }
+  for (const diagram of assets.diagrams) {
+    try {
+      const file = zip.file(diagram.path);
+      if (file) diagramSummaries.push(pptxDiagramSummary(await file.async('string'), diagram.caption || 'SmartArt on slide ' + number));
+    } catch (e) { /* retain the slide and its accessible description */ }
+  }
+  const embeddedImages = assets.images.map(x => '- ' + x.label + (x.caption ? '' : ' (no alternative description; inspect the attached image)'));
   const text = [
     '[slide ' + number + ']',
     'Slide title: ' + title,
     ...chunks.filter(t => t !== title),
     ...(alt.length ? ['Accessible image / object descriptions:', ...alt.map(x => '- ' + x)] : []),
+    ...(embeddedImages.length ? ['Embedded source images:', ...embeddedImages] : []),
+    ...(chartSummaries.length ? ['Extracted chart titles, series and cached values:', ...chartSummaries] : []),
+    ...(diagramSummaries.length ? ['Extracted SmartArt labels and directed connections:', ...diagramSummaries] : []),
     ...(notes ? ['Speaker notes:', notes] : []),
-    ...(chunks.length ? [] : ['[No extractable text found. The slide may be primarily visual; its embedded images are not represented as interpreted facts.]'])
+    ...(chunks.length || embeddedImages.length || chartSummaries.length || diagramSummaries.length ? [] : ['[No extractable text or embedded visuals found on this slide.]'])
   ].join('\n\n');
   return { id: 'slide-' + number, num: String(number), title, level: 2, startPage: number, endPage: number, sourceSlide: number, text, inventory: inventory(text) };
 }
@@ -870,6 +895,89 @@ export async function splitPresentation(blob, { onProgress } = {}) {
   };
   return { pages: slides.length, parts: [part], method: 'presentation', title, sourceType: 'pptx' };
 }
+
+export async function extractPresentationFigures(blob, from, to, { maxW = 1400, quality = 0.86, maxPerPart = 36, maxTotalBytes = 24 * 1024 * 1024, onProgress } = {}) {
+  if (!blob) return [];
+  if (typeof window === 'undefined' || !window.JSZip || typeof window.JSZip.loadAsync !== 'function') {
+    throw new Error('PowerPoint visual extraction could not load JSZip.');
+  }
+  const zip = await window.JSZip.loadAsync(blob, { checkCRC32: false });
+  const presentation = await pptXml(zip, 'ppt/presentation.xml');
+  const relationships = await pptXml(zip, 'ppt/_rels/presentation.xml.rels');
+  const rels = new Map([...relationships.getElementsByTagNameNS(PPT_REL, 'Relationship')].map(r => [r.getAttribute('Id'), r]));
+  const slideIds = [...presentation.getElementsByTagNameNS(PPT_P, 'sldIdLst')].flatMap(x => [...x.getElementsByTagNameNS(PPT_P, 'sldId')]);
+  const slidePaths = slideIds.map(x => {
+    const rid = x.getAttributeNS(PPT_R, 'id') || x.getAttribute('r:id');
+    const rel = rels.get(rid);
+    if (!rel || !/\/slide$/.test(rel.getAttribute('Type') || '')) return null;
+    return resolvePptTarget('ppt/presentation.xml', rel.getAttribute('Target'));
+  }).filter(Boolean);
+  const start = Math.max(1, Math.floor(Number(from) || 1));
+  const end = Math.min(slidePaths.length, Math.max(start, Math.floor(Number(to) || slidePaths.length)));
+  const out = [];
+  let sourceBytes = 0;
+  const mimeFor = path => {
+    const ext = String(path).split('.').pop().toLowerCase();
+    return ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml' })[ext] || '';
+  };
+  for (let n = start; n <= end && out.length < maxPerPart && sourceBytes < maxTotalBytes; n++) {
+    const slidePath = slidePaths[n - 1], slideFile = zip.file(slidePath);
+    if (!slideFile) continue;
+    const slideRaw = await slideFile.async('string');
+    const relPath = slidePath.split('/').slice(0, -1).join('/') + '/_rels/' + slidePath.split('/').pop() + '.rels';
+    const relFile = zip.file(relPath), relRaw = relFile ? await relFile.async('string') : '';
+    const assets = pptxSlideAssets(slideRaw, relRaw, slidePath, n);
+    let imageIndex = 0;
+    for (const asset of assets.images) {
+      if (out.length >= maxPerPart || sourceBytes >= maxTotalBytes) break;
+      const file = zip.file(asset.path), mime = mimeFor(asset.path);
+      if (!file || !mime) continue;
+      let bytes;
+      try { bytes = await file.async('uint8array'); } catch (e) { continue; }
+      if (!bytes || !bytes.byteLength || bytes.byteLength > 10 * 1024 * 1024 || sourceBytes + bytes.byteLength > maxTotalBytes) continue;
+      sourceBytes += bytes.byteLength;
+      let dataUrl = '';
+      if (typeof createImageBitmap === 'function' && typeof document !== 'undefined') {
+        let bitmap;
+        try {
+          bitmap = await createImageBitmap(new Blob([bytes], { type: mime }));
+          const scale = Math.min(1, maxW / Math.max(bitmap.width, bitmap.height));
+          const width = Math.max(1, Math.round(bitmap.width * scale)), height = Math.max(1, Math.round(bitmap.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d', { alpha: false });
+          if (ctx) {
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(bitmap, 0, 0, width, height);
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+        } catch (e) { /* use a directly attachable raster file below when possible */ }
+        finally { if (bitmap && bitmap.close) bitmap.close(); }
+      }
+      if (!dataUrl && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mime)) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        dataUrl = 'data:' + mime + ';base64,' + btoa(binary);
+      }
+      if (!dataUrl) continue;
+      imageIndex++;
+      out.push({
+        id: 'fig-s' + n + '-' + imageIndex,
+        label: asset.label,
+        kind: 'figure',
+        caption: asset.caption || '',
+        page: n,
+        slide: n,
+        src: 'pptx-embedded-image',
+        mediaPath: asset.path,
+        dataUrl
+      });
+    }
+    if (onProgress) onProgress((n - start + 1) / (end - start + 1));
+  }
+  return out;
+}
+
 export async function presentationSections(blob, part) {
   const sections = (part.subsections || []).map(s => {
     const text = String(s.text || '');
