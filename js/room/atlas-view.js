@@ -144,7 +144,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       ownLocus ? el('div', { class: 'atlas-memory-cue' }, [
         el('b', { text: 'Your association' }),
         el('p', { text: ownLocus.association || 'No cue text saved' }),
-        el('small', { text: (ownLocus.shelfName || ownLocus.caseId) + ' · row ' + (Number(ownLocus.row) + 1) + ' · place ' + (Number(ownLocus.slot) + 1) })
+        el('small', { text: (ownLocus.shelfName || ownLocus.caseId) + ' · row ' + (ownLocus.rowLabel || Number(ownLocus.row) + 1) + ' · place ' + (Number(ownLocus.slot) + 1) })
       ]) : null,
       el('div', { class: 'row wrap' }, [
         el('button', {
