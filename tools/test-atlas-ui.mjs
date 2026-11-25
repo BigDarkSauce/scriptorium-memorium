@@ -160,14 +160,14 @@ try {
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-summary').getAttribute('aria-expanded'), 'true', 'each subsection control must expose its expanded state');
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps').evaluate(el => el.hidden), false, 'the subsection step list must be revealed');
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row').count(), 2, 'expanded subsections must expose their source-step inventory');
-  assert.match(await sectionBrowse.innerText(), /S1.*Membrane boundary/i);
-  assert.match(await sectionBrowse.innerText(), /S2.*Flux relation/i);
+  assert.match(await sectionBrowse.innerText(), /Membrane boundary.*S1/i);
+  assert.match(await sectionBrowse.innerText(), /Flux relation.*S2/i);
   assert.equal(await sourceScan.locator('.atlas-scan-section').count(), 2, 'unsectioned source steps must have an explicit inventory group');
   const unmappedBrowse = sourceScan.locator('.atlas-scan-section').nth(1);
   assert.match(await unmappedBrowse.locator('.atlas-scan-section-summary').innerText(), /Unmapped \/ unsectioned source steps.*1 source steps/i);
   await unmappedBrowse.locator('.atlas-scan-section-summary').evaluate(el => el.click());
   assert.equal(await unmappedBrowse.locator('.atlas-scan-section-summary').getAttribute('aria-expanded'), 'true');
-  assert.match(await unmappedBrowse.innerText(), /S3.*Supplemental observation.*p\. 4/i);
+  assert.match(await unmappedBrowse.innerText(), /Supplemental observation.*S3.*p\. 4/i);
   const scanSearch = sourceScan.locator('.atlas-scan-search');
   assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
   const suggestionValues = await page.locator('#atlas-source-suggestions-test-node option').evaluateAll(options => options.map(option => option.value));
@@ -193,7 +193,7 @@ try {
   assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S3.*Supplemental observation/i);
   await scanSearch.fill('a diagram showing a selective boundary');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'figure captions must be searchable through their linked source step');
-  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S2.*p\. 3/i);
+  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /Flux relation.*S2.*p\. 3/i);
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
   await page.getByRole('button', { name: 'Remove memory place' }).click();
