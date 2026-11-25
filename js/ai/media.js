@@ -50,7 +50,7 @@ export async function mediaStatus() {
   if (!F.key) return { ok: false, why: 'FreeLLMAPI\'s unified key is missing (AI panel: FreeLLMAPI row, or its dashboard: Keys → Unified API key).' };
   await FREE.netReady();
   if (FREE.via() === 'bridge') { if (!(await bridgeReady())) return { ok: false, why: 'The Scriptorium extension is not running.' }; if (!bridgeBinary()) return { ok: false, why: 'The Scriptorium extension is older than 1.2 (pictures and sound need 1.2): install the new one from the AI panel.' }; }
-  if (FREE.via() === 'direct') return { ok: false, why: 'From a web address the page cannot reach FreeLLMAPI on your computer: open it in the Claude app (with the extension) or with Launch Scriptorium.bat.' };
+  if (FREE.via() === 'direct') return { ok: false, why: 'From a hosted web address the page cannot reach FreeLLMAPI on your computer: use the local Scriptorium launcher or configure an image provider reachable from this browser.' };
   return { ok: true };
 }
 export const bridgeBinaryOK = () => FREE.via() !== 'bridge' || bridgeBinary();
