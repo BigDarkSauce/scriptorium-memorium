@@ -1438,3 +1438,13 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
   .reader.atlas-reader .reader-body { padding: 13px 11px 18px; }
   .atlas-svg { min-width: 800px; }
 }
+
+/* Atlas research citations are external evidence, visually separate from the upload's own source index. */
+.atlas-web-sources { display: grid; gap: 6px; padding: 11px 12px; border-top: 1px solid rgba(90,60,30,.18); }
+.atlas-web-link { display: block; max-width: 100%; color: #315b50; font-size: 12px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(49,91,80,.35); text-underline-offset: 3px; }
+.atlas-web-link:hover, .atlas-web-link:focus-visible { color: #1e463b; text-decoration-color: currentColor; }
+.atlas-generated-figure { min-width: 0; }
+.atlas-generated-figure .fig { margin: 0; }
+.ai-openai-status { margin: 7px 0; overflow-wrap: anywhere; }
+.ai-openai-status.good { color: #54765e; }
+.ai-openai-status.warn { color: #9c5a2e; }
