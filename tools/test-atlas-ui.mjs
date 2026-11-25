@@ -102,6 +102,13 @@ try {
       onVisitMemoryRoute: () => { memoryVisits++; }
     });
     view.dataset.testAtlas = 'true';
+    // This is an isolated browser UI surface over the running 3D hall, not an element appended underneath its canvas.
+    // Give it a real pointer-interactive layer so Playwright exercises the same clicks a learner can make.
+    Object.assign(view.style, {
+      position: 'fixed', inset: '0', zIndex: '2147483000',
+      overflow: 'auto', background: 'rgba(247,244,236,.98)',
+      padding: '22px', boxSizing: 'border-box'
+    });
     document.body.append(view);
     window.__atlasUITest = {
       atlas, getSaves: () => saves,
