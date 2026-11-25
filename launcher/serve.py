@@ -145,9 +145,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         origin = self.headers.get('Origin')
         host = self.headers.get('Host', '')
-        if origin and origin.rstrip('/') != ('http://' + host):
-            self.send_error(403, 'OpenAI adapter accepts same-origin requests only')
+        host_url = urllib.parse.urlsplit('http://' + host)
+        # Reject DNS-rebinding Host names: this local listener is intended to be reachable only as localhost.
+        if host_url.hostname not in ('localhost', '127.0.0.1', '::1'):
+            self.send_error(403, 'OpenAI adapter is available only on localhost')
             return True
+        if origin:
+            origin_url = urllib.parse.urlsplit(origin)
+            if origin_url.scheme != 'http' or origin_url.netloc.lower() != host.lower():
+                self.send_error(403, 'OpenAI adapter accepts same-origin requests only')
+                return True
         fetch_site = self.headers.get('Sec-Fetch-Site')
         if fetch_site and fetch_site not in ('same-origin', 'none'):
             self.send_error(403, 'OpenAI adapter accepts same-origin requests only')
