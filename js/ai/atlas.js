@@ -78,16 +78,24 @@ export function validateAtlas(A, stepIds) {
     if (!n || !/^[a-z0-9][a-z0-9-]{1,55}$/.test(String(n.id || ''))) return 'node has an invalid stable id';
     if (ids.has(n.id)) return 'duplicate node id: ' + n.id;
     ids.add(n.id);
-    if (!clean(n.title, 100) || !clean(n.question, 300) || !Array.isArray(n.stepIds) || !n.stepIds.length) return 'node is missing a title, question or stepIds: ' + n.id;
+    if (!clean(n.title, 100) || !clean(n.question, 300) || !clean(n.summary, 500) || !Array.isArray(n.stepIds) || !n.stepIds.length) return 'node is missing a title, question, summary or stepIds: ' + n.id;
     assigned.push(...n.stepIds.map(String));
-    if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.question || !c.answer || !c.why)) return 'node has an incomplete or unsupported challenge: ' + n.id;
+    if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations))) return 'node is missing a complete explanatory-view plan: ' + n.id;
+    if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.question || !c.stimulus || !c.answer || !c.why || !Array.isArray(c.missingBodyIds))) return 'node has an incomplete or unsupported challenge: ' + n.id;
     if (n.challenges.length > 3) return 'node has more than three challenges: ' + n.id;
-    if (!n.position || !Number.isFinite(+n.position.x) || !Number.isFinite(+n.position.y)) return 'node has no finite map position: ' + n.id;
+    const nodeSteps = n.stepIds.map(id => String(id));
+    const challengeIds = new Set();
+    for (const ch of n.challenges) {
+      if (!ch.id || challengeIds.has(ch.id)) return 'node has a missing or duplicate challenge id: ' + n.id;
+      challengeIds.add(ch.id);
+    }
+    if (!n.position || !Number.isFinite(+n.position.x) || !Number.isFinite(+n.position.y) || +n.position.x < 0 || +n.position.x > 100 || +n.position.y < 0 || +n.position.y > 100) return 'node has no valid map position: ' + n.id;
   }
   const want = unique(stepIds), got = unique(assigned);
   if (assigned.length !== got.length) return 'a source step has been assigned to more than one concept node';
   if (want.length !== got.length || want.some(id => !got.includes(id))) return 'the atlas does not partition all source steps (missing or invented step IDs)';
-  for (const e of A.edges) if (!e || !ids.has(String(e.from)) || !ids.has(String(e.to)) || e.from === e.to) return 'edge has an invalid endpoint';
+  const edgeTypes = new Set(['prerequisite','part-of','causes','enables','constrains','transforms-into','regulates','contrasts-with','evidence-for','temporal-before','spatial-within','application-of']);
+  for (const e of A.edges) if (!e || !ids.has(String(e.from)) || !ids.has(String(e.to)) || e.from === e.to || !edgeTypes.has(String(e.type)) || !clean(e.label, 120)) return 'edge has an invalid endpoint, type or relationship label';
   return null;
 }
 
