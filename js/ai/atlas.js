@@ -45,7 +45,7 @@ TASK
    - explanatory: present an observation without its cause;
    - relational: omit a meaningful link between known concepts;
    - counterfactual: remove/change a component or variable and ask what follows.
-   Each challenge needs stimulus, question, a useful hint, the expected answer, why the answer follows, and the kind of feedback that should be shown after a learner commits a prediction. For structural challenges, list the exact actor/body IDs only when those IDs occur in the supplied step's bodies; never invent scene actors. For other types, list actor IDs only when grounded in the chain. Do not make arbitrary gaps, and do not choose challenges requiring knowledge the supplied material has not introduced.
+   Each challenge needs stimulus, question, a useful hint, the expected answer, why the answer follows, and the kind of feedback that should be shown after a learner commits a prediction. Also provide a `reasoning` array of 2–5 short, ordered reveal units. Each unit must contain a concise `title`, a plain-language `text`, and `sourceStepIds` listing one or more exact step IDs from this node that support that unit. The units must build the answer in small inferential moves, not repeat the final answer in fragments. The learner sees the question first; after committing and revealing the expected answer, each UNFOLD action exposes exactly one next unit in the same challenge. Keep earlier units visible. Never use an UNFOLD action to advance to another challenge. For structural challenges, list the exact actor/body IDs only when those IDs occur in the supplied step's bodies; never invent scene actors. For other types, list actor IDs only when grounded in the chain. Do not make arbitrary gaps, and do not choose challenges requiring knowledge the supplied material has not introduced.
 7. Keep facts and source boundaries honest. Every node carries stepIds and subsectionIds. Never invent PDF pages, figures, measurements, citations, mechanisms or data. Outside knowledge is not needed to complete this atlas. A fact absent from the source must not masquerade as a PDF claim.
 
 Return ONLY JSON:
@@ -53,7 +53,7 @@ Return ONLY JSON:
  "version":"scriptorium-atlas/1",
  "question":"the central question this part resolves",
  "nodes":[
-  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"title":"view title","purpose":"explanatory job","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d"}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","missingBodyIds":["only grounded IDs, otherwise []"]}]}
+  {"id":"stable-kebab-id","title":"short concept title","question":"a question worth exploring","summary":"1–3 precise sentences","stepIds":["S1","S2"],"subsectionIds":["1.1"],"knowledgeKinds":["structural|causal|temporal|relational|quantitative|procedural|historical|abstract"],"visualIntent":"what a diorama or diagram must make visible","dioramaSet":[{"title":"view title","purpose":"explanatory job","mustShow":["specific elements"],"manipulations":["variables or actions"],"medium":"3d|2d"}],"position":{"x":0-100,"y":0-100},"challenges":[{"id":"challenge-slug","type":"structural|mechanistic|temporal|explanatory|relational|counterfactual","stimulus":"what the learner sees or knows","question":"the prediction or reconstruction prompt","hint":"a small clue, not the answer","answer":"the accurate answer","why":"the causal or logical reason","feedback":"what to compare after the attempt","reasoning":[{"title":"first inferential move","text":"one short reasoning unit","sourceStepIds":["S1"]},{"title":"next inferential move","text":"the next linked unit","sourceStepIds":["S2"]}],"missingBodyIds":["only grounded IDs, otherwise []"]}]}
  ],
  "edges":[{"from":"node-id","to":"node-id","type":"prerequisite|part-of|causes|enables|constrains|transforms-into|regulates|contrasts-with|evidence-for|temporal-before|spatial-within|application-of","label":"short precise relation"}],
  "uncertainties":["explicit limits or ambiguity in the source"],
@@ -90,6 +90,16 @@ export function validateAtlas(A, stepIds, sourceSteps = []) {
       if (challengeIds.has(ch.id)) return 'atlas has a duplicate challenge id: ' + ch.id;
       challengeIds.add(ch.id);
       if (ch.type === 'structural' && ch.missingBodyIds.some(id => !allowedBodies.has(String(id)))) return 'structural challenge refers to an actor not listed in the node source steps: ' + ch.id;
+      // New atlases carry a source-mapped, bitwise reasoning path. Keep the field optional for older saved atlases;
+      // the reader supplies a single legacy explanation unit rather than inventing new reasoning.
+      if (ch.reasoning != null) {
+        if (!Array.isArray(ch.reasoning) || ch.reasoning.length < 1 || ch.reasoning.length > 5) return 'challenge reasoning must contain 1–5 ordered reveal units: ' + ch.id;
+        const nodeSteps = new Set(n.stepIds.map(String));
+        for (const unit of ch.reasoning) {
+          if (!unit || !clean(unit.title, 100) || !clean(unit.text, 700) || !Array.isArray(unit.sourceStepIds) || !unit.sourceStepIds.length) return 'challenge reasoning unit is missing a title, text or sourceStepIds: ' + ch.id;
+          if (unit.sourceStepIds.some(id => !nodeSteps.has(String(id)))) return 'challenge reasoning unit cites a step outside its concept node: ' + ch.id;
+        }
+      }
     }
     if (!n.position || !Number.isFinite(+n.position.x) || !Number.isFinite(+n.position.y) || +n.position.x < 0 || +n.position.x > 100 || +n.position.y < 0 || +n.position.y > 100) return 'node has no valid map position: ' + n.id;
   }
