@@ -10,7 +10,7 @@ The learning surface should let a learner move quickly across a whole source, st
 
 Show the document's real structure and evidence before generating explanations. The first atlas scan now lists detected subsections and source-step counts, then lets the learner search the validated chain for titles, terms, equations, worked examples, tables, figures and code. Each result retains its step ID and page location, opens the concept node to which that exact source step was assigned, and expands the matching source-trail entry.
 
-The scan is intentionally an index, not a second lesson or a generated chapter summary. It is collapsed by default, can be searched without changing the selected question branch, and only shows categories found in the ingested chain. Advanced autocomplete suggestions, adaptive preview prompts and richer per-section inventory facets remain future work. Never silently drop a subsection or treat an inaccessible picture as interpreted content.
+The scan is intentionally an index, not a second lesson or a generated chapter summary. It is collapsed by default, can be searched without changing the selected question branch, and only shows categories found in the ingested chain. Native autocomplete suggestions are now drawn only from source titles, concept questions, terms, equations, examples, table columns and figure labels/captions. Adaptive preview prompts, ranked cross-source suggestions and richer per-section inventory facets remain future work. Never silently drop a subsection or treat an inaccessible picture as interpreted content.
 
 ### Pass B — question sweep
 
