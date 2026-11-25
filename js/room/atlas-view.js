@@ -131,10 +131,28 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
       categories: [...new Set(ungroupedEntries.flatMap(x => x.tags))]
     });
   }
-  const countTags = [...new Set(scanEntries.flatMap(x => x.tags))];
+  // Keep every locally extracted figure visible. A figure that no validated chain step references is
+  // an explicit inventory item, not an inferred concept or a source-step link.
+  const linkedFigureIds = new Set(scanEntries.flatMap(entry => entry.figureIds || []));
+  const unlinkedFigureEntries = sourceFigureIndex
+    .filter(figure => figure && String(figure.id || '').trim() && !linkedFigureIds.has(String(figure.id)))
+    .map(figure => ({
+      figure,
+      searchable: [figure.id, figure.label, figure.caption, figure.page].filter(Boolean).join(' ').toLowerCase()
+    }));
+  if (unlinkedFigureEntries.length) {
+    sectionItems.push({
+      sec: { id: '__unlinked_figures__', title: 'Unlinked source figures', startPage: null, endPage: null },
+      entries: [],
+      categories: ['figure'],
+      figureEntries: unlinkedFigureEntries
+    });
+  }
+  const countTags = [...new Set([...scanEntries.flatMap(x => x.tags), ...(unlinkedFigureEntries.length ? ['figure'] : [])])];
   const scanSummary = [
     sourceSections.length + ' subsections' + (ungroupedEntries.length ? ' · ' + ungroupedEntries.length + ' unmapped steps' : ''),
     sourceSteps.length + ' source steps',
+    unlinkedFigureEntries.length + ' unlinked figures',
     countTags.length ? countTags.join(' · ') : 'source index'
   ].join(' · ');
   const scanSummaryNode = el('button', {
@@ -206,10 +224,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No subsection index is available for this saved atlas.' }));
         return;
       }
-      sectionItems.forEach(({ sec, entries, categories }, sectionIndex) => {
+      sectionItems.forEach(({ sec, entries, categories, figureEntries }, sectionIndex) => {
         const pages = sec.startPage
           ? (sec.startPage === sec.endPage ? 'p. ' + sec.startPage : 'pp. ' + sec.startPage + '–' + sec.endPage)
           : '';
+        const inventoryCount = figureEntries ? figureEntries.length : entries.length;
+        const inventoryLabel = figureEntries ? ' indexed figures' : ' source steps';
         const sectionDetails = el('section', { class: 'atlas-scan-section' });
         const stepListId = 'atlas-scan-section-steps-' + sectionIndex;
         const stepList = el('div', {
@@ -217,7 +237,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           id: stepListId,
           hidden: true,
           role: 'list',
-          'aria-label': (sec.title || sec.id) + ' source steps'
+          'aria-label': (sec.title || sec.id) + (figureEntries ? ' source figures' : ' source steps')
         });
         const sectionSummary = el('button', {
           class: 'atlas-scan-section-summary',
@@ -232,7 +252,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         }, [
           el('span', { class: 'atlas-scan-main' }, [
             el('b', { text: sec.title || sec.id }),
-            el('small', { text: entries.length + ' source steps' + (pages ? ' · ' + pages : '') })
+            el('small', { text: inventoryCount + inventoryLabel + (pages ? ' · ' + pages : '') })
           ]),
           el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag })))
         ]);
@@ -254,17 +274,57 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
             el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
           ]));
         });
+        (figureEntries || []).forEach(({ figure }) => {
+          const pageText = figure.page ? 'p. ' + figure.page : 'page not indexed';
+          stepList.append(el('button', {
+            class: 'atlas-scan-row atlas-scan-row-unlinked',
+            type: 'button',
+            role: 'listitem',
+            disabled: true
+          }, [
+            el('span', { class: 'atlas-scan-main' }, [
+              el('b', { text: figure.label || ('Figure ' + figure.id) }),
+              el('small', { text: String(figure.id) + ' · ' + pageText }),
+              figure.caption ? el('small', { text: figure.caption }) : null
+            ]),
+            el('span', { class: 'atlas-scan-tags' }, [el('span', { class: 'atlas-scan-tag', text: 'figure' })]),
+            el('span', { class: 'atlas-scan-open', text: 'INDEXED FIGURE · NO LINKED SOURCE STEP' })
+          ]));
+        });
         sectionDetails.append(sectionSummary, stepList);
         scanResults.append(sectionDetails);
       });
       return;
     }
-    const matches = scanEntries.filter(x => x.searchable.includes(q)).slice(0, 40);
+    const matches = [
+      ...scanEntries.filter(entry => entry.searchable.includes(q)).map(entry => ({ kind: 'step', entry })),
+      ...unlinkedFigureEntries.filter(entry => entry.searchable.includes(q)).map(entry => ({ kind: 'figure', entry }))
+    ].slice(0, 40);
     if (!matches.length) {
-      scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No source step matched that search. Try a term, a symbol, a step title or a figure/table ID.' }));
+      scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No source step or unlinked figure matched that search. Try a term, a symbol, a step title or a figure/table ID.' }));
       return;
     }
-    matches.forEach(entry => {
+    matches.forEach(match => {
+      if (match.kind === 'figure') {
+        const figure = match.entry.figure;
+        const pageText = figure.page ? 'p. ' + figure.page : 'page not indexed';
+        scanResults.append(el('button', {
+          class: 'atlas-scan-row atlas-scan-row-unlinked',
+          type: 'button',
+          role: 'listitem',
+          disabled: true
+        }, [
+          el('span', { class: 'atlas-scan-main' }, [
+            el('b', { text: figure.label || ('Figure ' + figure.id) }),
+            el('small', { text: String(figure.id) + ' · ' + pageText }),
+            figure.caption ? el('small', { text: figure.caption }) : null
+          ]),
+          el('span', { class: 'atlas-scan-tags' }, [el('span', { class: 'atlas-scan-tag', text: 'figure' })]),
+          el('span', { class: 'atlas-scan-open', text: 'INDEXED FIGURE · NO LINKED SOURCE STEP' })
+        ]));
+        return;
+      }
+      const entry = match.entry;
       const st = entry.step, pageText = entry.pages.length ? 'p. ' + entry.pages.join(', ') : 'page not indexed';
       scanResults.append(el('button', {
         class: 'atlas-scan-row',
