@@ -219,35 +219,32 @@ export async function ensureLocusReviewCard(bookId, partId, partTitle, node) {
   if (!node || !node.id) throw new TypeError('A concept node is required for a loci review card.');
   await loadLedger();
   const id = locusReviewId(bookId, partId, node.id);
-  const e = ledger.e[id] = Object.assign(ledger.e[id] || {}, {
+  const existing = ledger.e[id] || {};
+  if (existing.tr && (!existing.tr.memoryLocus || !existing.tr.recall)) {
+    throw new Error('The loci review ID collides with a non-loci retrieval card.');
+  }
+  const T = existing.tr || {
+    due: Date.now(), iv: 1, n: 0, hist: [],
+    recall: true, memoryLocus: true
+  };
+  T.q = node.question || node.title || 'Reconstruct this concept.';
+  T.a = node.summary || node.question || node.title || '';
+  ledger.e[id] = Object.assign(existing, {
     title: node.title || 'Concept',
     part: partTitle || '',
-    tr: Object.assign(ledger.e[id] && ledger.e[id].tr || {
-      due: Date.now(), iv: 1, n: 0, hist: [],
-      recall: true, memoryLocus: true
-    }, {
-      q: node.question || node.title || 'Reconstruct this concept.',
-      a: node.summary || node.question || node.title || ''
-    })
+    tr: T
   });
-  // Do not convert a different kind of spaced card that happens to share a malformed legacy ID.
-  if (!e.tr.memoryLocus || !e.tr.recall) throw new Error('The loci review ID collides with a non-loci retrieval card.');
   save();
-  return { id, due: e.tr.due, interval: e.tr.iv || 1, attempts: e.tr.n || 0, history: [...(e.tr.hist || [])], lastRating: e.tr.lastRating || null };
-}
-function recordTransferInterval(T, correct) {
-  T.n = (Number(T.n) || 0) + 1;
-  T.hist = Array.isArray(T.hist) ? T.hist : [];
-  T.hist.push(correct ? 1 : 0);
-  T.hist = T.hist.slice(-12);
-  T.iv = correct ? Math.min(120, Math.max(2, (Number(T.iv) || 1) * 2.5)) : 1;
-  T.due = Date.now() + T.iv * DAY;
+  return { id, due: T.due, interval: T.iv || 1, attempts: T.n || 0, history: [...(T.hist || [])], lastRating: T.lastRating || null, lastReviewed: T.lastReviewed || null };
 }
 export async function rateLocusRecall(id, recalled) {
   await loadLedger();
   const e = ledger.e[id], T = e && e.tr;
   if (!T || !T.memoryLocus || !T.recall) return null;
+  const ratedAt = Date.now();
   advanceReview(T, !!recalled);
+  T.lastRating = recalled ? 'recalled' : 'again';
+  T.lastReviewed = ratedAt;
   save();
   return { id, due: T.due, interval: T.iv, attempts: T.n, history: [...T.hist], lastRating: T.lastRating, lastReviewed: T.lastReviewed };
 }
