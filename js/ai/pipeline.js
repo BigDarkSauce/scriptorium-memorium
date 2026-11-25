@@ -19,7 +19,7 @@ import { partKey, cached } from '../store.js';
 import { validateFigure, figureSlots, setSlotFigure, autoFigure, isPrimitive } from '../room/figspec.js';
 import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
-import { compileAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest } from './atlas.js';
+import { compileAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief } from './atlas.js';
 
 export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'atlas', 'done'];
 export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas', atlas: 'mapping concepts and diorama sequences' };
@@ -356,6 +356,7 @@ export function mergeAtlasResearch(atlas, records = []) {
 async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
   const A = P.analysis, byId = new Map((A.chain || []).map(st => [String(st.id), st]));
   const sourceFigures = Array.isArray(o.sourceFigures) ? o.sourceFigures : [];
+  const sourceSections = Array.isArray(o.sourceSections) ? o.sourceSections : [];
   for (const node of atlas.nodes || []) {
     const refs = [];
     (node.stepIds || []).forEach(id => {
@@ -386,15 +387,19 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         check(o.signal);
         const views = (node.dioramaSet || []).filter(v => v && v.medium === '3d').slice(0, 6).map(v => ({
           title: v.title, purpose: v.purpose, mustShow: v.mustShow, manipulations: v.manipulations,
-          sourceFigureIds: Array.isArray(v.sourceFigureIds) ? v.sourceFigureIds : []
+          sourceFigureIds: Array.isArray(v.sourceFigureIds) ? v.sourceFigureIds : [],
+          sourceVisualIds: Array.isArray(v.sourceVisualIds) ? v.sourceVisualIds : []
         }));
         const sourceSteps = (node.stepIds || []).map(id => byId.get(String(id))).filter(Boolean).map(step => ({
           id: step.id, title: step.title, statement: String(step.statement || '').slice(0, 1200),
           answers: step.answers || '', opens: step.opens || '', math: step.math || '',
           terms: (step.terms || []).slice(0, 12), explanation: (step.explain || []).map(x => x && x.text).filter(Boolean).join(' ').slice(0, 1400),
+          from: step.from || [], bodies: step.bodies || [], derivation: step.derivation || [],
           pages: step.pages || [], figures: step.figures || [], figureRefs: step.figureRefs || [], table: step.table || null
         }));
         const figureEvidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
+        const visualEvidence = sourceVisualEvidence(node.stepIds, A.chain || [], sourceSections);
+        const reconstructionBrief = buildVisualReconstructionBrief(node, A.chain || [], sourceSections, sourceFigures);
         const visualImageLimit = imageLimit();
         const selectedFigures = selectSourceFigureAttachments(node, A.chain || [], sourceFigures, visualImageLimit);
         const sourceFigureRefs = figureEvidence.figures;
@@ -409,10 +414,13 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         const d = {
           type: 'scene', title: node.title, purpose: node.question, auto: true, planned: true, sourceStepIds: (node.stepIds || []).map(String),
           sourceFigureRefs, sourceVisualAttachments, sourceVisualAttachmentManifest, sourceEvidenceStatus,
+          sourceVisualRefs: visualEvidence.visuals, visualReconstructionBrief: reconstructionBrief,
           request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
             'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned explanatory views: ' + JSON.stringify(views) +
             '. COMPLETE SOURCE STEP MATERIAL FOR THIS NODE (use all of it; IDs remain the audit anchors): ' + JSON.stringify(sourceSteps) +
             '. SOURCE-FIGURE EVIDENCE (each record is linked to the listed validated source steps; inspect the attached images but do not claim details that the pixels do not support): ' + JSON.stringify(sourceFigureRefs) +
+            '. STRUCTURED VISUAL RECONSTRUCTION BRIEF (typed chart series, cached points, SmartArt node IDs/connections, source tables, equations and validated step relationships; preserve values and IDs exactly): ' + JSON.stringify(reconstructionBrief) +
+            '. Do not interpret SmartArt connections as causal mechanisms unless a validated source step independently states that causal relation. New spatial arrangements may be explanatory layouts, but are not source measurements.' +
             '. ATTACHED IMAGE MANIFEST (image 1, image 2, etc. match the request attachments in this exact order; the manifest records each image ID, caption and source location): ' + JSON.stringify(sourceVisualAttachmentManifest) +
             '. Unresolved source figure references (not attached and not evidence): ' + JSON.stringify(figureEvidence.unresolvedFigureIds) +
             '. Use only these source steps and linked source figures for factual claims, quantities, actors and relationships. Do not infer an unprovided measurement. ' +
@@ -439,6 +447,8 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         d.sourceVisualAttachments = sourceVisualAttachments;
         d.sourceVisualAttachmentManifest = sourceVisualAttachmentManifest;
         d.sourceEvidenceStatus = sourceEvidenceStatus;
+        d.sourceVisualRefs = visualEvidence.visuals;
+        d.visualReconstructionBrief = reconstructionBrief;
         st.demos.push(d);
         if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question, atlasNodeId: node.id });
         else if (d.type === 'figure' && d.figure) {
@@ -461,6 +471,9 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
     const evidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
     node.sourceFigureRecords = evidence.figures;
     node.unresolvedFigureIds = evidence.unresolvedFigureIds;
+    const visualRecords = sourceVisualEvidence(node.stepIds, A.chain || [], sourceSections).visuals;
+    node.sourceVisualRecords = visualRecords;
+    node.sourceVisualIds = visualRecords.map(v => v.id);
   }
   atlas.audit = { ...(atlas.audit || {}), conceptNodes: (atlas.nodes || []).length, linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0), nodesWithout3D: (atlas.nodes || []).filter(x => !x.dioramaRefs || !x.dioramaRefs.length).map(x => x.id) };
 }
@@ -544,7 +557,7 @@ async function analyseOne(ctx, P, o) {
       P.analysis.atlas = await compileAtlas({ book: bookName(ctx), sourceType: ctx.book.sourceType || 'pdf', part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, researchAudit, onStatus: say });
       save(); show();
     }
-    if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, sourceFigures: M.figures || [], onStatus: say });
+    if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, sourceFigures: M.figures || [], sourceSections: M.sections || [], onStatus: say });
     stage('done'); save(); show();
   }
   // the final gate result (figures, dioramas and semantic atlas now in place) is what the quality panel shows
