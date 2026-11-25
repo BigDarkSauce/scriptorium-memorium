@@ -253,13 +253,13 @@ try {
   assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/is, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
   const visualTabs = page.locator('.atlas-visual-path-tab');
   assert.equal(await visualTabs.count(), 2, 'the concept pathway must expose its two ordered visual stages');
-  assert.match(await visualTabs.nth(0).innerText(), /ORIENTATION.*Yield by treatment/i);
+  assert.match(await visualTabs.nth(0).innerText(), /Yield by treatment.*ORIENTATION/is);
   const firstVisualStage = page.locator('.atlas-visual-path-panel');
   assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-bars').count(), 1, 'the evidence stage must render its native source-chart figure');
   assert.match(await firstVisualStage.innerText(), /Reconstructed from source visual pptx-chart-s3-1.*slide 3.*S2/i);
   assert.equal(await firstVisualStage.locator('.fig-bad').count(), 0, 'the source-derived figure must validate and render without an error');
   await visualTabs.nth(1).click();
-  assert.match(await firstVisualStage.innerText(), /MECHANISM.*Transport mechanism.*route and the direction/i);
+  assert.match(await firstVisualStage.innerText(), /MECHANISM.*Transport mechanism.*route and the direction/is);
   assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-flow').count(), 1, 'the learner must be able to switch to the separate mechanism view');
   await visualTabs.nth(0).click();
   assert.equal(await firstVisualStage.locator('.atlas-visual-path-figure .fig-bars').count(), 1, 'switching back must restore the earlier source-evidence view');
