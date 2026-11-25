@@ -322,7 +322,30 @@ try {
       },
       onSave: () => { saves++; }
     });
-    window.__lociUITest = { atlas, reviewSchedules, ratings, getSaves: () => saves };
+    const openRoute = () => hub.showMemoryRoute({
+      bookId: app.lib.books[0].id,
+      partId: 'memory-test-part',
+      atlas,
+      initialNodeId: 'locus-one',
+      reviewSchedules,
+      onGradeRecall: async (nodeId, recalled) => {
+        const current = reviewSchedules[nodeId];
+        const interval = recalled ? Math.min(120, Math.max(2, current.interval * 2.5)) : 1;
+        const next = {
+          ...current,
+          interval,
+          attempts: current.attempts + 1,
+          history: [...current.history, recalled ? 1 : 0].slice(-12),
+          lastRating: recalled ? 'recalled' : 'again',
+          due: Date.now() + interval * 864e5
+        };
+        reviewSchedules[nodeId] = next;
+        ratings.push({ nodeId, recalled });
+        return next;
+      },
+      onSave: () => { saves++; }
+    });
+    window.__lociUITest = { atlas, reviewSchedules, ratings, getSaves: () => saves, openRoute };
     return {
       count: atlas.memoryPlaces.length,
       shelfId: shelf.caseId,
@@ -384,8 +407,21 @@ try {
   assert.equal(scheduleState.interval, 2.5);
   assert.deepEqual(scheduleState.history, [0, 1]);
   assert.deepEqual(scheduleState.ratings, [{ nodeId: 'locus-one', recalled: false }, { nodeId: 'locus-one', recalled: true }]);
+  // Simulate the review becoming due after the learner has already seen and rated its answer.
+  // Re-entering the route must archive the previous attempt and hide its answer until a new prediction.
+  await page.evaluate(() => { window.__lociUITest.reviewSchedules['locus-one'].due = Date.now() - 1; });
   await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
+  await page.evaluate(() => window.__lociUITest.openRoute());
+  const duePanel = page.locator('.memory-route-panel');
+  await duePanel.waitFor();
+  assert.equal(await duePanel.locator('.memory-route-response').inputValue(), '', 'a due revisit must clear the previous response');
+  assert.equal(await duePanel.locator('.memory-route-response').isDisabled(), false, 'a due revisit must return to an answerable recall prompt');
+  assert.equal(await duePanel.locator('.memory-route-feedback.expected').count(), 0, 'a due revisit must hide the previously revealed answer');
+  assert.equal(await duePanel.getByRole('button', { name: 'Reveal expected reconstruction' }).count(), 0, 'the previous answer cannot be revealed before a fresh attempt is committed');
+  const dueHistory = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review.history);
+  assert.equal(dueHistory.length, 2, 'the due revisit must retain both previous attempts');
+  assert.equal(dueHistory[1].rating, 'recalled', 'the prior self-rating must remain attached to its archived attempt');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
 
   console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, drafts, locked predictions, source labels, per-branch persistence, loci recall, self-rated due scheduling, learner-controlled route order and source-index search');
