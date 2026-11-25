@@ -13,6 +13,7 @@ const unique = xs => [...new Set((xs || []).filter(x => x != null).map(String))]
 const isScene = d => !!(d && (d.type === 'scene' || Array.isArray(d.bodies) || (typeof d.type === 'string' && d.type !== 'figure')));
 
 export function atlasPrompt({ book, part, analysis, sections = [] }) {
+  const sourceUnit = book && book.sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
   const S = (analysis.chain || []).map(st => ({
     id: st.id, kind: st.kind, title: st.title, statement: st.statement,
     question: st.answers, opens: st.opens, section: st.section,
@@ -26,7 +27,7 @@ export function atlasPrompt({ book, part, analysis, sections = [] }) {
 SOURCE
 Book: ${book}
 Chapter / part: ${part}
-PDF subsections (stable IDs and page spans):
+${sourceUnit} (stable IDs and source spans):
 ${JSON.stringify(C)}
 Validated reasoning steps (the IDs are authoritative; preserve them exactly):
 ${JSON.stringify(S)}
@@ -113,7 +114,7 @@ function sourceIndex(analysis, sections, figures) {
     };
   });
   return {
-    method: 'PDF hierarchy + subsection text + validated chain step mappings',
+    method: 'Locally extracted source hierarchy + subsection text + validated chain step mappings',
     sourceSubsections: (sections || []).map(s => ({ id: s.id, title: s.title, startPage: s.startPage, endPage: s.endPage })),
     pdfFigureIndex: (figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, caption: f.caption || '' })),
     stepMappings: steps,
@@ -206,6 +207,8 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     };
   });
   const index = sourceIndex(analysis, sections, figures);
+  index.sourceType = book && book.sourceType === 'pptx' ? 'pptx' : 'pdf';
+  index.sourceUnit = index.sourceType === 'pptx' ? 'slide' : 'page';
   // One research record per actual API call. The pipeline's in-memory audit also sees calls that happened
   // before the atlas stage; use it preferentially to avoid double-counting the first chain response.
   const recorded = analysis.researchEvidenceCalls && analysis.researchEvidenceCalls.length
