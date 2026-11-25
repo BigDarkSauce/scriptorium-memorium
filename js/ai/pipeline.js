@@ -73,7 +73,7 @@ export async function writeChain(ctx, P, M, o) {
   const A = await ask(prompt, { ...o, images, writing: 'Writing the chain', role: 'director', acceptTruncated: true, validate: v => !(v && Array.isArray(v.chain) && v.chain.length) ? 'the answer has no "chain" array of steps' : v._truncated && v.chain.length < 2 ? 'the answer was cut off before two complete steps' : null }, 'Analyse "' + P.title + '" in any AI');
   if (!A || !Array.isArray(A.chain)) throw { code: 'invalid_json' };
   if (A._truncated && A.chain.length > 1) A.chain.pop();
-  const N = normalizeChain(A); delete N._truncated; N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n; if (o.deep) N.deep = true;
+  const N = normalizeChain(A); delete N._truncated; if (N._webResearch) { N.researchEvidence = N._webResearch; delete N._webResearch; } N.level = o.level || 'complete'; if (o.level === 'exact') N.levelN = o.n; if (o.deep) N.deep = true;
   return N;
 }
 // stage 2: coverage against the subsections; targeted follow-ups write what is missing (≤ 100k characters each)
