@@ -250,7 +250,7 @@ try {
   const sourceVisualDisclosure = page.locator('.atlas-source-visual');
   await sourceVisualDisclosure.locator('summary').click();
   assert.equal(await sourceVisualDisclosure.getAttribute('open'), '', 'the structured visual source record should expand on demand');
-  assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
+  assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/is, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
   const visualTabs = page.locator('.atlas-visual-path-tab');
   assert.equal(await visualTabs.count(), 2, 'the concept pathway must expose its two ordered visual stages');
   assert.match(await visualTabs.nth(0).innerText(), /ORIENTATION.*Yield by treatment/i);
