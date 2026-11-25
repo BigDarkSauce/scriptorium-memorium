@@ -896,7 +896,7 @@ export async function splitPresentation(blob, { onProgress } = {}) {
   return { pages: slides.length, parts: [part], method: 'presentation', title, sourceType: 'pptx' };
 }
 
-export async function extractPresentationFigures(blob, from, to, { maxW = 1400, quality = 0.86, maxPerPart = 36, maxTotalBytes = 24 * 1024 * 1024, onProgress } = {}) {
+export async function extractPresentationFigures(blob, from, to, { maxW = 1400, quality = 0.86, maxPerPart = 36, maxTotalBytes = 12 * 1024 * 1024, onProgress } = {}) {
   if (!blob) return [];
   if (typeof window === 'undefined' || !window.JSZip || typeof window.JSZip.loadAsync !== 'function') {
     throw new Error('PowerPoint visual extraction could not load JSZip.');
@@ -934,7 +934,7 @@ export async function extractPresentationFigures(blob, from, to, { maxW = 1400, 
       if (!file || !mime) continue;
       let bytes;
       try { bytes = await file.async('uint8array'); } catch (e) { continue; }
-      if (!bytes || !bytes.byteLength || bytes.byteLength > 10 * 1024 * 1024 || sourceBytes + bytes.byteLength > maxTotalBytes) continue;
+      if (!bytes || !bytes.byteLength || bytes.byteLength > 6 * 1024 * 1024 || sourceBytes + bytes.byteLength > maxTotalBytes) continue;
       sourceBytes += bytes.byteLength;
       let dataUrl = '';
       if (typeof createImageBitmap === 'function' && typeof document !== 'undefined') {
