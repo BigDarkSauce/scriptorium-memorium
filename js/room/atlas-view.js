@@ -197,8 +197,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
               el('b', { text: 'Feedback' }), el('p', { html: mathHTML(ch.feedback || 'Compare the causal and relational structure of your answer with the explanation.') })
             ]));
             const ref = (node.dioramaRefs || [])[0];
-            if (ref) body.append(el('button', { class: 'btn small', type: 'button', text: ch.type === 'structural' ? 'Inspect the incomplete structure' : 'Inspect the related diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref, { challenge: ch, incomplete: true }) }));
-            if (ref) body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the complete diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+            if (ref && ch.type === 'structural' && (ch.missingBodyIds || []).length) {
+              body.append(el('button', { class: 'btn small', type: 'button', text: 'Inspect the incomplete structure', onclick: () => onOpenDiorama && onOpenDiorama(ref, { challenge: ch, incomplete: true }) }));
+              body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the complete diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+            } else if (ref) {
+              body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the related diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+            }
           } else {
             body.append(el('button', { class: 'btn small', type: 'button', text: 'Reveal answer and feedback', onclick: () => { atlas.attempts[ch.id] = { ...saved, revealed: true }; onSave && onSave(); renderDetail(); } }));
           }
