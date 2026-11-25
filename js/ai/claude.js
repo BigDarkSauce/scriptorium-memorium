@@ -71,7 +71,7 @@ export async function askJSON(prompt, o = {}) {
   catch (e) { if (J.signal.aborted && !(e && e.code === 'cancelled')) throw { code: 'cancelled', message: 'Stopped.' }; throw e; }
   finally { if (own) own.end(); }
 }
-async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
+async function askJSON0(prompt, { onText, onTool, onStatus, onResearch, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
   await ready;
   const m = FREE.mode();
   const viaClaude = async () => {
@@ -82,7 +82,7 @@ async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tool
     const { text, truncated } = await SAMPLE(prompt, opts);
     const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
   };
-  const viaFree = exhausted => FREE.ask(prompt, { promptForProvider: id => id === 'openai-local' ? prompt : forFreeModels(prompt), images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
+  const viaFree = exhausted => FREE.ask(prompt, { promptForProvider: id => id === 'openai-local' ? prompt : forFreeModels(prompt), images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, onResearch, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
   if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
   if (m === 'free' || !SAMPLE) {
     if (!FREE.hasAny()) return manualRelay(prompt, manualTitle);
