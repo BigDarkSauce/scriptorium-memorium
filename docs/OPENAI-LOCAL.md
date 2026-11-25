@@ -80,7 +80,7 @@ OpenAI requests use the Responses API with the `web_search` tool available. The 
 
 The search tool is not invoked for every stage or every claim. It is available to the model and invoked when useful; a response with no returned citations is labelled as having no web-search citations. Do not treat a prompt that merely says “search the web” as evidence that a search occurred.
 
-Other providers in the fallback pool keep their own request path and constraints. They do not automatically inherit OpenAI's native `web_search` tool. Claude is not a primary provider in this build.
+Other providers in the fallback pool keep their own request path and constraints. They do not automatically inherit OpenAI's native `web_search` tool. The legacy embedded-host adapter is retained only for compatibility; it is not part of the normal local authoring path.
 
 ## Model, latency and cost
 
