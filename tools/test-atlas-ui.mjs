@@ -54,7 +54,15 @@ try {
       nodes: [{
         id: 'test-node', title: 'Test concept', question: 'How does this system behave?',
         summary: 'A two-branch test of source-grounded reasoning.',
-        stepIds: ['S1', 'S2'], knowledgeKinds: ['causal'],
+        stepIds: ['S1', 'S2'],
+        sourceRefs: {
+          stepIds: ['S1', 'S2'], subsectionIds: ['1.1'],
+          stepSummaries: [
+            { stepId: 'S1', title: 'Membrane boundary', statement: 'The membrane separates two regions.', pages: [2] },
+            { stepId: 'S2', title: 'Flux relation', statement: 'The rate depends on the stated gradient and permeability.', pages: [3] }
+          ]
+        },
+        knowledgeKinds: ['causal'],
         visualIntent: 'Test view', dioramaSet: [], position: { x: 50, y: 50 },
         challenges: [
           makeChallenge('branch-mechanism', 'mechanistic', 'What mechanism connects the initial and final states?', 'Mechanism'),
@@ -115,9 +123,13 @@ try {
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'a term search must find its exact source step');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S1.*p\. 2/i);
   await sourceScan.locator('.atlas-scan-row').first().click();
+  assert.equal(await page.locator('.atlas-source-trail').getAttribute('open'), '', 'a source search must open the concept source trail');
+  assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S1.*Membrane boundary/i, 'the exact selected source step must expand in the source trail');
   await scanSearch.fill('Flux relation');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'an equation step must be searchable by its source title');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /equation \/ derivation/i);
+  await sourceScan.locator('.atlas-scan-row').first().click();
+  assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S2.*Flux relation/i, 'a second search must jump to its exact source step');
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
   await page.getByRole('button', { name: 'Remove memory place' }).click();
