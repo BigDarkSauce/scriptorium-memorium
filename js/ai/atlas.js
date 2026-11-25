@@ -125,12 +125,14 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     try {
       onStatus && onStatus('Mapping the chapter’s concepts and dependencies…');
       const prompt = atlasPrompt({ book, part, analysis, sections });
-      authored = await askJSON(prompt, {
+      const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
         validate: v => validateAtlas(v && (v.atlas || v), ids)
       });
-      authored = authored && (authored.atlas || authored);
+      const atlasResearch = response && response._webResearch || null;
+      authored = response && (response.atlas || response);
+      if (atlasResearch) authored._atlasWebResearch = atlasResearch;
       const issue = validateAtlas(authored, ids);
       if (issue) throw new Error(issue);
     } catch (e) {
@@ -186,9 +188,17 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     };
   });
   const index = sourceIndex(analysis, sections, figures);
-  index.webResearch = analysis.researchEvidence ? { ...analysis.researchEvidence, citations: (analysis.researchEvidence.citations || []).filter(c => c && /^https:\/\//i.test(c.url)) } : null;
+  const researchParts = [analysis.researchEvidence, authored._atlasWebResearch].filter(Boolean);
+  const researchCitations = researchParts.flatMap(x => x.citations || []).filter(c => c && /^https:\/\//i.test(c.url));
+  index.webResearch = researchParts.length ? {
+    provider: [...new Set(researchParts.map(x => x.provider).filter(Boolean))].join(', '),
+    model: [...new Set(researchParts.map(x => x.model).filter(Boolean))].join(', '),
+    searched: researchParts.reduce((n, x) => n + (+x.searched || 0), 0),
+    citations: researchCitations.filter((c, i, a) => a.findIndex(y => y.url === c.url) === i)
+  } : null;
+  const { _atlasWebResearch, ...authoredAtlas } = authored;
   const atlas = {
-    ...authored,
+    ...authoredAtlas,
     sourceIndex: index,
     audit: {
       generatedAt: new Date().toISOString(),
