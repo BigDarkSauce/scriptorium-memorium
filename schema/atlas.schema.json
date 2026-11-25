@@ -650,7 +650,8 @@
                       "format": "date-time"
                     }
                   }
-                }
+                },
+                "maxItems": 12
               }
             }
           }
