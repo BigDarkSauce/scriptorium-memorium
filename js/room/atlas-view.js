@@ -113,7 +113,8 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     };
   });
   const scan = el('section', { class: 'atlas-source-scan' });
-  const scanBody = el('div', { class: 'atlas-source-scan-body', id: 'atlas-source-scan-body', hidden: true });
+  const scanExpanded = !!atlas.sourceScanExpanded;
+  const scanBody = el('div', { class: 'atlas-source-scan-body', id: 'atlas-source-scan-body', hidden: !scanExpanded });
   const sectionItems = sourceSections.map(sec => {
     const entries = scanEntries.filter(x => String(x.step.section) === String(sec.id));
     const categories = [...new Set(entries.flatMap(x => x.tags))];
@@ -139,11 +140,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   const scanSummaryNode = el('button', {
     class: 'atlas-scan-summary',
     type: 'button',
-    'aria-expanded': 'false',
+    'aria-expanded': String(scanExpanded),
     'aria-controls': 'atlas-source-scan-body',
     onclick: () => {
       const expanded = scanBody.hidden;
       scanBody.hidden = !expanded;
+      atlas.sourceScanExpanded = expanded;
       scanSummaryNode.setAttribute('aria-expanded', String(expanded));
     }
   }, [
@@ -188,9 +190,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     placeholder: 'Search or choose a source concept, term, equation, example or figure…',
     'aria-label': 'Search source steps'
   });
+  scanInput.value = String(atlas.sourceScanQuery || '');
   const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
   const openNode = (node, stepId = null) => {
     atlas.selectedSourceStepId = stepId == null ? null : String(stepId);
+    atlas.sourceScanExpanded = !scanBody.hidden;
+    atlas.sourceScanQuery = scanInput.value;
     if (node) select(node.id);
   };
   const paintScan = query => {
@@ -278,8 +283,11 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     });
     if (matches.length === 40) scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'Showing the first 40 matches. Refine your search to narrow the source inventory.' }));
   };
-  scanInput.addEventListener('input', () => paintScan(scanInput.value));
-  paintScan('');
+  scanInput.addEventListener('input', () => {
+    atlas.sourceScanQuery = scanInput.value;
+    paintScan(scanInput.value);
+  });
+  paintScan(scanInput.value);
   scanBody.append(scanInput, suggestionList, scanResults);
   scan.append(scanSummaryNode, scanBody);
   root.append(scan);
