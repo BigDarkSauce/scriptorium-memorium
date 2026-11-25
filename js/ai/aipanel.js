@@ -10,7 +10,7 @@ import * as MEDIA from './media.js';
 const MODE_TEXT = {
   claude: ['Claude directs', 'Your Claude reads every chapter, plans and writes every scroll and diorama. The best quality; uses your Claude plan\'s limits.'],
   hybrid: ['Claude + free models', 'Claude reads each chapter and plans and checks each diorama; the free models write the volume (coverage, repairs, figures, diorama code). Either stands in when the other is at its limit, so a job never stops.'],
-  free: ['Free models only', 'No Claude at all: the pool of free models writes everything, the best free one first. When all are at their limits the job waits for the next reset instead of failing.'],
+  free: ['OpenAI preferred + fallbacks', 'GPT-6.2 Astra through the local secure relay is tried first. If it is not configured or cannot be reached, the existing model pool takes over. Claude is not required.'],
 };
 export function aiButton(app) {
   const btn = el('button', { class: 'ai-btn glass', type: 'button', 'aria-label': 'AI engine settings', html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>' });
@@ -48,7 +48,7 @@ export function openAIPanel(app) {
         el('div', { class: 'ai-pkeys' }, [base, key, model, p.keyUrl ? el('a', { href: p.keyUrl, target: '_blank', rel: 'noopener', class: 'ai-get', text: p.key === 'required' ? 'Get a free key ↗' : 'Site ↗' }) : null].filter(Boolean))]));
     });
   };
-  const testBtn = el('button', { class: 'btn primary', type: 'button', text: 'Test the free models', onclick: async () => {
+  const testBtn = el('button', { class: 'btn primary', type: 'button', text: 'Test AI providers', onclick: async () => {
     testBtn.disabled = true; out.innerHTML = ''; const rows = new Map(), table = el('div', { class: 'ai-rows' }); out.append(el('p', { class: 'dim small', text: 'Each provider: its model list, a tiny exact answer, then this app\'s real chapter request on a short passage, checked by the app\'s own quality gate. A minute or two.' }), table);
     const row = r => { let e = rows.get(r.id); if (!e) { e = el('div', { class: 'ai-row' }); rows.set(r.id, e); table.append(e); } e.className = 'ai-row ' + (r.verdict === 'writes scrolls' ? 'good' : r.verdict === 'fail' && r.step === 'done' ? 'bad' : r.step === 'done' ? 'mid' : '');
       const c = r.chain, txt = r.step && r.step !== 'done' ? r.step : r.reach && !r.reach.ok ? r.reach.why : c ? (c.ok ? `${c.steps} steps, ${c.issues} issue${c.issues === 1 ? '' : 's'} in ${(c.ms / 1000).toFixed(0)} s` : c.why || `${c.steps} steps, ${c.issues} issues: too weak`) : r.ping ? (r.ping.ok ? 'alive (' + r.ping.ms + ' ms)' : r.ping.why) : '…';
