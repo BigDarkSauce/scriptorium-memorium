@@ -300,7 +300,33 @@
           "figureRefs": {
             "type": "array"
           },
-          "dioramaBuild": {}
+          "dioramaBuild": {},
+          "explanatoryFigures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "stepId",
+                "title",
+                "purpose",
+                "figure"
+              ],
+              "properties": {
+                "stepId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "figure": {
+                  "type": "object"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -356,7 +382,74 @@
       }
     },
     "sourceIndex": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "sourceType": {
+          "enum": [
+            "pdf",
+            "pptx"
+          ]
+        },
+        "sourceUnit": {
+          "enum": [
+            "page",
+            "slide"
+          ]
+        },
+        "webResearch": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "searched": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "citations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "end": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
     },
     "audit": {
       "type": "object"
