@@ -1,6 +1,6 @@
 // The reading scroll: a parchment overlay showing one part's logical chain. 3D showcases appear as 2D drawings
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
-import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML, mathText } from '../util.js';
+import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML, mathText, confirmBox } from '../util.js';
 import { SVGDEMO, SVG_TYPES, renderFigure } from './diagrams.js';
 import { closeLecterns } from '../dio/prims/index.js';
 import { prose } from './prose.js';
@@ -373,6 +373,22 @@ export class Reader {
       toast(String(e && (e.message || e.code) || e), 5000);
       await app.openRoom(book.id, { openPart: part.id });
     }
+  }
+  async removeAtlasMemoryPlace(node) {
+    const book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    if (!atlas || !node || !Array.isArray(atlas.memoryPlaces)) return;
+    const place = atlas.memoryPlaces.find(p => String(p.nodeId) === String(node.id));
+    if (!place) return;
+    const ok = await confirmBox(
+      'Remove the saved library location and its recall record for “' + (node.title || node.id) + '”? The concept, source links and dioramas will remain in the atlas.',
+      'Remove memory place',
+      { title: 'Remove this memory place?' }
+    );
+    if (!ok) return;
+    atlas.memoryPlaces = atlas.memoryPlaces.filter(p => String(p.nodeId) !== String(node.id));
+    await roomCtx(this.app, book.id).save(part);
+    this.render();
+    toast('Memory place removed. The concept remains in the atlas.');
   }
   async visitAtlasMemoryRoute(node) {
     const app = this.app, book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
