@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, sourceVisualFigure, compileAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, sourceVisualFigure, selectedSourceVisualFigures, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [3], table: { caption: 'Transport conditions', columns: ['Condition', 'Flux'], rows: [['A', '2.1'], ['B', '3.4']] } },
@@ -116,6 +116,26 @@ assert.deepEqual(reconstruction.sourceTables[0].rows, [['A', '2.1'], ['B', '3.4'
 assert.equal(reconstruction.sourceEquations[0].expression, 'J = P(C1 - C2)');
 assert.deepEqual(reconstruction.stepDependencies, [{ stepId: 'S2', dependsOnStepIds: ['S1'] }]);
 assert.ok(reconstruction.reconstructionRules.some(rule => /Do not infer physical scale/.test(rule)));
+
+const selectedSourceFigures = selectedSourceVisualFigures(valid.nodes[0], steps, sourceSections);
+assert.equal(selectedSourceFigures.length, 1, 'the atlas should compile only the source visual selected by this concept view');
+assert.equal(selectedSourceFigures[0].sourceVisualId, 'pptx-chart-s3-1');
+assert.equal(selectedSourceFigures[0].sourceSlide, 3);
+assert.equal(selectedSourceFigures[0].figure.kind, 'bars');
+const noSelection = selectedSourceVisualFigures({
+  ...valid.nodes[0], dioramaSet: [{ ...valid.nodes[0].dioramaSet[0], sourceVisualIds: [] }]
+}, steps, sourceSections);
+assert.deepEqual(noSelection, [], 'unselected source visuals stay in provenance but are not presented as explanatory figures');
+
+const smartArtOnlyNode = {
+  ...valid.nodes[0],
+  dioramaSet: [{ ...valid.nodes[0].dioramaSet[0], sourceVisualIds: ['pptx-smartart-s3-1'] }]
+};
+const selectedSmartArt = selectedSourceVisualFigures(smartArtOnlyNode, steps, sourceSections);
+assert.equal(selectedSmartArt.length, 1);
+assert.equal(selectedSmartArt[0].figure.kind, 'flow');
+assert.deepEqual(selectedSmartArt[0].figure.edges, [{ from: 'n1', to: 'n2', label: 'parOf' }]);
+
 
 const chartFigure = sourceVisualFigure(sourceSections[0].sourceVisuals[0]);
 assert.equal(chartFigure.kind, 'bars');

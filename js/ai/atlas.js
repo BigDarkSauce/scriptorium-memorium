@@ -225,6 +225,27 @@ export function sourceVisualFigure(record) {
   return checked.ok ? checked.fig : null;
 }
 
+/** Build only the diagram entries selected by this concept's own view plan. */
+export function selectedSourceVisualFigures(node, sourceSteps = [], sections = []) {
+  const selected = new Set(unique((node && node.dioramaSet || []).flatMap(view =>
+    Array.isArray(view && view.sourceVisualIds) ? view.sourceVisualIds : []
+  )));
+  if (!selected.size) return [];
+  return sourceVisualEvidence(node && node.stepIds || [], sourceSteps, sections).visuals
+    .filter(record => selected.has(record.id))
+    .map(record => {
+      const figure = sourceVisualFigure(record);
+      return figure ? {
+        stepId: record.stepIds[0] || String((node.stepIds || [])[0] || ''),
+        title: clean(record.label || record.kind, 100),
+        purpose: record.kind === 'chart'
+          ? 'A faithful 2D reconstruction of the source chart cache.'
+          : 'A 2D reconstruction of the source SmartArt nodes and connections.',
+        figure, sourceVisualId: record.id, sourceSlide: record.slide, sourceKind: record.kind
+      } : null;
+    }).filter(Boolean);
+}
+
 export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [] }) {
   const sourceUnit = sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
   const S = (analysis.chain || []).map(st => ({
@@ -472,20 +493,8 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
     });
     // Preserve source-linked explanatory diagrams in the atlas itself. PDF crop IDs remain in sourceRefs rather
     // than being copied here, because their binary image assets live in the document's local figure store.
-    // Only render a structured source object as a generated diagram when the semantic atlas
-    // explicitly selected it for one of this node's explanatory views.
-    const selectedVisualIds = new Set((n.dioramaSet || []).flatMap(view => Array.isArray(view && view.sourceVisualIds) ? view.sourceVisualIds.map(String) : []));
-    sourceVisualEvidence(stepIds, analysis.chain, sections).visuals.forEach(visual => {
-      if (!selectedVisualIds.has(visual.id)) return;
-      const figure = sourceVisualFigure(visual);
-      if (!figure) return;
-      explanatoryFigures.push({
-        stepId: visual.stepIds[0] || stepIds[0],
-        title: clean(visual.label || visual.kind, 100),
-        purpose: visual.kind === 'chart' ? 'A faithful 2D reconstruction of the source chart cache.' : 'A 2D reconstruction of the source SmartArt nodes and connections.',
-        figure, sourceVisualId: visual.id, sourceSlide: visual.slide, sourceKind: visual.kind
-      });
-    });
+    // Only source visuals explicitly selected by this concept's plan become visible figure entries.
+    explanatoryFigures.push(...selectedSourceVisualFigures(n, analysis.chain, sections));
     const seenFigures = new Set();
     const uniqueFigures = explanatoryFigures.filter(f => {
       const key = f.sourceVisualId || (f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure));
