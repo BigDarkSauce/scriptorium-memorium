@@ -203,6 +203,10 @@ try {
   assert.ok(state.saves >= 7, 'drafts, confidence, prediction, answer and reveal movements should be saved');
   assert.deepEqual(errors, [], 'the atlas interaction must not create browser errors');
 
+  // The real app replaces the reader/atlas view when the library opens. Remove only the temporary test overlay
+  // so it cannot intercept clicks intended for the library's route panel.
+  await page.locator('.atlas-view[data-test-atlas="true"]').evaluate(el => el.remove());
+
   // Exercise the actual walkable-library implementation, not a mock: slots are bookcase-local and the review is
   // committed before the expected reconstruction is shown.
   await page.waitForFunction(() => {
