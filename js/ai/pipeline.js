@@ -242,11 +242,12 @@ export async function authorDemo(ctx, st, d, o = {}) {
 }
 async function authorDemo0(ctx, st, d, o = {}) {
   const context = `${st.title}: ${st.statement || ''}${st.answers ? ' | the step answers: ' + st.answers : ''}${st.opens ? ' | and opens: ' + st.opens : ''}`;
-  let fail = '';
+  let fail = '', rejectedAttempts = [];
   if (o.auto !== false && aiAvailable()) {
     const sourceStepIds = (d.sourceStepIds || [st.id]).map(String);
     const plan = o.plan === false ? null : await planDemo(ctx, st, d, context, o);
-    for (const simple of [false, true]) {
+    if (!plan) fail = 'no validated versioned model plan was available; scene authoring was not allowed to proceed without the source-mapped contract';
+    for (const simple of (plan ? [false, true] : [])) {
       check(o.signal); o.onStatus && o.onStatus(`${simple ? 'Retrying, simpler' : 'Authoring'}: diorama “${d.title || st.title}” for ${st.id}…`);
       try {
         const spec = await ask(authorPrompt({ ...d, plan, sourceStepIds, failure: fail }, context, { simple }), { ...o, writing: 'Authoring the diorama' }, 'Author this diorama in any AI');
@@ -262,15 +263,17 @@ async function authorDemo0(ctx, st, d, o = {}) {
               s.modelContract = JSON.parse(JSON.stringify(plan.modelContract));
               const local = checkSceneContract(s, plan, sourceStepIds);
               s.modelValidation = { checkedAt: new Date().toISOString(), method: 'deterministic scene-to-contract checks', pass: !local.faults.length, faults: local.faults, warnings: local.warnings };
-              if (local.faults.length) { fail = 'scene-to-model contract validation failed: ' + local.faults.slice(0, 8).join('; '); continue; }
+              if (local.faults.length) { rejectedAttempts.push({ attempt: simple ? 'simple' : 'full', stage: 'modelValidation', faults: local.faults.slice(0, 12) }); fail = 'scene-to-model contract validation failed: ' + local.faults.slice(0, 8).join('; '); continue; }
             }
             await critiqueDemo(s, s.plan, { ...o, sourceStepIds });
             const major = (s.modelAudit && s.modelAudit.issues || []).filter(x => x.severity === 'critical' || x.severity === 'major');
             if (s.modelAudit && s.modelAudit.verdict === 'revise' && major.length) {
+              rejectedAttempts.push({ attempt: simple ? 'simple' : 'full', stage: 'modelAudit', verdict: s.modelAudit.verdict, issues: s.modelAudit.issues.slice(0, 12), unverified: s.modelAudit.unverified || [] });
               fail = 'independent model audit: ' + major.slice(0, 5).map(x => x.problem + (x.repair ? ' — ' + x.repair : '')).join('; ');
               continue;
             }
           }
+          if (rejectedAttempts.length) s.rejectedAttempts = rejectedAttempts;
           Object.keys(d).forEach(k => delete d[k]); Object.assign(d, s); return d.authored;
         }
         fail = why;
@@ -279,7 +282,7 @@ async function authorDemo0(ctx, st, d, o = {}) {
   }
   const fb = fallbackDemo(st, d);
   const req = { request: d.request, title: d.title, purpose: d.purpose, technique: d.technique };
-  Object.keys(d).forEach(k => delete d[k]); Object.assign(d, fb, { requested: req, fallback: fail || 'no AI here' });
+  Object.keys(d).forEach(k => delete d[k]); Object.assign(d, fb, { requested: req, fallback: fail || 'no AI here', ...(rejectedAttempts.length ? { rejectedAttempts } : {}) });
   return 'fallback:' + (fb.type === 'figure' ? 'diagram' : fb.type);
 }
 export async function buildDioramas(ctx, P, M, o = {}) {
