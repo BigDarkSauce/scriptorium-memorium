@@ -395,9 +395,10 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
           pages: step.pages || [], figures: step.figures || [], figureRefs: step.figureRefs || [], table: step.table || null
         }));
         const figureEvidence = sourceFigureEvidence(node.stepIds, A.chain || [], sourceFigures);
-        const selectedFigures = selectSourceFigureAttachments(node, A.chain || [], sourceFigures, imageLimit());
+        const visualImageLimit = imageLimit();
+        const selectedFigures = selectSourceFigureAttachments(node, A.chain || [], sourceFigures, visualImageLimit);
         const sourceFigureRefs = figureEvidence.figures;
-        const sourceVisualAttachmentManifest = sourceFigureAttachmentManifest(node, A.chain || [], sourceFigures, imageLimit());
+        const sourceVisualAttachmentManifest = sourceFigureAttachmentManifest(node, A.chain || [], sourceFigures, visualImageLimit);
         const sourceVisualAttachments = sourceVisualAttachmentManifest.map(f => f.id);
         const sourceEvidenceStatus = {
           referenced: sourceFigureRefs.length + figureEvidence.unresolvedFigureIds.length,
@@ -424,7 +425,8 @@ async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
         let how;
         const images = selectedFigures.map(f => dataUrlBlob(f.dataUrl));
         try {
-          how = await authorDemo(ctx, st, d, { ...o, images: images.length ? images : o.images });
+          // Never fall back to unrelated parent images: this concept's vision context is restricted to its linked source figures.
+          how = await authorDemo(ctx, st, d, { ...o, images });
         } catch (e) {
           mergeAtlasResearch(atlas, (o.researchAudit || []).slice(auditBefore));
           if (ctx.save) await ctx.save(P);
