@@ -172,10 +172,12 @@ export function sourceVisualFigure(record) {
     const series = Array.isArray(data.series) ? data.series : [];
     const first = series[0];
     const categories = first && Array.isArray(first.points) ? first.points.map(p => p && p.category) : [];
-    const complete = categories.length > 0 && categories.length <= 24 && series.length > 0 && series.length <= 4 &&
+    const alignedCategories = categories.length > 0 && categories.length <= 24 && series.length > 0 && series.length <= 7 &&
       categories.every(x => x != null && String(x).trim() !== '') &&
       series.every(s => Array.isArray(s.points) && s.points.length === categories.length &&
-        s.points.every((p, i) => p && String(p.category) === String(categories[i]) && Number.isFinite(p.value) && p.rawValue != null));
+        s.points.every((p, i) => p && String(p.category) === String(categories[i]) && p.rawValue != null));
+    const complete = alignedCategories && series.length <= 4 &&
+      series.every(s => s.points.every(p => Number.isFinite(p.value)));
     if (data.chartKind === 'bar' && complete) {
       spec = {
         kind: 'bars',
@@ -183,8 +185,7 @@ export function sourceVisualFigure(record) {
         categories: categories.map(String),
         series: series.map(s => ({ name: s.name || 'Series', values: s.points.map(p => p.value) }))
       };
-    } else if (categories.length > 0 && categories.length <= 14 && series.length > 0 && series.length <= 7 &&
-      series.every(s => Array.isArray(s.points) && s.points.length === categories.length && s.points.every(p => p && p.rawValue != null))) {
+    } else if (alignedCategories && categories.length <= 14) {
       spec = {
         kind: 'table',
         caption: 'Source chart data: ' + captionBase + (slide ? ' · slide ' + slide : '') + '. Raw cached values; original chart type: ' + (data.chartKind || 'unknown') + '.',

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, compileAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, sourceVisualFigure, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
   { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [3], table: { caption: 'Transport conditions', columns: ['Condition', 'Flux'], rows: [['A', '2.1'], ['B', '3.4']] } },
@@ -116,6 +116,47 @@ assert.deepEqual(reconstruction.sourceTables[0].rows, [['A', '2.1'], ['B', '3.4'
 assert.equal(reconstruction.sourceEquations[0].expression, 'J = P(C1 - C2)');
 assert.deepEqual(reconstruction.stepDependencies, [{ stepId: 'S2', dependsOnStepIds: ['S1'] }]);
 assert.ok(reconstruction.reconstructionRules.some(rule => /Do not infer physical scale/.test(rule)));
+
+const chartFigure = sourceVisualFigure(sourceSections[0].sourceVisuals[0]);
+assert.equal(chartFigure.kind, 'bars');
+assert.deepEqual(chartFigure.categories, ['A', 'B']);
+assert.deepEqual(chartFigure.series[0].values, [2.1, 3.4]);
+assert.match(chartFigure.caption, /slide 3.*Cached values; no axis unit inferred/i);
+
+const smartArtFigure = sourceVisualFigure(sourceSections[0].sourceVisuals[1]);
+assert.equal(smartArtFigure.kind, 'flow');
+assert.deepEqual(smartArtFigure.nodes.map(n => [n.id, n.label]), [['n1', 'Stimulus'], ['n2', 'Response']]);
+assert.deepEqual(smartArtFigure.edges, [{ from: 'n1', to: 'n2', label: 'parOf' }]);
+assert.match(smartArtFigure.caption, /Layout redrawn; source node IDs and connection types retained/);
+
+const incompleteSmartArt = sourceVisualFigure({
+  ...sourceSections[0].sourceVisuals[1],
+  data: { ...sourceSections[0].sourceVisuals[1].data, links: [], omittedLinks: 1 }
+});
+assert.equal(incompleteSmartArt.kind, 'table', 'incomplete SmartArt must fall back to a source-node inventory');
+assert.deepEqual(incompleteSmartArt.rows, [['n1', 'Stimulus', ''], ['n2', 'Response', '']]);
+assert.doesNotMatch(JSON.stringify(incompleteSmartArt), /"edges"/, 'the fallback must not invent a chain of connections');
+
+const nonNumericChart = sourceVisualFigure({
+  ...sourceSections[0].sourceVisuals[0],
+  data: { ...sourceSections[0].sourceVisuals[0].data, chartKind: 'bar', series: [{
+    name: 'Flux', points: [
+      { index: 0, category: 'A', rawValue: 'not reported', value: null },
+      { index: 1, category: 'B', rawValue: '3.4', value: 3.4 }
+    ]
+  }] }
+});
+assert.equal(nonNumericChart.kind, 'table', 'a chart with non-numeric or missing values must stay a raw data table, not a quantitative bar scale');
+assert.deepEqual(nonNumericChart.rows, [['A', 'not reported'], ['B', '3.4']]);
+
+const misalignedChart = sourceVisualFigure({
+  ...sourceSections[0].sourceVisuals[0],
+  data: { ...sourceSections[0].sourceVisuals[0], chartKind: 'bar', series: [{
+    name: 'Flux', points: [{ index: 0, category: null, rawValue: '2.1', value: 2.1 }, { index: 1, category: 'B', rawValue: '3.4', value: 3.4 }]
+  }] }
+});
+assert.equal(misalignedChart, null, 'misaligned or missing categories must not be assigned arbitrary labels');
+
 
 const invalidVisual = makeAtlas();
 invalidVisual.nodes[0].dioramaSet[0].sourceVisualIds = ['pptx-chart-s8-1'];

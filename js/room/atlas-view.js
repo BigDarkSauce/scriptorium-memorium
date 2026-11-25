@@ -503,7 +503,9 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           el('b', { text: txt(item.title || 'Source explanation', 90) }),
           el('p', { text: txt(item.purpose || '', 240) }),
           host,
-          el('small', { text: 'Linked to source step ' + String(item.stepId || '') })
+          el('small', { text: item.sourceVisualId
+            ? 'Reconstructed from source visual ' + item.sourceVisualId + (item.sourceSlide ? ' · slide ' + item.sourceSlide : '') + ' · linked step ' + String(item.stepId || '')
+            : 'Linked to source step ' + String(item.stepId || '') })
         ]));
       });
       detail.append(figureSet);

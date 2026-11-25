@@ -522,6 +522,21 @@
                 },
                 "figure": {
                   "type": "object"
+                },
+                "sourceVisualId": {
+                  "type": "string",
+                  "description": "ID of the exact extracted chart or SmartArt source visual reconstructed in this figure."
+                },
+                "sourceSlide": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "sourceKind": {
+                  "enum": [
+                    "chart",
+                    "smartart",
+                    "visual"
+                  ]
                 }
               }
             }

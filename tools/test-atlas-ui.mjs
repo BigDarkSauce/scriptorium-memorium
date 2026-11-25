@@ -78,7 +78,13 @@ try {
           ]
         },
         knowledgeKinds: ['causal'],
-        visualIntent: 'Test view', dioramaSet: [], position: { x: 50, y: 50 },
+        visualIntent: 'Test view',
+        explanatoryFigures: [{
+          stepId: 'S2', title: 'Yield by treatment', purpose: 'Faithful reconstruction of the source chart.',
+          sourceVisualId: 'pptx-chart-s3-1', sourceSlide: 3, sourceKind: 'chart',
+          figure: { kind: 'bars', caption: 'Source chart · cached values; no axis unit inferred.', categories: ['Control', 'Fertiliser'], series: [{ name: 'Grain yield', values: [3.2, 4.8] }] }
+        }],
+        dioramaSet: [], position: { x: 50, y: 50 },
         challenges: [
           makeChallenge('branch-mechanism', 'mechanistic', 'What mechanism connects the initial and final states?', 'Mechanism'),
           makeChallenge('branch-counterfactual', 'counterfactual', 'What changes when this component is removed?', 'Counterfactual')
@@ -215,6 +221,11 @@ try {
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
   assert.match(await page.locator('.atlas-source-trail').innerText(), /Membrane permeability diagram.*F1.*p\. 3.*S2/i, 'the concept trail must expose the exact indexed source figure, page and linked step');
   assert.match(await page.locator('.atlas-source-visual').innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the concept source trail must reveal structured chart values and their linked source slide');
+  const sourceDerivedFigure = page.locator('.atlas-explanatory-figures .atlas-figure-entry');
+  assert.equal(await sourceDerivedFigure.count(), 1, 'the selected source chart must be reconstructed as a visible atlas figure');
+  assert.match(await sourceDerivedFigure.locator('small').innerText(), /Reconstructed from source visual pptx-chart-s3-1.*slide 3.*step S2/i);
+  assert.equal(await sourceDerivedFigure.locator('.fig-bars').count(), 1, 'the chart reconstruction must use the native bars renderer rather than a text-only placeholder');
+  assert.equal(await sourceDerivedFigure.locator('.fig-bad').count(), 0, 'the source-derived figure must validate and render without an error');
   assert.equal(await scanSearch.isVisible(), true, 'the source scan must remain expanded after opening a concept');
   assert.equal(await scanSearch.inputValue(), 'selective permeability', 'the previous source query must survive concept selection');
   await scanSearch.fill('Flux relation');
