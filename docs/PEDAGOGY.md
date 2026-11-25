@@ -120,3 +120,39 @@ learner's own self-explanation help where self-explanation alone falls short (Re
 "More detail → sub-scroll" no longer writes anything by itself: it asks what the reader wants explained and where
 (any of the step's statement, paragraphs, formula, derivation lines, terms, examples, code and boxes), with an optional
 deepest dive, and only then writes the sub-scroll.
+
+
+## 5. Generative incompleteness: make the learner reconstruct
+
+A conventional explanation can leave the learner watching, reading and recognising without generating the structure needed to explain or use it. Scriptorium therefore uses a prediction-first loop where a learner attempts a reconstruction before the full explanation appears:
+
+**Activate → Predict → Commit → Inspect → Explain → Reconstruct → Transfer → Revisit.**
+
+The system should not merely reveal information in an attractive order. It should create a gap that the learner can meaningfully try to close, then use the difference between their prediction and the supported explanation as feedback.
+
+Six forms are available:
+
+1. **Structural incompleteness:** hide a part of a structure and ask what belongs there.
+2. **Mechanistic incompleteness:** show initial and final states while withholding the causal transition.
+3. **Temporal incompleteness:** pause a process before a consequential next state.
+4. **Explanatory incompleteness:** present an observation without its mechanism and ask what could explain it.
+5. **Relational incompleteness:** show concepts without one important dependency or connection.
+6. **Counterfactual incompleteness:** remove or change a component/variable and ask what follows.
+
+These are not a quota. Each task must have an inferable target, enough prerequisite knowledge, and corrective feedback after the learner commits. Randomly obscuring pixels or withholding information the source has not introduced is not a useful challenge.
+
+### Multimodal reconstruction, not compulsory mental imagery
+
+A vivid mental image can help when the subject is spatial, structural or mechanical, but it is not a universal prerequisite for understanding. The same challenge should be accessible through a sketch, verbal explanation, symbolic reconstruction, ordering, physical gesture or interactive manipulation. The goal is a coherent generative model, not a particular imagery ability.
+
+### Use the diorama as a testable model
+
+A diorama is valuable when its spatial or temporal structure helps explain the concept. It should expose the relevant actors, states, relationships and controllable variables. The learner should be able to predict what happens when a meaningful variable changes, inspect the consequence, and explain why. An abstract proof, philosophical argument or purely relational taxonomy may be better represented as a 2D map or diagram than as an artificial 3D scene.
+
+### Atlas nodes and source audit
+
+The chapter atlas is compiled from validated reasoning steps, not directly from page count. A concept can span several subsections or slides; a source subsection can contain several concepts. The atlas validator checks that every supplied source step belongs to exactly one concept node, that edge endpoints exist, and that challenge records are complete. These deterministic checks protect coverage and graph integrity, but they cannot prove the model's semantic interpretation or scientific correctness. The source trail and uncertainty notes remain visible for review.
+
+### Evaluate learning, not only engagement
+
+The relevant outcome is not how immersive a scene feels. Evaluate whether the learner can later reconstruct the idea without cues, explain the mechanism, calibrate confidence, diagnose a misconception and transfer the principle to a changed context. Engagement is useful when it supports these outcomes, not as a substitute for them.
