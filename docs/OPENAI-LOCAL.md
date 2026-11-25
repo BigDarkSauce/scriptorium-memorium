@@ -1,20 +1,20 @@
-# OpenAI local engine
+# OpenAI-first local engine
 
-The standalone Scriptorium server can call the OpenAI API through a same-origin adapter. The browser sends requests to the local server; it never sees the OpenAI API key.
+Scriptorium's primary authoring engine is OpenAI. The standalone local server proxies requests to OpenAI; browser code never receives the API key. The app currently defaults to GPT-6.2 Astra (`gpt-6.2-astra`) and uses the Responses API with the live `web_search` tool. Other configured providers remain automatic fallbacks.
 
-## Quick start (Windows)
+## Quick start on Windows
 
 1. Create an API key in your OpenAI Platform account. API usage is billed separately from a ChatGPT subscription.
 2. Double-click **Launch Scriptorium with OpenAI.bat**.
-3. Paste the key into the hidden PowerShell prompt. The key is held in the launcher process environment only.
-4. Open the AI settings panel. **OpenAI · local secure relay** is enabled by default and is tried before the other providers.
-5. Add a PDF or presentation-derived PDF and run the analysis.
+3. Paste the key into the hidden PowerShell prompt.
+4. The launcher starts Scriptorium and opens `http://localhost:8000`. Keep its server window open for the whole session.
+5. Add a PDF or PowerPoint presentation (`.pptx`) and choose **Add and analyse**. OpenAI is the primary model route; enabled providers take over if the local OpenAI endpoint is not configured or cannot be reached.
 
-The launcher sets `OPENAI_MODEL=gpt-6.2-astra`. The model can be changed by editing that value in `launcher/launch-openai.ps1`, or by setting the environment variable before launching `launcher/serve.py`.
+The key is held in the launcher/server process environment for that run. It is not written to a config file, browser localStorage, URL, JavaScript bundle or Git repository. The launch script clears the temporary environment variables when the server exits.
 
 ## Manual launch
 
-Set environment variables in the same terminal that starts Scriptorium:
+Set environment variables in the same terminal that starts the Python server:
 
 ```powershell
 $env:OPENAI_API_KEY = Read-Host 'OpenAI API key'
@@ -22,34 +22,70 @@ $env:OPENAI_MODEL = 'gpt-6.2-astra'
 python launcher/serve.py 8000
 ```
 
-Then open `http://localhost:8000`. Keep the server terminal open. Do not commit a key, add it to a config file, or paste it into the AI settings form.
+Or on macOS/Linux:
 
-The Python server and PowerShell fallback server expose:
-- `GET /__openai/info` — whether a key is configured and which model is selected (never the key).
-- `GET /__openai/v1/models` — the configured model ID for the app's model router.
-- `POST /__openai/v1/chat/completions` — same-origin streaming proxy to OpenAI Chat Completions.
+```bash
+read -s OPENAI_API_KEY
+export OPENAI_API_KEY
+export OPENAI_MODEL=gpt-6.2-astra
+python3 launcher/serve.py 8000
+```
 
-The adapter checks request origin, imposes a 24 MB request-body ceiling, uses HTTPS upstream, and adds the bearer key server-side. It does not expose a general-purpose proxy route. The listener is bound to localhost.
+Then open `http://localhost:8000`. Do not commit a key or paste it into the provider settings form.
 
-## Model choice and cost
+## Local endpoints
 
-GPT-6.2 Astra is the default because OpenAI currently documents it as its flagship model for demanding reasoning and coding. It supports Chat Completions and the Responses API. Scriptorium currently uses Chat Completions because its existing pipeline expects streamed JSON chat messages. A chapter can invoke several AI calls (chain, repairs, figure design, diorama planning and scene authoring, semantic atlas, and custom dioramas). Monitor API usage and cost in the OpenAI Platform dashboard. The existing provider router can fall back to other configured providers if the local endpoint is unavailable.
+Both `launcher/serve.py` and the PowerShell fallback `launcher/serve.ps1` expose the same-origin, localhost-only routes:
 
-## What happens to a document
+- `GET /__openai/info` — reports whether a key is configured, the selected model and the key's storage location. It never returns the key.
+- `GET /__openai/v1/models` — exposes the selected model to the app's model router.
+- `POST /__openai/v1/responses` — proxies Responses API input, web-search tool configuration, JSON mode and optional image input.
+- `POST /__openai/v1/chat/completions` — compatibility path for Chat Completions clients.
 
-The browser extracts PDF text and page/figure metadata locally with pdf.js. The app sends the relevant chapter text, figure metadata and (when supported by the selected model) a limited set of figure images to the configured provider. The OpenAI adapter streams the request to OpenAI. The app stores derived analyses in the browser's IndexedDB. Review your provider's current data-use and retention terms before uploading sensitive material.
+The adapter verifies same-origin browser requests, limits request bodies to 24 MB, sends the key only to `https://api.openai.com` over HTTPS, and streams the upstream result. It is not a general-purpose URL proxy. The server listener is bound to localhost.
 
-## Honest limits
+## How the AI now builds a room
 
-- An AI-generated concept atlas is a validated grouping proposal, not a proof that a model has perfectly understood every topic.
-- The app's source index records the PDF subsection, page, figure and step mappings that it actually has. Missing page references remain listed as missing; the software does not invent a page.
-- The six kinds of incompleteness are selected where the source permits a meaningful prediction. They are not forced into every topic.
-- An external research citation is only labelled as external evidence when the AI returns a reference that can be stored and checked. The local OpenAI chat route in this version does not itself perform a web search. Claude's connected research tools remain a separate optional path; OpenAI's native web search tool requires the Responses API and is not yet wired into this chat-completions adapter.
-- A visually rich scene can still be conceptually wrong. Each diorama retains source step IDs and is checked against the app's existing scene schema and teaching-plan checks, but automated checks are not a substitute for subject-matter review.
+The new authoring workflow is staged rather than asking for one enormous scene dump:
 
-## References consulted for this integration
+1. **Local source extraction.** PDF.js reads PDF text, typography, hierarchy, page locations and figure regions. A PPTX parser reads the Open XML presentation order and extracts slide title/body/table text, speaker notes and accessibility descriptions.
+2. **Source inventory.** The app retains subsection/slide IDs, text, page/slide spans, figures and inventories. Those units are source evidence, not assumed to be the right conceptual chunks.
+3. **Grounded reasoning chain.** The current chapter prompt derives a detailed chain of definitions, mechanisms, explanations, quantities and evidence from the source. Existing source-coverage and quality checks detect dropped or coarse material and request targeted repairs.
+4. **Diorama planning and authoring.** The explanatory compiler routes each concept to an appropriate visual grammar. Spatial, temporal and causal mechanisms can become 3D scenes; intrinsically abstract or argumentative structures remain 2D diagrams rather than receiving decorative 3D treatment.
+5. **Semantic atlas.** The model groups validated step IDs across subsections into coherent concept nodes, proposes meaningful typed edges and assigns each step to exactly one node. A strict validator checks that the atlas partitions every source step and that every edge points to an existing node.
+6. **Grouped visual authoring.** Where a node needs 3D, the authoring pipeline creates a grouped diorama sequence from the node's visual plan, uses the existing scene specification, and runs the existing scene-plan checks and critique.
+7. **Learner reconstruction.** The concept map includes prediction-before-reveal tasks: structural, mechanistic, temporal, explanatory, relational and counterfactual incompleteness. A learner commits an answer and confidence before the answer and explanatory feedback are revealed.
+8. **Source audit.** Nodes retain source step IDs, subsection IDs, page/slide locations and figure IDs. OpenAI web-search calls and returned URL citations are logged separately from uploaded-source evidence.
 
-- OpenAI API models and the GPT-6.2 Astra model ID: https://developers.openai.com/api/docs/models
-- OpenAI API changelog, including November 17 2026 Chat Completions support for GPT-6.2 Astra and Sol: https://developers.openai.com/api/docs/changelog
-- OpenAI API key safety guidance: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety
-- Three.js documentation: https://threejs.org/docs/
+A concept node is not a page summary. A single concept may cross multiple slides or subsections; one slide may contain several separate concepts. The semantic model decides groupings from meaning, mechanism, dependency and explanatory purpose. The validator checks coverage and relationship integrity, not whether every semantic interpretation is necessarily correct.
+
+## Research and supplementation
+
+OpenAI requests use the Responses API with the `web_search` tool available. The model can invoke it where external evidence or a current/specialist detail genuinely helps. The response parser records the tool-call count and returned URL citation annotations. The atlas shows those external references separately from PDF/PPTX source evidence.
+
+The search tool is not invoked for every stage or every claim. It is available to the model and invoked when useful; a response with no returned citations is labelled as having no web-search citations. Do not treat a prompt that merely says “search the web” as evidence that a search occurred.
+
+Other providers in the fallback pool keep their own request path and constraints. They do not automatically inherit OpenAI's native `web_search` tool. Claude is not a primary provider in this build.
+
+## Model, latency and cost
+
+The default is GPT-6.2 Astra, selected for difficult reasoning and code/scene authoring. You can change `OPENAI_MODEL` in `launcher/launch-openai.ps1` or set it in the environment before starting the server. Model availability, pricing and limits can change; check the current [OpenAI model catalogue](https://developers.openai.com/api/docs/models) and [API pricing](https://openai.com/api/pricing/).
+
+A complete chapter can make multiple requests: chain writing, targeted repairs, missing figures, diorama storyboards, scene authoring, critique, semantic atlas, and possibly learner-requested additional scenes. It can therefore be significantly more expensive than one chat response. Monitor usage in the OpenAI Platform. ChatGPT Plus/Pro/etc. subscriptions do not include OpenAI API usage.
+
+## Honest extraction limits
+
+- **PPTX images:** this implementation extracts accessible `descr`/`title` text from PowerPoint image/object nodes. It does not yet render or visually interpret every embedded picture, raster diagram, chart or video. When no accessible description exists, the parser records that the slide may be image-led rather than inventing a description.
+- **PDF figures:** the existing PDF extractor crops figure regions, but an AI model only receives images where the selected model supports image input and the app's image limit allows it.
+- **Semantic accuracy:** a strict coverage check can prove that every source step was assigned once; it cannot prove that the inferred concepts or causal edges are all true. The audit records uncertainties and marks deterministic subsection fallback when semantic clustering fails.
+- **Diorama quality:** scene schema validation and the storyboard critique catch structural omissions, not every domain error. Review high-stakes scientific, medical, engineering or quantitative simulations.
+- **Incomplete reveals:** the six types are selected only where the chapter supports a meaningful prediction. Structural challenges can hide specific mapped actor IDs where the scene provides them. Other challenge types currently use a prediction/reveal interaction and then link back to the complete scene; they do not all yet have a bespoke dynamically paused scene state.
+- **Research attribution:** web citations are stored at chapter level when returned by the Responses API. They are not automatically asserted as evidence for every individual concept. To claim a source supports a particular node, the model must also attach that source to the relevant step/node.
+
+## References consulted
+
+- [OpenAI API models](https://developers.openai.com/api/docs/models)
+- [OpenAI Responses API](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+- [OpenAI web search tool](https://developers.openai.com/api/docs/guides/tools-web-search)
+- [OpenAI API key safety](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety)
+- [Three.js documentation](https://threejs.org/docs/)
