@@ -91,7 +91,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     const indexedFigures = sourceFigureIndex.filter(f => f && figureIds.includes(String(f.id)));
     const searchable = [
       node && [node.title, node.question, node.summary, (node.knowledgeKinds || []).join(' ')].join(' '),
-      st.id, st.kind, st.title, st.statement, st.math,
+      st.id, st.section, st.kind, st.title, st.statement, st.math,
       (st.derivation || []).map(x => x && x.expr || '').join(' '),
       (st.terms || []).map(x => [x && x.term, x && x.meaning].join(' ')).join(' '),
       (st.examples || []).map(x => [x && x.title, x && x.problem, x && x.answer].join(' ')).join(' '),
@@ -118,9 +118,20 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     const categories = [...new Set(entries.flatMap(x => x.tags))];
     return { sec, entries, categories };
   });
+  // The source scan must account for every validated chain step, including missing or stale section IDs.
+  // Keep these visible in an explicit group rather than silently omitting them from the default inventory.
+  const groupedEntries = new Set(sectionItems.flatMap(group => group.entries));
+  const ungroupedEntries = scanEntries.filter(entry => !groupedEntries.has(entry));
+  if (ungroupedEntries.length) {
+    sectionItems.push({
+      sec: { id: '__unmapped__', title: 'Unmapped / unsectioned source steps', startPage: null, endPage: null },
+      entries: ungroupedEntries,
+      categories: [...new Set(ungroupedEntries.flatMap(x => x.tags))]
+    });
+  }
   const countTags = [...new Set(scanEntries.flatMap(x => x.tags))];
   const scanSummary = [
-    sourceSections.length + ' subsections',
+    sourceSections.length + ' subsections' + (ungroupedEntries.length ? ' · ' + ungroupedEntries.length + ' unmapped steps' : ''),
     sourceSteps.length + ' source steps',
     countTags.length ? countTags.join(' · ') : 'source index'
   ].join(' · ');
