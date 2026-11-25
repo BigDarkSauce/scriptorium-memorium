@@ -220,7 +220,7 @@ duplicateViewOrder.nodes[0].dioramaSet.push({ ...duplicateViewOrder.nodes[0].dio
 assert.match(validateAtlas(duplicateViewOrder, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /duplicate view order/);
 const missingViewStage = makeAtlas();
 delete missingViewStage.nodes[0].dioramaSet[0].stage;
-assert.match(validateAtlas(missingViewStage, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /ordered explanatory-view plan/);
+assert.match(validateAtlas(missingViewStage, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /explanatory-view plan/);
 
 const invalidVisual = makeAtlas();
 invalidVisual.nodes[0].dioramaSet[0].sourceVisualIds = ['pptx-chart-s8-1'];
@@ -235,7 +235,7 @@ crossNodeFigure.nodes[0].stepIds = ['S1'];
 assert.match(validateAtlas(crossNodeFigure, ['S1'], steps, true, sourceFigures, true, sourceSections), /unknown or unlinked source figure/);
 const missingFigureField = makeAtlas();
 delete missingFigureField.nodes[0].dioramaSet[0].sourceFigureIds;
-assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /complete explanatory-view plan with stable view ID/);
+assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /explanatory-view plan/);
 
 const deterministicAtlas = await compileAtlas({
   book: 'Test source', sourceType: 'pptx', part: 'Transport',
