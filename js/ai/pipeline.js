@@ -83,7 +83,7 @@ export async function writeChain(ctx, P, M, o) {
   const thinText = M.sections && M.sections.reduce((a, s) => a + s.inventory.chars, 0) < 400;
   if (thinText && imageLimit() && M.blob) { images = await ctx.app.ingest.pageImages(M.blob, P.startPage || 1, P.endPage || 1, imageLimit()); pageImgs = images.length; }
   else if (imageLimit() && M.figures.length) { const pick = M.figures.filter(f => !/^Unlabelled/.test(f.label)).concat(M.figures.filter(f => /^Unlabelled/.test(f.label))).slice(0, Math.min(6, imageLimit())); images = pick.map(f => dataUrlBlob(f.dataUrl)); attached = pick.map(f => f.id); }
-  const meta = ctx.app.ingest.figureMeta(M.figures), chapter = P.title + (P.startPage ? ` (pages ${P.startPage}-${P.endPage})` : '');
+  const meta = ctx.app.ingest.figureMeta(M.figures), unit = ctx.book.sourceType === 'pptx' ? 'slides' : 'pages', chapter = P.title + (P.startPage ? ` (${unit} ${P.startPage}-${P.endPage})` : '');
   const prompt = chapterPrompt({ book: bookName(ctx), chapter, text: M.text, depth: o.level || 'complete', deep: !!o.deep, n: o.n, images: attached.length, pageImages: pageImgs, sections: M.sections, figures: meta, attached });
   o.onStatus && o.onStatus(writer('director') + ' ' + (writer('director') === 'Claude' ? 'is' : 'are') + ' reading and planning. Long parts can take a minute or two.');
   // a chain cut off by the output limit is kept when at least two complete steps came back: the coverage check and its
