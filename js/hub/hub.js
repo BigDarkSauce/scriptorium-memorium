@@ -501,6 +501,45 @@ export class Hub {
   caseName(id) { return (this.lib.shelves.find(s => s.id === id) || {}).name || 'a bookcase'; }
   // rows are counted from the top for people (row 1 = the top row); the API uses tier indices (0 = the bottom row)
   rowLabel(id, t) { const so = this.shelfObjs.get(id); return so ? so.userData.tiers - t : t + 1; }
+  // A loci anchor is a local bookcase coordinate, not a world-space point: it follows the case if the learner
+  // moves or rotates the furniture. It is deliberately independent of scroll occupancy, so a memory cue is not lost
+  // when a book is later placed in or moved away from that slot.
+  clearMemoryAnchor() {
+    if (!this.memoryMarker) return;
+    this.memoryMarker.removeFromParent();
+    disposeTree(this.memoryMarker);
+    this.memoryMarker = null;
+  }
+  showMemoryAnchor(caseId, row, slot, { frame = true } = {}) {
+    const so = this.shelfObjs.get(caseId);
+    if (!so || !(row >= 0 && row < so.userData.tiers && slot >= 0 && slot < so.userData.slotsPerTier)) {
+      this.clearMemoryAnchor();
+      return { ok: false, reason: 'The saved bookcase or slot no longer exists.' };
+    }
+    this.clearMemoryAnchor();
+    const marker = new THREE.Group();
+    marker.name = 'memory-locus-marker';
+    const gold = new THREE.MeshBasicMaterial({ color: 0xf2c66e, transparent: true, opacity: .96, depthTest: false, depthWrite: false, toneMapped: false });
+    const pale = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: .92, depthTest: false, depthWrite: false, toneMapped: false });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.083, .0065, 8, 40), gold);
+    ring.rotation.y = Math.PI / 2;
+    ring.renderOrder = 990;
+    const centre = new THREE.Mesh(new THREE.SphereGeometry(.012, 12, 8), pale);
+    centre.renderOrder = 991;
+    marker.add(ring, centre);
+    marker.position.copy(slotPos(so, row, slot));
+    marker.position.z += .035;
+    marker.userData.memoryAnchor = { caseId, row, slot };
+    so.add(marker);
+    this.memoryMarker = marker;
+    if (frame) {
+      so.updateMatrixWorld(true);
+      const p = so.localToWorld(marker.position.clone());
+      const n = V3(0, 0, 1).transformDirection(so.matrixWorld).setY(0).normalize();
+      this.frameAt(p, n);
+    }
+    return { ok: true, caseId, row, slot };
+  }
   // ---------- public API (for the Add-PDF dialog and other callers) ----------
   // listShelves() → [{caseId, title, kind, rows: [{row, label, hang: {min, max}, slots: [{slot, free, bookId?}]}]}]
   //   row: tier index, 0 = the bottom row (label: 1 = the top row, as people count); free: a new cradled scroll can go
