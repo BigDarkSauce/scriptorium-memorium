@@ -19,9 +19,10 @@ import { partKey, cached } from '../store.js';
 import { validateFigure, figureSlots, setSlotFigure, autoFigure, isPrimitive } from '../room/figspec.js';
 import { normalizeChain } from '../room/reader.js';
 import { GALTON, MARKET } from '../seeds-scenes.js';
+import { compileAtlas } from './atlas.js';
 
-export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'done'];
-export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas' };
+export const STAGES = ['chain', 'coverage', 'gate', 'figures', 'dioramas', 'atlas', 'done'];
+export const STAGE_NAMES = { chain: 'writing the steps', coverage: 'filling gaps against the PDF', gate: 'checking and repairing', figures: 'drawing the figures', dioramas: 'building the dioramas', atlas: 'mapping concepts and diorama sequences' };
 const cancelled = () => ({ code: 'cancelled' });
 const check = signal => { if (signal && signal.aborted) throw cancelled(); };
 const C = o => JSON.parse(JSON.stringify(o));
@@ -232,6 +233,52 @@ export async function buildDioramas(ctx, P, M, o = {}) {
   A.dioramaReport = { plan: ins.plan.map(p => ({ subsection: p.subsection, need: p.need, why: p.why })), added: ins.added, made };
 }
 
+// Give every concept node a fitting visual target. Reuse a source-linked diorama when one already exists;
+// author one grouped scene only when the node's own visual plan calls for 3D. Abstract material stays 2D.
+async function ensureAtlasDioramas(ctx, P, atlas, o = {}) {
+  const A = P.analysis, byId = new Map((A.chain || []).map(st => [String(st.id), st]));
+  for (const node of atlas.nodes || []) {
+    const refs = [];
+    (node.stepIds || []).forEach(id => {
+      const st = byId.get(String(id)); if (!st) return;
+      (st.demos || []).forEach((d, i) => {
+        if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: i, title: d.title || st.title, purpose: d.purpose || st.answers || st.title });
+      });
+    });
+    if (!refs.length && (node.dioramaSet || []).some(d => d && d.medium === '3d')) {
+      const st = (node.stepIds || []).map(id => byId.get(String(id))).find(Boolean);
+      if (st) {
+        check(o.signal);
+        const views = (node.dioramaSet || []).slice(0, 4).map(v => ({
+          title: v.title, purpose: v.purpose, mustShow: v.mustShow, manipulations: v.manipulations
+        }));
+        const d = {
+          type: 'scene', title: node.title, purpose: node.question, technique: 'card', auto: true, planned: true,
+          request: 'Build a grouped, high-fidelity explanatory diorama for this semantic topic node. ' +
+            'Concept summary: ' + node.summary + '. Visual intent: ' + node.visualIntent + '. Planned views: ' + JSON.stringify(views) +
+            '. Use only the attached source steps for factual claims, values and relationships. Make the main causal or structural mechanism inspectable, make the most meaningful variables changeable, and design 3–6 lessons that move from orientation to mechanism to reconstruction and a prediction/check. ' +
+            'This scene belongs to concept "' + node.title + '" and is connected to source steps ' + node.stepIds.join(', ') + '.'
+        };
+        st.demos = st.demos || [];
+        sayAtlasStatus(o, 'Authoring the grouped diorama for "' + node.title + '"…');
+        const how = await authorDemo(ctx, st, d, o);
+        st.demos.push(d);
+        if (isThreeD(d) && !needsAuthoring(d)) refs.push({ stepId: st.id, demoIndex: st.demos.length - 1, title: d.title || node.title, purpose: d.purpose || node.question });
+        else if (d.type === 'figure' && d.figure) node.generatedFigure = d.figure;
+        node.dioramaBuild = how;
+        ctx.save && ctx.save(P);
+      }
+    }
+    node.dioramaRefs = refs;
+    node.visualKind = refs.length ? 'diorama' : node.generatedFigure ? 'diagram' : (node.dioramaSet || []).some(d => d.medium === '2d') ? 'diagram' : 'concept';
+    node.figureRefs = (node.stepIds || []).flatMap(id => {
+      const st = byId.get(String(id)); return st ? (st.figures || []).map(figId => ({ stepId: st.id, id: figId })) : [];
+    });
+  }
+  atlas.audit = { ...(atlas.audit || {}), conceptNodes: (atlas.nodes || []).length, linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0), nodesWithout3D: (atlas.nodes || []).filter(x => !x.dioramaRefs || !x.dioramaRefs.length).map(x => x.id) };
+}
+function sayAtlasStatus(o, message) { o.onStatus && o.onStatus(message); }
+
 // ---------------------------------------------------------------- fallbacks: a fitting built-in model, a flagship scene, a bars scene, or a diagram
 const ROUTES = [
   [/galton|binomial|bernoulli|coin|central limit|bell curve|normal distribution|sampling distribution|random (draws|values|sample)|rbinom|dbinom|pbinom/i, () => ({ ...C(GALTON), purpose: null })],
@@ -293,8 +340,14 @@ async function analyseOne(ctx, P, o) {
   if (!done('coverage')) { check(o.signal); await coverageFill(ctx, P, M, { ...o, auto, onStatus: say }); stage('gate'); save(); show(); }
   if (!done('gate')) { check(o.signal); await gateAndRepair(ctx, P, M, { ...o, auto, onStatus: say }); stage('figures'); save(); }
   if (!done('figures')) { check(o.signal); await completeFigures(ctx, P, { ...o, auto, onStatus: say }); stage('dioramas'); save(); }
-  if (!done('dioramas')) { check(o.signal); if (o.dioramas !== false) await buildDioramas(ctx, P, M, { ...o, auto, onStatus: say }); stage('done'); save(); }
-  // the final gate result (figures and dioramas now in place) is what the reader's quality panel shows
+  if (!done('dioramas')) { check(o.signal); if (o.dioramas !== false) await buildDioramas(ctx, P, M, { ...o, auto, onStatus: say }); stage('atlas'); save(); show(); }
+  if (!P.analysis.atlas || !done('atlas')) {
+    check(o.signal); stage('atlas');
+    P.analysis.atlas = await compileAtlas({ book: bookName(ctx), part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, onStatus: say });
+    if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, onStatus: say });
+    stage('done'); save(); show();
+  }
+  // the final gate result (figures, dioramas and semantic atlas now in place) is what the quality panel shows
   const G = qualityGate(P.analysis, M.sections || [], (M.figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, bbox: f.bbox })));
   P.analysis.qualityReport = { ...(P.analysis.qualityReport || {}), final: { ok: G.ok, issues: G.issues, stats: G.stats } }; save();
   ctx.refresh && ctx.refresh(P);
