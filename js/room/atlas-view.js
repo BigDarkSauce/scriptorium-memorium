@@ -213,8 +213,15 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       el('p', { class: 'atlas-audit-line', text: 'Indexing method: ' + (atlas.sourceIndex?.method || atlas.audit?.method || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Source steps: ' + ((node.sourceRefs?.stepIds || []).join(', ')) }),
       el('p', { class: 'atlas-audit-line', text: 'Subsections: ' + ((node.sourceRefs?.subsectionIds || []).join(', ')) }),
-      el('p', { class: 'atlas-audit-line', text: 'Source spans: ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
+      el('p', { class: 'atlas-audit-line', text: 'Source spans (' + (atlas.sourceIndex?.sourceUnit === 'slide' ? 'slides' : 'pages') + '): ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
       el('p', { class: 'atlas-audit-line', text: 'Figures: ' + ((node.sourceRefs?.figureIds || []).join(', ') || 'none linked') }),
+      ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', { class: 'atlas-source-step' }, [
+        el('summary', { text: st.stepId + ' · ' + txt(st.title, 110) }),
+        el('p', { class: 'atlas-audit-line', text: txt(st.statement, 900) || 'No short statement was recorded for this source step.' }),
+        st.answers ? el('p', { class: 'atlas-audit-line', text: 'Answers: ' + txt(st.answers, 260) }) : null,
+        st.opens ? el('p', { class: 'atlas-audit-line', text: 'Opens: ' + txt(st.opens, 260) }) : null,
+        st.pages && st.pages.length ? el('small', { text: (atlas.sourceIndex?.sourceUnit === 'slide' ? 'Slides ' : 'Pages ') + st.pages.join(', ') }) : null
+      ]))),
       atlas.audit?.fallbackReason ? el('p', { class: 'atlas-audit-warning', text: 'AI semantic mapping failed; this is a deterministic subsection grouping. Reason: ' + atlas.audit.fallbackReason }) : null
     ]);
     detail.append(trail);
