@@ -69,11 +69,12 @@ QUALITY RULES
 `;
 }
 
-export function validateAtlas(A, stepIds) {
+export function validateAtlas(A, stepIds, sourceSteps = []) {
   if (!A || typeof A !== 'object' || !Array.isArray(A.nodes) || !A.nodes.length) return 'atlas has no nodes';
   if (!Array.isArray(A.edges)) return 'atlas has no edge array';
   if (A.nodes.length > 36) return 'atlas has too many nodes for one chapter map';
-  const ids = new Set(), assigned = [];
+  const ids = new Set(), assigned = [], challengeIds = new Set();
+  const bodyIndex = new Map((sourceSteps || []).map(st => [String(st.id), (st.bodies || []).map(String)]));
   for (const n of A.nodes) {
     if (!n || !/^[a-z0-9][a-z0-9-]{1,55}$/.test(String(n.id || ''))) return 'node has an invalid stable id';
     if (ids.has(n.id)) return 'duplicate node id: ' + n.id;
@@ -81,13 +82,14 @@ export function validateAtlas(A, stepIds) {
     if (!clean(n.title, 100) || !clean(n.question, 300) || !clean(n.summary, 500) || !Array.isArray(n.stepIds) || !n.stepIds.length) return 'node is missing a title, question, summary or stepIds: ' + n.id;
     assigned.push(...n.stepIds.map(String));
     if (!Array.isArray(n.dioramaSet) || !n.dioramaSet.length || n.dioramaSet.some(v => !v || !clean(v.title, 100) || !clean(v.purpose, 220) || !['2d', '3d'].includes(v.medium) || !Array.isArray(v.mustShow) || !Array.isArray(v.manipulations))) return 'node is missing a complete explanatory-view plan: ' + n.id;
-    if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.question || !c.stimulus || !c.answer || !c.why || !Array.isArray(c.missingBodyIds))) return 'node has an incomplete or unsupported challenge: ' + n.id;
+    if (!Array.isArray(n.challenges) || n.challenges.some(c => !c || !INCOMPLETENESS.includes(c.type) || !c.id || !c.question || !c.stimulus || !c.hint || !c.answer || !c.why || !c.feedback || !Array.isArray(c.missingBodyIds))) return 'node has an incomplete or unsupported challenge: ' + n.id;
     if (n.challenges.length > 3) return 'node has more than three challenges: ' + n.id;
     const nodeSteps = n.stepIds.map(id => String(id));
-    const challengeIds = new Set();
+    const allowedBodies = new Set(n.stepIds.flatMap(id => bodyIndex.get(String(id)) || []));
     for (const ch of n.challenges) {
-      if (!ch.id || challengeIds.has(ch.id)) return 'node has a missing or duplicate challenge id: ' + n.id;
+      if (challengeIds.has(ch.id)) return 'atlas has a duplicate challenge id: ' + ch.id;
       challengeIds.add(ch.id);
+      if (ch.type === 'structural' && ch.missingBodyIds.some(id => !allowedBodies.has(String(id)))) return 'structural challenge refers to an actor not listed in the node source steps: ' + ch.id;
     }
     if (!n.position || !Number.isFinite(+n.position.x) || !Number.isFinite(+n.position.y) || +n.position.x < 0 || +n.position.x > 100 || +n.position.y < 0 || +n.position.y > 100) return 'node has no valid map position: ' + n.id;
   }
@@ -136,12 +138,12 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
-        validate: v => validateAtlas(v && (v.atlas || v), ids)
+        validate: v => validateAtlas(v && (v.atlas || v), ids, analysis.chain)
       });
       const atlasResearch = response && response._webResearch || null;
       authored = response && (response.atlas || response);
       if (atlasResearch) { authored._atlasWebResearch = atlasResearch; researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
-      const issue = validateAtlas(authored, ids);
+      const issue = validateAtlas(authored, ids, analysis.chain);
       if (issue) throw new Error(issue);
     } catch (e) {
       if (e && e.code === 'cancelled') throw e;
