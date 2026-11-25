@@ -96,6 +96,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          node tools/test-atlas-ui.mjs http://127.0.0.1:8000/
           SMOKE_OUT="$RUNNER_TEMP/scriptorium-smoke" node tools/smoke.mjs http://127.0.0.1:8000/
 
       - name: Upload smoke captures and reports
