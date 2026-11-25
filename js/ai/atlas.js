@@ -92,7 +92,7 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
       if (ch.type === 'structural' && ch.missingBodyIds.some(id => !allowedBodies.has(String(id)))) return 'structural challenge refers to an actor not listed in the node source steps: ' + ch.id;
       // New atlases carry a source-mapped, bitwise reasoning path. Keep the field optional for older saved atlases;
       // the reader supplies a single legacy explanation unit rather than inventing new reasoning.
-      if (requireProgressive && !Array.isArray(ch.reasoning)) return 'newly authored challenge is missing its progressive reasoning path: ' + ch.id;
+      if (requireProgressive && (!Array.isArray(ch.reasoning) || ch.reasoning.length < 2)) return 'newly authored challenge must provide 2–5 ordered reveal units: ' + ch.id;
       if (ch.reasoning != null) {
         if (!Array.isArray(ch.reasoning) || ch.reasoning.length < 1 || ch.reasoning.length > 5) return 'challenge reasoning must contain 1–5 ordered reveal units: ' + ch.id;
         const nodeSteps = new Set(n.stepIds.map(String));
