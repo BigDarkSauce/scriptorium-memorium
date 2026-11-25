@@ -44,6 +44,21 @@ Both `launcher/serve.py` and the PowerShell fallback `launcher/serve.ps1` expose
 
 The adapter verifies same-origin browser requests, limits request bodies to 24 MB, sends the key only to `https://api.openai.com` over HTTPS, and streams the upstream result. It is not a general-purpose URL proxy. The server listener is bound to localhost.
 
+## Verify the local proxy without an API key
+
+The proxy has an offline HTTP integration suite. It starts the real local request handler and stubs only the outbound
+OpenAI transport, so it does not contact OpenAI or incur API charges:
+
+```bash
+python -m py_compile launcher/serve.py tools/test-openai-proxy.py
+python tools/test-openai-proxy.py
+```
+
+The suite checks that the information and model routes never return the secret, that Responses and Chat Completions
+requests reach only their fixed OpenAI endpoints, that streamed bytes and upstream error statuses are preserved,
+and that missing keys, malformed payloads, oversized bodies, cross-origin requests, untrusted Host headers and
+unknown routes are rejected. The same checks run in GitHub Actions on the feature branch and its pull request.
+
 ## How the AI now builds a room
 
 The new authoring workflow is staged rather than asking for one enormous scene dump:
