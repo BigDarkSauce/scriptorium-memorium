@@ -84,6 +84,24 @@ validLocus.memoryPlaces = [{
 }];
 assert.equal(validateAtlas(validLocus, ['S1', 'S2'], steps), null, 'a valid learner-authored loci anchor should pass');
 
+const validRecallHistory = makeAtlas();
+validRecallHistory.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage',
+  review: { response: 'The channel permits movement.', confidence: 'High', history: [] }
+}];
+assert.equal(validateAtlas(validRecallHistory, ['S1', 'S2'], steps), null, 'a valid loci recall record should pass');
+
+const oversizedRecallHistory = makeAtlas();
+oversizedRecallHistory.memoryPlaces = [{
+  nodeId: 'selective-transport', caseId: 'bookcase-1', row: 0, slot: 2,
+  association: 'A gate with one narrow passage',
+  review: {
+    history: Array.from({ length: 13 }, (_, i) => ({ response: 'Attempt ' + i, confidence: 'Medium' }))
+  }
+}];
+assert.match(validateAtlas(oversizedRecallHistory, ['S1', 'S2'], steps), /at most twelve attempts/);
+
 const foreignLocus = makeAtlas();
 foreignLocus.memoryPlaces = [{
   nodeId: 'missing-concept', caseId: 'bookcase-1', row: 0, slot: 2,
@@ -146,7 +164,7 @@ assert.match(prompt, /sourceStepIds/);
 assert.match(prompt, /each UNFOLD action exposes exactly one next unit/);
 assert.match(prompt, /Never use an UNFOLD action to advance to another challenge/);
 
-console.log('PASS  atlas coverage, source-mapped progressive challenges, legacy compatibility and unique loci anchors');
+console.log('PASS  atlas coverage, progressive source-mapped challenges, legacy compatibility and bounded unique loci recall');
 // The imported provider modules are browser-first and may leave browser lifecycle work queued; this pure unit
 // suite has completed all synchronous assertions at this point, so do not keep the CI runner alive for those handles.
 process.exit(0);
