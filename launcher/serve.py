@@ -14,7 +14,7 @@ python launcher/serve.py [port]   (default 8000; the folder above launcher/ is s
 import http.server, json, os, socketserver, sys, urllib.request, urllib.error, urllib.parse, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 PASS_HEADERS = ('content-type', 'x-provider', 'x-model', 'retry-after', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset',
                 'ratelimit-reset', 'x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens')
 
@@ -137,12 +137,119 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pass
         return True
 
+    def _openai(self):
+        """Local-only OpenAI adapter. The secret is read from the process environment."""
+        q = urllib.parse.urlsplit(self.path)
+        if not q.path.startswith('/__openai/'):
+            return False
+
+        origin = self.headers.get('Origin')
+        host = self.headers.get('Host', '')
+        if origin and origin.rstrip('/') != ('http://' + host):
+            self.send_error(403, 'OpenAI adapter accepts same-origin requests only')
+            return True
+        fetch_site = self.headers.get('Sec-Fetch-Site')
+        if fetch_site and fetch_site not in ('same-origin', 'none'):
+            self.send_error(403, 'OpenAI adapter accepts same-origin requests only')
+            return True
+
+        if q.path == '/__openai/info' and self.command == 'GET':
+            body = json.dumps({
+                'configured': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
+                'model': os.environ.get('OPENAI_MODEL', 'gpt-6.2-astra').strip() or 'gpt-6.2-astra',
+                'keyLocation': 'server environment'
+            }).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+
+        if q.path == '/__openai/v1/models' and self.command == 'GET':
+            if not os.environ.get('OPENAI_API_KEY', '').strip():
+                self.send_error(503, 'Set OPENAI_API_KEY in the environment')
+                return True
+            model = os.environ.get('OPENAI_MODEL', 'gpt-6.2-astra').strip() or 'gpt-6.2-astra'
+            body = json.dumps({'object': 'list', 'data': [{'id': model, 'object': 'model', 'owned_by': 'openai'}]}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+
+        if q.path != '/__openai/v1/chat/completions' or self.command != 'POST':
+            self.send_error(404, 'Unknown OpenAI adapter route')
+            return True
+        key = os.environ.get('OPENAI_API_KEY', '').strip()
+        if not key:
+            self.send_error(503, 'Set OPENAI_API_KEY in the environment')
+            return True
+
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except ValueError:
+            self.send_error(400, 'Invalid Content-Length')
+            return True
+        if n <= 0 or n > 24 * 1024 * 1024:
+            self.send_error(413, 'Request body must be between 1 byte and 24 MB')
+            return True
+        data = self.rfile.read(n)
+        try:
+            payload = json.loads(data)
+            if not isinstance(payload, dict) or not isinstance(payload.get('model'), str) or not isinstance(payload.get('messages'), list):
+                raise ValueError('Expected a chat-completions object with model and messages')
+        except (ValueError, UnicodeDecodeError) as e:
+            self.send_error(400, str(e))
+            return True
+
+        req = urllib.request.Request(
+            'https://api.openai.com/v1/chat/completions',
+            data=data,
+            headers={
+                'Authorization': 'Bearer ' + key,
+                'Content-Type': 'application/json',
+                'Accept': self.headers.get('Accept', 'text/event-stream, application/json')
+            },
+            method='POST'
+        )
+        try:
+            upstream = urllib.request.urlopen(req, timeout=600)
+        except urllib.error.HTTPError as e:
+            upstream = e
+        except Exception as e:
+            self.send_error(502, 'OpenAI API not reachable: %s' % e)
+            return True
+
+        status = upstream.status if hasattr(upstream, 'status') else upstream.code
+        self.send_response(status)
+        self.send_header('Content-Type', upstream.headers.get('Content-Type', 'application/json'))
+        self.send_header('Cache-Control', 'no-store')
+        for name in ('Retry-After', 'x-request-id', 'openai-processing-ms'):
+            value = upstream.headers.get(name)
+            if value:
+                self.send_header(name, value)
+        self.end_headers()
+        try:
+            while True:
+                chunk = upstream.read1(8192) if hasattr(upstream, 'read1') else upstream.read(8192)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        return True
+
     def do_GET(self):
-        if not self._relay():
+        if not self._openai() and not self._relay():
             super().do_GET()
 
     def do_POST(self):
-        if not self._relay():
+        if not self._openai() and not self._relay():
             self.send_error(405)
 
 
