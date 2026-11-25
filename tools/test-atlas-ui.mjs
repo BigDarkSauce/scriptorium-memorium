@@ -233,6 +233,17 @@ try {
   await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
   assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true, 'the attempt locks after reveal');
   assert.match(await memoryPanel.innerText(), /The boundary permits only the movements supported by its available routes/i);
+  await memoryPanel.getByRole('button', { name: 'Start another recall attempt' }).click();
+  assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), false, 'a learner must be able to practise a revealed concept again');
+  assert.equal(await memoryPanel.locator('.memory-route-response').inputValue(), '', 'a fresh attempt starts without copying the prior answer');
+  const historyAfterReset = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review.history);
+  assert.equal(historyAfterReset.length, 1, 'the completed attempt must be retained in history');
+  assert.equal(historyAfterReset[0].response, 'The boundary permits only movement through an available route.');
+  await memoryPanel.locator('.memory-route-response').fill('A new attempt: movement depends on an available route.');
+  await memoryPanel.locator('.memory-route-confidence').selectOption('Medium');
+  await memoryPanel.getByRole('button', { name: 'Commit recall' }).click();
+  await memoryPanel.getByRole('button', { name: 'Reveal expected reconstruction' }).click();
+  assert.equal(await memoryPanel.locator('.memory-route-response').isDisabled(), true);
   await memoryPanel.locator('.memory-route-footer button').nth(1).click();
   assert.match(await memoryPanel.locator('.memory-route-question').innerText(), /What changes if the route is removed/i);
   await memoryPanel.locator('.memory-route-footer button').nth(0).click();
@@ -246,6 +257,7 @@ try {
   const persistedReview = await page.evaluate(() => window.__lociUITest.atlas.memoryPlaces.find(p => p.nodeId === 'locus-one').review);
   assert.equal(persistedReview.committed, true);
   assert.equal(persistedReview.revealed, true);
+  assert.equal(persistedReview.history.length, 1, 'the prior recall attempt must survive a second attempt');
   await page.evaluate(() => window.__scriptorium.mode.closeMemoryRoute());
   assert.equal(await memoryPanel.count(), 0, 'closing a route must remove its panel');
   assert.deepEqual(errors, [], 'loci assignment and route interactions must not create browser errors');
