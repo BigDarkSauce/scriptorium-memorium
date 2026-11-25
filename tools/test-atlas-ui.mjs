@@ -58,6 +58,13 @@ try {
         sourceRefs: {
           stepIds: ['S1', 'S2', 'S3'], subsectionIds: ['1.1'],
           figureIds: ['F1'],
+          visualIds: ['pptx-chart-s3-1'],
+          visualRecords: [{
+            id: 'pptx-chart-s3-1', kind: 'chart', label: 'Yield by treatment', caption: 'Cached source chart',
+            slide: 3, mediaPath: 'ppt/charts/chart1.xml', sourceSectionId: '1.1', sourceSectionTitle: 'Membrane transport',
+            stepIds: ['S2'], linkBasis: 'same-slide source locator',
+            data: { chartKind: 'bar', series: [{ name: 'Grain yield', points: [{ index: 0, category: 'Control', rawValue: '3.2' }, { index: 1, category: 'Fertiliser', rawValue: '4.8' }] }] }
+          }],
           figureRecords: [{
             id: 'F1', label: 'Membrane permeability diagram',
             caption: 'A diagram showing a selective boundary and its transport route.',
@@ -207,6 +214,7 @@ try {
   const firstSourceTrailStep = await page.locator('.atlas-source-step[open]').innerText();
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
   assert.match(await page.locator('.atlas-source-trail').innerText(), /Membrane permeability diagram.*F1.*p\. 3.*S2/i, 'the concept trail must expose the exact indexed source figure, page and linked step');
+  assert.match(await page.locator('.atlas-source-visual').innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/i, 'the concept source trail must reveal structured chart values and their linked source slide');
   assert.equal(await scanSearch.isVisible(), true, 'the source scan must remain expanded after opening a concept');
   assert.equal(await scanSearch.inputValue(), 'selective permeability', 'the previous source query must survive concept selection');
   await scanSearch.fill('Flux relation');

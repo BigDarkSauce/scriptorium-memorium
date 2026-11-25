@@ -124,13 +124,13 @@ assert.match(validateAtlas(invalidVisual, ['S1', 'S2'], steps, true, sourceFigur
 
 const inventedFigure = makeAtlas();
 inventedFigure.nodes[0].dioramaSet[0].sourceFigureIds = ['F9'];
-assert.match(validateAtlas(inventedFigure, ['S1', 'S2'], steps, true, sourceFigures, true), /unknown or unlinked source figure/);
+assert.match(validateAtlas(inventedFigure, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /unknown or unlinked source figure/);
 const crossNodeFigure = makeAtlas();
 crossNodeFigure.nodes[0].stepIds = ['S1'];
-assert.match(validateAtlas(crossNodeFigure, ['S1'], steps, true, sourceFigures, true), /unknown or unlinked source figure/);
+assert.match(validateAtlas(crossNodeFigure, ['S1'], steps, true, sourceFigures, true, sourceSections), /unknown or unlinked source figure/);
 const missingFigureField = makeAtlas();
 delete missingFigureField.nodes[0].dioramaSet[0].sourceFigureIds;
-assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, sourceFigures, true), /complete explanatory-view plan/);
+assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /complete explanatory-view plan/);
 
 const deterministicAtlas = await compileAtlas({
   book: 'Test source', sourceType: 'pptx', part: 'Transport',
