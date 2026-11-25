@@ -34,10 +34,10 @@ function dataUrlBlob(u) { const [h, b] = String(u).split(','); const bin = atob(
 export async function material(ctx, part, { onStatus } = {}) {
   const { app, book } = ctx, P = part, src = P.subOf ? ((ctx.data.parts || []).find(x => x.id === P.subOf) || P) : P;
   if (book.sourceType === 'pptx') {
-    const deck = await app.store.get('pptx:' + book.id);
-    if (!deck) return { sections: null, figures: [], text: P.text || '' };
     onStatus && onStatus('Reading slide text, accessible descriptions and speaker notes…');
-    const sec = await cached(partKey('sections', book.id, src.id), () => app.ingest.presentationSections(deck, src));
+    // Extracted slide text is also embedded in the room record, so a shared/imported room can be re-analysed
+    // even when the original .pptx binary is not present in this browser's IndexedDB.
+    const sec = await cached(partKey('sections', book.id, src.id), () => app.ingest.presentationSections(null, src));
     return { sections: sec.sections, figures: [], blob: null, src, text: P.text || sec.text };
   }
   if (!book.hasPdf) return { sections: null, figures: [], text: P.text || '' };
