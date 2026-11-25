@@ -774,6 +774,7 @@
               },
               "evidenceStepIds": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                   "type": "string"
                 }
@@ -820,6 +821,7 @@
               },
               "evidenceStepIds": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                   "type": "string"
                 }
@@ -926,6 +928,72 @@
         },
         "error": {
           "type": "string"
+        }
+      }
+    },
+    "rejectedAttempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "enum": [
+              "full",
+              "simple"
+            ]
+          },
+          "stage": {
+            "enum": [
+              "modelValidation",
+              "modelAudit"
+            ]
+          },
+          "verdict": {
+            "enum": [
+              "pass",
+              "revise",
+              "uncertain"
+            ]
+          },
+          "faults": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "severity": {
+                  "enum": [
+                    "critical",
+                    "major",
+                    "minor"
+                  ]
+                },
+                "area": {
+                  "type": "string"
+                },
+                "problem": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "string"
+                },
+                "repair": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "unverified": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     }
