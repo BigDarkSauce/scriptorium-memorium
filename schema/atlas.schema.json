@@ -537,6 +537,86 @@
     },
     "selectedNodeId": {
       "type": "string"
+    },
+    "memoryPlaces": {
+      "type": "array",
+      "description": "Optional learner-authored memory cues anchored to stable bookcase-local locations. The route is not a source claim or a mastery score.",
+      "items": {
+        "type": "object",
+        "required": [
+          "nodeId",
+          "caseId",
+          "row",
+          "slot",
+          "association"
+        ],
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "caseId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shelfName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "rowLabel": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "association": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "review": {
+            "type": "object",
+            "properties": {
+              "response": {
+                "type": "string",
+                "maxLength": 1200
+              },
+              "confidence": {
+                "enum": [
+                  "",
+                  "Low",
+                  "Medium",
+                  "High"
+                ]
+              },
+              "committed": {
+                "type": "boolean"
+              },
+              "attemptedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revealed": {
+                "type": "boolean"
+              },
+              "revealedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
