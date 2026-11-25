@@ -27,7 +27,7 @@ jobs:
         run: node tools/test-model-contract.mjs
 
       - name: Verify representative source chain
-        run: node tools/verify-chain.mjs examples/chain-coverage-example.json
+        run: node tools/verify-chain.mjs tools/fixtures/byu-stub/chain-01.json
 
       - name: Verify built-in diorama plans
         run: node tools/verify-chain.mjs --builtins
