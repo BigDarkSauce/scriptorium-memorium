@@ -607,9 +607,9 @@ export class Hub {
       const place = stops[index], node = nodes.get(String(place.nodeId));
       const schedule = reviewSchedules[String(node.id)] || null;
       let review = place.review || {};
-      // A due, already-rated attempt must not leak its previous answer on re-entry. Archive it and
-      // start a fresh recall prompt before constructing the visible panel.
-      if (review.revealed && review.gradedAt && schedule && Number(schedule.due) <= Date.now()) {
+      // A due, already-revealed attempt must not leak its previous answer on re-entry,
+      // even if the learner left without self-rating it. Archive it and start a fresh recall prompt.
+      if (review.revealed && schedule && Number(schedule.due) <= Date.now()) {
         const history = [...(review.history || [])];
         if (review.committed) history.push({
           response: review.response || '',
