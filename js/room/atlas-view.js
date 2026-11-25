@@ -146,7 +146,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     (st.examples || []).forEach(x => addSuggestion(x && x.title));
     if (st.table) {
       addSuggestion(st.table.caption);
-      sourceText(st.table.columns).split(/\\s{2,}/).forEach(addSuggestion);
+      (st.table.columns || []).forEach(addSuggestion);
     }
     (st.figureRefs || []).forEach(x => addSuggestion(x && x.id));
   });
