@@ -82,7 +82,7 @@ async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tool
     const { text, truncated } = await SAMPLE(prompt, opts);
     const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
   };
-  const viaFree = exhausted => FREE.ask(forFreeModels(prompt), { images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
+  const viaFree = exhausted => FREE.ask(prompt, { promptForProvider: id => id === 'openai-local' ? prompt : forFreeModels(prompt), images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
   if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
   if (m === 'free' || !SAMPLE) { if (!FREE.hasAny()) return manualRelay(prompt, manualTitle); return viaFree(false); }
   // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other
