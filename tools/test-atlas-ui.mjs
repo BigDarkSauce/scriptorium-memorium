@@ -227,7 +227,6 @@ try {
       selectedStep: window.__atlasUITest && window.__atlasUITest.atlas.selectedSourceStepId
     };
   });
-  console.log('ATLAS_AFTER_UNMAPPED_SELECTION', JSON.stringify(afterUnmappedSelection));
   assert.equal(afterUnmappedSelection.scanPresent, true, 'selecting an unsectioned source result must keep the source scan mounted');
   assert.equal(afterUnmappedSelection.scanBodyHidden, false, 'selecting an unsectioned source result must keep the source scan expanded');
   assert.equal(afterUnmappedSelection.searchPresent, true, 'selecting an unsectioned source result must keep the source search field mounted');
@@ -235,7 +234,7 @@ try {
   await currentScanSearch.fill('a diagram showing a selective boundary');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'figure captions must be searchable through their linked source step');
   const figureResult = await sourceScan.locator('.atlas-scan-row').first().innerText();
-  assert.ok(figureResult.includes('Flux relation') && figureResult.includes('S2 · p. 3'), 'the figure-caption result must retain its linked source title and ID/page');
+  assert.ok(figureResult.includes('Flux relation') && figureResult.includes('S2') && figureResult.includes('p. 3'), 'the figure-caption result must retain its linked source title, ID and page even when the subsection label appears between them');
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
   await page.getByRole('button', { name: 'Remove memory place' }).click();
