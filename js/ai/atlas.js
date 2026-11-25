@@ -123,10 +123,14 @@ export function validateAtlas(A, stepIds, sourceSteps = [], requireProgressive =
       if (!place.review || typeof place.review !== 'object' || Array.isArray(place.review)) return 'memory place has an invalid recall record: ' + place.nodeId;
       if (place.review.response != null && (typeof place.review.response !== 'string' || place.review.response.length > 1200)) return 'memory place recall response is too long: ' + place.nodeId;
       if (place.review.confidence != null && !['', 'Low', 'Medium', 'High'].includes(place.review.confidence)) return 'memory place recall confidence is invalid: ' + place.nodeId;
+      if (place.review.rating != null && !['again', 'recalled'].includes(place.review.rating)) return 'memory place recall rating is invalid: ' + place.nodeId;
+      if (place.review.gradedAt != null && (typeof place.review.gradedAt !== 'string' || !Number.isFinite(Date.parse(place.review.gradedAt)))) return 'memory place recall timestamp is invalid: ' + place.nodeId;
       if (place.review.history != null) {
         if (!Array.isArray(place.review.history) || place.review.history.length > 12) return 'memory place recall history must contain at most twelve attempts: ' + place.nodeId;
         for (const attempt of place.review.history) {
           if (!attempt || typeof attempt.response !== 'string' || attempt.response.length > 1200 || !['', 'Low', 'Medium', 'High'].includes(attempt.confidence || '')) return 'memory place recall history contains an invalid attempt: ' + place.nodeId;
+          if (attempt.rating != null && !['again', 'recalled'].includes(attempt.rating)) return 'memory place recall history contains an invalid rating: ' + place.nodeId;
+          if (attempt.gradedAt != null && (typeof attempt.gradedAt !== 'string' || !Number.isFinite(Date.parse(attempt.gradedAt)))) return 'memory place recall history contains an invalid timestamp: ' + place.nodeId;
         }
       }
     }
