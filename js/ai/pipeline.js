@@ -55,19 +55,26 @@ export async function material(ctx, part, { onStatus } = {}) {
   return { sections: sec.sections, figures, blob, src, text: P.text || text };
 }
 
-// ---------------------------------------------------------------- the stages
+// Keep each actual provider search once, even though the same record arrives through both the live callback
+// (for failed/retried outputs) and the accepted JSON response (including cached responses).
+function recordResearch(audit, x, task) {
+  if (!Array.isArray(audit) || !x) return;
+  const key = x.callId || [x.provider || '', x.model || '', +x.searched || 0, (x.citations || []).map(c => c && c.url || '').sort().join('|')].join('::');
+  if (audit.some(y => (y.callId || [y.provider || '', y.model || '', +y.searched || 0, (y.citations || []).map(c => c && c.url || '').sort().join('|')].join('::')) === key)) return;
+  audit.push({ ...x, task: task || x.task || 'AI authoring call' });
+}
 async function ask(prompt, o = {}, title) {
   const answer = await askJSON(prompt, {
     tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images,
     onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`),
     onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'),
     onStatus: o.onStatus,
-    onResearch: x => { if (Array.isArray(o.researchAudit)) o.researchAudit.push({ ...x, task: title || o.writing || 'AI authoring call' }); },
+    onResearch: x => recordResearch(o.researchAudit, x, title || o.writing || 'AI authoring call'),
     role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated,
     fresh: !!(o.fresh || o.force), manualTitle: title
   });
   // Cache hits retain the original search metadata but do not trigger onResearch again.
-  if (answer && answer._webResearch && Array.isArray(o.researchAudit)) o.researchAudit.push({ ...answer._webResearch, task: title || o.writing || 'AI authoring call' });
+  if (answer && answer._webResearch) recordResearch(o.researchAudit, answer._webResearch, title || o.writing || 'AI authoring call');
   return answer;
 }
 // stage 1: one structured call for the whole part
