@@ -202,7 +202,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
       const rail = el('div', { class: 'atlas-branch-rail', role: 'tablist', 'aria-label': 'Question branches' });
       challenges.forEach((ch, i) => {
         const saved = atlas.attempts[ch.id] || {};
-        const status = saved.revealed ? 'revealed' : saved.committed ? 'prediction saved' : 'unopened';
+        const status = saved.revealed ? 'revealed' : saved.committed ? 'prediction saved' : saved.response ? 'draft saved' : 'unopened';
         const tab = el('button', {
           class: 'atlas-branch-tab' + (ch.id === atlas.selectedChallengeId ? ' active' : ''),
           type: 'button', role: 'tab', 'aria-selected': String(ch.id === atlas.selectedChallengeId),
@@ -255,6 +255,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
         'aria-label': 'Your prediction'
       });
       response.value = saved.response || '';
+      response.disabled = !!saved.revealed;
       const confidence = el('select', {
         class: 'field small atlas-confidence',
         'aria-label': 'Confidence in prediction'
@@ -262,11 +263,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
         el('option', { value: '', text: 'Confidence?' }),
         ...['Low', 'Medium', 'High'].map(v => el('option', { value: v, text: v, selected: saved.confidence === v }))
       ]);
+      confidence.disabled = !!saved.revealed;
       const commit = el('button', {
         class: 'btn primary small',
         type: 'button',
-        text: saved.committed ? 'Update prediction' : 'Commit prediction',
-        disabled: !response.value.trim(),
+        text: saved.revealed ? 'Prediction locked' : saved.committed ? 'Update prediction' : 'Commit prediction',
+        disabled: !!saved.revealed || !response.value.trim(),
         onclick: () => {
           const current = atlas.attempts[ch.id] || {};
           atlas.attempts[ch.id] = {
@@ -283,12 +285,24 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onSave
           if (field) field.focus();
         }
       });
-      response.addEventListener('input', () => { commit.disabled = !response.value.trim(); });
+      response.addEventListener('input', () => {
+        commit.disabled = !response.value.trim();
+        const current = atlas.attempts[ch.id] || {};
+        atlas.attempts[ch.id] = { ...current, response: response.value.slice(0, 1200) };
+        onSave && onSave();
+      });
+      confidence.addEventListener('change', () => {
+        const current = atlas.attempts[ch.id] || {};
+        atlas.attempts[ch.id] = { ...current, confidence: confidence.value || '' };
+        onSave && onSave();
+      });
       body.append(response, el('div', { class: 'row wrap' }, [confidence, commit]));
 
       if (saved.committed) {
         if (saved.revealed) {
           body.append(el('div', { class: 'atlas-feedback' }, [
+            el('b', { text: 'Your committed prediction' }),
+            el('p', { html: mathHTML(saved.response || 'No written prediction was recorded.') }),
             el('b', { text: 'Expected reconstruction' }),
             el('p', { html: mathHTML(ch.answer) }),
             el('b', { text: 'Feedback' }),
