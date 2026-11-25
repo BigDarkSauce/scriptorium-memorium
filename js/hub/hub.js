@@ -551,12 +551,21 @@ export class Hub {
   }
   // The route is a retrieval surface, not a tour score: every stop asks for an attempt before its answer appears.
   // Review records live with the chapter atlas and remain optional; leaving or switching stops gives no points.
-  showMemoryRoute({ bookId, partId, atlas, initialNodeId, onSave = () => {} } = {}) {
+  showMemoryRoute({ bookId, partId, atlas, initialNodeId, reviewSchedules = {}, onGradeRecall = async () => null, onSave = () => {} } = {}) {
     this.closeMemoryRoute();
     const nodes = new Map((atlas && atlas.nodes || []).map(n => [String(n.id), n]));
     const stops = (atlas && atlas.memoryPlaces || []).filter(p => p && nodes.has(String(p.nodeId)));
     if (!stops.length) return null;
     let index = Math.max(0, stops.findIndex(p => String(p.nodeId) === String(initialNodeId)));
+    const reviewDueLabel = schedule => {
+      if (!schedule || !Number.isFinite(Number(schedule.due))) return 'Not scheduled';
+      const days = Math.ceil((Number(schedule.due) - Date.now()) / 864e5);
+      return days <= 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : 'Due in ' + days + ' days';
+    };
+    const intervalLabel = schedule => {
+      const days = Number(schedule && schedule.interval) || 1;
+      return days === 1 ? '1 day' : days + ' days';
+    };
     const panel = el('aside', { class: 'memory-route-panel glass', role: 'region', 'aria-label': 'Loci memory route' });
     this.memoryRoutePanel = panel;
     this.ui.append(panel);
@@ -588,6 +597,7 @@ export class Hub {
       const rail = el('div', { class: 'memory-route-stops', role: 'group', 'aria-label': 'Memory places in this chapter' });
       stops.forEach((stop, i) => {
         const item = nodes.get(String(stop.nodeId));
+        const due = reviewSchedules[String(stop.nodeId)];
         rail.append(el('button', {
           class: 'memory-route-stop' + (i === index ? ' active' : ''),
           type: 'button',
@@ -595,7 +605,10 @@ export class Hub {
           onclick: () => { index = i; render(); }
         }, [
           el('span', { class: 'memory-route-stop-n', text: String(i + 1).padStart(2, '0') }),
-          el('span', { text: item ? item.title : stop.nodeId })
+          el('span', { class: 'memory-route-stop-main' }, [
+            el('span', { text: item ? item.title : stop.nodeId }),
+            due ? el('small', { class: 'memory-route-stop-due', text: reviewDueLabel(due) }) : null
+          ])
         ]));
       });
       panel.append(rail);
@@ -674,6 +687,46 @@ export class Hub {
             el('small', { text: 'Source steps: ' + ((node.stepIds || []).join(', ') || 'not recorded') })
           ]));
           panel.append(el('p', { class: 'memory-route-transfer-note', text: 'Return to the concept atlas for the full source-linked reasoning path, diagrams and dioramas.' }));
+          const schedule = reviewSchedules[String(node.id)] || null;
+          const ratingText = review.rating === 'recalled' ? 'You rated this recall as accurate.' : review.rating === 'again' ? 'You marked this concept for another pass.' : '';
+          const schedulePanel = el('div', { class: 'memory-route-schedule' }, [
+            el('span', { class: 'memory-route-label', text: 'SPACED REVIEW · SELF-RATED' }),
+            el('b', { text: schedule ? reviewDueLabel(schedule) : 'Review schedule unavailable' }),
+            schedule ? el('small', { text: 'Current interval · ' + intervalLabel(schedule) + ' · ' + (schedule.attempts || 0) + ' reviewed attempts' }) : null,
+            ratingText ? el('p', { text: ratingText }) : null
+          ]);
+          if (schedule && !review.gradedAt) {
+            schedulePanel.append(el('p', { class: 'memory-route-rating-prompt', text: 'Rate your own reconstruction. This is not automatically graded.' }));
+            schedulePanel.append(el('div', { class: 'row wrap' }, [
+              el('button', {
+                class: 'btn small',
+                type: 'button',
+                text: 'Needs another pass',
+                onclick: async () => {
+                  const updated = await onGradeRecall(node.id, false);
+                  if (!updated) return;
+                  reviewSchedules[String(node.id)] = updated;
+                  place.review = { ...(place.review || {}), rating: 'again', gradedAt: new Date().toISOString() };
+                  await flushSave();
+                  render();
+                }
+              }),
+              el('button', {
+                class: 'btn primary small',
+                type: 'button',
+                text: 'Recalled accurately',
+                onclick: async () => {
+                  const updated = await onGradeRecall(node.id, true);
+                  if (!updated) return;
+                  reviewSchedules[String(node.id)] = updated;
+                  place.review = { ...(place.review || {}), rating: 'recalled', gradedAt: new Date().toISOString() };
+                  await flushSave();
+                  render();
+                }
+              })
+            ]));
+          }
+          panel.append(schedulePanel);
           panel.append(el('button', {
             class: 'btn small',
             type: 'button',
@@ -685,9 +738,11 @@ export class Hub {
                 response: current.response || '',
                 confidence: current.confidence || '',
                 attemptedAt: current.attemptedAt || null,
-                revealedAt: current.revealedAt || null
+                revealedAt: current.revealedAt || null,
+                rating: current.rating || null,
+                gradedAt: current.gradedAt || null
               });
-              place.review = { history: history.slice(-12), response: '', confidence: '', committed: false, revealed: false };
+              place.review = { history: history.slice(-12), response: '', confidence: '', committed: false, revealed: false, rating: null, gradedAt: null };
               await flushSave();
               render();
             }
