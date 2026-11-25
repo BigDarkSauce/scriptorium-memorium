@@ -1035,6 +1035,14 @@
     },
     "levelN": {
       "type": "integer"
+    },
+    "atlas": {
+      "$ref": "atlas.schema.json",
+      "description": "AI-generated semantic concept graph, source index, linked diorama sequence and generative prediction challenges."
+    },
+    "researchEvidence": {
+      "type": "object",
+      "description": "Actual OpenAI Responses API web-search tool calls and returned citations, separate from uploaded-PDF source evidence."
     }
   },
   "description": "One part (scroll) of a book as a chain of steps. Every subsection of the part is covered by ≥1 step (coverage), steps form a question thread (answers/opens), the PDF's own figures are cited by id, and anything from outside the PDF sits in 'extra' with its source. See docs/PROTOCOL.md. Validate with any draft 2020-12 validator (load chain.schema.json, room.schema.json and scene.schema.json together; their $ids share one base so the relative $refs resolve). The strict profile used by tools/verify-chain.mjs is chain.strict.schema.json.",
