@@ -117,7 +117,7 @@ function sourceIndex(analysis, sections, figures) {
   };
 }
 
-export async function compileAtlas({ book, part, analysis, sections = [], figures = [], onStatus, signal, auto = true } = {}) {
+export async function compileAtlas({ book, part, analysis, sections = [], figures = [], onStatus, signal, auto = true, researchAudit = [] } = {}) {
   const ids = (analysis.chain || []).map(st => String(st.id));
   if (!ids.length) throw new Error('Cannot compile a concept atlas without validated chain steps');
   let authored = null, failure = null;
@@ -132,7 +132,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
       });
       const atlasResearch = response && response._webResearch || null;
       authored = response && (response.atlas || response);
-      if (atlasResearch) authored._atlasWebResearch = atlasResearch;
+      if (atlasResearch) { authored._atlasWebResearch = atlasResearch; researchAudit.push({ ...atlasResearch, task: 'Semantic chapter atlas' }); }
       const issue = validateAtlas(authored, ids);
       if (issue) throw new Error(issue);
     } catch (e) {
@@ -196,12 +196,20 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     };
   });
   const index = sourceIndex(analysis, sections, figures);
-  const researchParts = [analysis.researchEvidence, authored._atlasWebResearch].filter(Boolean);
-  const researchCitations = researchParts.flatMap(x => x.citations || []).filter(c => c && /^https:\/\//i.test(c.url));
-  index.webResearch = researchParts.length ? {
-    provider: [...new Set(researchParts.map(x => x.provider).filter(Boolean))].join(', '),
-    model: [...new Set(researchParts.map(x => x.model).filter(Boolean))].join(', '),
-    searched: researchParts.reduce((n, x) => n + (+x.searched || 0), 0),
+  // One research record per actual API call. The pipeline's in-memory audit also sees calls that happened
+  // before the atlas stage; use it preferentially to avoid double-counting the first chain response.
+  const recorded = analysis.researchEvidenceCalls && analysis.researchEvidenceCalls.length
+    ? analysis.researchEvidenceCalls
+    : [analysis.researchEvidence].filter(Boolean);
+  const researchParts = [...recorded, ...(researchAudit || []) , authored._atlasWebResearch].filter(Boolean);
+  const signature = x => [x.provider || '', x.model || '', +x.searched || 0, (x.citations || []).map(c => c && c.url || '').filter(Boolean).sort().join('|')].join('::');
+  const uniqueResearch = researchParts.filter((x, i, all) => all.findIndex(y => signature(y) === signature(x)) === i);
+  const researchCitations = uniqueResearch.flatMap(x => x.citations || []).filter(c => c && /^https:\/\//i.test(c.url));
+  index.webResearch = uniqueResearch.length ? {
+    provider: [...new Set(uniqueResearch.map(x => x.provider).filter(Boolean))].join(', '),
+    model: [...new Set(uniqueResearch.map(x => x.model).filter(Boolean))].join(', '),
+    searched: uniqueResearch.reduce((n, x) => n + (+x.searched || 0), 0),
+    tasks: uniqueResearch.map(x => x.task || 'AI authoring call'),
     citations: researchCitations.filter((c, i, a) => a.findIndex(y => y.url === c.url) === i)
   } : null;
   const { _atlasWebResearch, ...authoredAtlas } = authored;
