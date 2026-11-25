@@ -175,6 +175,7 @@ function modelContractIssues(plan, sourceStepIds = null) {
     if (!v || !v.key || !v.name || !v.unit || !['source', 'derived', 'illustrative'].includes(v.provenance)) F(`stateVariable ${i + 1} needs key, name, unit and provenance`);
     if (v && v.controllable && (![v.initial, v.min, v.max].every(x => Number.isFinite(+x)) || !(+v.min < +v.max) || +v.initial < +v.min || +v.initial > +v.max)) F(`controllable stateVariable ${i + 1} needs a finite range containing its initial value`);
     if (v && !Array.isArray(v.evidenceStepIds)) F(`stateVariable ${i + 1} needs evidenceStepIds (use [] only for a clearly illustrative variable)`);
+    else if (v && !v.evidenceStepIds.length && v.provenance !== 'illustrative') F(`stateVariable ${i + 1} has no source evidence; mark it illustrative and explain the assumption, or cite source step IDs`);
   });
   const mechanisms = Array.isArray(m.mechanisms) ? m.mechanisms : [];
   if (!mechanisms.length) F('modelContract needs at least one causal or transformation mechanism');
@@ -182,7 +183,7 @@ function modelContractIssues(plan, sourceStepIds = null) {
     if (!x || !x.id || !x.rule || !['source', 'standard', 'external', 'hypothesis'].includes(x.basis)) F(`mechanism ${i + 1} needs id, rule and basis`);
     if (!x || !Array.isArray(x.from) || !x.from.length || !Array.isArray(x.to) || !x.to.length) F(`mechanism ${i + 1} needs explicit from/to actor IDs`);
     if (x && [...(x.from || []), ...(x.to || [])].some(id => !ids.has(String(id)))) F(`mechanism ${i + 1} references an undeclared actor`);
-    if (x && !Array.isArray(x.evidenceStepIds)) F(`mechanism ${i + 1} needs evidenceStepIds`);
+    if (x && (!Array.isArray(x.evidenceStepIds) || !x.evidenceStepIds.length)) F(`mechanism ${i + 1} needs at least one source step ID explaining the mechanism`);
     if (x && x.basis === 'external' && !String(x.source || '').trim()) F(`external mechanism ${i + 1} needs a source`);
   });
   ['constraints', 'assumptions', 'observables', 'uncertainties'].forEach(k => { if (!Array.isArray(m[k])) F(`modelContract.${k} must be an array (empty is allowed)`); });
@@ -1010,7 +1011,7 @@ export function grammarIssues(A) {
 export function authorPrompt(req, context = '', { simple = false } = {}) {
   if (simple) return `Author a SIMPLE but mechanistically faithful interactive 3D diorama. This is a bounded retry: ${req.failure || 'the first attempt was not accepted'}. Keep the geometry and code small; do not remove or contradict the model contract.
 WHAT IT MUST SHOW: ${req.request || req.title}
-${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\\n' : ''}${context ? 'CONTEXT: ' + context + '\\n' : ''}${req.plan ? 'APPROVED PLAN AND CONTRACT: ' + JSON.stringify(req.plan) + '\\nCopy req.plan.modelContract exactly into scene.modelContract. ' : ''}SOURCE STEP IDS: ${JSON.stringify(req.sourceStepIds || [])}
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}${req.plan ? 'APPROVED PLAN AND CONTRACT: ' + JSON.stringify(req.plan) + '\\nCopy req.plan.modelContract exactly into scene.modelContract. ' : ''}SOURCE STEP IDS: ${JSON.stringify(req.sourceStepIds || [])}
 LIMITS: 3–6 bodies from basic shapes; restrained dynamics; no more than 40 lines of code; 3 lessons with question/opens; studio environment. Keep actor IDs exactly equal to modelContract.entities[].bodyId. Every controllable state variable maps to a matching parameter with the contract's range and unit.
 ${MODEL_CONTRACT_FORMAT}
 ${SCENE_SPEC}
