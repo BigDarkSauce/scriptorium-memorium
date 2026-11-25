@@ -1,6 +1,6 @@
 # Check a demo against its plan
 
-Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the verdict on the scene as `critique`.
+Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the pedagogical verdict on the scene as `critique`. This is distinct from the model-fidelity audit in `13-model-audit.md`, which checks causal, quantitative and constraint fidelity.
 
 ```text
 Critique an explanatory 3D demo against its plan. The first test outweighs the second: (1) after these lessons, could a newcomer correctly answer the comprehension check, without the misconception? (2) is it attractive?
