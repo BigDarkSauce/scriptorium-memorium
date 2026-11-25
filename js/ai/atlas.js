@@ -181,13 +181,29 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
     const stepIds = unique(n.stepIds).filter(id => byStep.has(id));
     const subIds = unique(stepIds.map(id => byStep.get(id).section).filter(Boolean));
     const refs = stepIds.map(id => byStep.get(id));
-    const dioramas = [];
-    refs.forEach(st => (st.demos || []).forEach((d, i) => {
-      if (isScene(d)) dioramas.push({ stepId: String(st.id), demoIndex: i, title: clean(d.title || st.title, 100), purpose: clean(d.purpose || st.answers || st.title, 220) });
-    }));
+    const dioramas = [], explanatoryFigures = [];
+    refs.forEach(st => {
+      (st.demos || []).forEach((d, i) => {
+        if (isScene(d)) dioramas.push({ stepId: String(st.id), demoIndex: i, title: clean(d.title || st.title, 100), purpose: clean(d.purpose || st.answers || st.title, 220) });
+        else if (d && d.type === 'figure' && d.figure) explanatoryFigures.push({ stepId: String(st.id), title: clean(d.title || st.title, 100), purpose: clean(d.purpose || st.answers || st.title, 220), figure: d.figure });
+      });
+      (st.explain || []).forEach((ex, i) => {
+        if (ex && ex.figure) explanatoryFigures.push({ stepId: String(st.id), title: clean(st.title || 'Explanation', 100), purpose: clean(ex.text || st.answers || st.title, 220), figure: ex.figure });
+      });
+      if (st.intuitionFigure) explanatoryFigures.push({ stepId: String(st.id), title: clean(st.title || 'Intuition', 100), purpose: clean(st.intuition || st.answers || st.title, 220), figure: st.intuitionFigure });
+      if (st.misconceptionFigure) explanatoryFigures.push({ stepId: String(st.id), title: clean(st.title || 'Misconception', 100), purpose: clean(st.misconception || st.answers || st.title, 220), figure: st.misconceptionFigure });
+    });
+    // Preserve source-linked explanatory diagrams in the atlas itself. PDF crop IDs remain in sourceRefs rather
+    // than being copied here, because their binary image assets live in the document's local figure store.
+    const seenFigures = new Set();
+    const uniqueFigures = explanatoryFigures.filter(f => {
+      const key = f.stepId + '|' + f.title + '|' + JSON.stringify(f.figure);
+      if (seenFigures.has(key)) return false; seenFigures.add(key); return true;
+    });
     return {
       ...n,
       stepIds, subsectionIds: subIds,
+      explanatoryFigures: uniqueFigures,
       title: clean(n.title, 100), question: clean(n.question, 300), summary: clean(n.summary, 500),
       position: { x: Math.max(4, Math.min(96, +n.position.x)), y: Math.max(4, Math.min(96, +n.position.y)) },
       dioramaRefs: dioramas,
