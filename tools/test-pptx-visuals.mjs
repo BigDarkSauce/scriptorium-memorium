@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary, resolvePptTarget } from '../js/ai/pptx.js';
+import { sectionList, figureList, chapterPrompt } from '../js/ai/prompts.js';
 
 const slidePath = 'ppt/slides/slide3.xml';
 const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -48,4 +49,18 @@ assert.match(diagramSummary, /Stimulus/);
 assert.match(diagramSummary, /Response/);
 assert.match(diagramSummary, /node-1 → node-2/);
 
-console.log('PASS  PowerPoint visual relationships resolve in slide order; linked/unused images are excluded; chart values and SmartArt edges are recoverable');
+const slide = { id: 'slide-3', title: 'Plant response', level: 2, startPage: 3, endPage: 3, text: 'A response follows a stimulus.' };
+assert.match(sectionList([slide], 'pptx'), /slide 3/);
+const figureLabel = figureList([{ id: 'fig-s3-1', label: 'Leaf cross-section', slide: 3, page: 3, caption: 'Vascular bundle' }]);
+assert.match(figureLabel, /slide 3/);
+const prompt = chapterPrompt({
+  book: 'Test deck', chapter: 'Plant response (slides 3–3)', text: slide.text, sourceType: 'pptx',
+  sections: [{ ...slide, inventory: { chars: 32 } }],
+  figures: [{ id: 'fig-s3-1', label: 'Leaf cross-section', slide: 3, page: 3, caption: 'Vascular bundle' }],
+  attached: ['fig-s3-1'], images: 1
+});
+assert.match(prompt, /\(slide 3\)/);
+assert.match(prompt, /FIGURES, TABLES AND EMBEDDED IMAGES FROM THE SOURCE/);
+assert.match(prompt, /PowerPoint presentation's own examples/);
+
+console.log('PASS  PowerPoint visual relationships resolve in slide order; linked/unused images are excluded; chart values, SmartArt edges and slide provenance are recoverable');
