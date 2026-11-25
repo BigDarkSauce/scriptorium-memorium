@@ -170,17 +170,19 @@ function modelContractIssues(plan, sourceStepIds = null) {
     if (e && e.bodyId) ids.add(String(e.bodyId));
     if (!e || !Array.isArray(e.evidenceStepIds) || !e.evidenceStepIds.length) F(`entity ${i + 1} needs source evidenceStepIds`);
   });
-  const vars = Array.isArray(m.stateVariables) ? m.stateVariables : [];
+  const vars = Array.isArray(m.stateVariables) ? m.stateVariables : [], variableKeys = new Set();
   vars.forEach((v, i) => {
     if (!v || !v.key || !v.name || !v.unit || !['source', 'derived', 'illustrative'].includes(v.provenance)) F(`stateVariable ${i + 1} needs key, name, unit and provenance`);
+    if (v && v.key && variableKeys.has(String(v.key))) F(`duplicate stateVariable key "${v.key}"`); else if (v && v.key) variableKeys.add(String(v.key));
     if (v && v.controllable && (![v.initial, v.min, v.max].every(x => Number.isFinite(+x)) || !(+v.min < +v.max) || +v.initial < +v.min || +v.initial > +v.max)) F(`controllable stateVariable ${i + 1} needs a finite range containing its initial value`);
     if (v && !Array.isArray(v.evidenceStepIds)) F(`stateVariable ${i + 1} needs evidenceStepIds (use [] only for a clearly illustrative variable)`);
     else if (v && !v.evidenceStepIds.length && v.provenance !== 'illustrative') F(`stateVariable ${i + 1} has no source evidence; mark it illustrative and explain the assumption, or cite source step IDs`);
   });
-  const mechanisms = Array.isArray(m.mechanisms) ? m.mechanisms : [];
+  const mechanisms = Array.isArray(m.mechanisms) ? m.mechanisms : [], mechanismIds = new Set();
   if (!mechanisms.length) F('modelContract needs at least one causal or transformation mechanism');
   mechanisms.forEach((x, i) => {
     if (!x || !x.id || !x.rule || !['source', 'standard', 'external', 'hypothesis'].includes(x.basis)) F(`mechanism ${i + 1} needs id, rule and basis`);
+    if (x && x.id && mechanismIds.has(String(x.id))) F(`duplicate mechanism id "${x.id}"`); else if (x && x.id) mechanismIds.add(String(x.id));
     if (!x || !Array.isArray(x.from) || !x.from.length || !Array.isArray(x.to) || !x.to.length) F(`mechanism ${i + 1} needs explicit from/to actor IDs`);
     if (x && [...(x.from || []), ...(x.to || [])].some(id => !ids.has(String(id)))) F(`mechanism ${i + 1} references an undeclared actor`);
     if (x && (!Array.isArray(x.evidenceStepIds) || !x.evidenceStepIds.length)) F(`mechanism ${i + 1} needs at least one source step ID explaining the mechanism`);
@@ -209,7 +211,8 @@ export function checkSceneContract(scene, plan, sourceStepIds = null) {
   declared.filter(id => !actual.includes(id)).forEach(id => faults.push(`planned actor "${id}" is missing from the scene`));
   actual.filter(id => !declared.includes(id)).forEach(id => faults.push(`scene actor "${id}" is absent from the model contract`));
   if (new Set(actual).size !== actual.length) faults.push('scene actor IDs are not unique');
-  const params = new Map((scene.params || []).map(p => [String(p.key), p]));
+  const paramList = scene.params || [], params = new Map(paramList.map(p => [String(p.key), p]));
+  if (params.size !== paramList.length) faults.push('scene parameter keys are not unique');
   const controllable = (m.stateVariables || []).filter(v => v && v.controllable);
   controllable.forEach(v => {
     const p = params.get(String(v.key));
