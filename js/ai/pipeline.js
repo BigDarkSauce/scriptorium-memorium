@@ -213,10 +213,11 @@ export async function critiqueDemo(s, plan, o = {}) {
   try {
     check(o.signal); o.onStatus && o.onStatus('Checking the explanation: could a newcomer explain it after watching?');
     const ans = await ask(critiquePrompt(plan, s), { ...o, tools: false, writing: 'Checking the explanation', role: 'director' }, 'Check this diorama in any AI');
-    if (!ans || typeof ans !== 'object') return s.critique;
-    Object.assign(s.critique, { canExplain: +ans.canExplain || 0, attractive: +ans.attractive || 0, verdict: ans.verdict === 'revise' ? 'revise' : 'pass', issues: (ans.issues || []).slice(0, 6).map(String) });
-    let n = 0; if (ans.verdict === 'revise' && Array.isArray(ans.patch)) ans.patch.forEach(P => { const l = P && (s.lessons || [])[+P.i]; if (!l) return; ['text', 'explain', 'explainBack'].forEach(k => { if (typeof P[k] === 'string' && P[k].trim().length > 8 && P[k].length < 1400) { l[k] = P[k].trim(); n++; } }); });
-    s.critique.patched = n;
+    if (ans && typeof ans === 'object') {
+      Object.assign(s.critique, { canExplain: +ans.canExplain || 0, attractive: +ans.attractive || 0, verdict: ans.verdict === 'revise' ? 'revise' : 'pass', issues: (ans.issues || []).slice(0, 6).map(String) });
+      let n = 0; if (ans.verdict === 'revise' && Array.isArray(ans.patch)) ans.patch.forEach(P => { const l = P && (s.lessons || [])[+P.i]; if (!l) return; ['text', 'explain', 'explainBack'].forEach(k => { if (typeof P[k] === 'string' && P[k].trim().length > 8 && P[k].length < 1400) { l[k] = P[k].trim(); n++; } }); });
+      s.critique.patched = n;
+    }
   } catch (e) { if (e && e.code === 'cancelled') throw e; s.critique.error = (e && (e.code || e.message)) || 'failed'; }
   try {
     check(o.signal); o.onStatus && o.onStatus('Auditing the scene model: entities, mechanisms, units, constraints and controls…');
