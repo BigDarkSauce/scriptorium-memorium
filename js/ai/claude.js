@@ -26,7 +26,7 @@ export const aiAvailable = () => { const m = FREE.mode(); return m === 'claude' 
 // hybrid mode; a free vision model, Gemini, otherwise)
 export const imageLimit = () => { const c = LIMITS && LIMITS.images ? LIMITS.images.maxCount : 0, m = FREE.mode(), fv = FREE.hasVision() ? 6 : 0; return m === 'claude' ? c : m === 'hybrid' ? (SAMPLE ? c : fv) : fv; };
 // who writes, in words, for the status lines
-export const writer = (role = 'worker') => { const m = FREE.mode(); return m === 'claude' || (m === 'hybrid' && role === 'director' && SAMPLE) ? 'Claude' : 'The free models'; };
+export const writer = () => 'OpenAI (configured fallback providers if unavailable)';
 export function errCopy(err) {
   const code = err && err.code;
   return ({ cancelled: 'Stopped.', not_granted: 'Claude access was declined for this page.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'Claude declined this request.', session_expired: 'Your session expired. Sign in again on claude.ai.', unavailable: 'Claude is not reachable from this view. Use "Copy prompt" to run it in any AI, then paste the answer back.', images_unavailable: 'This view cannot send images to Claude.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
