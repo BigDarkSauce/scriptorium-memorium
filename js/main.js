@@ -762,7 +762,7 @@ class App {
     const out = (name, obj) => this.download(name, JSON.stringify(obj, null, 2));
     const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide' }, [
       el('h3', { text: 'Import / export' }),
-      el('p', { class: 'dim', text: 'Everything is plain JSON in one documented format (docs/PROTOCOL.md). Any AI (another Claude account, ChatGPT, Gemini) can produce a room from your PDF with the prompt pack, and you import the result here.' }),
+      el('p', { class: 'dim', text: 'Everything is plain JSON in one documented format (docs/PROTOCOL.md). Any compatible AI can produce a room from your source material with the prompt pack, and you can import the result here.' }),
       el('div', { class: 'row wrap' }, [
         el('button', { class: 'btn', text: 'Copy the prompt pack', onclick: async () => { try { await navigator.clipboard.writeText(this.promptPack(book)); toast('Prompt pack copied'); } catch (e) { toast('Clipboard blocked: use Download instead'); } } }),
         el('button', { class: 'btn', text: 'Download prompt pack', onclick: () => this.download('scriptorium-prompt-pack.md', this.promptPack(book)) }),
