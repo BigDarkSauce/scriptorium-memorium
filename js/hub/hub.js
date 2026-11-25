@@ -580,9 +580,57 @@ export class Hub {
       saveTimer = setTimeout(() => { saveTimer = null; void flushSave(); }, 450);
     };
     this._memoryRouteFlush = flushSave;
+    const startFreshAttempt = async place => {
+      const current = place.review || {};
+      const history = [...(current.history || [])];
+      if (current.committed) history.push({
+        response: current.response || '',
+        confidence: current.confidence || '',
+        attemptedAt: current.attemptedAt || null,
+        revealedAt: current.revealedAt || null,
+        rating: current.rating || null,
+        gradedAt: current.gradedAt || null
+      });
+      place.review = {
+        history: history.slice(-12),
+        response: '',
+        confidence: '',
+        committed: false,
+        revealed: false,
+        rating: null,
+        gradedAt: null
+      };
+      await flushSave();
+    };
     const render = () => {
       panel.innerHTML = '';
-      const place = stops[index], node = nodes.get(String(place.nodeId)), review = place.review || {};
+      const place = stops[index], node = nodes.get(String(place.nodeId));
+      const schedule = reviewSchedules[String(node.id)] || null;
+      let review = place.review || {};
+      // A due, already-rated attempt must not leak its previous answer on re-entry. Archive it and
+      // start a fresh recall prompt before constructing the visible panel.
+      if (review.revealed && review.gradedAt && schedule && Number(schedule.due) <= Date.now()) {
+        const history = [...(review.history || [])];
+        if (review.committed) history.push({
+          response: review.response || '',
+          confidence: review.confidence || '',
+          attemptedAt: review.attemptedAt || null,
+          revealedAt: review.revealedAt || null,
+          rating: review.rating || null,
+          gradedAt: review.gradedAt || null
+        });
+        place.review = {
+          history: history.slice(-12),
+          response: '',
+          confidence: '',
+          committed: false,
+          revealed: false,
+          rating: null,
+          gradedAt: null
+        };
+        review = place.review;
+        void flushSave();
+      }
       const shelf = this.lib.shelves.find(s => s.id === place.caseId);
       panel.append(
         el('div', { class: 'memory-route-overline', text: 'OPTIONAL LOCI MEMORY ROUTE' }),
@@ -732,18 +780,7 @@ export class Hub {
             type: 'button',
             text: 'Start another recall attempt',
             onclick: async () => {
-              const current = place.review || {};
-              const history = [...(current.history || [])];
-              if (current.committed) history.push({
-                response: current.response || '',
-                confidence: current.confidence || '',
-                attemptedAt: current.attemptedAt || null,
-                revealedAt: current.revealedAt || null,
-                rating: current.rating || null,
-                gradedAt: current.gradedAt || null
-              });
-              place.review = { history: history.slice(-12), response: '', confidence: '', committed: false, revealed: false, rating: null, gradedAt: null };
-              await flushSave();
+              await startFreshAttempt(place);
               render();
             }
           }));
