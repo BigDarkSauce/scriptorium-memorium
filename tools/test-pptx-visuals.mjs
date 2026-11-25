@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { pptxSlideAssets, pptxChartSummary, pptxDiagramSummary, resolvePptTarget } from '../js/ai/pptx.js';
+import { pptxSlideAssets, pptxChartSummary, pptxChartData, pptxDiagramSummary, pptxDiagramData, resolvePptTarget } from '../js/ai/pptx.js';
 import { sectionList, figureList, chapterPrompt } from '../js/ai/prompts.js';
 import { sourcePointLabel, sourcePointsLabel, sourceRangeLabel } from '../js/room/source-label.js';
 
@@ -35,6 +35,13 @@ const chart = `<c:chartSpace xmlns:c="c" xmlns:a="a"><c:chart><c:title><c:tx><c:
   <c:cat><c:strRef><c:strCache><c:pt idx="0"><c:v>Control</c:v></c:pt><c:pt idx="1"><c:v>Fertiliser</c:v></c:pt></c:strCache></c:cat>
   <c:val><c:numRef><c:numCache><c:pt idx="0"><c:v>3.2</c:v></c:pt><c:pt idx="1"><c:v>4.8</c:v></c:pt></c:numCache></c:val>
 </c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>`;
+const chartData = pptxChartData(chart);
+assert.equal(chartData.chartKind, 'bar');
+assert.equal(chartData.series[0].name, 'Grain yield');
+assert.deepEqual(chartData.series[0].categories, ['Control', 'Fertiliser']);
+assert.deepEqual(chartData.series[0].points.map(p => [p.category, p.rawValue, p.value]), [['Control', '3.2', 3.2], ['Fertiliser', '4.8', 4.8]]);
+assert.equal(chartData.hasCachedValues, true);
+assert.ok(chartData.limitations.some(x => /workbook is not recalculated/.test(x)));
 const chartSummary = pptxChartSummary(chart);
 assert.match(chartSummary, /Yield by treatment/);
 assert.match(chartSummary, /Grain yield/);
@@ -45,6 +52,10 @@ const diagram = `<dgm:dataModel xmlns:dgm="d" xmlns:a="a"><dgm:ptLst>
   <dgm:pt modelId="node-1" type="node"><dgm:sp><a:t>Stimulus</a:t></dgm:sp></dgm:pt>
   <dgm:pt modelId="node-2" type="node"><dgm:sp><a:t>Response</a:t></dgm:sp></dgm:pt>
 </dgm:ptLst><dgm:cxnLst><dgm:cxn modelId="edge-1" type="parOf" srcId="node-1" destId="node-2"/></dgm:cxnLst></dgm:dataModel>`;
+const diagramData = pptxDiagramData(diagram, 'Feedback cycle');
+assert.equal(diagramData.nodes.length, 2);
+assert.deepEqual(diagramData.links[0], { id: 'edge-1', from: 'node-1', to: 'node-2', type: 'parOf' });
+assert.ok(diagramData.limitations.some(x => /not automatically/.test(x)));
 const diagramSummary = pptxDiagramSummary(diagram, 'Feedback cycle');
 assert.match(diagramSummary, /Stimulus/);
 assert.match(diagramSummary, /Response/);
@@ -69,4 +80,4 @@ assert.equal(sourcePointsLabel([2, 4], 'pptx'), 'slides 2, 4');
 assert.equal(sourcePointLabel({ page: 4 }, 'pdf'), 'p. 4');
 
 
-console.log('PASS  PowerPoint visual relationships resolve in slide order; linked/unused images are excluded; chart values, SmartArt edges and slide provenance are recoverable');
+console.log('PASS  PowerPoint visual relationships resolve in slide order; linked/unused images are excluded; structured chart caches, SmartArt nodes/edges and slide provenance are recoverable');

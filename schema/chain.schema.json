@@ -764,6 +764,170 @@
                     }
                   },
                   "description": "Image-to-attachment ordering and source provenance for the vision request; contains metadata only, never image bytes."
+                },
+                "sourceVisualRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "kind",
+                      "slide",
+                      "stepIds"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "caption": {
+                        "type": "string"
+                      },
+                      "slide": {
+                        "type": "integer"
+                      },
+                      "mediaPath": {
+                        "type": "string"
+                      },
+                      "sourceSectionId": {
+                        "type": "string"
+                      },
+                      "sourceSectionTitle": {
+                        "type": "string"
+                      },
+                      "stepIds": {
+                        "type": "array",
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "linkBasis": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "visualReconstructionBrief": {
+                  "type": "object",
+                  "properties": {
+                    "conceptNodeId": {
+                      "type": "string"
+                    },
+                    "sourceStepIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sourceSlides": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "structuredVisuals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "slide",
+                          "stepIds"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "caption": {
+                            "type": "string"
+                          },
+                          "slide": {
+                            "type": "integer"
+                          },
+                          "mediaPath": {
+                            "type": "string"
+                          },
+                          "sourceSectionId": {
+                            "type": "string"
+                          },
+                          "sourceSectionTitle": {
+                            "type": "string"
+                          },
+                          "stepIds": {
+                            "type": "array",
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "linkBasis": {
+                            "type": "string"
+                          },
+                          "data": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    },
+                    "rasterFigures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "unresolvedFigureIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sourceTables": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "sourceEquations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "sourceActors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stepDependencies": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "reconstructionRules": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               },
               "description": "a 2D diagram, a built-in 3D model, or a scene (full spec or {type:'scene',request} to be authored later)"

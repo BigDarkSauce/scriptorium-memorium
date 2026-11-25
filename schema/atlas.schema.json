@@ -128,6 +128,14 @@
                     "type": "string"
                   },
                   "description": "Exact source figure IDs explicitly linked to this concept's validated steps; empty when no source visual is used."
+                },
+                "sourceVisualIds": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Exact structured chart/SmartArt source visual IDs from a slide mapped to validated steps in this concept."
                 }
               }
             }
@@ -417,6 +425,64 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "visualIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "visualRecords": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "kind",
+                    "slide",
+                    "stepIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "caption": {
+                      "type": "string"
+                    },
+                    "slide": {
+                      "type": "integer"
+                    },
+                    "mediaPath": {
+                      "type": "string"
+                    },
+                    "sourceSectionId": {
+                      "type": "string"
+                    },
+                    "sourceSectionTitle": {
+                      "type": "string"
+                    },
+                    "stepIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "linkBasis": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                }
               }
             }
           },
@@ -577,6 +643,57 @@
             "records": {
               "type": "array",
               "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "sourceVisualIndex": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "slide",
+              "stepIds"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "caption": {
+                "type": "string"
+              },
+              "slide": {
+                "type": "integer"
+              },
+              "mediaPath": {
+                "type": "string"
+              },
+              "sourceSectionId": {
+                "type": "string"
+              },
+              "sourceSectionTitle": {
+                "type": "string"
+              },
+              "stepIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "linkBasis": {
+                "type": "string"
+              },
+              "data": {
                 "type": "object"
               }
             }

@@ -5,12 +5,22 @@ import assert from 'node:assert/strict';
 // The atlas module imports the configured provider router. Its module-level environment probe
 // expects a browser window, but these tests exercise only pure atlas functions and never call a provider.
 globalThis.window = globalThis.window || {};
-const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, compileAtlas } = await import('../js/ai/atlas.js');
+const { atlasPrompt, validateAtlas, sourceFigureEvidence, selectSourceFigureAttachments, sourceFigureAttachmentManifest, sourceVisualEvidence, buildVisualReconstructionBrief, compileAtlas } = await import('../js/ai/atlas.js');
 
 const steps = [
-  { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [2] },
-  { id: 'S2', bodies: ['membrane', 'channel'], section: '1.1', pages: [3], figureRefs: [{ id: 'F1' }] }
+  { id: 'S1', bodies: ['membrane', 'solute'], section: '1.1', pages: [3], table: { caption: 'Transport conditions', columns: ['Condition', 'Flux'], rows: [['A', '2.1'], ['B', '3.4']] } },
+  { id: 'S2', bodies: ['membrane', 'channel'], section: '1.1', pages: [3], figureRefs: [{ id: 'F1' }], math: 'J = P(C1 - C2)', derivation: [{ expr: 'J = PΔC', why: 'The source relation' }], from: ['S1'] }
 ];
+const sourceSections = [{
+  id: '1.1', title: 'Membrane transport', startPage: 3, endPage: 3, sourceSlide: 3,
+  sourceVisuals: [{
+    id: 'pptx-chart-s3-1', kind: 'chart', label: 'Transport rates', slide: 3, mediaPath: 'ppt/charts/chart1.xml',
+    data: { title: 'Transport rates', chartKind: 'bar', series: [{ name: 'Flux', categories: ['A', 'B'], values: ['2.1', '3.4'], points: [{ index: 0, category: 'A', rawValue: '2.1', value: 2.1 }, { index: 1, category: 'B', rawValue: '3.4', value: 3.4 }] }] }
+  }, {
+    id: 'pptx-smartart-s3-1', kind: 'smartart', label: 'Transport cycle', slide: 3, mediaPath: 'ppt/diagrams/data1.xml',
+    data: { title: 'Transport cycle', nodes: [{ id: 'n1', label: 'Stimulus' }, { id: 'n2', label: 'Response' }], links: [{ id: 'e1', from: 'n1', to: 'n2', type: 'parOf' }] }
+  }]
+}];
 const sourceFigures = [{
   id: 'F1', label: 'Membrane transport diagram', kind: 'figure',
   caption: 'A labelled membrane channel and its direction of transport.',
@@ -39,7 +49,8 @@ const makeAtlas = () => ({
       mustShow: ['membrane', 'channel', 'solute'],
       manipulations: ['channel availability'],
       medium: '2d',
-      sourceFigureIds: ['F1']
+      sourceFigureIds: ['F1'],
+      sourceVisualIds: ['pptx-chart-s3-1']
     }],
     position: { x: 50, y: 50 },
     challenges: [{
@@ -66,7 +77,7 @@ const makeAtlas = () => ({
 
 const valid = makeAtlas();
 assert.equal(validateAtlas(valid, ['S1', 'S2'], steps), null, 'a complete source-mapped atlas should pass');
-assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true, sourceFigures, true), null, 'new atlas views may cite only a source figure linked to their own steps');
+assert.equal(validateAtlas(valid, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), null, 'new atlas views may cite only extracted figures and structured visuals linked to their concept steps');
 
 const figureEvidence = sourceFigureEvidence(['S1', 'S2'], steps, sourceFigures);
 assert.deepEqual(figureEvidence.figures.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page, slide: f.slide })), [
@@ -88,6 +99,29 @@ assert.deepEqual(attachmentManifest, [{
 }], 'the image manifest must preserve the exact attachment order and source location');
 assert.equal(Object.hasOwn(attachmentManifest[0], 'dataUrl'), false, 'manifest metadata must not duplicate image bytes into saved JSON');
 
+const visualEvidence = sourceVisualEvidence(['S1', 'S2'], steps, sourceSections);
+assert.deepEqual(visualEvidence.slides, ['3']);
+assert.deepEqual(visualEvidence.visuals.map(v => ({ id: v.id, kind: v.kind, stepIds: v.stepIds, slide: v.slide })), [
+  { id: 'pptx-chart-s3-1', kind: 'chart', stepIds: ['S1', 'S2'], slide: 3 },
+  { id: 'pptx-smartart-s3-1', kind: 'smartart', stepIds: ['S1', 'S2'], slide: 3 }
+], 'structured chart and SmartArt records must retain exact slide and source-step links');
+const unrelatedVisuals = sourceVisualEvidence(['S1'], [
+  { id: 'S1', section: '1.2', pages: [4] }
+], sourceSections);
+assert.deepEqual(unrelatedVisuals.visuals, [], 'a visual from another slide/section must not leak into the concept');
+const reconstruction = buildVisualReconstructionBrief(valid.nodes[0], steps, sourceSections, sourceFigures);
+assert.equal(reconstruction.structuredVisuals[0].data.series[0].points[1].value, 3.4, 'the reconstruction brief must preserve the chart cache value');
+assert.deepEqual(reconstruction.structuredVisuals[1].data.links[0], { id: 'e1', from: 'n1', to: 'n2', type: 'parOf' }, 'the brief must preserve SmartArt edge identity');
+assert.deepEqual(reconstruction.sourceTables[0].rows, [['A', '2.1'], ['B', '3.4']], 'source table cells must be copied exactly');
+assert.equal(reconstruction.sourceEquations[0].expression, 'J = P(C1 - C2)');
+assert.deepEqual(reconstruction.stepDependencies, [{ stepId: 'S2', dependsOnStepIds: ['S1'] }]);
+assert.ok(reconstruction.reconstructionRules.some(rule => /Do not infer physical scale/.test(rule)));
+
+const invalidVisual = makeAtlas();
+invalidVisual.nodes[0].dioramaSet[0].sourceVisualIds = ['pptx-chart-s8-1'];
+assert.match(validateAtlas(invalidVisual, ['S1', 'S2'], steps, true, sourceFigures, true, sourceSections), /unknown or unlinked structured source visual/);
+
+
 const inventedFigure = makeAtlas();
 inventedFigure.nodes[0].dioramaSet[0].sourceFigureIds = ['F9'];
 assert.match(validateAtlas(inventedFigure, ['S1', 'S2'], steps, true, sourceFigures, true), /unknown or unlinked source figure/);
@@ -101,9 +135,13 @@ assert.match(validateAtlas(missingFigureField, ['S1', 'S2'], steps, true, source
 const deterministicAtlas = await compileAtlas({
   book: 'Test source', sourceType: 'pptx', part: 'Transport',
   analysis: { question: 'How is transport controlled?', chain: steps.map(st => ({ ...st, title: st.id, statement: st.id, answers: 'A', opens: 'B', explain: [] })) },
-  sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }],
+  sections: sourceSections,
   figures: sourceFigures, auto: false
 });
+assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.visualRecords.map(v => ({ id: v.id, stepIds: v.stepIds, slide: v.slide })), [
+  { id: 'pptx-chart-s3-1', stepIds: ['S1', 'S2'], slide: 3 },
+  { id: 'pptx-smartart-s3-1', stepIds: ['S1', 'S2'], slide: 3 }
+], 'the deterministic fallback atlas must preserve structured visual evidence');
 assert.deepEqual(deterministicAtlas.nodes[0].sourceRefs.figureRecords.map(f => ({ id: f.id, stepIds: f.stepIds, page: f.page, slide: f.slide })), [
   { id: 'F1', stepIds: ['S2'], page: 3, slide: 3 }
 ], 'the deterministic fallback must preserve figure-to-step provenance');
@@ -242,13 +280,16 @@ const prompt = atlasPrompt({
   book: 'Test source',
   part: 'Transport',
   analysis: { chain: steps.map(st => ({ ...st, title: st.id, statement: st.id, answers: 'A', opens: 'B', explain: [] })) },
-  sections: [{ id: '1.1', title: 'Transport', level: 1, startPage: 2, endPage: 3, text: 'Source-grounded transport description.' }],
+  sections: sourceSections,
   figures: sourceFigures
 });
 assert.match(prompt, /reasoning array of 2–5 short, ordered reveal units/);
 assert.match(prompt, /sourceStepIds/);
 assert.match(prompt, /SOURCE FIGURE INDEX/);
 assert.match(prompt, /sourceFigureIds/);
+assert.match(prompt, /sourceVisualIds/);
+assert.match(prompt, /STRUCTURED SOURCE VISUAL INDEX/);
+assert.match(prompt, /pptx-chart-s3-1/);
 assert.match(prompt, /F1/);
 assert.match(prompt, /each UNFOLD action exposes exactly one next unit/);
 assert.match(prompt, /Never use an UNFOLD action to advance to another challenge/);

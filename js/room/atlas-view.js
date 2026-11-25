@@ -750,6 +750,24 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         class: 'atlas-audit-warning',
         text: 'Referenced but not present in the extracted figure index: ' + node.sourceRefs.unresolvedFigureIds.join(', ')
       })] : []),
+      ...((node.sourceRefs?.visualRecords || []).map(v => el('details', {
+        class: 'atlas-source-visual'
+      }, [
+        el('summary', { text: (v.kind || 'visual') + ' · ' + (v.label || v.id) + ' · ' + v.id }),
+        el('p', { class: 'atlas-audit-line', text: 'Slide ' + v.slide + ' · linked steps ' + ((v.stepIds || []).join(', ')) + ' · ' + (v.linkBasis || 'source location') }),
+        ...(v.data && Array.isArray(v.data.series) ? v.data.series.slice(0, 8).map(series => el('p', {
+          class: 'atlas-audit-line',
+          text: (series.name || 'Series') + ': ' + ((series.points || []).slice(0, 24).map(point => (point.category == null ? '#' + (point.index + 1) : point.category) + ' = ' + point.rawValue).join('; ') || 'no cached values')
+        })) : []),
+        ...(v.data && Array.isArray(v.data.nodes) ? [el('p', {
+          class: 'atlas-audit-line',
+          text: 'Nodes: ' + v.data.nodes.slice(0, 30).map(n => (n.id ? n.id + ': ' : '') + n.label).join(' · ')
+        })] : []),
+        ...(v.data && Array.isArray(v.data.links) ? [el('p', {
+          class: 'atlas-audit-line',
+          text: 'Connections: ' + v.data.links.slice(0, 30).map(link => link.from + ' → ' + link.to + (link.type ? ' (' + link.type + ')' : '')).join('; ')
+        })] : [])
+      ]))),
       ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', {
         class: 'atlas-source-step',
         open: String(st.stepId) === selectedSourceStepId

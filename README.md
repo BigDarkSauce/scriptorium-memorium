@@ -52,6 +52,12 @@ The source parser has two complementary checks:
 
 The browser fixture does not call an AI provider or incur API charges. It verifies ingestion mechanics, not the scientific accuracy of a model's later interpretation.
 
+## Source-structured visual reconstruction
+
+The PowerPoint parser retains chart series, category labels, cached raw/numeric values, chart kind, and SmartArt node IDs and directed connections as structured data rather than flattening everything into prose. Concept links are established by exact slide location and labelled as locators, not semantic proof. The atlas builds a deterministic reconstruction brief from those records plus source tables, equations, derivations, actor IDs and step dependencies. Diorama authoring receives this brief and explicit fidelity rules: preserve exact values/IDs, do not interpolate missing chart points, do not infer units or physical scale from raster figures, and do not treat SmartArt edges as causal mechanisms by themselves.
+
+Run `node tools/test-pptx-visuals.mjs` for structured Open XML chart/SmartArt tests, `node tools/test-atlas.mjs` for source-step linking and reconstruction-brief checks, and `node tools/test-pptx-browser.mjs http://localhost:8000/` for the production browser ZIP-ingestion path.
+
 ## Evidence-linked visual compilation
 
 Concept-level diorama plans may cite only figure IDs that are present in the extracted source index and explicitly referenced by one of that concept's validated steps. The atlas records each figure's caption, page or slide, package media path and linked step IDs. The grouped authoring and model-audit calls receive only those linked image assets, subject to the configured image budget. An ordered image manifest maps each request attachment to its figure ID, caption, page/slide and source-step IDs. Unindexed references are recorded as unresolved and never attached as evidence.

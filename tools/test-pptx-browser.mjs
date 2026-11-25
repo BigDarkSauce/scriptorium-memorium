@@ -86,6 +86,7 @@ try {
       pages: parsed.pages,
       slideTitles: part.subsections.map(x => x.title),
       slideTexts: part.subsections.map(x => x.text),
+      sourceVisuals: part.subsections.map(x => x.sourceVisuals || []),
       sectionText: sections.text,
       figures: extracted.map(x => ({ id: x.id, label: x.label, caption: x.caption, slide: x.slide, page: x.page, mediaPath: x.mediaPath, dataUrlPrefix: x.dataUrl.slice(0, 24) })),
       figureMeta: (await import('/js/ai/ingest.js')).figureMeta(extracted)
@@ -96,6 +97,13 @@ try {
   assert.deepEqual(result.slideTitles, ['Leaf anatomy', 'Stomatal control'], 'slide order must follow presentation.xml relationships, not filename order');
   assert.match(result.slideTexts[0], /vascular bundle transports water and sugars/i);
   assert.match(result.slideTexts[0], /Instructor note: compare xylem and phloem/i);
+  assert.equal(result.sourceVisuals[0].length, 2, 'the slide parser must retain its structured chart and SmartArt records');
+  const chartVisual = result.sourceVisuals[0].find(v => v.kind === 'chart');
+  assert.equal(chartVisual.id, 'pptx-chart-s1-1');
+  assert.deepEqual(chartVisual.data.series[0].points.map(p => [p.category, p.rawValue, p.value]), [['Control', '3.2', 3.2], ['Fertiliser', '4.8', 4.8]]);
+  const smartArtVisual = result.sourceVisuals[0].find(v => v.kind === 'smartart');
+  assert.equal(smartArtVisual.data.nodes[0].id, 'n1');
+  assert.deepEqual(smartArtVisual.data.links[0], { id: 'e1', from: 'n1', to: 'n2', type: 'parOf' });
   assert.match(result.slideTexts[0], /Yield by treatment/);
   assert.match(result.slideTexts[0], /Control = 3.2/);
   assert.match(result.slideTexts[0], /Fertiliser = 4.8/);
