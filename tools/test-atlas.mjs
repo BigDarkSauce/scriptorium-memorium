@@ -147,3 +147,6 @@ assert.match(prompt, /each UNFOLD action exposes exactly one next unit/);
 assert.match(prompt, /Never use an UNFOLD action to advance to another challenge/);
 
 console.log('PASS  atlas coverage, source-mapped progressive challenges, legacy compatibility and unique loci anchors');
+// The imported provider modules are browser-first and may leave browser lifecycle work queued; this pure unit
+// suite has completed all synchronous assertions at this point, so do not keep the CI runner alive for those handles.
+process.exit(0);
