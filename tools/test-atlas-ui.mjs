@@ -54,12 +54,13 @@ try {
       nodes: [{
         id: 'test-node', title: 'Test concept', question: 'How does this system behave?',
         summary: 'A two-branch test of source-grounded reasoning.',
-        stepIds: ['S1', 'S2'],
+        stepIds: ['S1', 'S2', 'S3'],
         sourceRefs: {
-          stepIds: ['S1', 'S2'], subsectionIds: ['1.1'],
+          stepIds: ['S1', 'S2', 'S3'], subsectionIds: ['1.1'],
           stepSummaries: [
             { stepId: 'S1', title: 'Membrane boundary', statement: 'The membrane separates two regions.', pages: [2] },
-            { stepId: 'S2', title: 'Flux relation', statement: 'The rate depends on the stated gradient and permeability.', pages: [3] }
+            { stepId: 'S2', title: 'Flux relation', statement: 'The rate depends on the stated gradient and permeability.', pages: [3] },
+            { stepId: 'S3', title: 'Supplemental observation', statement: 'An additional note has no subsection mapping.', pages: [4] }
           ]
         },
         knowledgeKinds: ['causal'],
@@ -93,6 +94,11 @@ try {
             id: 'S2', section: '1.1', kind: 'equation', title: 'Flux relation',
             statement: 'The rate of movement depends on the stated gradient and permeability.',
             math: 'J = P (C1 - C2)', figureRefs: [{ id: 'F1' }], pages: [3]
+          },
+          {
+            id: 'S3', kind: 'note', title: 'Supplemental observation',
+            statement: 'An additional note has no subsection mapping.',
+            pages: [4]
           }
         ]
       }
@@ -127,16 +133,21 @@ try {
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
 
   const sourceScan = page.locator('.atlas-source-scan');
-  await sourceScan.locator('summary').click({ force: true });
+  await sourceScan.locator('.atlas-scan-summary').click({ force: true });
   assert.equal(await sourceScan.evaluate(el => el.open), true, 'the native source-scan disclosure must open');
   assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
   const sectionBrowse = sourceScan.locator('.atlas-scan-section').first();
   assert.match(await sectionBrowse.innerText(), /Membrane transport.*2 source steps/s);
-  await sectionBrowse.locator('summary').click({ force: true });
+  await sectionBrowse.locator('.atlas-scan-section-summary').click({ force: true });
   assert.equal(await sectionBrowse.evaluate(el => el.open), true, 'each subsection should expand independently');
   assert.equal(await sectionBrowse.locator('.atlas-scan-section-steps .atlas-scan-row').count(), 2, 'expanded subsections must expose their source-step inventory');
   assert.match(await sectionBrowse.innerText(), /S1.*Membrane boundary/i);
   assert.match(await sectionBrowse.innerText(), /S2.*Flux relation/i);
+  assert.equal(await sourceScan.locator('.atlas-scan-section').count(), 2, 'unsectioned source steps must have an explicit inventory group');
+  const unmappedBrowse = sourceScan.locator('.atlas-scan-section').nth(1);
+  assert.match(await unmappedBrowse.locator('.atlas-scan-section-summary').innerText(), /Unmapped \/ unsectioned source steps.*1 source steps/i);
+  await unmappedBrowse.locator('.atlas-scan-section-summary').click({ force: true });
+  assert.match(await unmappedBrowse.innerText(), /S3.*Supplemental observation.*p\. 4/i);
   const scanSearch = sourceScan.locator('.atlas-scan-search');
   assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
   const suggestionValues = await page.locator('#atlas-source-suggestions-test-node option').evaluateAll(options => options.map(option => option.value));
@@ -155,6 +166,11 @@ try {
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /equation \/ derivation/i);
   await sourceScan.locator('.atlas-scan-row').first().click();
   assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S2.*Flux relation/i, 'a second search must jump to its exact source step');
+  await scanSearch.fill('Supplemental observation');
+  assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'unsectioned steps must remain searchable');
+  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S3.*page not indexed|S3.*p\. 4/i);
+  await sourceScan.locator('.atlas-scan-row').first().click();
+  assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S3.*Supplemental observation/i);
   await scanSearch.fill('a diagram showing a selective boundary');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'figure captions must be searchable through their linked source step');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S2.*p\. 3/i);
