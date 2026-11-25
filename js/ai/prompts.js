@@ -127,7 +127,8 @@ RULES: choose each technique by the kind of knowledge (structure → explode; in
 export function planPrompt(req, context = '') {
   return `Plan a 3D explanatory demo BEFORE it is built (no scene yet: only the plan).
 WHAT IT MUST SHOW: ${req.request || req.title}
-${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\\n' : ''}${context ? 'CONTEXT: ' + context + '\\n' : ''}${req.issues ? 'FIX THESE PROBLEMS OF THE LAST PLAN: ' + req.issues + '\\n' : ''}SOURCE STEP IDS (the only permitted evidence IDs): ${JSON.stringify(req.sourceStepIds || [])}\\n${PLAN_FORMAT}\\n${MODEL_CONTRACT_FORMAT}\\nReturn ONLY the JSON plan with version=\"scriptorium-model-plan/1\".`
+${req.purpose ? 'THE QUESTION IT MUST ANSWER: ' + req.purpose + '\n' : ''}${context ? 'CONTEXT: ' + context + '\n' : ''}${req.issues ? 'FIX THESE PROBLEMS OF THE LAST PLAN: ' + req.issues + '\n' : ''}SOURCE STEP IDS (the only permitted evidence IDs): ${JSON.stringify(req.sourceStepIds || [])}\n${PLAN_FORMAT}\n${MODEL_CONTRACT_FORMAT}\nReturn ONLY the JSON plan with version="scriptorium-model-plan/1".`;
+}
 // the self-critique: can someone explain the concept after watching? (weighed above attractiveness); a short answer that only
 // patches lesson texts, never the scene
 export function critiquePrompt(plan, spec) {
