@@ -12,8 +12,8 @@ const clean = (x, n = 500) => String(x == null ? '' : x).replace(/\s+/g, ' ').tr
 const unique = xs => [...new Set((xs || []).filter(x => x != null).map(String))];
 const isScene = d => !!(d && (d.type === 'scene' || Array.isArray(d.bodies) || (typeof d.type === 'string' && d.type !== 'figure')));
 
-export function atlasPrompt({ book, part, analysis, sections = [] }) {
-  const sourceUnit = book && book.sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
+export function atlasPrompt({ book, sourceType = 'pdf', part, analysis, sections = [] }) {
+  const sourceUnit = sourceType === 'pptx' ? 'presentation slide source units' : 'PDF subsections';
   const S = (analysis.chain || []).map(st => ({
     id: st.id, kind: st.kind, title: st.title, statement: st.statement,
     question: st.answers, opens: st.opens, section: st.section,
@@ -127,14 +127,14 @@ function sourceIndex(analysis, sections, figures) {
   };
 }
 
-export async function compileAtlas({ book, part, analysis, sections = [], figures = [], onStatus, signal, auto = true, researchAudit = [] } = {}) {
+export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, sections = [], figures = [], onStatus, signal, auto = true, researchAudit = [] } = {}) {
   const ids = (analysis.chain || []).map(st => String(st.id));
   if (!ids.length) throw new Error('Cannot compile a concept atlas without validated chain steps');
   let authored = null, failure = null;
   if (auto) {
     try {
       onStatus && onStatus('Mapping the chapter’s concepts and dependencies…');
-      const prompt = atlasPrompt({ book, part, analysis, sections });
+      const prompt = atlasPrompt({ book, sourceType, part, analysis, sections });
       const response = await askJSON(prompt, {
         role: 'director', signal, fresh: true,
         onStatus, manualTitle: 'Build this chapter concept atlas',
@@ -207,7 +207,7 @@ export async function compileAtlas({ book, part, analysis, sections = [], figure
     };
   });
   const index = sourceIndex(analysis, sections, figures);
-  index.sourceType = book && book.sourceType === 'pptx' ? 'pptx' : 'pdf';
+  index.sourceType = sourceType === 'pptx' ? 'pptx' : 'pdf';
   index.sourceUnit = index.sourceType === 'pptx' ? 'slide' : 'page';
   // One research record per actual API call. The pipeline's in-memory audit also sees calls that happened
   // before the atlas stage; use it preferentially to avoid double-counting the first chain response.
