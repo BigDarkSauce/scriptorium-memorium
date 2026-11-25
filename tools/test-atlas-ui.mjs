@@ -248,7 +248,36 @@ try {
   assert.ok(firstSourceTrailStep.includes('S1') && firstSourceTrailStep.includes('Membrane boundary'), 'the exact selected source step must expand in the source trail');
   assert.match(await page.locator('.atlas-source-trail').innerText(), /Membrane permeability diagram.*F1.*p\. 3.*S2/i, 'the concept trail must expose the exact indexed source figure, page and linked step');
   const sourceVisualDisclosure = page.locator('.atlas-source-visual');
-  await sourceVisualDisclosure.locator('summary').click();
+  const sourceVisualSummary = sourceVisualDisclosure.locator('summary');
+  // The source trail is near the bottom of a long concept detail panel. Scroll its
+  // native disclosure into the nested reader viewport before attempting a real
+  // pointer click; this avoids depending on Playwright's implicit scroll choice.
+  await sourceVisualSummary.scrollIntoViewIfNeeded();
+  const sourceVisualGeometry = await sourceVisualSummary.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    const ancestors = [];
+    for (let parent = el.parentElement; parent && ancestors.length < 8; parent = parent.parentElement) {
+      const s = getComputedStyle(parent);
+      ancestors.push({
+        tag: parent.tagName.toLowerCase(),
+        className: typeof parent.className === 'string' ? parent.className : '',
+        display: s.display,
+        visibility: s.visibility,
+        open: parent.tagName === 'DETAILS' ? parent.open : undefined
+      });
+    }
+    return {
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      display: style.display,
+      visibility: style.visibility,
+      opacity: style.opacity,
+      ancestors
+    };
+  });
+  console.log('ATLAS_SOURCE_VISUAL_DISCLOSURE', JSON.stringify(sourceVisualGeometry));
+  assert.equal(await sourceVisualSummary.isVisible(), true, 'the indexed source-visual disclosure must be visible before interaction');
+  await sourceVisualSummary.click({ timeout: 15000 });
   assert.equal(await sourceVisualDisclosure.getAttribute('open'), '', 'the structured visual source record should expand on demand');
   assert.match(await sourceVisualDisclosure.innerText(), /Yield by treatment.*pptx-chart-s3-1.*Slide 3.*S2.*Grain yield: Control = 3\\.2; Fertiliser = 4\\.8/is, 'the expanded concept source trail must reveal structured chart values and their linked source slide');
   const visualTabs = page.locator('.atlas-visual-path-tab');
