@@ -218,6 +218,12 @@ export async function compileAtlas({ book, sourceType = 'pdf', part, analysis, s
           return sec ? { subsectionId: String(id), startPage: Number(sec.startPage), endPage: Number(sec.endPage) } : null;
         }).filter(Boolean),
         figureIds: unique(refs.flatMap(st => st.figures || [])),
+        stepSummaries: refs.map(st => ({
+          stepId: String(st.id), title: clean(st.title, 120), statement: clean(st.statement, 900),
+          answers: clean(st.answers, 260), opens: clean(st.opens, 260),
+          pages: unique([...(st.pages || []), ...(bySection.get(String(st.section)) ? [bySection.get(String(st.section)).startPage, bySection.get(String(st.section)).endPage] : [])].filter(Number.isFinite)).map(Number),
+          figureIds: unique(st.figures || [])
+        })),
         externalSources: refs.flatMap(st => (st.sources || []).map(s => ({ title: s.title || '', doi: s.doi || '', url: s.url || '' })))
       }
     };
