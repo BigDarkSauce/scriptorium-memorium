@@ -77,6 +77,8 @@ try {
   await page.locator('.atlas-confidence').selectOption('High');
   await page.getByRole('button', { name: 'Commit prediction' }).click();
   await page.getByRole('button', { name: 'Reveal answer and begin unfolding' }).click();
+  assert.equal(await page.locator('.atlas-prediction').isDisabled(), true, 'a committed prediction must lock after the answer is shown');
+  assert.equal(await page.locator('.atlas-confidence').isDisabled(), true, 'confidence must remain the pre-reveal confidence');
 
   const next = page.locator('.atlas-unfold-next');
   assert.equal(await page.locator('.atlas-reasoning-unit').count(), 0, 'the explanation must remain hidden until UNFOLD');
@@ -96,24 +98,35 @@ try {
   await branches.nth(1).click();
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /component is removed/i);
   assert.equal(await page.locator('.atlas-reasoning-unit').count(), 0, 'a new branch starts at its own first reveal state');
+  await page.locator('.atlas-prediction').fill('This is a saved draft for the second branch.');
+  await page.locator('.atlas-confidence').selectOption('Medium');
 
   await page.keyboard.press('ArrowLeft');
   assert.match(await page.locator('.atlas-challenge-card h4').innerText(), /mechanism/i);
   assert.equal(await page.locator('.atlas-reasoning-unit').count(), 1, 'arrow navigation must return to the previous branch and restore its saved reveal cursor');
 
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('.atlas-prediction').inputValue(), 'This is a saved draft for the second branch.', 'an uncommitted draft must survive switching branches');
+  assert.equal(await page.locator('.atlas-confidence').inputValue(), 'Medium', 'the confidence draft must survive branch switching');
+  await page.keyboard.press('ArrowLeft');
+
   const state = await page.evaluate(() => ({
     unfolded: window.__atlasUITest.atlas.attempts['branch-mechanism'].unfoldedCount,
     committed: window.__atlasUITest.atlas.attempts['branch-mechanism'].committed,
     revealed: window.__atlasUITest.atlas.attempts['branch-mechanism'].revealed,
+    draft: window.__atlasUITest.atlas.attempts['branch-counterfactual'].response,
+    draftConfidence: window.__atlasUITest.atlas.attempts['branch-counterfactual'].confidence,
     saves: window.__atlasUITest.getSaves()
   }));
   assert.equal(state.unfolded, 1);
   assert.equal(state.committed, true);
   assert.equal(state.revealed, true);
-  assert.ok(state.saves >= 4, 'prediction, answer and reveal movements should be saved');
+  assert.equal(state.draft, 'This is a saved draft for the second branch.');
+  assert.equal(state.draftConfidence, 'Medium');
+  assert.ok(state.saves >= 7, 'drafts, confidence, prediction, answer and reveal movements should be saved');
   assert.deepEqual(errors, [], 'the atlas interaction must not create browser errors');
 
-  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, source labels and per-branch persistence');
+  console.log('PASS  atlas UI: horizontal branches, arrow navigation, committed prediction, one-unit UNFOLD, Space, Ctrl+Z, draft preservation, locked predictions, source labels and per-branch persistence');
 } finally {
   await browser.close();
 }
