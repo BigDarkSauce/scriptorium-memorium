@@ -90,11 +90,16 @@
             "items": {
               "type": "object",
               "required": [
+                "viewId",
+                "order",
+                "stage",
                 "title",
                 "purpose",
                 "mustShow",
                 "manipulations",
-                "medium"
+                "medium",
+                "sourceFigureIds",
+                "sourceVisualIds"
               ],
               "properties": {
                 "title": {
