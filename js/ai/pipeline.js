@@ -56,8 +56,12 @@ export async function material(ctx, part, { onStatus } = {}) {
 }
 
 // ---------------------------------------------------------------- the stages
-async function ask(prompt, o, title) {
-  return askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated, fresh: !!(o.fresh || o.force), manualTitle: title });
+async function ask(prompt, o = {}, title) {
+  const answer = await askJSON(prompt, { tools: o.tools === false ? [] : evidenceTools(), signal: o.signal, images: o.images, onTool: (n, i) => o.onStatus && o.onStatus(`Looking it up in ${TOOLNAME[n] || n}: “${String((i && (i.query || i.condition)) || '').slice(0, 60)}”…`), onText: t => o.onStatus && o.onStatus((o.writing || 'Writing') + '… ' + t.length.toLocaleString() + ' characters'), onStatus: o.onStatus, role: o.role || 'worker', validate: o.validate, acceptTruncated: !!o.acceptTruncated, fresh: !!(o.fresh || o.force), manualTitle: title });
+  if (answer && answer._webResearch && Array.isArray(o.researchAudit)) {
+    o.researchAudit.push({ ...answer._webResearch, task: title || o.writing || 'AI authoring call' });
+  }
+  return answer;
 }
 // stage 1: one structured call for the whole part
 export async function writeChain(ctx, P, M, o) {
@@ -334,6 +338,8 @@ export async function analysePart(ctx, P, o = {}) {
   finally { BUSY.delete(key); J.end(ok ? 'Written: every stage done.' : J.signal.aborted ? 'Stopped: what was written is kept.' : 'Stopped by an error (the scroll says which).'); }
 }
 async function analyseOne(ctx, P, o) {
+  const researchAudit = [];
+  o = { ...o, researchAudit };
   const auto = o.auto != null ? o.auto : aiAvailable(), say = o.onStatus || (() => {}), stage = s => { P.job = { ...(P.job || {}), stage: s, level: o.level || (P.job && P.job.level) || 'complete', n: o.n || (P.job && P.job.n) || null, updated: Date.now() }; o.onStage && o.onStage(s); };
   const save = () => ctx.save && ctx.save(P);
   if (o.force) { delete P.analysis; P.job = null; }
@@ -350,13 +356,15 @@ async function analyseOne(ctx, P, o) {
   if (!done('dioramas')) { check(o.signal); if (o.dioramas !== false) await buildDioramas(ctx, P, M, { ...o, auto, onStatus: say }); stage('atlas'); save(); show(); }
   if (!P.analysis.atlas || !done('atlas')) {
     check(o.signal); stage('atlas');
-    P.analysis.atlas = await compileAtlas({ book: bookName(ctx), part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, onStatus: say });
+    P.analysis.atlas = await compileAtlas({ book: bookName(ctx), part: P.title, analysis: P.analysis, sections: M.sections || [], figures: M.figures || [], auto, signal: o.signal, researchAudit, onStatus: say });
     if (o.dioramas !== false && auto) await ensureAtlasDioramas(ctx, P, P.analysis.atlas, { ...o, onStatus: say });
     stage('done'); save(); show();
   }
   // the final gate result (figures, dioramas and semantic atlas now in place) is what the quality panel shows
   const G = qualityGate(P.analysis, M.sections || [], (M.figures || []).map(f => ({ id: f.id, label: f.label, page: f.page, bbox: f.bbox })));
-  P.analysis.qualityReport = { ...(P.analysis.qualityReport || {}), final: { ok: G.ok, issues: G.issues, stats: G.stats } }; save();
+  P.analysis.qualityReport = { ...(P.analysis.qualityReport || {}), final: { ok: G.ok, issues: G.issues, stats: G.stats } };
+  if (researchAudit.length) P.analysis.researchEvidenceCalls = [...(P.analysis.researchEvidenceCalls || []), ...researchAudit].slice(-120);
+  save();
   ctx.refresh && ctx.refresh(P);
   return P.analysis;
 }
