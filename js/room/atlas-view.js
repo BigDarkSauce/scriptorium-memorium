@@ -48,7 +48,7 @@ function svgText(text, x, y, cls, max = 27) {
   return el0;
 }
 
-export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssignMemoryPlace, onVisitMemoryRoute, onSave }) {
+export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssignMemoryPlace, onRemoveMemoryPlace, onVisitMemoryRoute, onSave }) {
   atlas.attempts = atlas.attempts || {};
   const root = el('section', { class: 'atlas-view' });
   const header = el('div', { class: 'atlas-intro' }, [
@@ -153,6 +153,12 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
           text: ownLocus ? 'Change this memory place' : 'Assign a memory place',
           onclick: () => onAssignMemoryPlace && onAssignMemoryPlace(node)
         }),
+        ownLocus ? el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: 'Remove memory place',
+          onclick: () => onRemoveMemoryPlace && onRemoveMemoryPlace(node)
+        }) : null,
         memoryPlaces.length ? el('button', {
           class: 'btn primary small',
           type: 'button',
