@@ -74,25 +74,42 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     if ((st.terms || []).length) tags.push('terms');
     return tags;
   };
+  const sourceFigureIndex = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.pdfFigureIndex) ? atlas.sourceIndex.pdfFigureIndex : [];
+  const sourceText = value => {
+    if (value == null) return '';
+    if (Array.isArray(value)) return value.map(sourceText).join(' ');
+    if (typeof value === 'object') return Object.values(value).map(sourceText).join(' ');
+    return String(value);
+  };
   const scanEntries = sourceSteps.map(st => {
     const section = sourceSections.find(s => String(s.id) === String(st.section));
+    const node = nodeForStep(st.id);
+    const figureIds = [
+      ...(st.figures || []).map(x => typeof x === 'string' ? x : x && x.id),
+      ...(st.figureRefs || []).map(x => x && x.id)
+    ].filter(Boolean).map(String);
+    const indexedFigures = sourceFigureIndex.filter(f => f && figureIds.includes(String(f.id)));
     const searchable = [
+      node && [node.title, node.question, node.summary, (node.knowledgeKinds || []).join(' ')].join(' '),
       st.id, st.kind, st.title, st.statement, st.math,
-      (st.derivation || []).map(x => x.expr || '').join(' '),
-      (st.terms || []).map(x => [x.term, x.meaning].join(' ')).join(' '),
-      (st.examples || []).map(x => [x.title, x.problem, x.answer].join(' ')).join(' '),
-      st.table && [st.table.caption, ...(st.table.columns || []), ...(st.table.rows || []).flat()].join(' '),
-      (st.figures || []).join(' '), (st.figureRefs || []).map(x => x && x.id).join(' '),
-      st.code && [st.code.lang, (st.code.lines || []).map(x => x.code).join(' ')].join(' '),
+      (st.derivation || []).map(x => x && x.expr || '').join(' '),
+      (st.terms || []).map(x => [x && x.term, x && x.meaning].join(' ')).join(' '),
+      (st.examples || []).map(x => [x && x.title, x && x.problem, x && x.answer].join(' ')).join(' '),
+      st.table && [st.table.caption, sourceText(st.table.columns), sourceText(st.table.rows)].join(' '),
+      sourceText(st.figures), sourceText(st.figureRefs),
+      indexedFigures.map(f => [f.id, f.label, f.caption].join(' ')).join(' '),
+      sourceText(st.sources),
+      st.code && [st.code.lang, sourceText(st.code.lines)].join(' '),
       section && section.title
     ].filter(Boolean).join(' ').toLowerCase();
     return {
       step: st,
-      node: nodeForStep(st.id),
+      node,
       section,
       tags: tagsForStep(st),
       pages: (st.pages || []).length ? st.pages : section ? [section.startPage, section.endPage].filter(Boolean) : [],
-      searchable
+      searchable,
+      figureIds
     };
   });
   const scan = el('details', { class: 'atlas-source-scan' });
@@ -111,10 +128,42 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     el('span', { class: 'atlas-section-label', text: 'QUICK SOURCE SCAN' }),
     el('span', { class: 'atlas-scan-count', text: scanSummary })
   ]);
+  // Native autocomplete options are copied only from the uploaded source index and validated chain.
+  // Suggestions are retrieval cues, not generated questions or hidden answers.
+  const suggestions = new Set();
+  const addSuggestion = value => {
+    const v = sourceText(value).replace(/\\s+/g, ' ').trim();
+    if (v.length >= 2 && v.length <= 160) suggestions.add(v);
+  };
+  sourceSteps.forEach(st => {
+    const n = nodeForStep(st.id);
+    addSuggestion(n && n.title);
+    addSuggestion(n && n.question);
+    addSuggestion(st.title);
+    addSuggestion(st.math);
+    (st.derivation || []).forEach(x => addSuggestion(x && x.expr));
+    (st.terms || []).forEach(x => addSuggestion(x && x.term));
+    (st.examples || []).forEach(x => addSuggestion(x && x.title));
+    if (st.table) {
+      addSuggestion(st.table.caption);
+      sourceText(st.table.columns).split(/\\s{2,}/).forEach(addSuggestion);
+    }
+    (st.figureRefs || []).forEach(x => addSuggestion(x && x.id));
+  });
+  sourceFigureIndex.forEach(f => {
+    addSuggestion(f && f.id);
+    addSuggestion(f && f.label);
+    addSuggestion(f && f.caption);
+  });
+  const suggestionId = 'atlas-source-suggestions-' + String(atlas.nodes && atlas.nodes[0] && atlas.nodes[0].id || 'chapter');
+  const suggestionList = el('datalist', { id: suggestionId },
+    [...suggestions].slice(0, 120).map(value => el('option', { value }))
+  );
   const scanInput = el('input', {
     class: 'atlas-scan-search',
     type: 'search',
-    placeholder: 'Search concepts, terms, equations, examples, tables, figures or code…',
+    list: suggestionId,
+    placeholder: 'Search or choose a source concept, term, equation, example or figure…',
     'aria-label': 'Search source steps'
   });
   const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
@@ -179,7 +228,7 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
   };
   scanInput.addEventListener('input', () => paintScan(scanInput.value));
   paintScan('');
-  scan.append(scanSummaryNode, scanInput, scanResults);
+  scan.append(scanSummaryNode, scanInput, suggestionList, scanResults);
   root.append(scan);
 
   const graphData = coordinates(atlas.nodes || []), svg = svgEl('svg', { class: 'atlas-svg', viewBox: '0 0 ' + graphData.width + ' ' + graphData.height, role: 'group', 'aria-label': 'Interactive concept mind map' });
