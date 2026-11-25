@@ -30,9 +30,18 @@ let RELAY = null; const relayP = (typeof location !== 'undefined' && /^(localhos
   ? fetch(location.pathname || '/', { method: 'HEAD', cache: 'no-store' }).then(r => (RELAY = !!r.headers.get('x-scriptorium-relay'))).catch(() => (RELAY = false)) : Promise.resolve(RELAY = false);   /* the launcher marks every answer (a probe of a missing path would log a 404 on a plain server) */
 export const netReady = () => relayP;
 export const via = () => inClaudeApp() ? 'bridge' : RELAY ? 'relay' : 'direct';
-const net = async (url, init) => { if (!inClaudeApp()) await relayP; return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init); };
+const net = async (url, init) => {
+  // The OpenAI adapter is same-origin and already performs its own credentialed server-side request.
+  if (String(url).startsWith('/__openai/')) return fetch(url, init);
+  if (!inClaudeApp()) await relayP;
+  return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init);
+};
 
 export const PROVIDERS = [
+  // Local OpenAI API adapter: the API key remains in OPENAI_API_KEY on the local Python server.
+  // No key or billable request is sent until that server is configured and the user starts an AI task.
+  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', fixed: ['gpt-6.2-astra'], local: true, json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
+
   // no key needed: work from the first minute (slow: small per-IP limits)
   { id: 'ovh', name: 'OVHcloud AI Endpoints', base: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', key: 'optional', keyUrl: 'https://endpoints.ai.cloud.ovh.net/', rpm: 2, rpd: 2000, perModel: true, note: 'No key: 2 requests a minute per model, from EU data centres.' },
   { id: 'llm7', name: 'LLM7.io', base: 'https://api.llm7.io/v1', key: 'optional', keyUrl: 'https://token.llm7.io/', rpm: 20, rpd: 250, anon: ['mistral-Nemo-Instruct-2407', 'default'], note: 'No key: two small models (Mistral Nemo, Codestral). A free token (100k tokens a day) opens gpt-oss and others.' },
@@ -69,15 +78,15 @@ export const rankOf = id => { for (const [re, s] of RANK) if (re.test(id)) retur
 const SKEY = 'sm-ai', UKEY = 'sm-ai-use';
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
-export const MODES = { claude: 'Claude directs', hybrid: 'Claude + free models', free: 'Free models only' };
+export const MODES = { claude: 'Claude directs', hybrid: 'Claude + free models', free: 'OpenAI preferred + fallback providers' };
 // chosen: the reader picked the engine in the AI panel; auto: the engine was set by autoMode (what is available here)
-export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'claude', chosen: !!s.chosen, auto: !!s.auto, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: s.on || {} }; }
+export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'free', chosen: !!s.chosen, auto: !!s.auto, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: { 'openai-local': true, ...(s.on || {}) } }; }
 // The default engine is the first one available here: Claude inside the Claude app, else the free models. A choice the
 // reader made is never changed: one made in the panel (chosen), or, from before this flag, any engine other than the old
 // default ('claude') that autoMode did not set itself.
 export function autoMode(claudeOK) {
   const S = settings(); if (S.chosen || (S.mode !== 'claude' && !S.auto)) return S.mode;
-  const want = claudeOK ? 'claude' : 'free'; if (S.mode !== want) saveSettings({ mode: want, auto: true }); return want;
+  const want = 'free'; if (S.mode !== want) saveSettings({ mode: want, auto: true }); return want;
 }
 export function saveSettings(patch, { quiet = false } = {}) { const s = { ...settings(), ...patch, at: Date.now() }; write(SKEY, s); persist(s); if (!quiet) listeners.forEach(f => { try { f(s); } catch (e) { } }); return s; }
 // Keys and choices survive every new version of the app: kept in this browser (localStorage), mirrored in its
