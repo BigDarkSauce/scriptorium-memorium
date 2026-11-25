@@ -71,7 +71,11 @@ try {
       }],
       edges: [],
       sourceIndex: {
-        sourceSubsections: [{ id: '1.1', title: 'Membrane transport', startPage: 2, endPage: 3 }]
+        sourceSubsections: [{ id: '1.1', title: 'Membrane transport', startPage: 2, endPage: 3 }],
+        pdfFigureIndex: [{
+          id: 'F1', label: 'Membrane permeability diagram', page: 3,
+          caption: 'A diagram showing a selective boundary and its transport route.'
+        }]
       },
       audit: { certainty: 'test atlas' }
     };
@@ -88,7 +92,7 @@ try {
           {
             id: 'S2', section: '1.1', kind: 'equation', title: 'Flux relation',
             statement: 'The rate of movement depends on the stated gradient and permeability.',
-            math: 'J = P (C1 - C2)', pages: [3]
+            math: 'J = P (C1 - C2)', figureRefs: [{ id: 'F1' }], pages: [3]
           }
         ]
       }
@@ -126,6 +130,12 @@ try {
   await sourceScan.locator('summary').click();
   assert.match(await sourceScan.innerText(), /Membrane transport/i, 'the default source scan must expose the extracted subsection');
   const scanSearch = sourceScan.locator('.atlas-scan-search');
+  assert.equal(await scanSearch.getAttribute('list'), 'atlas-source-suggestions-test-node', 'the scan input must expose its source-grounded autocomplete list');
+  const suggestionValues = await page.locator('#atlas-source-suggestions-test-node option').evaluateAll(options => options.map(option => option.value));
+  assert.ok(suggestionValues.includes('selective permeability'), 'autocomplete must include source terms');
+  assert.ok(suggestionValues.includes('J = P (C1 - C2)'), 'autocomplete must include source equations');
+  assert.ok(suggestionValues.includes('Membrane permeability diagram'), 'autocomplete must include indexed figure labels');
+  assert.ok(suggestionValues.includes('A diagram showing a selective boundary and its transport route.'), 'autocomplete must include source figure captions');
   await scanSearch.fill('selective permeability');
   assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'a term search must find its exact source step');
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S1.*p\. 2/i);
@@ -137,6 +147,9 @@ try {
   assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /equation \/ derivation/i);
   await sourceScan.locator('.atlas-scan-row').first().click();
   assert.match(await page.locator('.atlas-source-step[open]').innerText(), /S2.*Flux relation/i, 'a second search must jump to its exact source step');
+  await scanSearch.fill('a diagram showing a selective boundary');
+  assert.equal(await sourceScan.locator('.atlas-scan-row').count(), 1, 'figure captions must be searchable through their linked source step');
+  assert.match(await sourceScan.locator('.atlas-scan-row').first().innerText(), /S2.*p\. 3/i);
   assert.match(await page.locator('.atlas-memory-locus').innerText(), /brass key opening a narrow gate/i);
   await page.getByRole('button', { name: 'Change this memory place' }).click();
   await page.getByRole('button', { name: 'Remove memory place' }).click();
