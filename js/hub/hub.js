@@ -557,6 +557,7 @@ export class Hub {
     const stops = (atlas && atlas.memoryPlaces || []).filter(p => p && nodes.has(String(p.nodeId)));
     if (!stops.length) return null;
     let index = Math.max(0, stops.findIndex(p => String(p.nodeId) === String(initialNodeId)));
+    const preparedStops = new Set();
     const reviewDueLabel = schedule => {
       if (!schedule || !Number.isFinite(Number(schedule.due))) return 'Not scheduled';
       const days = Math.ceil((Number(schedule.due) - Date.now()) / 864e5);
@@ -607,29 +608,33 @@ export class Hub {
       const place = stops[index], node = nodes.get(String(place.nodeId));
       const schedule = reviewSchedules[String(node.id)] || null;
       let review = place.review || {};
-      // A due, already-revealed attempt must not leak its previous answer on re-entry,
-      // even if the learner left without self-rating it. Archive it and start a fresh recall prompt.
-      if (review.revealed && schedule && Number(schedule.due) <= Date.now()) {
-        const history = [...(review.history || [])];
-        if (review.committed) history.push({
-          response: review.response || '',
-          confidence: review.confidence || '',
-          attemptedAt: review.attemptedAt || null,
-          revealedAt: review.revealedAt || null,
-          rating: review.rating || null,
-          gradedAt: review.gradedAt || null
-        });
-        place.review = {
-          history: history.slice(-12),
-          response: '',
-          confidence: '',
-          committed: false,
-          revealed: false,
-          rating: null,
-          gradedAt: null
-        };
-        review = place.review;
-        void flushSave();
+      // Prepare an overdue stop only on its first entry in this route session. Do not
+      // clear the answer on the re-render immediately after a fresh reveal, before self-rating.
+      const reviewKey = String(node.id);
+      if (!preparedStops.has(reviewKey)) {
+        preparedStops.add(reviewKey);
+        if (review.revealed && schedule && Number(schedule.due) <= Date.now()) {
+          const history = [...(review.history || [])];
+          if (review.committed) history.push({
+            response: review.response || '',
+            confidence: review.confidence || '',
+            attemptedAt: review.attemptedAt || null,
+            revealedAt: review.revealedAt || null,
+            rating: review.rating || null,
+            gradedAt: review.gradedAt || null
+          });
+          place.review = {
+            history: history.slice(-12),
+            response: '',
+            confidence: '',
+            committed: false,
+            revealed: false,
+            rating: null,
+            gradedAt: null
+          };
+          review = place.review;
+          void flushSave();
+        }
       }
       const shelf = this.lib.shelves.find(s => s.id === place.caseId);
       panel.append(
