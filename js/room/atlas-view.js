@@ -315,16 +315,28 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
     });
     response.value = saved.response || '';
     response.disabled = !!saved.revealed;
+    const commitStatus = el('small', {
+      class: 'atlas-scan-recall-status',
+      role: 'status',
+      'aria-live': 'polite'
+    });
     const commit = el('button', {
       class: 'btn primary small',
       type: 'button',
       text: saved.committed ? 'Recommit response' : 'Commit recall',
-      disabled: !!saved.revealed || !response.value.trim(),
+      disabled: !!saved.revealed,
       onclick: () => {
+        const answer = response.value.trim();
+        if (!answer) {
+          commitStatus.textContent = 'Write a response before committing.';
+          response.focus();
+          return;
+        }
+        commitStatus.textContent = '';
         const current = atlas.scanAttempts[prompt.id] || {};
         atlas.scanAttempts[prompt.id] = {
           ...current,
-          response: response.value.trim().slice(0, 1200),
+          response: answer.slice(0, 1200),
           committed: true,
           revealed: false,
           attemptedAt: new Date().toISOString()
@@ -341,12 +353,15 @@ export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssi
         committed: false,
         revealed: false
       };
-      commit.disabled = !response.value.trim();
+      commitStatus.textContent = '';
       commit.textContent = 'Commit recall';
       refreshRecallTabs();
       onSave && onSave();
     });
-    recallCard.append(response, el('div', { class: 'row wrap atlas-scan-recall-actions' }, [commit]));
+    recallCard.append(
+      response,
+      el('div', { class: 'row wrap atlas-scan-recall-actions' }, [commit, commitStatus])
+    );
     if (saved.committed && !saved.revealed) {
       recallCard.append(el('button', {
         class: 'btn small',

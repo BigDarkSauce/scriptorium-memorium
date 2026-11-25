@@ -1464,6 +1464,7 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-scan-recall-stimulus { margin: 0; color: #514638; font: 14px/1.55 var(--f-body); }
 .atlas-scan-recall-title { color: #81745e; font: 9px var(--f-mono); }
 .atlas-scan-recall-actions { justify-content: flex-start; }
+.atlas-scan-recall-status { align-self: center; color: #8a6848; font: 10px/1.3 var(--f-body); }
 .atlas-scan-recall-answer { padding: 9px 10px; border-left: 2px solid rgba(49,91,80,.58); border-radius: 4px; background: rgba(255,255,255,.48); }
 .atlas-scan-recall-answer b { color: #315b50; font: 9px var(--f-mono); letter-spacing: .07em; }
 .atlas-scan-recall-answer p { margin: 4px 0; color: #403729; font: 14px/1.55 var(--f-body); }

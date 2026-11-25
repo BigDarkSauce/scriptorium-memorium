@@ -248,8 +248,14 @@ try {
   assert.match(await recallCard.innerText(), /Which term is described by this definition/i);
   assert.match(await recallCard.innerText(), /The boundary permits some movements and not others/i);
   assert.doesNotMatch(await recallCard.innerText(), /selective permeability/i, 'the expected term must remain hidden before reveal');
-  await recallCard.locator('.atlas-scan-recall-response').fill('selective permeability');
-  await recallCard.getByRole('button', { name: 'Commit recall' }).click();
+  const termRecallResponse = recallCard.locator('.atlas-scan-recall-response');
+  const termCommitButton = recallCard.getByRole('button', { name: 'Commit recall' });
+  assert.equal(await termCommitButton.isEnabled(), true, 'the commit action remains available and validates its own response');
+  await termCommitButton.click();
+  assert.match(await recallCard.innerText(), /Write a response before committing/i, 'an empty submission must be blocked with inline guidance');
+  assert.equal(await page.evaluate(() => !!window.__atlasUITest.atlas.scanAttempts['term:S1:0']?.committed), false, 'an empty recall must not become committed');
+  await termRecallResponse.fill('selective permeability');
+  await termCommitButton.click();
   await recallCard.getByRole('button', { name: 'Reveal expected answer' }).click();
   assert.match(await recallCard.innerText(), /EXPECTED RECONSTRUCTION.*selective permeability/s);
   assert.equal(await page.evaluate(() => window.__atlasUITest.atlas.scanAttempts['term:S1:0'].revealed), true, 'the revealed recall state must persist in the atlas model');
