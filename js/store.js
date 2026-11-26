@@ -9,13 +9,13 @@ function warn(msg) { status.error = msg; if (warned) return; warned = true; if (
 function db() {
   if (dbp) return dbp;
   dbp = new Promise(res => {
-    let done = false;
+    let done = false, deadline = null;
     const fin = (v, why) => {
       if (done) { if (v) try { v.close(); } catch (e) { } return; }   // too late: this session already runs in memory (never overwrite stored data with it)
-      done = true; status.persistent = !!v; res(v);
+      done = true; clearTimeout(deadline); status.persistent = !!v; res(v);
       if (!v) warn(why === 'slow' ? 'The browser storage did not answer: changes made now are kept only until this page is closed.' : 'This browser is not keeping data for this page (private window or blocked storage): your library lasts until the page is closed.');
     };
-    setTimeout(() => fin(null, 'slow'), 15000);   // some private modes never answer open()
+    deadline = setTimeout(() => fin(null, 'slow'), 15000);   // some private modes never answer open()
     try {
       const rq = indexedDB.open(DB, 1);
       rq.onupgradeneeded = () => { try { rq.result.createObjectStore(OS); } catch (e) { } };
