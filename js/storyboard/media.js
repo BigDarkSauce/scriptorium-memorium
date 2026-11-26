@@ -28,7 +28,7 @@ async function findCommonsImage(query) {
       origin: '*'
     });
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3600);
+    const timer = setTimeout(() => controller.abort(), 2000);
     try {
       const response = await fetch('https://commons.wikimedia.org/w/api.php?' + params.toString(), { signal: controller.signal, mode: 'cors', cache: 'force-cache' });
       if (!response.ok) throw new Error('Image search returned ' + response.status);
@@ -84,15 +84,15 @@ export async function fillImageFrame(frame) {
     const loaded = await new Promise(resolve => {
       let settled = false;
       const done = value => { if (!settled) { settled = true; clearTimeout(timer); resolve(value); } };
-      const timer = setTimeout(() => { probe.src = ''; done(false); }, 3900);
+      const timer = setTimeout(() => { probe.src = ''; done(false); }, 2500);
       probe.onload = () => done(true);
       probe.onerror = () => done(false);
       probe.decoding = 'async';
       probe.src = result.url;
     });
     if (!loaded) { fallback(); return; }
-    const img = document.createElement('img');
-    img.src = result.url; img.alt = alt; img.loading = 'lazy'; img.decoding = 'async'; img.className = 'loaded';
+    const img = probe;
+    img.alt = alt; img.loading = 'lazy'; img.decoding = 'async'; img.className = 'loaded';
     frame.replaceChildren(img);
     if (meta) {
       meta.replaceChildren();

@@ -2,7 +2,8 @@
 
 A walkable 3D library for studying anything. Each PDF becomes a **room**. Its chapters hang as **scrolls** along the walls, each rebuilt as one rigorous logical chain. Beside each scroll stands a **pedestal** carrying a small card model. Step into it and the idea plays out as a living 3D **diorama** of bodies, events and processes.
 
-- **Library hub.** A baroque hall whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs; each appears as a scroll lying in its holder, with its name tag. Click a scroll: it unfolds in a shaft of light and carries you into its room. Right-click it to move, hang or delete it (with undo). The hall's door leads back to the room you visited last.
+- **Library hub.** A baroque hall whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs; each appears as a scroll lying in its holder, with its name tag. Click a scroll: it unfolds in a shaft of light and carries you into its room. Right-click it to move, hang or delete it (with undo).
+- **Storyboard Studio.** Open it from the title screen or visit `storyboard.html`. Import a PDF or PPTX, select the chapters or slides, and build an image-led explanation with two-sentence visual beats, original source figures, custom diagrams, adjustable depth rows, interactive GeoGebra constructions and downloadable Manim scenes. One click presents the story without manually building slides; see `docs/STORYBOARD_STUDIO.md`. The hall's door leads back to the room you visited last.
 - **Links.** The address names the room and the open scroll (`#room=…&scroll=…`): a reload or a shared link reopens it, and Back / Forward step through the places you visited.
 - **Book rooms.** Parts are found automatically: from the PDF's bookmarks, then from chapter headings, then from a printed contents page, then in 20-page windows. They hang from the left wall onward. The room grows when more scrolls need hanging, and you can resize it.
 - **Reading scrolls.** Each part becomes a chain where every step follows from earlier ones: definitions, axioms, derivations line by line, results. Each step names the bodies it is about. You choose the length: complete, essential, or an exact number of steps. Any step can grow its own sub-scroll.
@@ -69,6 +70,7 @@ These are generalised from Samnang Aing's experiments (see `docs/RESEARCH.md`). 
 
 ```
 index.html            page shell (import map, CDN libraries)
+storyboard.html       source-driven storyboard workspace
 css/app.css           HUD design (glass panels, parchment scrolls)
 js/main.js            boot, mode switching, seed library, import/export
 js/gfx/               renderer + post chain, procedural textures, materials, room shell, materialiser
@@ -76,6 +78,7 @@ js/dio/               diorama: scene builder (shapes & macros), environments, bu
 js/hub/               library room and its props
 js/room/              book room, reading scroll, 2D diagrams
 js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
+js/storyboard/        PowerPoint package reader and sourced-image / GeoGebra visual tools
 prompts/              the portable prompt pack (same text the app sends; regenerate with `node prompts/build.mjs`)
 schema/               JSON Schemas: chain (with coverage, question thread, figures, extra) and its strict profile, scene, room
 tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test), polish.mjs (layout and
