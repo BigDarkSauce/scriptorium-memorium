@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Storyboard Studio · Scriptorium Memorialium</title>
+  <meta name="description" content="Turn PDF chapters and PowerPoint slides into a deep, image-led explanatory storyboard.">
+  <link rel="icon" href="assets/scriptorium.png">
+  <link rel="stylesheet" href="css/storyboard.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]},svg:{fontCache:'global'},startup:{typeset:false},options:{enableMenu:false}};</script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" title="Back to Scriptorium">
+      <span class="brand-mark">S</span>
+      <span><b>Scriptorium</b><small>STORYBOARD STUDIO</small></span>
+    </a>
+    <div class="topbar-status"><span class="status-dot"></span><span id="engine-status">Ready for a source document</span></div>
+    <div class="topbar-actions">
+      <button class="btn quiet" id="export-board" disabled>Export storyboard</button>
+      <button class="btn quiet" id="present-board" disabled>Present <kbd>Space</kbd></button>
+      <a class="btn quiet home-link" href="index.html">Library</a>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="source-panel">
+      <div class="panel-heading">
+        <div><span class="eyebrow">01 / SOURCE</span><h1>Build a storyboard</h1></div>
+        <span class="panel-icon">✳</span>
+      </div>
+      <p class="muted intro">Import a PDF or PowerPoint. The source outline becomes your chapter and slide selector.</p>
+
+      <label class="upload-zone" for="source-file" id="upload-zone">
+        <span class="upload-glyph">↑</span>
+        <b>Choose a PDF or presentation</b>
+        <small>PDF · PPTX · up to 250 MB</small>
+        <span class="upload-cta">Browse files</span>
+      </label>
+      <input id="source-file" type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+      <div id="source-meta" class="source-meta" hidden></div>
+
+      <section id="outline-panel" class="outline-panel" hidden>
+        <div class="section-head">
+          <div><span class="eyebrow">02 / COVERAGE</span><h2>Choose chapters or slides</h2></div>
+          <span id="selected-count" class="count-pill">0 selected</span>
+        </div>
+        <div class="selection-actions">
+          <button class="text-btn" id="select-all">Select all</button>
+          <span>·</span>
+          <button class="text-btn" id="select-none">Clear</button>
+        </div>
+        <div class="outline-list" id="outline-list"></div>
+        <div class="source-range" id="source-range" hidden>
+          <label>Limit pages <input type="number" id="page-from" min="1" value="1"></label>
+          <span>to</span>
+          <input type="number" id="page-to" min="1" value="1" aria-label="End page">
+        </div>
+        <div class="detail-controls">
+          <label class="field-label" for="detail-level">Breakdown depth</label>
+          <select class="field" id="detail-level">
+            <option value="complete">Complete · every concept and mechanism</option>
+            <option value="essential">Essential · the main explanatory chain</option>
+            <option value="exact">Exact card count per chapter</option>
+          </select>
+          <label id="exact-count-wrap" class="field-label" hidden>Cards per chapter <input class="field inline-field" type="number" id="exact-count" min="2" max="40" value="12"></label>
+          <label class="check-line"><input type="checkbox" id="include-source-pages" checked> Include useful original PDF page images</label>
+          <label class="check-line"><input type="checkbox" id="include-figures" checked> Attach relevant figures from the source</label>
+        </div>
+        <button id="generate-board" class="btn primary full" disabled>Generate storyboard <span>→</span></button>
+        <p id="parse-status" class="micro muted" aria-live="polite"></p>
+      </section>
+
+      <div class="side-footer">
+        <span class="eyebrow">SOURCE-FIRST</span>
+        <p>Each concept stays traceable to its chapter, slide, page, figure or table. Outside imagery is separately credited.</p>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-head">
+        <div class="workspace-title">
+          <span class="eyebrow">03 / CANVAS</span>
+          <h2 id="board-title">Your storyboard will appear here</h2>
+          <p id="board-subtitle" class="muted">A horizontal sequence of image-led explanations, with extra depth above and below the main thread.</p>
+        </div>
+        <div class="layout-tools" id="layout-tools" hidden>
+          <label>Depth rows
+            <select id="row-count" class="small-field">
+              <option value="1">1 row</option><option value="2">2 rows</option><option value="3" selected>3 rows</option><option value="4">4 rows</option><option value="5">5 rows</option>
+            </select>
+          </label>
+          <label>Side topics
+            <select id="depth-mode" class="small-field">
+              <option value="auto" selected>Use concept depth</option><option value="above">Above</option><option value="below">Below</option><option value="alternate">Alternate</option><option value="centre">Main row</option>
+            </select>
+          </label>
+          <label>Card size
+            <select id="card-size" class="small-field">
+              <option value="compact">Compact</option><option value="balanced" selected>Balanced</option><option value="wide">Wide</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div id="progress-wrap" class="progress-wrap" hidden>
+        <div class="progress-copy"><b id="progress-label">Analysing source</b><span id="progress-step">0 / 0</span></div>
+        <div class="progress-track"><i id="progress-bar"></i></div>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-orbit"><span>01</span><i></i><b>02</b></div>
+        <h3>From source material to visual understanding.</h3>
+        <p>Select the chapters or slides you want to explore. The director will separate the material into concepts, mechanisms and derivations, then pair every two explanatory sentences with one relevant image from a free image source.</p>
+        <div class="empty-features">
+          <span>REAL SOURCE FIGURES</span><span>CUSTOM DIAGRAMS</span><span>GEOGEBRA</span><span>MANIM EXPORT</span>
+        </div>
+      </div>
+      <div class="board-viewport" id="board-viewport" hidden>
+        <div class="lane-ruler" id="lane-ruler" aria-hidden="true"></div>
+        <div class="storyboard" id="storyboard"></div>
+      </div>
+      <div class="workspace-footer" id="workspace-footer" hidden>
+        <span id="board-stats"></span>
+        <span>Images are fetched from Wikimedia Commons and filtered for public-domain or CC licences.</span>
+      </div>
+    </section>
+  </main>
+
+  <div id="presentation" class="presentation" hidden>
+    <div class="presentation-top">
+      <span class="eyebrow">STORYBOARD PRESENTATION</span>
+      <span id="presentation-progress">01 / 01</span>
+      <button class="icon-btn" id="close-presentation" aria-label="Exit presentation">×</button>
+    </div>
+    <div id="presentation-content" class="presentation-content"></div>
+    <div class="presentation-bottom">
+      <button class="btn quiet" id="presentation-prev">← Previous</button>
+      <div class="presentation-dots" id="presentation-dots"></div>
+      <button class="btn primary" id="presentation-next">Next concept →</button>
+    </div>
+    <p class="presentation-hint">Use ← → or Space to move through the story · Esc to leave</p>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/storyboard.js"></script>
+</body>
+</html>
