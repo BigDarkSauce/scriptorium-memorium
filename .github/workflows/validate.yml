@@ -1,0 +1,244 @@
+name: Validate Scriptorium
+
+# Push and pull_request events for the same feature branch share one group. New commits
+# cancel older, slower browser jobs instead of consuming runners on stale snapshots.
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - feature/openai-diorama-atlas
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  model-and-source-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile and exercise the localhost OpenAI adapter
+        run: |
+          python -m py_compile launcher/serve.py tools/test-openai-proxy.py
+          python tools/test-openai-proxy.py
+
+      - name: Parse the PowerShell fallback server
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "launcher/serve.ps1"), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Host $_.Message }
+            exit 1
+          }
+
+      - name: Test source-mapped simulation contracts
+        run: node tools/test-model-contract.mjs
+
+      - name: Test custom OpenAI-compatible provider settings
+        run: node tools/test-provider-config.mjs
+
+      - name: Test semantic atlas and progressive challenge reveals
+        run: node tools/test-atlas.mjs
+
+      - name: Test PowerPoint image, chart and SmartArt extraction
+        run: node tools/test-pptx-visuals.mjs
+
+      - name: Test loci spaced-review ledger integration
+        run: node tools/test-locus-review.mjs
+
+      - name: Verify built-in diorama plans
+        run: node tools/verify-chain.mjs --builtins
+
+      - name: Verify a standalone diorama scene
+        run: node tools/verify-chain.mjs examples/scene-osmosis.json
+
+  browser-pptx-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install headless Chromium
+        run: |
+          npm install --global playwright
+          playwright install --with-deps chromium
+      - name: Start app and test real PPTX ingestion
+        run: |
+          set -Eeuo pipefail
+          python launcher/serve.py 8000 >"$RUNNER_TEMP/scriptorium-pptx-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          timeout --signal=TERM --kill-after=15s 8m node tools/test-pptx-browser.mjs http://127.0.0.1:8000/
+      - name: Upload PPTX browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptorium-pptx-browser
+          path: ${{ runner.temp }}/scriptorium-pptx-server.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-atlas-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install headless Chromium
+        run: |
+          npm install --global playwright
+          playwright install --with-deps chromium
+      - name: Start app and test atlas interactions
+        run: |
+          set -Eeuo pipefail
+          python launcher/serve.py 8000 >"$RUNNER_TEMP/scriptorium-atlas-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          timeout --signal=TERM --kill-after=15s 14m node tools/test-atlas-ui.mjs http://127.0.0.1:8000/
+      - name: Upload atlas browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptorium-atlas-browser
+          path: ${{ runner.temp }}/scriptorium-atlas-server.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  webgl-smoke:
+    needs: [browser-pptx-smoke, browser-atlas-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install headless Chromium
+        run: |
+          npm install --global playwright
+          playwright install --with-deps chromium
+      - name: Start app and run bounded WebGL smoke suite
+        run: |
+          set -Eeuo pipefail
+          python launcher/serve.py 8000 >"$RUNNER_TEMP/scriptorium-webgl-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          SMOKE_OUT="$RUNNER_TEMP/scriptorium-webgl" SMOKE_POLISH=0 timeout --signal=TERM --kill-after=20s 27m node tools/smoke.mjs http://127.0.0.1:8000/
+      - name: Upload WebGL captures and server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptorium-webgl-smoke
+          path: |
+            ${{ runner.temp }}/scriptorium-webgl
+            ${{ runner.temp }}/scriptorium-webgl-server.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  visual-polish-smoke:
+    needs: [browser-pptx-smoke, browser-atlas-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install headless Chromium
+        run: |
+          npm install --global playwright
+          playwright install --with-deps chromium
+      - name: Start app and run bounded visual-polish checks
+        run: |
+          set -Eeuo pipefail
+          python launcher/serve.py 8000 >"$RUNNER_TEMP/scriptorium-polish-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/ >/dev/null
+          POLISH_OUT="$RUNNER_TEMP/scriptorium-polish" timeout --signal=TERM --kill-after=15s 12m node tools/polish.mjs http://127.0.0.1:8000/ --quick --budget=600
+      - name: Upload visual-polish diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptorium-visual-polish
+          path: |
+            ${{ runner.temp }}/scriptorium-polish
+            ${{ runner.temp }}/scriptorium-polish-server.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  windows-powershell-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Exercise the actual Windows localhost server
+        shell: pwsh
+        run: ./tools/test-ps-server.ps1

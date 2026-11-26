@@ -17,7 +17,7 @@ const demoFigures = [{ id: '<fig-1-1>', label: '<Figure 1.1>', page: 3, caption:
 
 w('prompts/00-README.md', `# Prompt pack
 
-These are the exact prompts Scriptorium Memorialium sends to Claude (generated from \`js/ai/prompts.js\` by \`node prompts/build.mjs\`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
+These are the prompt templates used by Scriptorium's OpenAI-first authoring pipeline, with portable versions for other AIs. The files are generated from js/ai/prompts.js by node prompts/build.mjs; edit the source prompts, not these generated files.
 
 Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` → "Recipe for any AI"):
 1. \`01-split-book.md\`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).
@@ -26,9 +26,10 @@ Order of work (the full recipe, with checklists, is in \`../docs/PROTOCOL.md\` �
 3b. \`08-repair-steps.md\`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. \`09-figures.md\`: only for paragraphs and teaching boxes that still lack a figure.
 3d. \`12-domain-compiler.md\`: the explanatory compiler: for steps whose structure (an argument, a feedback loop, a business model, a matrix, a data series…) is drawn best by a domain primitive and that have none yet, the visual routing and the interactive primitive spec (\`../docs/research/explanatory-compiler.md\`).
-4. \`10-didactic-plan.md\`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with \`node tools/verify-chain.mjs plan.json\`.
-4b. \`03-author-diorama.md\`: one call per 3D scene the chain asked for (\`{"type":"scene","request":...}\`), built from the plan (paste the plan into the request's "plan").
-4c. \`11-self-critique.md\`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
+4. \`10-didactic-plan.md\`: write the explanatory sequence and a source-mapped model contract before authoring a new 3D scene.
+4b. \`03-author-diorama.md\`: create the scene from the approved plan and preserve its actor IDs, parameter ranges and units exactly.
+4c. \`11-self-critique.md\`: check whether a newcomer can explain the concept; this review may patch lesson text only.
+4d. \`13-model-audit.md\`: independently inspect entity, causal, quantitative, constraint, intervention and scope fidelity. The app stores this review and its uncertainties.
 5. \`04-edit-diorama.md\`: change an existing diorama.
 6. \`05-sub-scroll.md\`: expand one step into a detailed sub-scroll.
 7. \`06-whole-room.md\`: everything in one answer (for AIs with large outputs).
@@ -67,7 +68,8 @@ Replace the placeholders. Inside the app the SUBSECTIONS list (with an inventory
 Without the lists (attach the PDF instead):
 
 ` + block(P.chapterPrompt({ book: '<book title>', chapter: '<part title (pages a-b)>', text: '<paste the text of the part here, or attach the PDF and say which pages>' }).split('PROCEDURE')[0] + 'PROCEDURE … (identical to the prompt above from here on)'));
-w('prompts/03-author-diorama.md', '# Author a 3D diorama\n\n' + block(P.authorPrompt({ request: '<what the diorama must show: actors, decor, variables, events, lessons>', technique: '<card | sweep | topdown>', purpose: '<the question the demo answers>' }, '<the study step it illustrates | the step answers: … | and opens: …>')));
+const demoModelPlan = { version: 'scriptorium-model-plan/1', question: '<the demo question>', knowledgeKind: ['structural'], levels: ['System', 'Mechanism'], sequence: [{ stage: 'orientation', technique: 'establish', cameraMode: 'global', purpose: 'locate the whole system', answers: 'What system is being modelled?', opens: 'Which components make it up?', on: ['input', 'process'], lesson: 0 }], comprehensionCheck: { explainBack: 'Explain how the declared components form the system.', misconceptionToAvoid: 'The components are unrelated.', answer: 'The components form one bounded system with an explicit relationship.' }, modelContract: { systemBoundary: '<what is inside and outside>', entities: [{ bodyId: 'input', referent: '<real entity>', role: '<role>', evidenceStepIds: ['S1'] }, { bodyId: 'process', referent: '<real mechanism>', role: '<role>', evidenceStepIds: ['S1'] }], stateVariables: [{ key: 'rate', name: '<quantity>', unit: '<unit>', initial: 1, min: 0, max: 2, controllable: true, provenance: 'source', evidenceStepIds: ['S1'] }], mechanisms: [{ id: 'rule-1', from: ['input'], to: ['process'], rule: '<conditional cause and effect>', basis: 'source', evidenceStepIds: ['S1'] }], constraints: [{ kind: 'causal', statement: '<what cannot happen>', evidenceStepIds: ['S1'] }], assumptions: [{ statement: '<simplification>', why: '<what it enables and excludes>' }], observables: [{ name: '<readout>', unit: '<unit>', relationship: '<relation to model state>', evidenceStepIds: ['S1'] }], uncertainties: ['<what the source does not establish>'] } };
+w('prompts/03-author-diorama.md', '# Author a 3D diorama\n\n' + block(P.authorPrompt({ request: '<what the diorama must show: actors, decor, variables, events, lessons>', technique: '<card | sweep | topdown>', purpose: '<the question the demo answers>', plan: demoModelPlan, sourceStepIds: ['S1'] }, '<the study step it illustrates | the step answers: … | and opens: …>')));
 w('prompts/04-edit-diorama.md', '# Change a diorama\n\n' + block(P.editPrompt({ type: '<paste the current spec JSON here>' }, { name: '<selected object, optional>' }, '<what to change>')));
 w('prompts/05-sub-scroll.md', '# Expand a step into a sub-scroll\n\n' + block(P.detailPrompt({ step: { id: 'S3', title: '<step title>', statement: '<step statement>', answers: '<question it settles>', opens: '<question it opens>' }, chain: [] })));
 w('prompts/06-whole-room.md', `# A whole book room in one answer
@@ -93,16 +95,17 @@ For 3D scenes not covered by the built-in models, put {"type":"scene","title":st
 Import the file in the app with *Import / export → Import JSON*. It appears as a new scroll on your first bookcase. Open each scroll once with the PDF attached to the book to run the coverage check.
 `);
 // the didactic planner (docs/PEDAGOGY.md, "The didactic planner") and the self-critique, shown with placeholders
-w('prompts/10-didactic-plan.md', `# Plan a 3D demo before building it
+w('prompts/10-didactic-plan.md', `# Plan a 3D demo and model contract before building it
 
-The app sends this before it authors a scene (stage 5 of the pipeline). The plan is short (about 1.5k tokens): the demo's question, the kind of knowledge, the levels of its multiscale scene graph, Jared Owen's sequence (curiosity → orientation → decomposition → inspection → mechanism → intuition → reconstruction → understanding, recursive inside a beat) with one operation of the visual grammar and one camera mode per beat, an analogy with its limit, and the comprehension check. Operations are named, never described: the app already knows how to explode, section, compare, zoom, track and so on. \`node tools/verify-chain.mjs plan.json\` checks a plan; the built-in models' own plans are in \`../js/dio/plans.js\` (\`node tools/verify-chain.mjs --builtins\`).
+The app plans the explanatory sequence and a source-mapped model contract before authoring a scene. The contract names the system boundary, actors, state variables and units, causal mechanisms and evidence basis, constraints, assumptions, observables and uncertainties. Illustrative parameters must be labelled and justified; do not present them as source measurements. Evidence IDs must come only from the supplied source-step IDs.
 
-` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>' }, '<the study step it illustrates>')));
+` + block(P.planPrompt({ request: '<what the diorama must show>', purpose: '<the question the demo answers>', sourceStepIds: ['S1'] }, '<the study step it illustrates>')));
 w('prompts/11-self-critique.md', `# Check a demo against its plan
 
 Sent after a scene is authored from a plan. The first test outweighs the second: could a newcomer correctly answer the plan's comprehension check after these lessons, and only then: is it attractive? The answer may patch lesson texts (text, explain, explainBack), never the scene. The app stores the verdict on the scene as \`critique\`.
 
 ` + block(P.critiquePrompt({ question: '<the plan question>', comprehensionCheck: { explainBack: '<what the learner must explain>', misconceptionToAvoid: '<the wrong answer>' }, sequence: [{ stage: 'orientation', technique: 'establish', lesson: 0, answers: '<…>' }] }, { lessons: [{ title: '<lesson 1>', question: '<…>', text: '<…>', explain: '<…>', opens: '<…>', cameraMode: 'global' }] })));
+w('prompts/13-model-audit.md', `# Independently audit a diorama model\n\nThis is not the lesson-writing critique. It checks model fidelity against the approved contract: entities, causal rules, parameter values and units, constraints, intervention behaviour, simplifications and unresolved claims. A language-model audit is a review aid, not a scientific proof or runtime test.\n\n` + block(P.modelAuditPrompt({ question: '<plan question>', modelContract: { systemBoundary: '<boundary>', entities: [], stateVariables: [], mechanisms: [], constraints: [], assumptions: [], observables: [], uncertainties: [] } }, { title: '<scene title>', bodies: [], params: [], behaviors: [], code: '', lessons: [] }, ['S1'])));
 
 // the follow-up, shown with a small mock chain so its structure is visible
 // one coarse gap (1.1 already has S1) and one missing gap (1.2), so both kinds of thread instruction are shown

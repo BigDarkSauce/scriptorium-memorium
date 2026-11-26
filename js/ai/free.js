@@ -1,10 +1,11 @@
-// Free models: a router over many free-tier LLM APIs, run in the page (no server needed).
+// Optional provider pool and automatic fallback router for Scriptorium's OpenAI-first workflow.
+// The local OpenAI Responses adapter is ranked ahead of every other provider; this module tries enabled fallbacks
+// when the primary endpoint is missing or a request cannot be completed there. Some fallbacks are free-tier APIs;
+// others are local models or a user-configured OpenAI-compatible endpoint.
 //
-// WHY THIS SHAPE. No single free tier is large or steady enough to write a whole book: each caps requests per minute
-// and per day, changes its model list every few weeks, and some days is down. Pooled, they are large: a dozen free
-// tiers give thousands of requests a day (FreeLLMAPI, github.com/tashfeenahmed/freellmapi, counts ~7.4 billion tokens a
-// month across 34 of them). So every request goes to the best model that is free *now*, and the router keeps going:
-//   1. discover   each provider's live model list (GET /models), so retired models drop out and new ones come in;
+// WHY THIS SHAPE. No single free tier is large or steady enough to be a dependable fallback for a whole book: each
+// caps requests per minute and per day, changes its model list, and can be unavailable. A pool provides alternatives:
+////   1. discover   each provider's live model list (GET /models), so retired models drop out and new ones come in;
 //   2. rank       the models by how well they write long, exact JSON (RANK below; a tested ordering, not a guess);
 //   3. budget     per model: requests this minute and today (learned from the 429s it meets) and cool-downs taken from
 //                 the provider's own reset headers; a daily cap waits for 00:00 UTC, a minute cap for the minute;
@@ -13,7 +14,7 @@
 //   5. cache      an answer that passed is kept (IndexedDB, 30 days): the same request again costs nothing;
 //   6. wait, never fail   when every model is busy the job waits for the earliest reset, saying for what and how long
 //                 (and can be stopped); a model on your own computer (Ollama, LM Studio, FreeLLMAPI) has no quota at all.
-// Keys are the viewer's own, kept only in this browser (localStorage 'sm-ai'), sent only to the provider they belong to.
+// Optional fallback keys are stored in browser AI settings (localStorage 'sm-ai' plus the app's IndexedDB mirror), sent only to their matching provider. The OpenAI key is handled separately by the local server.
 //
 // Browser reach (measured from a page, Nov 2026): Groq, Google Gemini, Cerebras, Mistral, OpenRouter, Cohere, Z.ai,
 // Chutes, Hugging Face, OVHcloud, LLM7 and Pollinations answer cross-origin requests; NVIDIA NIM, GitHub Models,
@@ -30,9 +31,18 @@ let RELAY = null; const relayP = (typeof location !== 'undefined' && /^(localhos
   ? fetch(location.pathname || '/', { method: 'HEAD', cache: 'no-store' }).then(r => (RELAY = !!r.headers.get('x-scriptorium-relay'))).catch(() => (RELAY = false)) : Promise.resolve(RELAY = false);   /* the launcher marks every answer (a probe of a missing path would log a 404 on a plain server) */
 export const netReady = () => relayP;
 export const via = () => inClaudeApp() ? 'bridge' : RELAY ? 'relay' : 'direct';
-const net = async (url, init) => { if (!inClaudeApp()) await relayP; return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init); };
+const net = async (url, init) => {
+  // The OpenAI adapter is same-origin and already performs its own credentialed server-side request.
+  if (String(url).startsWith('/__openai/')) return fetch(url, init);
+  if (!inClaudeApp()) await relayP;
+  return via() === 'bridge' ? bridgeFetch(url, init) : via() === 'relay' ? fetch('/__relay/fetch?u=' + encodeURIComponent(url), init) : fetch(url, init);
+};
 
 export const PROVIDERS = [
+  // Local OpenAI API adapter: the API key remains in OPENAI_API_KEY on the local Python server.
+  // No key or billable request is sent until that server is configured and the user starts an AI task.
+  { id: 'openai-local', name: 'OpenAI · local secure relay', base: '/__openai/v1', key: 'none', local: true, api: 'responses', json: true, vision: true, out: 65536, note: 'Preferred engine. Uses GPT-6.2 Astra through the local Scriptorium server. The API key stays in the server environment, not browser storage. Requires OPENAI_API_KEY.' },
+
   // no key needed: work from the first minute (slow: small per-IP limits)
   { id: 'ovh', name: 'OVHcloud AI Endpoints', base: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', key: 'optional', keyUrl: 'https://endpoints.ai.cloud.ovh.net/', rpm: 2, rpd: 2000, perModel: true, note: 'No key: 2 requests a minute per model, from EU data centres.' },
   { id: 'llm7', name: 'LLM7.io', base: 'https://api.llm7.io/v1', key: 'optional', keyUrl: 'https://token.llm7.io/', rpm: 20, rpd: 250, anon: ['mistral-Nemo-Instruct-2407', 'default'], note: 'No key: two small models (Mistral Nemo, Codestral). A free token (100k tokens a day) opens gpt-oss and others.' },
@@ -49,12 +59,12 @@ export const PROVIDERS = [
   // your own computer: no quota at all (and the router of routers)
   { id: 'freellmapi', name: 'FreeLLMAPI (34 providers, one key)', base: 'http://127.0.0.1:31415/v1', key: 'optional', keyUrl: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', rpm: 600, rpd: 1e6, discover: 'freellmapi', extra: ['auto:smart'], local: true, editableBase: true, json: true, note: 'The router of routers on your computer: 34 free providers, 635 model endpoints, ~7.4 billion tokens a month once each provider has its free key (added in its own dashboard, Keys page). Found and connected by itself when the Scriptorium extension is installed; otherwise paste its address (desktop app :31415, Docker or npm :3001) and its unified freellmapi-… key.' },
   { id: 'ollama', name: 'Ollama / LM Studio (local)', base: 'http://localhost:11434/v1', key: 'none', rpm: 600, rpd: 1e6, local: true, editableBase: true, note: 'A model on this computer: unlimited, private, slow on a laptop GPU. Ollama needs OLLAMA_ORIGINS=* to answer a web page.' },
-  { id: 'custom', name: 'Any OpenAI-compatible endpoint', base: '', key: 'optional', rpm: 60, rpd: 1e5, editableBase: true, editableModel: true, note: 'Base URL ending in /v1, its key and model.' },
 ];
 
 // How well a model family writes long, exact JSON in this app's formats (higher is better). Ordered from the live tests
 // (js/ai/freetest.js) and the public leaderboards; unknown names get 40, so a new model is tried but after the known.
 const RANK = [
+  [/gpt-6\.2-astra/i, 100], [/gpt-6\.2-sol/i, 96],
   [/gemini-[3-9][\d.]*-pro|gemini-2\.5-pro/i, 97], [/gemini-[3-9][\d.]*-flash(?!-lite)/i, 95], [/qwen3[\d.]*-(397|235)b|qwen3\.\d-max/i, 91], [/deepseek-v4(\.\d)?-pro|deepseek-v4(?![\w.-]*flash)/i, 90],
   [/gpt-oss-120b/i, 88], [/glm-5/i, 88], [/kimi-k2/i, 86], [/deepseek-v4[\w.:-]*flash|deepseek-v3/i, 85], [/gemini-2\.5-flash(?!-lite)/i, 85], [/nemotron-3-ultra/i, 84],
   [/mistral-(medium|large)|magistral-medium/i, 82], [/llama-4-maverick/i, 80], [/command-a(?![\w-]*(vision|reasoning))/i, 76], [/llama-3[._]3-70b/i, 75], [/gemma-4-(31|26)b/i, 74],
@@ -69,15 +79,69 @@ export const rankOf = id => { for (const [re, s] of RANK) if (re.test(id)) retur
 const SKEY = 'sm-ai', UKEY = 'sm-ai-use';
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
-export const MODES = { claude: 'Claude directs', hybrid: 'Claude + free models', free: 'Free models only' };
-// chosen: the reader picked the engine in the AI panel; auto: the engine was set by autoMode (what is available here)
-export function settings() { const s = read(SKEY, {}); return { mode: s.mode || 'claude', chosen: !!s.chosen, auto: !!s.auto, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: s.on || {} }; }
-// The default engine is the first one available here: Claude inside the Claude app, else the free models. A choice the
-// reader made is never changed: one made in the panel (chosen), or, from before this flag, any engine other than the old
-// default ('claude') that autoMode did not set itself.
-export function autoMode(claudeOK) {
-  const S = settings(); if (S.chosen || (S.mode !== 'claude' && !S.auto)) return S.mode;
-  const want = claudeOK ? 'claude' : 'free'; if (S.mode !== want) saveSettings({ mode: want, auto: true }); return want;
+// OpenAI is the single primary engine. Other configured providers remain available as automatic fallbacks.
+export const MODES = { free: 'OpenAI preferred + fallback providers' };
+export function settings() {
+  const s = read(SKEY, {});
+  const keys = { ...(s.keys || {}) }, bases = { ...(s.bases || {}) }, models = { ...(s.models || {}) };
+  const on = { 'openai-local': true, ...(s.on || {}) }, off = { ...(s.off || {}) };
+  const seen = new Set();
+  const customProviders = (Array.isArray(s.customProviders) ? s.customProviders : []).filter(p => {
+    if (!p || typeof p.id !== 'string' || !/^custom-[a-z0-9-]{4,80}$/i.test(p.id) || seen.has(p.id)) return false;
+    seen.add(p.id); return true;
+  }).map(p => ({ id: p.id, name: String(p.name || 'Custom API').trim().slice(0, 60) || 'Custom API' }));
+  // Migrate the former single custom endpoint without losing its URL, key, model or enabled state.
+  if ((bases.custom || models.custom || keys.custom) && !seen.has('custom-legacy')) {
+    customProviders.push({ id: 'custom-legacy', name: 'Custom API (migrated)' });
+    if (bases.custom) bases['custom-legacy'] = bases.custom;
+    if (models.custom) models['custom-legacy'] = models.custom;
+    if (keys.custom) keys['custom-legacy'] = keys.custom;
+    if (Object.prototype.hasOwnProperty.call(on, 'custom')) on['custom-legacy'] = on.custom;
+    if (Object.prototype.hasOwnProperty.call(off, 'custom')) off['custom-legacy'] = off.custom;
+    delete bases.custom; delete models.custom; delete keys.custom; delete on.custom; delete off.custom;
+  }
+  return { mode: 'free', chosen: true, auto: false, keys, bases, models, off, on, customProviders };
+}
+export function providers(S = settings()) {
+  const custom = (S.customProviders || []).map(p => ({
+    id: p.id, name: p.name, base: S.bases[p.id] || '', key: 'optional',
+    rpm: 60, rpd: 100000, editableBase: true, editableModel: true, custom: true,
+    note: 'Custom OpenAI-compatible Chat Completions endpoint. Enter its base URL (normally ending in /v1), the exact model ID and an optional API key. The app appends /chat/completions.'
+  }));
+  return [...PROVIDERS, ...custom];
+}
+
+export function addCustomProvider(name = 'Custom API') {
+  const S = settings();
+  const id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const entry = { id, name: String(name || 'Custom API').trim().slice(0, 60) || 'Custom API' };
+  return saveSettings({ customProviders: [...S.customProviders, entry], on: { ...S.on, [id]: true } });
+}
+
+export function renameCustomProvider(id, name) {
+  const S = settings();
+  if (!S.customProviders.some(p => p.id === id)) return S;
+  const label = String(name || 'Custom API').trim().slice(0, 60) || 'Custom API';
+  return saveSettings({ customProviders: S.customProviders.map(p => p.id === id ? { ...p, name: label } : p) });
+}
+
+export function removeCustomProvider(id) {
+  const S = settings();
+  if (!S.customProviders.some(p => p.id === id)) return S;
+  const without = object => { const next = { ...object }; delete next[id]; return next; };
+  const next = saveSettings({
+    customProviders: S.customProviders.filter(p => p.id !== id),
+    keys: without(S.keys), bases: without(S.bases), models: without(S.models),
+    on: without(S.on), off: without(S.off)
+  });
+  try { const cache = read(MKEY, {}); delete cache[id]; write(MKEY, cache); } catch (e) { }
+  return next;
+}
+
+export function autoMode() {
+  const S = read(SKEY, {});
+  if (S.mode !== 'free' || S.chosen !== true) saveSettings({ mode: 'free', chosen: true, auto: false });
+  return 'free';
 }
 export function saveSettings(patch, { quiet = false } = {}) { const s = { ...settings(), ...patch, at: Date.now() }; write(SKEY, s); persist(s); if (!quiet) listeners.forEach(f => { try { f(s); } catch (e) { } }); return s; }
 // Keys and choices survive every new version of the app: kept in this browser (localStorage), mirrored in its
@@ -85,6 +149,9 @@ export function saveSettings(patch, { quiet = false } = {}) { const s = { ...set
 // the newest of the three is used, so a change you make is never undone by an older copy; nothing else changes them.
 let vaultT = 0;
 function persist(s) {
+  // Browser storage and the optional host vault are only available in the browser app.
+  // Keeping this guard makes configuration logic safe to import in Node-based validation tools.
+  if (typeof window === 'undefined') return;
   store.setGlobal('sm-ai-settings', s).catch(() => { });
   clearTimeout(vaultT); vaultT = setTimeout(async () => { try { if (via() === 'bridge' && await bridgeReady()) { const v = await bridgeVault('get'); const same = v && JSON.stringify({ ...v, savedAt: 0 }) === JSON.stringify({ ...s, savedAt: 0 }); if (!same) await bridgeVault('set', s); } } catch (e) { console.warn('vault', e); } }, 1500);
 }
@@ -132,7 +199,11 @@ const keyOf = (p, S = settings()) => (S.keys[p.id] || '').trim();
 // a provider is in play when it is switched on (a server on your own computer or a custom endpoint: once you turn it on;
 // the others: unless you turn them off), has an address, and has a key if it needs one
 export const isOn = (p, S = settings()) => p.local || p.editableModel ? !!S.on[p.id] : !S.off[p.id];
-export const active = (S = settings()) => PROVIDERS.filter(p => isOn(p, S) && baseOf(p, S) && (p.key !== 'required' || keyOf(p, S)));
+export const active = (S = settings()) => providers(S).filter(p =>
+  isOn(p, S) && baseOf(p, S) &&
+  (p.key !== 'required' || keyOf(p, S)) &&
+  (!p.custom || !!(S.models[p.id] || '').trim())
+);
 export { baseOf, keyOf };
 
 // ---------------------------------------------------------------- usage, limits and cool-downs (this browser)
@@ -181,9 +252,62 @@ export async function models(p, { fresh = false } = {}) {
 }
 
 // ---------------------------------------------------------------- one call
-const SYSTEM = 'You write content for Scriptorium Memorialium, a study app that turns textbook chapters into logical chains of steps, figures and interactive 3D dioramas. Follow the request exactly. Answer with ONE JSON value in exactly the requested format: no prose before or after it, no markdown fences, no comments. Use only facts supported by the given text or well established knowledge.';
+const SYSTEM = 'You write content for Scriptorium Memorialium, a study app that turns source documents into logically connected concepts and explanatory dioramas. Follow the request exactly. Answer with ONE JSON value in exactly the requested format: no prose before or after it, no markdown fences, no comments. Keep claims grounded in the supplied source. When a factual gap, current fact, or specialist simulation detail genuinely needs supplementation, use the enabled live web_search tool and cite actual sources in the requested JSON fields. Never invent a search, source, DOI, URL, or claim. Clearly distinguish uploaded-source facts from external evidence. Do not search merely to decorate an answer when the source is sufficient.';
 async function blobToDataUrl(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
+async function callResponses(p, model, prompt, { images = [], signal, onText, maxTokens, json = true, timeoutMs = 420000 } = {}) {
+  const S = settings(), key = keyOf(p, S), headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (key) headers.Authorization = 'Bearer ' + key;
+  const content = images.length
+    ? [{ type: 'input_text', text: prompt }, ...(await Promise.all(images.map(async b => ({ type: 'input_image', image_url: typeof b === 'string' ? b : await blobToDataUrl(b) }))))]
+    : prompt;
+  const body = {
+    model, instructions: SYSTEM, input: [{ role: 'user', content }],
+    tools: [{ type: 'web_search', search_context_size: 'medium' }], tool_choice: 'auto',
+    max_output_tokens: maxTokens || p.out || 16384, reasoning: { effort: 'high' },
+    ...(json && p.json ? { text: { format: { type: 'json_object' } } } : {})
+  };
+  const ctl = new AbortController(), stop = () => ctl.abort();
+  if (signal) { if (signal.aborted) throw { code: 'cancelled' }; signal.addEventListener('abort', stop, { once: true }); }
+  const hard = setTimeout(stop, timeoutMs), t0 = performance.now();
+  try {
+    let res;
+    try { res = await net(baseOf(p, S) + '/responses', { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
+    catch (e) { if (signal && signal.aborted) throw { code: 'cancelled' }; throw { code: 'network', message: String(e && e.message || e) }; }
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw { code: res.status === 429 ? 'rate' : res.status === 401 || res.status === 403 ? 'key' : res.status === 404 ? 'model' : res.status === 400 || res.status === 422 ? 'request' : 'server', status: res.status, body: t.slice(0, 1000), res }; }
+    const j = await res.json(), output = Array.isArray(j.output) ? j.output : [];
+    const messages = output.filter(x => x && x.type === 'message');
+    const chunks = messages.flatMap(x => (x.content || []).filter(c => c && c.type === 'output_text').map(c => c.text || ''));
+    const text = String(j.output_text || chunks.join('') || '');
+    const citations = messages.flatMap(x => (x.content || []).flatMap(c => (c.annotations || []).filter(a => a && a.type === 'url_citation').map(a => ({
+      title: String(a.title || ''), url: String(a.url || ''),
+      start: Number.isFinite(a.start_index) ? a.start_index : null,
+      end: Number.isFinite(a.end_index) ? a.end_index : null
+    }))));
+    const webSearchCalls = output.filter(x => x && x.type === 'web_search_call').length;
+    if (!text) {
+      const refusal = messages.flatMap(x => x.content || []).find(c => c && c.type === 'refusal');
+      if (refusal) throw { code: 'refused', message: String(refusal.refusal || 'The model refused this request.') };
+      throw { code: 'invalid_json', message: 'The Responses API returned no text output.' };
+    }
+    onText && onText(text);
+    const incomplete = j.status !== 'completed' || !!j.incomplete_details;
+    return {
+      text, finish: incomplete && j.incomplete_details && j.incomplete_details.reason === 'max_output_tokens' ? 'length' : 'stop',
+      usage: j.usage ? { total_tokens: (j.usage.input_tokens || 0) + (j.usage.output_tokens || 0), input_tokens: j.usage.input_tokens, output_tokens: j.usage.output_tokens } : null,
+      citations, webSearchCalls, ms: performance.now() - t0, model, provider: p.id
+    };
+  } catch (e) {
+    if (ctl.signal.aborted && !(signal && signal.aborted)) throw { code: 'timeout' };
+    if (signal && signal.aborted) throw { code: 'cancelled' };
+    throw e;
+  } finally {
+    clearTimeout(hard);
+    if (signal) signal.removeEventListener('abort', stop);
+  }
+}
+
 export async function call(p, model, prompt, { images = [], signal, onText, onThink, maxTokens, json = true, timeoutMs = 420000 } = {}) {
+  if (p.api === 'responses') return callResponses(p, model, prompt, { images, signal, onText, maxTokens, json, timeoutMs });
   const S = settings(), key = keyOf(p, S), H = { 'Content-Type': 'application/json' }; if (key) H.Authorization = 'Bearer ' + key;
   if (p.id === 'openrouter') { H['HTTP-Referer'] = location.origin; H['X-Title'] = 'Scriptorium Memorialium'; }
   const content = images.length ? [{ type: 'text', text: prompt }, ...(await Promise.all(images.map(async b => ({ type: 'image_url', image_url: { url: typeof b === 'string' ? b : await blobToDataUrl(b) } }))))] : prompt;
@@ -216,22 +340,26 @@ export async function call(p, model, prompt, { images = [], signal, onText, onTh
 const hash = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length; };
 const est = s => Math.ceil(String(s).length / 3.6);
 export const lastRoute = { provider: null, model: null };
+export const researchLog = [];
 export const lastBad = [];   // the last answers that did not parse (for the panel's diagnostics)
 // every (provider, model) that could take this request, best first
 export async function candidates({ images = 0, minRank = 0 } = {}) {
   const out = [];
-  await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) out.push({ p, m: m.id, rank: m.rank + (p.local && !p.discover ? -6 : p.discover ? 2 : 0) })   /* through FreeLLMAPI a model has every key behind it: a little ahead of the same model direct */; }); }));
+  await Promise.all(active().map(async p => { let L = []; try { L = await models(p); } catch (e) { return; } L.forEach(m => { if (m.rank >= minRank && (!images || m.vision)) {
+    // The local OpenAI adapter is the configured primary engine, not merely another candidate in the fallback pool.
+    // Give it absolute precedence; if its request fails, the normal tried-set moves on to the other providers.
+    const priority = p.id === 'openai-local' ? 100000 : m.rank + (p.local && !p.discover ? -6 : p.discover ? 2 : 0);
+    out.push({ p, m: m.id, rank: priority });
+  } }); }));
   return out.sort((a, b) => b.rank - a.rank);
 }
-// can this page reach the free providers? Outside the Claude app: one keyless provider's model list; inside it: is the
-// free-models extension installed and running (remembered for the session; the AI panel asks again)
-// (asked only once a free engine is chosen or the panel is opened: nothing is sent anywhere in the Claude mode)
+// Can this host reach optional fallback providers? The older embedded-host path requires the bridge extension;
+// standalone local mode uses the relay, while an ordinary hosted page probes only its allowed direct endpoints.
 let reachP = null, reachOK = null;
 export const reachable = ({ fresh = false } = {}) => (!fresh && reachP) || (reachP = relayP.then(() => via() === 'bridge' ? bridgeReady({ fresh }) : via() === 'relay' ? true : fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', { signal: AbortSignal.timeout(8000) }).then(r => true, () => fetch('https://api.llm7.io/v1/models', { signal: AbortSignal.timeout(8000) }).then(() => true, () => false))).then(v => (reachOK = v)));
 if (mode() !== 'claude') reachable(); onSettings(S => { if (S.mode !== 'claude') reachable(); });
-// a provider counts only where the page can reach it (inside the Claude app without the extension it cannot: hybrid
-// then uses Claude for all)
-export const hasAny = () => reachOK !== false && active().length > 0;
+// A provider counts only where the current host can actually reach it.
+export const hasAny = () => { const providers = active(); return providers.some(p => p.local) || (reachOK !== false && providers.length > 0); };
 export const hasVision = () => active().some(p => p.vision);
 // ask: JSON back, or it keeps trying. o.validate(v) → null | 'what is wrong' (a wrong answer moves on to the next model,
 // with the problem named once to the same model first). o.onWait(ms, why) when everything is busy; o.exhausted: throw
@@ -267,8 +395,20 @@ export async function ask(prompt, o = {}) {
     onStatus && onStatus(`Writing with ${p.name} · ${m}…`);
     spend(p, m, 0);
     try {
-      const r = await call(p, m, fixNote ? prompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : prompt, { images, signal, onText, onThink: n => onStatus && onStatus(`${p.name} · ${m} is thinking… ${n.toLocaleString()} characters of reasoning`) });
+      const providerPrompt = typeof o.promptForProvider === 'function' ? o.promptForProvider(p.id) : prompt;
+      const requestPrompt = fixNote ? providerPrompt + '\n\nYOUR PREVIOUS ANSWER WAS REJECTED: ' + fixNote + '\nReturn the corrected, complete JSON only.' : providerPrompt;
+      const r = await call(p, m, requestPrompt, { images, signal, onText, onThink: n => onStatus && onStatus(p.name + ' · ' + m + ' is thinking… ' + n.toLocaleString() + ' characters of reasoning') });
       use().tok[p.id] = (use().tok[p.id] || 0) + ((r.usage && r.usage.total_tokens) || pin + est(r.text)); saveUse();
+      const webResearch = (r.webSearchCalls || (r.citations && r.citations.length)) ? {
+        callId: Date.now() + ':' + p.id + ':' + m + ':' + round,
+        provider: p.name, model: m, searched: r.webSearchCalls || 0,
+        citations: (r.citations || []).filter(c => /^https:\/\//i.test(c.url))
+      } : null;
+      if (webResearch) {
+        researchLog.push({ at: Date.now(), ...webResearch });
+        if (researchLog.length > 120) researchLog.shift();
+        if (typeof o.onResearch === 'function') { try { o.onResearch(webResearch); } catch (e) { } }
+      }
       let v; try { v = parseJSONLoose(r.text); } catch (e) { lastBad.push({ at: Date.now(), provider: p.id, model: m, finish: r.finish, text: r.text.slice(0, 1500) + (r.text.length > 1500 ? ' … ' + r.text.slice(-500) : '') }); if (lastBad.length > 6) lastBad.shift(); throw { code: 'invalid_json' }; }
       const cut = r.finish === 'length' || !!(v && v._truncated);
       // a cut-off answer: its complete elements are kept (parseJSONLoose) when the caller can use them and its check passes
@@ -276,6 +416,7 @@ export async function ask(prompt, o = {}) {
       if (cut && v && typeof v === 'object') v._truncated = true;
       const bad = validate ? validate(v) : null; if (bad) { if (cut) throw { code: 'truncated', message: bad }; if (!fixNote) { fixNote = bad; continue; } throw { code: 'invalid', message: bad }; }
       fixNote = null; lastRoute.provider = p.name; lastRoute.model = m;
+      if (webResearch) v._webResearch = webResearch;
       if (!cut && (validate || usable(v))) store.setGlobal('aic:' + h, { v, at: Date.now(), provider: p.name, model: m }).catch(() => { });   /* a cut-off answer is used once, never kept */
       return v;
     } catch (e) {

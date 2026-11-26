@@ -27,7 +27,7 @@ function draw(J) {
   J.stageEl.textContent = n ? `${Math.min(i + 1, n)} of ${n}: ${J.stageNames[i] || J.stages[i]}` : '';
   J.line.textContent = J.text || '';
 }
-const tick = setInterval(() => { for (const J of JOBS) if (J.time) J.time.textContent = fmt(Date.now() - J.at); }, 1000);
+const tick = typeof window !== 'undefined' ? setInterval(() => { for (const J of JOBS) if (J.time) J.time.textContent = fmt(Date.now() - J.at); }, 1000) : null;
 void tick;
 
 // start a job: { label, stages: ['chain', …], names: {chain: 'writing the steps', …}, signal }

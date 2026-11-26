@@ -1,6 +1,6 @@
 # Prompt pack
 
-These are the exact prompts Scriptorium Memorialium sends to Claude (generated from `js/ai/prompts.js` by `node prompts/build.mjs`; do not edit them by hand). Use them with **any** AI (another Claude account, ChatGPT, Gemini, a local model) that can read your PDF. Every answer is plain JSON that you paste back into the app (open a scroll → *Paste JSON from another AI*, or *Import / export → Import JSON* for a whole room or library).
+These are the prompt templates used by Scriptorium's OpenAI-first authoring pipeline, with portable versions for other AIs. The files are generated from js/ai/prompts.js by node prompts/build.mjs; edit the source prompts, not these generated files.
 
 Order of work (the full recipe, with checklists, is in `../docs/PROTOCOL.md` → "Recipe for any AI"):
 1. `01-split-book.md`: split the PDF into parts and list **every subsection** with page ranges (the app also does this itself, without AI).
@@ -9,9 +9,11 @@ Order of work (the full recipe, with checklists, is in `../docs/PROTOCOL.md` →
 3b. `08-repair-steps.md`: only when the quality gate finds steps that paste the PDF, repeat another step, state without explaining, or skip code explanations: just those steps are rewritten.
 3c. `09-figures.md`: only for paragraphs and teaching boxes that still lack a figure.
 3d. `12-domain-compiler.md`: the explanatory compiler: for steps whose structure (an argument, a feedback loop, a business model, a matrix, a data series…) is drawn best by a domain primitive and that have none yet, the visual routing and the interactive primitive spec (`../docs/research/explanatory-compiler.md`).
-4. `10-didactic-plan.md`: before each 3D scene, a short plan (the question, the kind of knowledge, the levels, Jared Owen's explanatory sequence with an operation and a camera mode per beat, the comprehension check). Check it with `node tools/verify-chain.mjs plan.json`.
-4b. `03-author-diorama.md`: one call per 3D scene the chain asked for (`{"type":"scene","request":...}`), built from the plan (paste the plan into the request's "plan").
-4c. `11-self-critique.md`: could someone explain the concept after watching? A short check of the lessons against the plan's comprehension check; it may only patch lesson texts.
+4. `10-didactic-plan.md`: plan the explanatory sequence and source-mapped model contract before building a 3D scene.
+4b. `03-author-diorama.md`: author the scene from the approved plan; preserve the contract, actor IDs, variable ranges and units.
+4c. `11-self-critique.md`: check whether the lessons support a correct explanation; it may patch lesson text only.
+4d. `13-model-audit.md`: independently review model fidelity (entities, mechanisms, units, constraints, controls and scope).
+5. `04-edit-diorama.md`: change an existing diorama.
 5. `04-edit-diorama.md`: change an existing diorama.
 6. `05-sub-scroll.md`: expand one step into a detailed sub-scroll.
 7. `06-whole-room.md`: everything in one answer (for AIs with large outputs).

@@ -2,6 +2,11 @@
 # Started in the background by "Launch Scriptorium.bat" just before the server itself; probes the address for up to
 # -Seconds (default 10). Any HTTP answer, even an error status, means the server is up.
 param([string]$Url = 'http://localhost:8000/', [int]$Seconds = 10)
+
+# This helper is launched as a child of the OpenAI launcher. Remove the inherited API secret before
+# spawning the user's browser: only the local Scriptorium server process needs the credential.
+Remove-Item Env:\OPENAI_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:\OPENAI_MODEL -ErrorAction SilentlyContinue
 $deadline = [DateTime]::Now.AddSeconds($Seconds)
 $ready = $false
 while (-not $ready -and [DateTime]::Now -lt $deadline) {

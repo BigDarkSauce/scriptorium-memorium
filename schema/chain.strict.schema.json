@@ -78,6 +78,14 @@
       "items": {
         "$ref": "#/$defs/source"
       }
+    },
+    "atlas": {
+      "$ref": "atlas.schema.json",
+      "description": "AI-generated semantic concept graph, source index, linked diorama sequence and generative prediction challenges."
+    },
+    "researchEvidence": {
+      "type": "object",
+      "description": "Actual OpenAI Responses API web-search tool calls and returned citations, separate from uploaded-PDF source evidence."
     }
   },
   "$defs": {

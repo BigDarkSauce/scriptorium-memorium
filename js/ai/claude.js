@@ -1,12 +1,8 @@
-// AI connector. Three engines, chosen in the AI settings (js/ai/free.js, js/ai/aipanel.js):
-//   claude   Claude directs: inside claude.ai the page asks the viewer's own Claude (sample capability);
-//   hybrid   Claude + free models: Claude takes the director's requests (reading a chapter into its chain, planning
-//            and checking each diorama: role 'director'), the pool of free models the volume work (coverage, repairs,
-//            figures, diorama authoring, expansions: role 'worker'). Each stands in for the other when it is at its
-//            limit or unreachable, so a job never stops for want of an engine;
-//   free     free models only (the router in free.js: many providers, budgets, waits for the next reset, never fails).
-// With no engine reachable, every request can be exported as a prompt and the JSON answer pasted back — see
-// docs/PROTOCOL.md. The prompts and the JSON formats are the same whichever engine answers.
+// Shared request coordinator: activity wrapper, streaming, JSON parsing and the portable manual relay.
+// Current authoring is OpenAI-first. FREE.mode() is fixed to 'free', and free.js gives the local OpenAI
+// Responses adapter absolute priority before trying enabled fallback providers. The old window.claude host
+// adapter below is retained only for compatibility with older embedded hosts; it is not the primary route.
+// If no configured provider can answer, the app can expose the same portable prompt for manual completion.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { startJob, currentJob, anyOf } from './activity.js';
@@ -17,7 +13,7 @@ export function initAI() {
   return ready;
 }
 export const claudeAvailable = () => !!SAMPLE;
-// Claude asked directly (the picture reviewer in js/ai/media.js): pictures go only where this page may send them
+// Legacy embedded-host image budget; it is not used by the OpenAI-first authoring route.
 export const claudeImageCount = () => (SAMPLE && LIMITS && LIMITS.images ? LIMITS.images.maxCount || 0 : 0);
 export async function claudeSample(prompt, opts) { await ready; if (!SAMPLE) throw { code: 'unavailable' }; return SAMPLE(prompt, opts); }
 export const engine = () => FREE.mode();
@@ -26,10 +22,10 @@ export const aiAvailable = () => { const m = FREE.mode(); return m === 'claude' 
 // hybrid mode; a free vision model, Gemini, otherwise)
 export const imageLimit = () => { const c = LIMITS && LIMITS.images ? LIMITS.images.maxCount : 0, m = FREE.mode(), fv = FREE.hasVision() ? 6 : 0; return m === 'claude' ? c : m === 'hybrid' ? (SAMPLE ? c : fv) : fv; };
 // who writes, in words, for the status lines
-export const writer = (role = 'worker') => { const m = FREE.mode(); return m === 'claude' || (m === 'hybrid' && role === 'director' && SAMPLE) ? 'Claude' : 'The free models'; };
+export const writer = () => 'The AI engine';
 export function errCopy(err) {
   const code = err && err.code;
-  return ({ cancelled: 'Stopped.', not_granted: 'Claude access was declined for this page.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'Claude declined this request.', session_expired: 'Your session expired. Sign in again on claude.ai.', unavailable: 'Claude is not reachable from this view. Use "Copy prompt" to run it in any AI, then paste the answer back.', images_unavailable: 'This view cannot send images to Claude.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
+  return ({ cancelled: 'Stopped.', not_granted: 'Permission to use the AI provider was declined.', rate_limited: 'Too many requests right now. Wait a minute and try again.', prompt_too_large: 'The request is too long. Analyse a smaller part.', invalid_json: 'The answer did not come back in the expected format. Try again.', refused: 'The selected AI provider declined this request.', session_expired: 'The hosted session expired. Reopen the app and try again.', unavailable: 'The selected AI provider is not reachable from this view. Use "Copy prompt" to run it in ChatGPT or another AI, then paste the answer back.', images_unavailable: 'This view cannot send images to the selected AI provider.' }[code]) || (err && err.message) || 'Something went wrong. Try again.';
 }
 export function parseJSONLoose(text) {
   let s = String(text || '').trim(); const fence = s.match(/```(?:json)?\s*([\s\S]*?)(```|$)/); if (fence && fence[1].trim()) s = fence[1];
@@ -71,7 +67,7 @@ export async function askJSON(prompt, o = {}) {
   catch (e) { if (J.signal.aborted && !(e && e.code === 'cancelled')) throw { code: 'cancelled', message: 'Stopped.' }; throw e; }
   finally { if (own) own.end(); }
 }
-async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
+async function askJSON0(prompt, { onText, onTool, onStatus, onResearch, images, signal, tools, tier = 'complex', role = 'worker', validate, manualTitle = 'Run this request in any AI', minRank, acceptTruncated = false, fresh = false } = {}) {
   await ready;
   const m = FREE.mode();
   const viaClaude = async () => {
@@ -82,10 +78,14 @@ async function askJSON0(prompt, { onText, onTool, onStatus, images, signal, tool
     const { text, truncated } = await SAMPLE(prompt, opts);
     const v = parseJSONLoose(text); if (truncated && v && typeof v === 'object') v._truncated = true; return v;
   };
-  const viaFree = exhausted => FREE.ask(forFreeModels(prompt), { images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
+  const viaFree = exhausted => FREE.ask(prompt, { promptForProvider: id => id === 'openai-local' ? prompt : forFreeModels(prompt), images: images && FREE.hasVision() ? images : [], signal, onText, onStatus, onResearch, validate, exhausted, minRank: minRank != null ? minRank : role === 'director' ? 80 : 55, acceptTruncated, fresh });
   if (m === 'claude' || (!FREE.hasAny() && m === 'hybrid')) { if (!SAMPLE) return manualRelay(prompt, manualTitle); return viaClaude(); }
-  if (m === 'free' || !SAMPLE) { if (!FREE.hasAny()) return manualRelay(prompt, manualTitle); return viaFree(false); }
-  // hybrid: the director's requests to Claude first, the worker's to the free pool first; each falls back to the other
+  if (m === 'free' || !SAMPLE) {
+    if (!FREE.hasAny()) return manualRelay(prompt, manualTitle);
+    try { return await viaFree(false); }
+    catch (e) { if (e && e.code === 'free_none') return manualRelay(prompt, manualTitle); throw e; }
+  }
+  // Legacy hybrid branch retained for old saved settings; the current router fixes mode to OpenAI-first.
   const STANDIN = /rate_limited|unavailable|not_granted|session_expired|invalid_json|refused|timeout|overloaded|server/;
   if (role === 'director') {
     try { return await viaClaude(); } catch (e) { if (e && e.code === 'cancelled') throw e; if (!(e && STANDIN.test(e.code || ''))) throw e; onStatus && onStatus('Claude is not available for this one (' + (errCopy(e) || e.code) + '): the free models take it.'); return viaFree(false); }
@@ -105,7 +105,7 @@ export function manualRelay(prompt, title) {
     const copy = el('button', { class: 'btn', text: 'Copy prompt', onclick: async () => { try { await navigator.clipboard.writeText(prompt); toast('Prompt copied'); } catch (e) { pre.select(); toast('Select the text and copy it'); } } });
     const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide' }, [
       el('h3', { text: title }),
-      el('p', { class: 'dim', text: 'Copy the prompt into Claude (any account), ChatGPT, Gemini or another AI together with your file, then paste the JSON it returns.' }),
+      el('p', { class: 'dim', text: 'Copy the prompt into ChatGPT, Gemini or another compatible AI together with your file, then paste the JSON it returns.' }),
       pre, el('div', { class: 'row' }, [copy]), ta,
       el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Cancel', onclick: () => close(rej, { code: 'cancelled' }) }),
         el('button', { class: 'btn primary', text: 'Use this answer', onclick: () => { try { close(res, parseJSONLoose(ta.value)); } catch (e) { toast('That is not valid JSON yet'); } } })])])]);

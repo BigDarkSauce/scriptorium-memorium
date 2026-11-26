@@ -36,30 +36,22 @@ The quality gate checks every answer for pasted text, repeated passages and figu
 
 The learner chooses how fine the chain is, but never coarser than the source: *Complete* (every definition, rule, worked example, table, figure, code block and panel item its own step), *Essential* (the spine, at least one step per subsection), or an *exact number* of steps for the chosen pages (raised to the number of subsections if it is smaller).
 
-## 2. Grounding: the literature as a co-author
+## 2. Grounding: source evidence, research and provenance
 
-Inside claude.ai the page uses the viewer's own research connectors (the artifact `mcp` capability):
+Scriptorium uses OpenAI as its primary authoring engine when the local launcher is configured. The browser sends requests to the same-origin local adapter; the adapter reads `OPENAI_API_KEY` from its process environment and forwards requests to the Responses API over HTTPS. The API key is never placed in browser storage or in a prompt. Setup, limits and the optional fallback route are described in [the OpenAI-first setup guide](OPENAI-LOCAL.md).
 
-- **OpenAlex**: an open index of about 250 million scholarly works in every field, with CC0 metadata and DOIs. It is used for search and for **verifying citations** (`resolve_references`).
-- **Consensus**: semantic search over peer-reviewed papers for plain-language research questions, used for empirical claims and measured values.
-- **PubMed**: biomedical and life-science literature.
+**External research is separate from the uploaded source.** The OpenAI Responses API can provide the model with the `web_search` tool. The model decides when it is useful; the app records actual search calls and returned URL citations. A prompt asking for research is not proof that research occurred. The atlas displays those external citations separately from PDF/PPTX subsection, page, slide and figure references. See the [Responses API documentation](https://developers.openai.com/api/docs/guides/tools-web-search).
 
-**While writing** a chain, a diorama or a sub-scroll, Claude gets these as tools (`search_literature`, `search_evidence`, `search_biomedical`). The prompt's GROUNDING rules tell it to:
-- look up the central laws, definitions and every number it will state or plot;
-- copy titles and DOIs exactly from what it found;
-- never invent a DOI;
-- give a range when sources disagree.
+**Optional scholarly connectors.** When an approved host connector is configured, `js/ai/evidence.js` can also query services such as OpenAlex, Consensus and PubMed. These connectors are optional and are not assumed to exist in the standalone local workflow. OpenAlex is used by the explicit **Verify sources** action: a reference is marked verified only after the resolver returns an exact or likely match. Without a successful resolver result, it remains unchecked. The reader can still search and attach a reference manually; a plausible-looking DOI is never treated as verified merely because it appears in model output.
 
-**After writing**, every cited reference is checked against OpenAlex and marked:
-- ✓ found;
-- ? partial match;
-- ✗ not found: the reference may be garbled or invented.
+Grounding rules:
+- look up central laws, definitions and measured values when an appropriate research tool is available;
+- preserve titles, author lists, years, DOIs and URLs returned by the source rather than reconstructing them from memory;
+- distinguish a source statement, an inference, a standard background fact and an externally researched addition;
+- show a range or uncertainty when reliable sources disagree;
+- never claim that a search or citation check happened unless the corresponding tool actually returned a result.
 
-The reader can also press **Find sources** on any step to search OpenAlex and cite a work by hand.
-
-**Without connectors** (outside claude.ai, or with another AI), the same prompts still ask for sources. They show as *unchecked* until verified.
-
-**Corrections over fidelity.** When a book and the established literature disagree, the chain follows the literature, keeps the step, and says what differs in `sourceNote`. Two corrections made while grounding the example library:
+**Corrections over fidelity.** When a book and the established literature disagree, the chain follows the literature, keeps the source wording visible and explains the difference in `sourceNote`. Two corrections made while grounding the example library:
 - *Water cycle:* "warm air holds more water" was replaced by the saturation vapour pressure of water, $e_s(T)$, which rises about 7 % per kelvin. Saturation is a property of water at a given temperature, not of the air (Koutsoyiannis 2012).
 - *Osmosis:* "water diffuses down its own concentration gradient" was replaced by flow driven by the water's chemical potential, mostly as bulk flow through pores (Kramer & Myers 2013; Kedem & Katchalsky 1958). The diorama's lesson text now says that its particle picture shows the direction of flow, not the molecular mechanism.
 
@@ -120,3 +112,51 @@ learner's own self-explanation help where self-explanation alone falls short (Re
 "More detail → sub-scroll" no longer writes anything by itself: it asks what the reader wants explained and where
 (any of the step's statement, paragraphs, formula, derivation lines, terms, examples, code and boxes), with an optional
 deepest dive, and only then writes the sub-scroll.
+
+
+## 5. Generative incompleteness: make the learner reconstruct
+
+A conventional explanation can leave the learner watching, reading and recognising without generating the structure needed to explain or use it. Scriptorium therefore uses a prediction-first loop where a learner attempts a reconstruction before the full explanation appears:
+
+**Activate → Predict → Commit → Inspect → Explain → Reconstruct → Transfer → Revisit.**
+
+The system should not merely reveal information in an attractive order. It should create a gap that the learner can meaningfully try to close, then use the difference between their prediction and the supported explanation as feedback.
+
+Six forms are available:
+
+1. **Structural incompleteness:** hide a part of a structure and ask what belongs there.
+2. **Mechanistic incompleteness:** show initial and final states while withholding the causal transition.
+3. **Temporal incompleteness:** pause a process before a consequential next state.
+4. **Explanatory incompleteness:** present an observation without its mechanism and ask what could explain it.
+5. **Relational incompleteness:** show concepts without one important dependency or connection.
+6. **Counterfactual incompleteness:** remove or change a component/variable and ask what follows.
+
+These are not a quota. Each task must have an inferable target, enough prerequisite knowledge, and corrective feedback after the learner commits. Randomly obscuring pixels or withholding information the source has not introduced is not a useful challenge.
+
+### Multimodal reconstruction, not compulsory mental imagery
+
+A vivid mental image can help when the subject is spatial, structural or mechanical, but it is not a universal prerequisite for understanding. The same challenge should be accessible through a sketch, verbal explanation, symbolic reconstruction, ordering, physical gesture or interactive manipulation. The goal is a coherent generative model, not a particular imagery ability.
+
+### Use the diorama as a testable model
+
+A diorama is valuable when its spatial or temporal structure helps explain the concept. It should expose the relevant actors, states, relationships and controllable variables. The learner should be able to predict what happens when a meaningful variable changes, inspect the consequence, and explain why. An abstract proof, philosophical argument or purely relational taxonomy may be better represented as a 2D map or diagram than as an artificial 3D scene.
+
+### Atlas nodes and source audit
+
+The chapter atlas is compiled from validated reasoning steps, not directly from page count. A concept can span several subsections or slides; a source subsection can contain several concepts. The atlas validator checks that every supplied source step belongs to exactly one concept node, that edge endpoints exist, and that challenge records are complete. These deterministic checks protect coverage and graph integrity, but they cannot prove the model's semantic interpretation or scientific correctness. The source trail and uncertainty notes remain visible for review.
+
+### Question branches and bitwise reconstruction
+
+The atlas presents its challenges as a horizontal set of question branches rather than a vertical list of finished explanations. A learner selects one branch, sees its question and stimulus, writes a prediction and confidence, and commits before the expected reconstruction appears. The explanation is an ordered, source-mapped sequence of reasoning units: one UNFOLD action reveals exactly one unit, earlier units remain visible, Space reveals the next unit, and Ctrl+Z steps back. Switching branches preserves each branch's own prediction and reveal cursor. UNFOLD never advances to another question.
+
+Newly authored reasoning units cite exact source-step IDs from their concept node. The validator rejects empty reasoning units and references outside that node. Older stored atlases without the structured sequence use their existing explanation as a single legacy reveal unit; the app does not invent missing intermediate reasoning. Implementation: `js/ai/atlas.js`, `js/room/atlas-view.js`, and `tools/test-atlas.mjs` / `tools/test-atlas-ui.mjs`.
+
+### Rapid scanning and optional loci routes
+
+The first source-orientation scan is implemented in the chapter atlas. It lists the extracted subsections, step counts and source-step matches for terms, equations, worked examples, tables, figures and code; a search result retains its exact step ID and opens the owning concept and source-trail entry. Native autocomplete suggestions come only from the ingested source titles, concept questions, terms, equations, examples, table labels and figure captions. This is a navigation/index layer, not a generated summary or substitute for the original source. Adaptive scan prompts and richer inventory facets remain future work. The broader scan → question sweep → selective depth design is specified in [Learning workflow](LEARNING-WORKFLOW.md).
+
+A first optional loci route is implemented over the atlas. A concept can be anchored to a bookcase ID, row and slot; the marker follows the bookcase when it is moved or rotated. The learner writes an association, visits the location, commits a reconstruction and confidence, and only then reveals the concept summary. The review record stays with the atlas, and the concept's source-step IDs remain available when the learner returns to the atlas. This initial version still uses bookcase-local anchors rather than arbitrary room landmarks, but it now schedules due reviews through the existing retrieval ledger. After reveal, learners self-rate recall; one-day retries and expanding accurate-recall intervals are recorded as recall cards, separate from transfer-accuracy scoring. When a revealed attempt becomes due, the next route entry archives it and restores a blank recall prompt before showing the answer again, including for attempts left unrated. This protects retrieval practice from becoming answer recognition. The route does not replace the atlas's full reasoning path. Adaptive autocomplete prompts and non-bookcase landmarks remain design targets.
+
+### Evaluate learning, not only engagement
+
+The relevant outcome is not how immersive a scene feels. Evaluate whether the learner can later reconstruct the idea without cues, explain the mechanism, calibrate confidence, diagnose a misconception and transfer the principle to a changed context. Engagement is useful when it supports these outcomes, not as a substitute for them.

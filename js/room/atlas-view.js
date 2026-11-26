@@ -1,0 +1,1138 @@
+// Chapter atlas UI: a transitionable 2D concept graph whose nodes lead to linked diorama sets.
+// The validated reasoning chain remains the source of truth, but is not rendered as a long text scroll here.
+import { el, mathHTML, toast } from '../util.js';
+import { renderFigure } from './diagrams.js';
+import { sourcePointLabel, sourcePointsLabel, sourceRangeLabel } from './source-label.js';
+
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs = {}) => {
+  const n = document.createElementNS(NS, tag);
+  Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, String(v)));
+  return n;
+};
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const txt = (v, n = 240) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n);
+const titleCase = s => String(s || '').replace(/-/g, ' ');
+
+function coordinates(nodes) {
+  const W = 1100, H = Math.max(660, 190 * Math.ceil(nodes.length / 4));
+  const P = nodes.map((n, i) => ({
+    id: n.id, node: n,
+    x: 130 + (clamp(+((n.position || {}).x) || ((i % 4) * 24 + 14), 0, 100) / 100) * 840,
+    y: 110 + (clamp(+((n.position || {}).y) || (Math.floor(i / 4) * 22 + 10), 0, 100) / 100) * (H - 220)
+  }));
+  // Deterministic repulsion keeps approximate AI positions from placing cards on top of one another.
+  for (let k = 0; k < 48; k++) {
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+      const a = P[i], b = P[j], dx = b.x - a.x, dy = b.y - a.y;
+      const ox = 216 - Math.abs(dx), oy = 124 - Math.abs(dy);
+      if (ox > 0 && oy > 0) {
+        if (ox < oy) { const q = Math.max(1, ox * .12) * (dx < 0 ? -1 : 1); a.x -= q; b.x += q; }
+        else { const q = Math.max(1, oy * .12) * (dy < 0 ? -1 : 1); a.y -= q; b.y += q; }
+      }
+    }
+    P.forEach(p => { p.x = clamp(p.x, 120, W - 120); p.y = clamp(p.y, 84, H - 84); });
+  }
+  return { points: P, width: W, height: H };
+}
+function svgText(text, x, y, cls, max = 27) {
+  const el0 = svgEl('text', { x, y, class: cls });
+  const words = txt(text, 160).split(' '); let line = '', row = 0;
+  for (const word of words) {
+    const candidate = line ? line + ' ' + word : word;
+    if (candidate.length > max && line) {
+      const t = svgEl('tspan', { x, dy: row === 0 ? 0 : 18 }); t.textContent = line; el0.append(t);
+      row++; line = word; if (row >= 2) break;
+    } else line = candidate;
+  }
+  if (line && row < 2) { const t = svgEl('tspan', { x, dy: row === 0 ? 0 : 18 }); t.textContent = line; el0.append(t); }
+  return el0;
+}
+
+export function renderAtlasView({ atlas, part, onOpenDiorama, onGenerate, onAssignMemoryPlace, onRemoveMemoryPlace, onVisitMemoryRoute, onSave }) {
+  atlas.attempts = atlas.attempts || {};
+  atlas.selectedVisualViews = atlas.selectedVisualViews || {};
+  const root = el('section', { class: 'atlas-view' });
+  const header = el('div', { class: 'atlas-intro' }, [
+    el('div', { class: 'atlas-overline', text: 'CHAPTER CONCEPT ATLAS' }),
+    el('p', { class: 'atlas-central-q', html: mathHTML(atlas.question || part.title) }),
+    el('div', { class: 'atlas-meta', text: (atlas.nodes || []).length + ' concepts · ' + (atlas.audit?.linkedDioramas ?? 0) + ' linked dioramas · ' + (atlas.audit?.certainty || 'AI-generated map') })
+  ]);
+  root.append(header);
+
+  // A compact orientation scan exposes the real ingested structure and validated source steps.
+  // It is an index for retrieval, not a generated chapter summary or a replacement for the source trail.
+  const sourceType = atlas.sourceIndex && atlas.sourceIndex.sourceType || (part.sourceType === 'pptx' ? 'pptx' : 'pdf');
+  const sourceSteps = part.analysis && Array.isArray(part.analysis.chain) ? part.analysis.chain : [];
+  const sourceSections = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.sourceSubsections) ? atlas.sourceIndex.sourceSubsections : [];
+  const nodeForStep = stepId => (atlas.nodes || []).find(n => (n.stepIds || []).some(id => String(id) === String(stepId)));
+  const tagsForStep = st => {
+    const tags = [];
+    if (/definition|term/.test(String(st.kind || '').toLowerCase())) tags.push('definition');
+    if (st.math || (st.derivation || []).length) tags.push('equation / derivation');
+    if (st.examples && st.examples.length || String(st.kind || '').toLowerCase() === 'example') tags.push('worked example');
+    if (st.table) tags.push('table');
+    if ((st.figures || []).length || (st.figureRefs || []).length) tags.push('figure');
+    if (st.code) tags.push('code');
+    if ((st.terms || []).length) tags.push('terms');
+    return tags;
+  };
+  const indexedFigureList = atlas.sourceIndex && Array.isArray(atlas.sourceIndex.pdfFigureIndex) ? atlas.sourceIndex.pdfFigureIndex : [];
+  const sourceFigureIndex = indexedFigureList.length ? indexedFigureList : Array.isArray(part.figureIndex) ? part.figureIndex : [];
+  const sourceText = value => {
+    if (value == null) return '';
+    if (Array.isArray(value)) return value.map(sourceText).join(' ');
+    if (typeof value === 'object') return Object.values(value).map(sourceText).join(' ');
+    return String(value);
+  };
+  const scanEntries = sourceSteps.map(st => {
+    const section = sourceSections.find(s => String(s.id) === String(st.section));
+    const node = nodeForStep(st.id);
+    const figureIds = [
+      ...(st.figures || []).map(x => typeof x === 'string' ? x : x && x.id),
+      ...(st.figureRefs || []).map(x => x && x.id)
+    ].filter(Boolean).map(String);
+    const indexedFigures = sourceFigureIndex.filter(f => f && figureIds.includes(String(f.id)));
+    const searchable = [
+      node && [node.title, node.question, node.summary, (node.knowledgeKinds || []).join(' ')].join(' '),
+      st.id, st.section, st.kind, st.title, st.statement, st.math,
+      (st.derivation || []).map(x => x && x.expr || '').join(' '),
+      (st.terms || []).map(x => [x && x.term, x && x.meaning].join(' ')).join(' '),
+      (st.examples || []).map(x => [x && x.title, x && x.problem, x && x.answer].join(' ')).join(' '),
+      st.table && [st.table.caption, sourceText(st.table.columns), sourceText(st.table.rows)].join(' '),
+      sourceText(st.figures), sourceText(st.figureRefs),
+      indexedFigures.map(f => [f.id, f.label, f.caption].join(' ')).join(' '),
+      sourceText(st.sources),
+      st.code && [st.code.lang, sourceText(st.code.lines)].join(' '),
+      section && section.title
+    ].filter(Boolean).join(' ').toLowerCase();
+    return {
+      step: st,
+      node,
+      section,
+      tags: tagsForStep(st),
+      pages: (st.pages || []).length ? st.pages : section ? [section.startPage, section.endPage].filter(Boolean) : [],
+      searchable,
+      figureIds
+    };
+  });
+  const scan = el('section', { class: 'atlas-source-scan' });
+  const scanExpanded = !!atlas.sourceScanExpanded;
+  const scanBody = el('div', { class: 'atlas-source-scan-body', id: 'atlas-source-scan-body', hidden: !scanExpanded });
+  const sectionItems = sourceSections.map(sec => {
+    const entries = scanEntries.filter(x => String(x.step.section) === String(sec.id));
+    const categories = [...new Set(entries.flatMap(x => x.tags))];
+    return { sec, entries, categories };
+  });
+  // The source scan must account for every validated chain step, including missing or stale section IDs.
+  // Keep these visible in an explicit group rather than silently omitting them from the default inventory.
+  const groupedEntries = new Set(sectionItems.flatMap(group => group.entries));
+  const ungroupedEntries = scanEntries.filter(entry => !groupedEntries.has(entry));
+  if (ungroupedEntries.length) {
+    sectionItems.push({
+      sec: { id: '__unmapped__', title: 'Unmapped / unsectioned source steps', startPage: null, endPage: null },
+      entries: ungroupedEntries,
+      categories: [...new Set(ungroupedEntries.flatMap(x => x.tags))]
+    });
+  }
+  // Keep every locally extracted figure visible. A figure that no validated chain step references is
+  // an explicit inventory item, not an inferred concept or a source-step link.
+  const linkedFigureIds = new Set(scanEntries.flatMap(entry => entry.figureIds || []));
+  const unlinkedFigureEntries = sourceFigureIndex
+    .filter(figure => figure && String(figure.id || '').trim() && !linkedFigureIds.has(String(figure.id)))
+    .map(figure => ({
+      figure,
+      searchable: [figure.id, figure.label, figure.caption, figure.page, figure.slide, figure.mediaPath].filter(Boolean).join(' ').toLowerCase()
+    }));
+  if (unlinkedFigureEntries.length) {
+    sectionItems.push({
+      sec: { id: '__unlinked_figures__', title: 'Unlinked source figures', startPage: null, endPage: null },
+      entries: [],
+      categories: ['figure'],
+      figureEntries: unlinkedFigureEntries
+    });
+  }
+  const countTags = [...new Set([...scanEntries.flatMap(x => x.tags), ...(unlinkedFigureEntries.length ? ['figure'] : [])])];
+  const scanSummary = [
+    sourceSections.length + ' subsections' + (ungroupedEntries.length ? ' · ' + ungroupedEntries.length + ' unmapped steps' : ''),
+    sourceSteps.length + ' source steps',
+    unlinkedFigureEntries.length + ' unlinked figures',
+    countTags.length ? countTags.join(' · ') : 'source index'
+  ].join(' · ');
+  const scanSummaryNode = el('button', {
+    class: 'atlas-scan-summary',
+    type: 'button',
+    'aria-expanded': String(scanExpanded),
+    'aria-controls': 'atlas-source-scan-body',
+    onclick: () => {
+      const expanded = scanBody.hidden;
+      scanBody.hidden = !expanded;
+      atlas.sourceScanExpanded = expanded;
+      scanSummaryNode.setAttribute('aria-expanded', String(expanded));
+    }
+  }, [
+    el('span', { class: 'atlas-section-label', text: 'QUICK SOURCE SCAN' }),
+    el('span', { class: 'atlas-scan-count', text: scanSummary })
+  ]);
+  // Native autocomplete options are copied only from the uploaded source index and validated chain.
+  // Suggestions are retrieval cues, not generated questions or hidden answers.
+  const suggestions = new Set();
+  const addSuggestion = value => {
+    const v = sourceText(value).replace(/\s+/g, ' ').trim();
+    if (v.length >= 2 && v.length <= 160) suggestions.add(v);
+  };
+  sourceSteps.forEach(st => {
+    const n = nodeForStep(st.id);
+    addSuggestion(n && n.title);
+    addSuggestion(n && n.question);
+    addSuggestion(st.title);
+    addSuggestion(st.math);
+    (st.derivation || []).forEach(x => addSuggestion(x && x.expr));
+    (st.terms || []).forEach(x => addSuggestion(x && x.term));
+    (st.examples || []).forEach(x => addSuggestion(x && x.title));
+    if (st.table) {
+      addSuggestion(st.table.caption);
+      (st.table.columns || []).forEach(addSuggestion);
+    }
+    (st.figureRefs || []).forEach(x => addSuggestion(x && x.id));
+  });
+  sourceFigureIndex.forEach(f => {
+    addSuggestion(f && f.id);
+    addSuggestion(f && f.label);
+    addSuggestion(f && f.caption);
+  });
+  const suggestionId = 'atlas-source-suggestions-' + String(atlas.nodes && atlas.nodes[0] && atlas.nodes[0].id || 'chapter');
+  const suggestionList = el('datalist', { id: suggestionId },
+    [...suggestions].slice(0, 120).map(value => el('option', { value }))
+  );
+  const scanInput = el('input', {
+    class: 'atlas-scan-search',
+    type: 'search',
+    list: suggestionId,
+    placeholder: 'Search or choose a source concept, term, equation, example or figure…',
+    'aria-label': 'Search source steps'
+  });
+  scanInput.value = String(atlas.sourceScanQuery || '');
+  // Adaptive retrieval checks are compiled only from complete source records.
+  // Prompt types are constrained by explicit source fields; incomplete records are skipped.
+  const recallPrompts = scanEntries.flatMap(entry => {
+    const step = entry.step;
+    const prompts = [];
+    (Array.isArray(step.terms) ? step.terms : []).forEach((term, index) => {
+      const name = sourceText(term && term.term).trim();
+      const meaning = sourceText(term && term.meaning).trim();
+      if (!name || !meaning || meaning.toLowerCase().includes(name.toLowerCase()) || meaning.length > 1000) return;
+      prompts.push({
+        id: 'term:' + String(step.id) + ':' + index,
+        kind: 'term completion',
+        stepId: String(step.id),
+        title: step.title || 'Source term',
+        pages: entry.pages,
+        question: 'Which term is described by this definition?',
+        stimulus: meaning,
+        answer: name
+      });
+    });
+    (Array.isArray(step.examples) ? step.examples : []).forEach((example, index) => {
+      const problem = sourceText(example && example.problem).trim();
+      const answer = sourceText(example && example.answer).trim();
+      const compactProblem = problem.replace(/\s+/g, '').toLowerCase();
+      const compactAnswer = answer.replace(/\s+/g, '').toLowerCase();
+      if (!problem || !answer || problem.length > 1000 || answer.length > 1000 || compactProblem.includes(compactAnswer)) return;
+      prompts.push({
+        id: 'example:' + String(step.id) + ':' + index,
+        kind: 'worked example',
+        stepId: String(step.id),
+        title: (example && example.title) || step.title || 'Worked example',
+        pages: entry.pages,
+        question: 'Reconstruct the worked example before checking its result.',
+        stimulus: problem,
+        answer
+      });
+    });
+    const equation = sourceText(step.math).trim();
+    const statement = sourceText(step.statement).trim();
+    const compactStatement = statement.replace(/\s+/g, '').toLowerCase();
+    const compactEquation = equation.replace(/\s+/g, '').toLowerCase();
+    if (!prompts.length && equation && statement && !compactStatement.includes(compactEquation) && equation.length <= 1000 && statement.length <= 1000) {
+      prompts.push({
+        id: 'equation:' + String(step.id),
+        kind: 'equation anticipation',
+        stepId: String(step.id),
+        title: step.title || 'Source equation',
+        pages: entry.pages,
+        question: 'Write the equation that expresses this relationship.',
+        stimulus: statement,
+        answer: equation
+      });
+    }
+    return prompts;
+  }).slice(0, 80);
+  atlas.scanAttempts = atlas.scanAttempts || {};
+  const scanRecall = el('section', { class: 'atlas-scan-recall', hidden: !recallPrompts.length });
+  const recallRail = el('div', {
+    class: 'atlas-scan-recall-rail',
+    role: 'group',
+    'aria-label': 'Source-derived retrieval prompts'
+  });
+  const recallCard = el('section', {
+    class: 'atlas-scan-recall-card',
+    hidden: true,
+    'aria-live': 'polite'
+  });
+  const recallTabs = new Map();
+  const refreshRecallTabs = () => {
+    recallPrompts.forEach(prompt => {
+      const button = recallTabs.get(prompt.id);
+      if (!button) return;
+      const saved = atlas.scanAttempts[prompt.id] || {};
+      button.classList.toggle('active', atlas.selectedScanPromptId === prompt.id);
+      button.setAttribute('aria-pressed', String(atlas.selectedScanPromptId === prompt.id));
+      const status = saved.revealed ? 'REVEALED' : saved.committed ? 'COMMITTED' : 'NEW';
+      const small = button.querySelector('small');
+      if (small) small.textContent = prompt.stepId + ' · ' + status;
+    });
+  };
+  const renderRecallPrompt = prompt => {
+    atlas.selectedScanPromptId = prompt.id;
+    const saved = atlas.scanAttempts[prompt.id] || {};
+    recallCard.innerHTML = '';
+    recallCard.hidden = false;
+    const location = sourcePointsLabel(prompt.pages, sourceType);
+    recallCard.append(
+      el('div', {
+        class: 'atlas-scan-recall-meta',
+        text: prompt.kind.toUpperCase() + ' · ' + prompt.stepId + (location ? ' · ' + location : '')
+      }),
+      el('h4', { text: prompt.question }),
+      el('p', { class: 'atlas-scan-recall-stimulus', html: mathHTML(prompt.stimulus) })
+    );
+    const response = el('textarea', {
+      class: 'field atlas-scan-recall-response',
+      rows: 2,
+      placeholder: 'Reconstruct the answer in your own words…',
+      'aria-label': 'Your source-derived recall response'
+    });
+    response.value = saved.response || '';
+    response.disabled = !!saved.revealed;
+    const commitStatus = el('small', {
+      class: 'atlas-scan-recall-status',
+      role: 'status',
+      'aria-live': 'polite'
+    });
+    const commit = el('button', {
+      class: 'btn primary small',
+      type: 'button',
+      text: saved.committed ? 'Recommit response' : 'Commit recall',
+      disabled: !!saved.revealed,
+      onclick: () => {
+        const answer = response.value.trim();
+        if (!answer) {
+          commitStatus.textContent = 'Write a response before committing.';
+          response.focus();
+          return;
+        }
+        commitStatus.textContent = '';
+        const current = atlas.scanAttempts[prompt.id] || {};
+        atlas.scanAttempts[prompt.id] = {
+          ...current,
+          response: answer.slice(0, 1200),
+          committed: true,
+          revealed: false,
+          attemptedAt: new Date().toISOString()
+        };
+        onSave && onSave();
+        renderRecallPrompt(prompt);
+      }
+    });
+    response.addEventListener('input', () => {
+      const current = atlas.scanAttempts[prompt.id] || {};
+      atlas.scanAttempts[prompt.id] = {
+        ...current,
+        response: response.value.slice(0, 1200),
+        committed: false,
+        revealed: false
+      };
+      commitStatus.textContent = '';
+      commit.textContent = 'Commit recall';
+      refreshRecallTabs();
+      onSave && onSave();
+    });
+    recallCard.append(
+      response,
+      el('div', { class: 'row wrap atlas-scan-recall-actions' }, [commit, commitStatus])
+    );
+    if (saved.committed && !saved.revealed) {
+      recallCard.append(el('button', {
+        class: 'btn small',
+        type: 'button',
+        text: 'Reveal expected answer',
+        onclick: () => {
+          const current = atlas.scanAttempts[prompt.id] || {};
+          atlas.scanAttempts[prompt.id] = { ...current, revealed: true, revealedAt: new Date().toISOString() };
+          onSave && onSave();
+          renderRecallPrompt(prompt);
+        }
+      }));
+    } else if (saved.revealed) {
+      recallCard.append(el('div', { class: 'atlas-scan-recall-answer' }, [
+        el('b', { text: 'EXPECTED RECONSTRUCTION' }),
+        el('p', { html: mathHTML(prompt.answer) }),
+        el('small', { text: 'Compare this source answer with your committed response. This is a recall check, not an automatically graded score.' })
+      ]));
+    }
+    refreshRecallTabs();
+  };
+  if (recallPrompts.length) {
+    scanRecall.append(
+      el('div', { class: 'atlas-section-label', text: 'SOURCE-DERIVED QUICK RETRIEVAL' }),
+      el('p', {
+        class: 'atlas-scan-recall-intro',
+        text: 'Choose a check built from complete terms, worked examples or equation statements in this source. Commit your reconstruction before revealing the expected answer.'
+      }),
+      recallRail,
+      recallCard
+    );
+    recallPrompts.forEach(prompt => {
+      const button = el('button', {
+        class: 'atlas-scan-recall-tab',
+        type: 'button',
+        'aria-pressed': 'false',
+        onclick: () => {
+          atlas.selectedScanPromptId = prompt.id;
+          onSave && onSave();
+          renderRecallPrompt(prompt);
+        }
+      }, [
+        el('b', { text: prompt.kind }),
+        el('small', { text: prompt.stepId + ' · NEW' })
+      ]);
+      recallTabs.set(prompt.id, button);
+      recallRail.append(button);
+    });
+    const rememberedPrompt = recallPrompts.find(prompt => prompt.id === atlas.selectedScanPromptId);
+    if (rememberedPrompt) renderRecallPrompt(rememberedPrompt);
+  }
+  const scanResults = el('div', { class: 'atlas-scan-results', role: 'list', 'aria-label': 'Source scan results' });
+  const openNode = (node, stepId = null) => {
+    atlas.selectedSourceStepId = stepId == null ? null : String(stepId);
+    atlas.sourceScanExpanded = !scanBody.hidden;
+    atlas.sourceScanQuery = scanInput.value;
+    if (node) select(node.id);
+  };
+  const paintScan = query => {
+    const q = String(query || '').trim().toLowerCase();
+    scanResults.innerHTML = '';
+    if (!q) {
+      if (!sectionItems.length) {
+        scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No subsection index is available for this saved atlas.' }));
+        return;
+      }
+      sectionItems.forEach(({ sec, entries, categories, figureEntries }, sectionIndex) => {
+        const pages = sourceRangeLabel(sec, sourceType);
+        const inventoryCount = figureEntries ? figureEntries.length : entries.length;
+        const inventoryLabel = figureEntries ? ' indexed figures' : ' source steps';
+        const sectionDetails = el('section', { class: 'atlas-scan-section' });
+        const stepListId = 'atlas-scan-section-steps-' + sectionIndex;
+        const stepList = el('div', {
+          class: 'atlas-scan-section-steps',
+          id: stepListId,
+          hidden: true,
+          role: 'list',
+          'aria-label': (sec.title || sec.id) + (figureEntries ? ' source figures' : ' source steps')
+        });
+        const facetBar = el('div', {
+          class: 'atlas-scan-facets',
+          hidden: true,
+          role: 'group',
+          'aria-label': 'Filter source steps by content type'
+        });
+        const facetButtons = [];
+        const facetStatus = el('span', {
+          class: 'atlas-scan-facet-status',
+          'aria-live': 'polite',
+          text: entries.length + ' source steps'
+        });
+        const applyFacet = selectedTag => {
+          let visible = 0;
+          stepList.querySelectorAll('.atlas-scan-row').forEach(row => {
+            const tags = String(row.getAttribute('data-scan-tags') || '').split('|').filter(Boolean);
+            const show = selectedTag === '*' || tags.includes(selectedTag);
+            row.hidden = !show;
+            if (show) visible++;
+          });
+          facetButtons.forEach(({ tag, button }) => {
+            button.setAttribute('aria-pressed', String(tag === selectedTag));
+          });
+          facetStatus.textContent = selectedTag === '*'
+            ? visible + ' source steps'
+            : visible + ' of ' + entries.length + ' source steps · ' + selectedTag;
+        };
+        const addFacet = (tag, label, count) => {
+          const button = el('button', {
+            class: 'atlas-scan-facet',
+            type: 'button',
+            'data-facet': tag,
+            'aria-pressed': String(tag === '*'),
+            text: label + ' · ' + count,
+            onclick: () => applyFacet(tag)
+          });
+          facetButtons.push({ tag, button });
+          facetBar.append(button);
+        };
+        const sectionSummary = el('button', {
+          class: 'atlas-scan-section-summary',
+          type: 'button',
+          'aria-expanded': 'false',
+          'aria-controls': stepListId,
+          onclick: () => {
+            const expanded = stepList.hidden;
+            stepList.hidden = !expanded;
+            facetBar.hidden = !expanded;
+            sectionSummary.setAttribute('aria-expanded', String(expanded));
+          }
+        }, [
+          el('span', { class: 'atlas-scan-main' }, [
+            el('b', { text: sec.title || sec.id }),
+            el('small', { text: inventoryCount + inventoryLabel + (pages ? ' · ' + pages : '') })
+          ]),
+          el('span', { class: 'atlas-scan-tags' }, categories.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag })))
+        ]);
+        entries.forEach(entry => {
+          const st = entry.step;
+          const pageText = sourcePointsLabel(entry.pages, sourceType);
+          stepList.append(el('button', {
+            class: 'atlas-scan-row',
+            type: 'button',
+            role: 'listitem',
+            'data-scan-tags': entry.tags.join('|'),
+            disabled: !entry.node,
+            onclick: () => openNode(entry.node, st.id)
+          }, [
+            el('span', { class: 'atlas-scan-main' }, [
+              el('b', { text: st.title || st.id }),
+              el('small', { text: st.id + ' · ' + pageText })
+            ]),
+            el('span', { class: 'atlas-scan-tags' }, entry.tags.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
+            el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
+          ]));
+        });
+        if (entries.length > 1 && categories.length > 1) {
+          addFacet('*', 'All', entries.length);
+          categories.forEach(tag => {
+            const count = entries.filter(entry => entry.tags.includes(tag)).length;
+            if (count) addFacet(tag, tag, count);
+          });
+          facetBar.append(facetStatus);
+          applyFacet('*');
+        }
+        (figureEntries || []).forEach(({ figure }) => {
+          const pageText = sourcePointLabel(figure, sourceType);
+          stepList.append(el('button', {
+            class: 'atlas-scan-row atlas-scan-row-unlinked',
+            type: 'button',
+            role: 'listitem',
+            disabled: true
+          }, [
+            el('span', { class: 'atlas-scan-main' }, [
+              el('b', { text: figure.label || ('Figure ' + figure.id) }),
+              el('small', { text: String(figure.id) + ' · ' + pageText }),
+              figure.caption ? el('small', { text: figure.caption }) : null
+            ]),
+            el('span', { class: 'atlas-scan-tags' }, [el('span', { class: 'atlas-scan-tag', text: 'figure' })]),
+            el('span', { class: 'atlas-scan-open', text: 'INDEXED FIGURE · NO LINKED SOURCE STEP' })
+          ]));
+        });
+        sectionDetails.append(sectionSummary, ...(facetButtons.length ? [facetBar] : []), stepList);
+        scanResults.append(sectionDetails);
+      });
+      return;
+    }
+    const matches = [
+      ...scanEntries.filter(entry => entry.searchable.includes(q)).map(entry => ({ kind: 'step', entry })),
+      ...unlinkedFigureEntries.filter(entry => entry.searchable.includes(q)).map(entry => ({ kind: 'figure', entry }))
+    ].slice(0, 40);
+    if (!matches.length) {
+      scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'No source step or unlinked figure matched that search. Try a term, a symbol, a step title or a figure/table ID.' }));
+      return;
+    }
+    matches.forEach(match => {
+      if (match.kind === 'figure') {
+        const figure = match.entry.figure;
+        const pageText = sourcePointLabel(figure, sourceType);
+        scanResults.append(el('button', {
+          class: 'atlas-scan-row atlas-scan-row-unlinked',
+          type: 'button',
+          role: 'listitem',
+          disabled: true
+        }, [
+          el('span', { class: 'atlas-scan-main' }, [
+            el('b', { text: figure.label || ('Figure ' + figure.id) }),
+            el('small', { text: String(figure.id) + ' · ' + pageText }),
+            figure.caption ? el('small', { text: figure.caption }) : null
+          ]),
+          el('span', { class: 'atlas-scan-tags' }, [el('span', { class: 'atlas-scan-tag', text: 'figure' })]),
+          el('span', { class: 'atlas-scan-open', text: 'INDEXED FIGURE · NO LINKED SOURCE STEP' })
+        ]));
+        return;
+      }
+      const entry = match.entry;
+      const st = entry.step, pageText = sourcePointsLabel(entry.pages, sourceType);
+      scanResults.append(el('button', {
+        class: 'atlas-scan-row',
+        type: 'button',
+        role: 'listitem',
+        disabled: !entry.node,
+        onclick: () => openNode(entry.node, st.id)
+      }, [
+        el('span', { class: 'atlas-scan-main' }, [
+          el('b', { text: st.title || st.id }),
+          el('small', { text: st.id + ' · ' + (entry.section && entry.section.title || st.section || 'unsectioned') + ' · ' + pageText })
+        ]),
+        el('span', { class: 'atlas-scan-tags' }, entry.tags.slice(0, 4).map(tag => el('span', { class: 'atlas-scan-tag', text: tag }))),
+        el('span', { class: 'atlas-scan-open', text: entry.node ? 'OPEN CONCEPT ↗' : 'NO LINKED CONCEPT' })
+      ]));
+    });
+    if (matches.length === 40) scanResults.append(el('p', { class: 'atlas-scan-empty', text: 'Showing the first 40 matches. Refine your search to narrow the source inventory.' }));
+  };
+  scanInput.addEventListener('input', () => {
+    atlas.sourceScanQuery = scanInput.value;
+    paintScan(scanInput.value);
+  });
+  paintScan(scanInput.value);
+  scanBody.append(scanInput, suggestionList, ...(recallPrompts.length ? [scanRecall] : []), scanResults);
+  scan.append(scanSummaryNode, scanBody);
+  root.append(scan);
+
+  const graphData = coordinates(atlas.nodes || []), svg = svgEl('svg', { class: 'atlas-svg', viewBox: '0 0 ' + graphData.width + ' ' + graphData.height, role: 'group', 'aria-label': 'Interactive concept mind map' });
+  const defs = svgEl('defs'), marker = svgEl('marker', { id: 'atlas-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' });
+  marker.append(svgEl('path', { d: 'M0 0 L10 5 L0 10 z', class: 'atlas-arrowhead' })); defs.append(marker); svg.append(defs);
+  const byId = new Map(graphData.points.map(p => [p.id, p]));
+  const edgeLayer = svgEl('g', { class: 'atlas-edges' });
+  (atlas.edges || []).forEach(edge => {
+    const a = byId.get(edge.from), b = byId.get(edge.to); if (!a || !b) return;
+    const mid = (a.x + b.x) / 2 + (b.y - a.y) * .12;
+    const d = 'M ' + a.x + ' ' + a.y + ' C ' + mid + ' ' + a.y + ', ' + mid + ' ' + b.y + ', ' + b.x + ' ' + b.y;
+    const path = svgEl('path', { d, class: 'atlas-edge edge-' + String(edge.type || 'related').replace(/[^a-z-]/g, ''), 'marker-end': 'url(#atlas-arrow)' });
+    path.append(svgEl('title')); path.firstChild.textContent = txt(edge.label || edge.type, 120); edgeLayer.append(path);
+    const label = svgEl('text', { x: mid, y: (a.y + b.y) / 2 - 7, class: 'atlas-edge-label' }); label.textContent = txt(edge.label || edge.type, 22); edgeLayer.append(label);
+  });
+  svg.append(edgeLayer);
+  const nodesLayer = svgEl('g', { class: 'atlas-nodes' });
+  const nodeEls = new Map();
+  let activeId = atlas.selectedNodeId && byId.has(atlas.selectedNodeId) ? atlas.selectedNodeId : (graphData.points[0] || {}).id;
+  graphData.points.forEach(p => {
+    const g = svgEl('g', { class: 'atlas-node', tabindex: 0, role: 'button', 'aria-label': p.node.title + ': ' + p.node.question, 'data-id': p.id });
+    g.append(svgEl('rect', { x: p.x - 100, y: p.y - 45, width: 200, height: 90, rx: 18, class: 'atlas-node-card' }));
+    g.append(svgText(p.node.title || 'Concept', p.x - 82, p.y - 12, 'atlas-node-title', 23));
+    g.append(svgText(p.node.question || '', p.x - 82, p.y + 12, 'atlas-node-question', 25));
+    const count = svgEl('text', { x: p.x + 78, y: p.y + 31, class: 'atlas-node-count' }); count.textContent = String((p.node.dioramaRefs || []).length) + ' ◇'; g.append(count);
+    g.addEventListener('click', () => select(p.id));
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(p.id); } });
+    nodesLayer.append(g); nodeEls.set(p.id, g);
+  });
+  svg.append(nodesLayer);
+  const mapWrap = el('div', { class: 'atlas-map-wrap' }, [svg, el('div', { class: 'atlas-map-hint', text: 'Select a concept node to explore its dioramas, predictions and source trail.' })]);
+  root.append(mapWrap);
+  const detail = el('div', { class: 'atlas-detail' }); root.append(detail);
+  let visualPathCleanup = () => {};
+
+  // Keyboard control is scoped to an active challenge, never to the whole app or text-editing fields.
+  root.addEventListener('keydown', e => {
+    const tab = e.target && e.target.closest ? e.target.closest('.atlas-branch-tab') : null;
+    if (tab && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+      const tabs = [...root.querySelectorAll('.atlas-branch-tab')];
+      const index = tabs.indexOf(tab);
+      const nextIndex = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+        : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      if (tabs[nextIndex]) {
+        e.preventDefault();
+        tabs[nextIndex].click();
+        const freshTabs = root.querySelectorAll('.atlas-branch-tab');
+        freshTabs[nextIndex] && freshTabs[nextIndex].focus();
+      }
+      return;
+    }
+    const card = e.target && e.target.closest ? e.target.closest('.atlas-challenge-card') : null;
+    if (!card || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.code === 'Space' && !e.repeat) {
+      const next = card.querySelector('.atlas-unfold-next:not(:disabled)');
+      if (next) { e.preventDefault(); next.click(); }
+    } else if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'z') {
+      const back = card.querySelector('.atlas-unfold-back');
+      if (back) { e.preventDefault(); back.click(); }
+    }
+  });
+
+  function select(id) {
+    if (!byId.has(id)) return;
+    activeId = id; atlas.selectedNodeId = id;
+    nodeEls.forEach((g, k) => { g.classList.toggle('selected', k === id); g.setAttribute('aria-pressed', String(k === id)); });
+    renderDetail();
+  }
+  function renderDetail() {
+    visualPathCleanup(); visualPathCleanup = () => {};
+    const node = (byId.get(activeId) || {}).node; detail.innerHTML = ''; if (!node) return;
+    const top = el('div', { class: 'atlas-detail-head' }, [
+      el('div', { class: 'atlas-overline', text: 'CONCEPT NODE' }),
+      el('h3', { html: mathHTML(node.title) }),
+      el('p', { class: 'atlas-node-lede', html: mathHTML(node.summary || node.question) }),
+      el('div', { class: 'atlas-node-tags' }, (node.knowledgeKinds || []).slice(0, 5).map(k => el('span', { class: 'atlas-tag', text: titleCase(k) })))
+    ]);
+    detail.append(top);
+
+    // Loci are optional spatial retrieval cues over stable library locations. They never replace the source trail or
+    // the concept's explanation, and an association is authored by the learner rather than generated as a fact.
+    const memoryPlaces = Array.isArray(atlas.memoryPlaces) ? atlas.memoryPlaces : [];
+    const ownLocus = memoryPlaces.find(place => place && String(place.nodeId) === String(node.id));
+    const memory = el('section', { class: 'atlas-memory-locus' }, [
+      el('div', { class: 'atlas-section-label', text: 'OPTIONAL LOCI MEMORY PLACE' }),
+      el('p', { class: 'atlas-memory-description', text: ownLocus
+        ? 'This concept has a saved location in the walkable library. The place is a retrieval cue; the source-linked explanation stays in the atlas.'
+        : 'Choose a distinctive place in the library for this concept. Later, visit it and reconstruct the idea before revealing the expected explanation.' }),
+      ownLocus ? el('div', { class: 'atlas-memory-cue' }, [
+        el('b', { text: 'Your association' }),
+        el('p', { text: ownLocus.association || 'No cue text saved' }),
+        el('small', { text: (ownLocus.shelfName || ownLocus.caseId) + ' · row ' + (ownLocus.rowLabel || Number(ownLocus.row) + 1) + ' · place ' + (Number(ownLocus.slot) + 1) })
+      ]) : null,
+      el('div', { class: 'row wrap' }, [
+        el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: ownLocus ? 'Change this memory place' : 'Assign a memory place',
+          onclick: () => onAssignMemoryPlace && onAssignMemoryPlace(node)
+        }),
+        ownLocus ? el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: 'Remove memory place',
+          onclick: () => onRemoveMemoryPlace && onRemoveMemoryPlace(node)
+        }) : null,
+        memoryPlaces.length ? el('button', {
+          class: 'btn primary small',
+          type: 'button',
+          text: 'Visit memory route · ' + memoryPlaces.length + ' place' + (memoryPlaces.length === 1 ? '' : 's'),
+          onclick: () => onVisitMemoryRoute && onVisitMemoryRoute(node)
+        }) : null
+      ])
+    ]);
+    detail.append(memory);
+
+    const visualSequence = Array.isArray(node.visualSequence) ? node.visualSequence : [];
+    if (visualSequence.length) {
+      const path = el('div', { class: 'atlas-visual-path' }, [
+        el('div', { class: 'atlas-section-label', text: 'CONCEPT VISUAL PATHWAY' }),
+        el('p', { class: 'atlas-visual-path-intro', text: 'Move through the explanation in order. Each view has a distinct job; the interactive model and evidence diagrams are connected stages of the same concept.' })
+      ]);
+      const rail = el('div', { class: 'atlas-visual-path-rail', role: 'tablist', 'aria-label': 'Concept visual stages' });
+      const panel = el('div', { class: 'atlas-visual-path-panel', 'aria-live': 'polite' });
+      const savedViewId = atlas.selectedVisualViews[node.id];
+      let selected = Math.max(0, visualSequence.findIndex(item => item.viewId === savedViewId));
+      let cleanups = [];
+      const clearStage = () => {
+        cleanups.forEach(stop => { try { typeof stop === 'function' && stop(); } catch (e) {} });
+        cleanups = [];
+        panel.innerHTML = '';
+      };
+      const tabs = visualSequence.map((item, index) => {
+        const tab = el('button', {
+          class: 'atlas-visual-path-tab' + (index === selected ? ' active' : ''),
+          type: 'button', role: 'tab', 'aria-selected': String(index === selected),
+          onclick: () => {
+            selected = index;
+            atlas.selectedVisualViews[node.id] = visualSequence[index].viewId;
+            onSave && onSave();
+            tabs.forEach((button, i) => {
+              button.classList.toggle('active', i === selected);
+              button.setAttribute('aria-selected', String(i === selected));
+            });
+            drawStage();
+          }
+        }, [
+          el('span', { class: 'atlas-visual-path-index', text: String(item.order || index + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-visual-path-tab-text' }, [
+            el('b', { text: txt(item.title || 'Visual view', 70) }),
+            el('small', { text: String(item.stage || 'explanation').toUpperCase() + ' · ' + (item.medium || '2d').toUpperCase() + ' · ' + (item.status === 'ready' ? 'READY' : 'PLANNED') })
+          ])
+        ]);
+        return tab;
+      });
+      tabs.forEach(tab => rail.append(tab));
+      const drawStage = () => {
+        clearStage();
+        const item = visualSequence[selected];
+        if (!item) return;
+        panel.append(el('div', { class: 'atlas-visual-path-head' }, [
+          el('span', { class: 'atlas-visual-path-stage-label', text: String(item.stage || 'explanation').toUpperCase() + ' · VIEW ' + String(item.order || selected + 1) }),
+          el('h4', { text: txt(item.title || 'Explanatory view', 100) }),
+          el('p', { text: txt(item.purpose || '', 360) })
+        ]));
+        if (item.medium === '3d') {
+          const ref = item.dioramaRef || (node.dioramaRefs || [])[0] || null;
+          if (ref) panel.append(el('button', { class: 'atlas-open-diorama', type: 'button', onclick: () => onOpenDiorama && onOpenDiorama(ref) }, [
+            el('span', { class: 'atlas-dio-n', text: '3D' }),
+            el('span', { class: 'atlas-dio-main' }, [
+              el('b', { html: mathHTML(ref.title || 'Open interactive diorama') }),
+              el('small', { text: txt(ref.purpose || item.purpose || node.question, 180) })
+            ]),
+            el('span', { class: 'atlas-dio-go', text: 'ENTER ↗' })
+          ]));
+          else panel.append(el('div', { class: 'atlas-empty-visual', text: 'The 3D scene is planned but has not yet been authored.' }));
+        } else if (Array.isArray(item.figures) && item.figures.length) {
+          item.figures.forEach(figureItem => {
+            const host = el('div', { class: 'atlas-generated-figure atlas-visual-path-figure' });
+            const stop = renderFigure(figureItem.figure, host);
+            if (typeof stop === 'function') cleanups.push(stop);
+            panel.append(el('div', { class: 'atlas-figure-entry' }, [
+              el('b', { text: txt(figureItem.title || item.title || 'Source explanation', 90) }),
+              el('p', { text: txt(figureItem.purpose || item.purpose || '', 240) }),
+              host,
+              el('small', { text: figureItem.sourceVisualId
+                ? 'Reconstructed from source visual ' + figureItem.sourceVisualId + (figureItem.sourceSlide ? ' · slide ' + figureItem.sourceSlide : '') + ' · linked step ' + String(figureItem.stepId || '')
+                : 'Linked to source step' + ((figureItem.sourceStepIds || []).length === 1 ? ' ' : 's ') + ((figureItem.sourceStepIds || []).join(', ') || figureItem.stepId || ' not recorded') })
+            ]));
+          });
+        } else {
+          panel.append(el('div', { class: 'atlas-empty-visual', text: 'This explanatory view is planned, but its figure has not yet been authored. Its source references and intended purpose are retained.' }));
+        }
+        if (item.status === 'planned' && item.medium === '2d' && node.viewAuthoring && node.viewAuthoring.error) {
+          panel.append(el('small', { class: 'atlas-visual-path-warning', text: 'Figure authoring note: ' + txt(node.viewAuthoring.error, 240) }));
+        }
+      };
+      path.append(rail, panel);
+      detail.append(path);
+      drawStage();
+      visualPathCleanup = clearStage;
+    } else {
+      const set = el('div', { class: 'atlas-dioramas' }, [el('div', { class: 'atlas-section-label', text: 'DIORAMA SEQUENCE' })]);
+      (node.dioramaSet || []).forEach((d, i) => set.append(el('div', { class: 'atlas-view-intent' }, [
+        el('b', { text: (i + 1) + '. ' + txt(d.title, 90) }),
+        el('span', { text: txt(d.purpose, 180) }),
+        el('small', { text: (d.medium || '3d').toUpperCase() + ((d.manipulations || []).length ? ' · ' + d.manipulations.join(' · ') : '') })
+      ])));
+      const refs = node.dioramaRefs || [];
+      if (refs.length) refs.forEach((ref, i) => {
+        const b = el('button', { class: 'atlas-open-diorama', type: 'button', onclick: () => onOpenDiorama && onOpenDiorama(ref) }, [
+          el('span', { class: 'atlas-dio-n', text: String(i + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-dio-main' }, [el('b', { html: mathHTML(ref.title || 'Open diorama') }), el('small', { text: txt(ref.purpose || node.question, 150) })]),
+          el('span', { class: 'atlas-dio-go', text: 'ENTER ↗' })
+        ]);
+        set.append(b);
+      });
+      else if (node.visualKind === 'diagram' || (node.dioramaSet || []).some(d => d.medium === '2d')) {
+        set.append(el('div', { class: 'atlas-empty-visual', text: 'This concept is best represented through explanatory diagrams rather than an artificial 3D simulation. The related figures are shown below.' }));
+      } else {
+        set.append(el('div', { class: 'atlas-empty-visual', text: 'No authored 3D scene is linked to this node yet. Add a diorama request below.' }));
+      }
+      detail.append(set);
+
+      const figures = (node.explanatoryFigures && node.explanatoryFigures.length)
+        ? node.explanatoryFigures
+        : (node.generatedFigure ? [{ stepId: (node.stepIds || [])[0] || '', title: node.title, purpose: node.question, figure: node.generatedFigure }] : []);
+      if (figures.length) {
+        const figureSet = el('div', { class: 'atlas-explanatory-figures' }, [
+          el('div', { class: 'atlas-section-label', text: 'RELATED EXPLANATORY FIGURES' })
+        ]);
+        figures.forEach((item, i) => {
+          const host = el('div', { class: 'atlas-generated-figure' });
+          renderFigure(item.figure, host);
+          figureSet.append(el('div', { class: 'atlas-figure-entry' }, [
+            el('b', { text: txt(item.title || 'Source explanation', 90) }),
+            el('p', { text: txt(item.purpose || '', 240) }),
+            host,
+            el('small', { text: item.sourceVisualId
+              ? 'Reconstructed from source visual ' + item.sourceVisualId + (item.sourceSlide ? ' · slide ' + item.sourceSlide : '') + ' · linked step ' + String(item.stepId || '')
+              : 'Linked to source step ' + String(item.stepId || '') })
+          ]));
+        });
+        detail.append(figureSet);
+      }
+    }
+
+    const customTa = el('textarea', { class: 'field atlas-custom-input', rows: 2, placeholder: 'Describe a particular diorama to add to this concept: viewpoint, mechanisms, objects, variables, events or comparison…' });
+    const status = el('div', { class: 'atlas-action-status', role: 'status' });
+    const add = el('button', { class: 'btn primary small', type: 'button', text: 'Generate an additional diorama', onclick: async () => {
+      const request = customTa.value.trim();
+      if (!request) { status.textContent = 'Describe the particular diorama you want added.'; customTa.focus(); return; }
+      add.disabled = true; status.textContent = 'Preparing the diorama…';
+      try { await (onGenerate && onGenerate(request, node.id, t => { status.textContent = t; })); status.textContent = 'The new diorama is linked to this concept.'; }
+      catch (e) { status.textContent = String(e && (e.message || e.code) || e); add.disabled = false; }
+    } });
+    detail.append(el('div', { class: 'atlas-custom' }, [
+      el('div', { class: 'atlas-section-label', text: 'ADD A DIORAMA YOU DESCRIBE' }),
+      customTa, el('div', { class: 'row wrap' }, [add, status])
+    ]));
+
+    // Question branches are a horizontal selector, not a vertical stack. Each branch owns its prediction
+    // and reveal cursor; switching branches never advances or resets another branch.
+    const challenges = node.challenges || [];
+    if (challenges.length) {
+      const block = el('div', { class: 'atlas-challenge' }, [
+        el('div', { class: 'atlas-section-label', text: 'QUESTION BRANCHES · CHOOSE A GAP TO INVESTIGATE' })
+      ]);
+      const validSelected = challenges.some(ch => ch.id === atlas.selectedChallengeId);
+      if (!validSelected) atlas.selectedChallengeId = challenges[0].id;
+      const rail = el('div', { class: 'atlas-branch-rail', role: 'tablist', 'aria-label': 'Question branches' });
+      challenges.forEach((ch, i) => {
+        const saved = atlas.attempts[ch.id] || {};
+        const status = saved.revealed ? 'revealed' : saved.committed ? 'prediction saved' : saved.response ? 'draft saved' : 'unopened';
+        const tab = el('button', {
+          class: 'atlas-branch-tab' + (ch.id === atlas.selectedChallengeId ? ' active' : ''),
+          type: 'button', role: 'tab', 'aria-selected': String(ch.id === atlas.selectedChallengeId),
+          'aria-controls': 'atlas-challenge-active',
+          onclick: () => {
+            atlas.selectedChallengeId = ch.id;
+            onSave && onSave();
+            renderDetail();
+            const tabs = root.querySelectorAll('.atlas-branch-tab');
+            const activeTab = [...tabs].find(tab => tab.getAttribute('aria-selected') === 'true');
+            activeTab && activeTab.focus();
+          }
+        }, [
+          el('span', { class: 'atlas-branch-index', text: String(i + 1).padStart(2, '0') }),
+          el('span', { class: 'atlas-branch-name' }, [
+            el('b', { text: titleCase(ch.type) }),
+            el('small', { text: status })
+          ])
+        ]);
+        rail.append(tab);
+      });
+      block.append(rail);
+
+      const ch = challenges.find(item => item.id === atlas.selectedChallengeId) || challenges[0];
+      const saved = atlas.attempts[ch.id] || {};
+      const reasoning = Array.isArray(ch.reasoning) && ch.reasoning.length
+        ? ch.reasoning
+        : [{ title: 'Why this follows', text: ch.why || ch.answer, sourceStepIds: (node.stepIds || []).slice(0, 1) }];
+      const revealedCount = Math.max(0, Math.min(reasoning.length, Number(saved.unfoldedCount) || 0));
+      const body = el('div', {
+        class: 'atlas-challenge-card',
+        id: 'atlas-challenge-active',
+        role: 'tabpanel',
+        'aria-label': titleCase(ch.type) + ' question branch'
+      });
+      body.append(
+        el('div', { class: 'atlas-challenge-type', text: titleCase(ch.type) + ' · BRANCH ' + (challenges.indexOf(ch) + 1) + ' OF ' + challenges.length }),
+        el('h4', { html: mathHTML(ch.question) }),
+        el('p', { class: 'atlas-challenge-stimulus', html: mathHTML(ch.stimulus || '') })
+      );
+      if (ch.hint) body.append(el('details', { class: 'atlas-hint' }, [
+        el('summary', { text: 'A small hint' }),
+        el('p', { html: mathHTML(ch.hint) })
+      ]));
+
+      const response = el('textarea', {
+        class: 'field atlas-prediction',
+        rows: 3,
+        placeholder: 'Commit to your own reconstruction before revealing the answer…',
+        'aria-label': 'Your prediction'
+      });
+      response.value = saved.response || '';
+      response.disabled = !!saved.revealed;
+      const confidence = el('select', {
+        class: 'field small atlas-confidence',
+        'aria-label': 'Confidence in prediction'
+      }, [
+        el('option', { value: '', text: 'Confidence?' }),
+        ...['Low', 'Medium', 'High'].map(v => el('option', { value: v, text: v, selected: saved.confidence === v }))
+      ]);
+      confidence.disabled = !!saved.revealed;
+      const commit = el('button', {
+        class: 'btn primary small',
+        type: 'button',
+        text: saved.revealed ? 'Prediction locked' : saved.committed ? 'Update prediction' : 'Commit prediction',
+        disabled: !!saved.revealed || !response.value.trim(),
+        onclick: () => {
+          const current = atlas.attempts[ch.id] || {};
+          atlas.attempts[ch.id] = {
+            ...current,
+            response: response.value.trim(),
+            confidence: confidence.value || '',
+            committed: true,
+            at: new Date().toISOString()
+          };
+          onSave && onSave();
+          toast('Prediction saved. Reveal the answer when you are ready.');
+          renderDetail();
+          const field = detail.querySelector('.atlas-prediction');
+          if (field) field.focus();
+        }
+      });
+      response.addEventListener('input', () => {
+        commit.disabled = !response.value.trim();
+        const current = atlas.attempts[ch.id] || {};
+        atlas.attempts[ch.id] = { ...current, response: response.value.slice(0, 1200) };
+        onSave && onSave();
+      });
+      confidence.addEventListener('change', () => {
+        const current = atlas.attempts[ch.id] || {};
+        atlas.attempts[ch.id] = { ...current, confidence: confidence.value || '' };
+        onSave && onSave();
+      });
+      body.append(response, el('div', { class: 'row wrap' }, [confidence, commit]));
+
+      if (saved.committed) {
+        if (saved.revealed) {
+          body.append(el('div', { class: 'atlas-feedback' }, [
+            el('b', { text: 'Your committed prediction' }),
+            el('p', { html: mathHTML(saved.response || 'No written prediction was recorded.') }),
+            el('b', { text: 'Expected reconstruction' }),
+            el('p', { html: mathHTML(ch.answer) }),
+            el('b', { text: 'Feedback' }),
+            el('p', { html: mathHTML(ch.feedback || 'Compare the causal and relational structure of your prediction with the expected reconstruction.') })
+          ]));
+
+          const path = el('div', { class: 'atlas-reasoning-path' }, [
+            el('div', { class: 'atlas-reasoning-head' }, [
+              el('span', { class: 'atlas-section-label', text: 'REASONING PATH' }),
+              el('span', { class: 'atlas-reasoning-count', text: revealedCount + ' / ' + reasoning.length + ' revealed' })
+            ])
+          ]);
+          reasoning.slice(0, revealedCount).forEach((unit, i) => {
+            const sourceIds = Array.isArray(unit.sourceStepIds) ? unit.sourceStepIds : [];
+            path.append(el('article', { class: 'atlas-reasoning-unit' }, [
+              el('div', { class: 'atlas-reasoning-unit-head' }, [
+                el('span', { class: 'atlas-reasoning-number', text: String(i + 1).padStart(2, '0') }),
+                el('b', { text: txt(unit.title || 'Reasoning move', 100) })
+              ]),
+              el('p', { html: mathHTML(unit.text || '') }),
+              sourceIds.length ? el('div', { class: 'atlas-reasoning-sources' }, [
+                el('span', { text: 'GROUNDED IN' }),
+                ...sourceIds.map(id => el('span', { class: 'atlas-source-chip', text: String(id) }))
+              ]) : null
+            ]));
+          });
+          if (revealedCount < reasoning.length) {
+            const next = reasoning[revealedCount];
+            path.append(el('div', { class: 'atlas-unfold-preview' }, [
+              el('span', { class: 'atlas-reasoning-number', text: String(revealedCount + 1).padStart(2, '0') }),
+              el('span', { text: 'Next: ' + txt(next.title || 'the next reasoning move', 100) })
+            ]));
+          } else {
+            path.append(el('p', { class: 'atlas-reasoning-complete', text: 'All reasoning units in this branch are now visible.' }));
+          }
+          const controls = el('div', { class: 'atlas-unfold-controls' });
+          if (revealedCount > 0) controls.append(el('button', {
+            class: 'btn small atlas-unfold-back',
+            type: 'button',
+            text: '← Back one reveal',
+            title: 'Ctrl+Z',
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, unfoldedCount: Math.max(0, (Number(current.unfoldedCount) || 0) - 1) };
+              onSave && onSave();
+              renderDetail();
+              const focus = detail.querySelector('.atlas-unfold-next') || detail.querySelector('.atlas-unfold-back');
+              focus && focus.focus();
+            }
+          }));
+          controls.append(el('button', {
+            class: 'btn primary small atlas-unfold-next',
+            type: 'button',
+            text: revealedCount < reasoning.length ? 'UNFOLD · ' + (revealedCount + 1) + ' / ' + reasoning.length : 'UNFOLD COMPLETE',
+            disabled: revealedCount >= reasoning.length,
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, unfoldedCount: Math.min(reasoning.length, (Number(current.unfoldedCount) || 0) + 1) };
+              onSave && onSave();
+              renderDetail();
+              const focus = detail.querySelector('.atlas-unfold-next') || detail.querySelector('.atlas-unfold-back');
+              focus && focus.focus();
+            }
+          }));
+          path.append(controls);
+          path.append(el('p', { class: 'atlas-keyboard-hint', text: 'Space: unfold one unit · Ctrl+Z: step back · switching branches keeps each path where you left it' }));
+          body.append(path);
+
+          const ref = (node.dioramaRefs || [])[0];
+          if (ref && ch.type === 'structural' && (ch.missingBodyIds || []).length) {
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Inspect the incomplete structure', onclick: () => onOpenDiorama && onOpenDiorama(ref, { challenge: ch, incomplete: true }) }));
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the complete diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+          } else if (ref) {
+            body.append(el('button', { class: 'btn small', type: 'button', text: 'Open the related diorama', onclick: () => onOpenDiorama && onOpenDiorama(ref) }));
+          }
+        } else {
+          body.append(el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Reveal answer and begin unfolding',
+            onclick: () => {
+              const current = atlas.attempts[ch.id] || {};
+              atlas.attempts[ch.id] = { ...current, revealed: true, unfoldedCount: 0 };
+              onSave && onSave();
+              renderDetail();
+              const next = detail.querySelector('.atlas-unfold-next');
+              next && next.focus();
+            }
+          }));
+        }
+      }
+      block.append(body);
+      detail.append(block);
+    }
+
+    const selectedSourceStepId = String(atlas.selectedSourceStepId || '');
+    const trail = el('details', {
+      class: 'atlas-source-trail',
+      open: !!selectedSourceStepId && (node.stepIds || []).some(id => String(id) === selectedSourceStepId)
+    }, [
+      el('summary', { text: 'Source trail and internal indexing' }),
+      el('p', { class: 'atlas-audit-line', text: 'Indexing method: ' + (atlas.sourceIndex?.method || atlas.audit?.method || 'not recorded') }),
+      el('p', { class: 'atlas-audit-line', text: 'Source steps: ' + ((node.sourceRefs?.stepIds || []).join(', ')) }),
+      el('p', { class: 'atlas-audit-line', text: 'Subsections: ' + ((node.sourceRefs?.subsectionIds || []).join(', ')) }),
+      el('p', { class: 'atlas-audit-line', text: 'Source spans (' + (atlas.sourceIndex?.sourceUnit === 'slide' ? 'slides' : 'pages') + '): ' + ((node.sourceRefs?.pageSpans || []).map(x => x.startPage === x.endPage ? (x.subsectionId || '') + ' · ' + x.startPage : (x.subsectionId || '') + ' · ' + x.startPage + '–' + x.endPage).join('; ') || (node.sourceRefs?.pages || []).join(', ') || 'not recorded') }),
+      el('p', { class: 'atlas-audit-line', text: 'Figures: ' + ((node.sourceRefs?.figureIds || []).join(', ') || 'none linked') }),
+      ...((node.sourceRefs?.figureRecords || []).map(f => el('p', {
+        class: 'atlas-audit-line atlas-source-figure',
+        text: (f.label || f.id) + ' · ' + f.id + ' · ' + sourcePointLabel(f, sourceType) + ' · linked step' + ((f.stepIds || []).length === 1 ? ' ' : 's ') + ((f.stepIds || []).join(', ') || 'not mapped')
+      }))),
+      ...((node.sourceRefs?.unresolvedFigureIds || []).length ? [el('p', {
+        class: 'atlas-audit-warning',
+        text: 'Referenced but not present in the extracted figure index: ' + node.sourceRefs.unresolvedFigureIds.join(', ')
+      })] : []),
+      ...((node.sourceRefs?.visualRecords || []).map(v => el('details', {
+        class: 'atlas-source-visual'
+      }, [
+        el('summary', { text: (v.kind || 'visual') + ' · ' + (v.label || v.id) + ' · ' + v.id }),
+        el('p', { class: 'atlas-audit-line', text: 'Slide ' + v.slide + ' · linked steps ' + ((v.stepIds || []).join(', ')) + ' · ' + (v.linkBasis || 'source location') }),
+        ...(v.data && Array.isArray(v.data.series) ? v.data.series.slice(0, 8).map(series => el('p', {
+          class: 'atlas-audit-line',
+          text: (series.name || 'Series') + ': ' + ((series.points || []).slice(0, 24).map(point => (point.category == null ? '#' + (point.index + 1) : point.category) + ' = ' + point.rawValue).join('; ') || 'no cached values')
+        })) : []),
+        ...(v.data && Array.isArray(v.data.nodes) ? [el('p', {
+          class: 'atlas-audit-line',
+          text: 'Nodes: ' + v.data.nodes.slice(0, 30).map(n => (n.id ? n.id + ': ' : '') + n.label).join(' · ')
+        })] : []),
+        ...(v.data && Array.isArray(v.data.links) ? [el('p', {
+          class: 'atlas-audit-line',
+          text: 'Connections: ' + v.data.links.slice(0, 30).map(link => link.from + ' → ' + link.to + (link.type ? ' (' + link.type + ')' : '')).join('; ')
+        })] : [])
+      ]))),
+      ...((node.sourceRefs?.stepSummaries || []).map(st => el('details', {
+        class: 'atlas-source-step',
+        open: String(st.stepId) === selectedSourceStepId
+      }, [
+        el('summary', { text: st.stepId + ' · ' + txt(st.title, 110) }),
+        el('p', { class: 'atlas-audit-line', text: txt(st.statement, 900) || 'No short statement was recorded for this source step.' }),
+        st.answers ? el('p', { class: 'atlas-audit-line', text: 'Answers: ' + txt(st.answers, 260) }) : null,
+        st.opens ? el('p', { class: 'atlas-audit-line', text: 'Opens: ' + txt(st.opens, 260) }) : null,
+        st.pages && st.pages.length ? el('small', { text: (atlas.sourceIndex?.sourceUnit === 'slide' ? 'Slides ' : 'Pages ') + st.pages.join(', ') }) : null
+      ]))),
+      atlas.audit?.fallbackReason ? el('p', { class: 'atlas-audit-warning', text: 'AI semantic mapping failed; this is a deterministic subsection grouping. Reason: ' + atlas.audit.fallbackReason }) : null
+    ]);
+    detail.append(trail);
+    const research = atlas.sourceIndex && atlas.sourceIndex.webResearch;
+    const citations = research && Array.isArray(research.citations) ? research.citations : [];
+    const web = el('div', { class: 'atlas-web-sources' }, [
+      el('div', { class: 'atlas-section-label', text: 'EXTERNAL RESEARCH' }),
+      el('p', { class: 'atlas-audit-line', text: research ? (research.searched || 0) + ' live web-search tool calls recorded · ' + citations.length + ' unique source citations captured' : 'No web-search audit data was returned for this chapter.' }),
+      ...(research && (research.tasks || []).length ? [el('p', { class: 'atlas-audit-line', text: 'Used during: ' + [...new Set(research.tasks)].join('; ') })] : []),
+      el('p', { class: 'atlas-audit-line', text: 'These are chapter-level citations. They are not automatically assigned to individual concepts unless a chain step also names the source.' }),
+      ...(citations.length ? citations.map(c => el('a', { class: 'atlas-web-link', href: c.url, target: '_blank', rel: 'noopener noreferrer', text: c.title || c.url })) : [el('span', { class: 'atlas-audit-line', text: 'No external URLs were captured in the structured response.' })])
+    ]);
+    detail.append(web);
+  }
+
+  if (activeId) select(activeId);
+  return root;
+}

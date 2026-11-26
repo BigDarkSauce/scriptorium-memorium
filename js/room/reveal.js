@@ -31,6 +31,14 @@ const KEY = 'reveal:ledger', DAY = 864e5;
 let ledger = null, loading = null;
 export async function loadLedger() { if (ledger) return ledger; if (!loading) loading = store.get(KEY).then(v => (ledger = v && typeof v === 'object' ? v : { e: {}, sessions: [] })).catch(() => (ledger = { e: {}, sessions: [] })); return loading; }
 const save = () => { if (ledger) store.saveLater(KEY, () => ledger, 400); };
+function advanceReview(T, correct) {
+  T.n = (Number(T.n) || 0) + 1;
+  T.hist = Array.isArray(T.hist) ? T.hist : [];
+  T.hist.push(correct ? 1 : 0);
+  T.hist = T.hist.slice(-12);
+  T.iv = correct ? Math.min(120, Math.max(2, (Number(T.iv) || 1) * 2.5)) : 1;
+  T.due = Date.now() + T.iv * DAY;
+}
 export const ledgerNow = () => ledger;
 
 // ---- the spec ----
@@ -196,8 +204,57 @@ export async function stats() {
   return { loops: E.filter(e => e.t).length, cards: E.filter(e => e.tr).length, predicted: E.filter(e => e.ok != null).length, rightFirst: E.filter(e => e.ok === true).length, transfers: H.length, transferRight: H.filter(Boolean).length, due: E.filter(e => e.tr && e.tr.due <= Date.now()).length };
 }
 export function answerTransfer(id, correct) {
-  const e = ledger && ledger.e[id]; if (!e || !e.tr) return; const T = e.tr; T.n++; T.hist.push(correct ? 1 : 0); T.hist = T.hist.slice(-12);
-  T.iv = correct ? Math.min(120, Math.max(2, T.iv * 2.5)) : 1; T.due = Date.now() + T.iv * DAY; save();
+  const e = ledger && ledger.e[id]; if (!e || !e.tr) return; const T = e.tr;
+  advanceReview(T, correct);
+  save();
+}
+
+// Optional bookcase loci use the same persistent ledger and interval progression as the other
+// retrieval cards. They are explicitly self-rated recall (recall:true), so their history never
+// inflates the objectively scored transfer-accuracy figures above.
+export function locusReviewId(bookId, partId, nodeId) {
+  return 'locus/' + [bookId, partId, nodeId].map(x => encodeURIComponent(String(x))).join('/');
+}
+export async function ensureLocusReviewCard(bookId, partId, partTitle, node) {
+  if (!node || !node.id) throw new TypeError('A concept node is required for a loci review card.');
+  await loadLedger();
+  const id = locusReviewId(bookId, partId, node.id);
+  const existing = ledger.e[id] || {};
+  if (existing.tr && (!existing.tr.memoryLocus || !existing.tr.recall)) {
+    throw new Error('The loci review ID collides with a non-loci retrieval card.');
+  }
+  const T = existing.tr || {
+    due: Date.now(), iv: 1, n: 0, hist: [],
+    recall: true, memoryLocus: true
+  };
+  T.q = node.question || node.title || 'Reconstruct this concept.';
+  T.a = node.summary || node.question || node.title || '';
+  ledger.e[id] = Object.assign(existing, {
+    title: node.title || 'Concept',
+    part: partTitle || '',
+    tr: T
+  });
+  save();
+  return { id, due: T.due, interval: T.iv || 1, attempts: T.n || 0, history: [...(T.hist || [])], lastRating: T.lastRating || null, lastReviewed: T.lastReviewed || null };
+}
+export async function rateLocusRecall(id, recalled) {
+  await loadLedger();
+  const e = ledger.e[id], T = e && e.tr;
+  if (!T || !T.memoryLocus || !T.recall) return null;
+  const ratedAt = Date.now();
+  advanceReview(T, !!recalled);
+  T.lastRating = recalled ? 'recalled' : 'again';
+  T.lastReviewed = ratedAt;
+  save();
+  return { id, due: T.due, interval: T.iv, attempts: T.n, history: [...T.hist], lastRating: T.lastRating, lastReviewed: T.lastReviewed };
+}
+export async function removeLocusReviewCard(bookId, partId, nodeId) {
+  await loadLedger();
+  const id = locusReviewId(bookId, partId, nodeId), e = ledger.e[id];
+  if (!e || !e.tr || !e.tr.memoryLocus || !e.tr.recall) return false;
+  delete ledger.e[id];
+  save();
+  return true;
 }
 
 // ---- "Try it in a new situation": the step's transfer question, inline in the scroll, right after its analogy ----

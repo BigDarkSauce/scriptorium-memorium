@@ -1,36 +1,41 @@
 # Scriptorium Memorialium
 
-A walkable 3D library for studying anything. Each PDF becomes a **room**. Its chapters hang as **scrolls** along the walls, each rebuilt as one rigorous logical chain. Beside each scroll stands a **pedestal** carrying a small card model. Step into it and the idea plays out as a living 3D **diorama** of bodies, events and processes.
+A walkable 3D library for studying anything. Each PDF or PowerPoint presentation becomes a **room**. Its chapters and parts are analysed into coherent topic groups, then displayed as an interactive **2D concept atlas**. Each concept node opens its linked sequence of explanatory **dioramas**: detailed, manipulable simulations of structures, mechanisms, processes, data and relationships. The original source remains indexed behind every concept.
 
-- **Library hub.** A baroque hall whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs; each appears as a scroll lying in its holder, with its name tag. Click a scroll: it unfolds in a shaft of light and carries you into its room. Right-click it to move, hang or delete it (with undo). The hall's door leads back to the room you visited last.
+- **Library hub.** A baroque hall whose size you can change. Place bookcases, move them, rotate them and name them by subject (Maths, Physics, Biology…). Add PDFs or `.pptx` presentations; each appears as a scroll lying in its holder, with its name tag. Click a scroll: it unfolds in a shaft of light and carries you into its room. Right-click it to move, hang or delete it (with undo). The hall's door leads back to the room you visited last.
 - **Links.** The address names the room and the open scroll (`#room=…&scroll=…`): a reload or a shared link reopens it, and Back / Forward step through the places you visited.
 - **Book rooms.** Parts are found automatically: from the PDF's bookmarks, then from chapter headings, then from a printed contents page, then in 20-page windows. They hang from the left wall onward. The room grows when more scrolls need hanging, and you can resize it.
-- **Reading scrolls.** Each part becomes a chain where every step follows from earlier ones: definitions, axioms, derivations line by line, results. Each step names the bodies it is about. You choose the length: complete, essential, or an exact number of steps. Any step can grow its own sub-scroll.
-- **Nothing coarser than the book.** Import finds the hierarchy (chapter → section → subsection) from the bookmarks, numbered and bold headings, or the contents page, and keeps every subsection's text with its pages. Each scroll shows a coverage map: which steps cover which subsection. Missing or coarse subsections are filled by a small follow-up call that sends only their text.
-- **The book's own figures.** Figures and tables are cut out of the PDF pages with their captions and shown in the steps that explain them, marked *From the PDF, p. N*. Anything taken from outside the PDF is marked *Added from outside the PDF* with its source.
-- **A question thread.** Every step, and every lesson in a diorama, answers one question and opens the next; the thread runs down the scroll's margin.
-- **Dioramas.** Every 3D showcase first appears on the scroll as a **drawing**. The drawing is not a picture: it is the real model seen through a very long lens. Press **Transition** and it materialises while the camera dives in. Scrolling then introduces each significant body in turn, its name pinned beside it. Then a foldable panel opens with step-by-step instructions (each one played before the next appears) and the variables.
+- **Concept atlases.** The validated source chain is grouped by meaning, mechanism, prerequisite and question—not page or slide boundaries—into an interconnected mind map. Selecting a node reveals its diorama sequence, what each view explains, and the source trail. The reader is atlas-first rather than a long conventional lesson scroll.
+- **Source coverage and audit.** PDF ingestion uses bookmarks, headings, typography, page geometry, inventories and figures. PowerPoint ingestion follows the actual Open XML slide order and extracts shape/table text, speaker notes, accessible descriptions, referenced embedded images, cached chart series values and SmartArt labels/connections. Vision-capable authoring requests can inspect a bounded set of slide images; all assets retain slide-level provenance. The AI then groups material across source units into coherent concepts. Every concept records its source step IDs, subsection IDs, page/slide spans and figure IDs; a strict coverage check ensures no source step disappears or is assigned twice.
+- **The source's own figures.** Figures and tables are cut from PDF pages with source page references. PowerPoint image relationships are resolved from each slide's Open XML relationships; embedded images can be attached to vision-capable analysis, while chart caches and SmartArt structure are extracted as source text. Unsupported objects are never presented as interpreted facts. Anything taken from external research is kept separate from uploaded-source claims and carries its returned URL/source metadata.
+- **Discoverable knowledge.** The atlas offers prediction-before-reveal challenges using structural, mechanistic, temporal, explanatory, relational and counterfactual incompleteness. Learners commit an answer and confidence before feedback is shown. These challenges are used only where the supplied source supports a meaningful inference.
+- **Dioramas.** Each concept node opens its linked diorama sequence. Every new 3D scene is planned with a source-mapped model contract (system boundary, actors, state variables, mechanisms, constraints, assumptions and observables), checked against the authored scene, then reviewed separately for causal, quantitative and intervention fidelity. Results, unresolved claims and assumptions are saved with the scene and checked by the offline verifier. These checks make assumptions inspectable; they are not proof of scientific correctness. Every 3D model keeps the app's drafting-to-materialisation transition, camera movement, body introductions, guided lessons and manipulable variables. A node may also expose a 2D explanatory figure when a spatial model would mislead. See [the model-contract and audit design](docs/research/simulation-model-contract.md).
 - **Edit anything.** Select any object to move, rotate, scale, hide, remove or replace it, add new objects, or ask an AI to change it in plain words.
-- **Grounded in the literature.** While Claude writes, it can search OpenAlex, Consensus and PubMed through your claude.ai connectors. Each step says where it comes from, and every cited reference is checked against OpenAlex (✓ found / ✗ not found). Each step also carries its terms with units, a plain picture, the commonest misconception and a self-check question (see `docs/PEDAGOGY.md`).
-- **Works with any AI.** Inside claude.ai the page uses the viewer's own Claude. Everywhere else, every request is a portable prompt and every answer is documented JSON (see `prompts/`, `skill/`, and the step-by-step "Recipe for any AI" in `docs/PROTOCOL.md`).
+- **Grounded in actual research.** The local OpenAI integration uses the Responses API with the live `web_search` tool when external evidence is genuinely needed. Search-call metadata and returned citations are recorded separately from the uploaded-document index. Other configured models remain automatic fallbacks; they do not inherit OpenAI's native web-search tool.
+- **OpenAI-first, locally secured.** The Windows launcher can prompt for an OpenAI API key without echoing it, keep it in the server process environment, and proxy Responses API requests through localhost. The browser never stores the OpenAI key. Other providers can be enabled as fallbacks.
+
+## AI providers and ChatGPT development
+
+The AI engine settings support built-in providers plus multiple custom OpenAI-compatible endpoints. Each custom endpoint has its own name, base URL, exact model ID and optional API key. The app calls the base URL plus /chat/completions. Non-compatible native protocols require a dedicated adapter. See [provider setup](docs/SETUP-GUIDE.md#configure-ai-providers) and [working from ChatGPT without an API key](docs/CHATGPT-GITHUB-WORKFLOW.md).
+
+ChatGPT can also work on this repository through its authorised GitHub connection. That access is separate from provider credentials used by the running Scriptorium app.
 
 ## Run it
 
-**First time on Windows:** double-click `Setup Scriptorium.bat` (shortcuts, the Claude Desktop extension, FreeLLMAPI, the free keys; each step asks first). The full guide, to keep and to share: [docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md).
+**Hosted preview target:** [Scriptorium Memorialium](https://bigdarksauce.github.io/scriptorium-memorium/) (available after the repository's Pages source is set to GitHub Actions and the deploy workflow succeeds). The hosted edition runs the complete browser experience, including the seeded library, 3D dioramas, PDF/PPTX ingestion, source atlases, learner tools, and local browser storage. It does not host an OpenAI key or the localhost relay; use the local OpenAI launcher below for the OpenAI-first authoring route. See [deployment and run modes](docs/DEPLOYMENT.md).
 
-- **Online:** open the published version, https://claude.ai/artifact/QpCmKYRujhaHzeq4eY2rie, or double-click `Scriptorium Memorialium (online).url`. This is the only way to get the built-in Claude analysis and the research connectors.
-- **Free AI models as well (all three AI engines in the Claude app):** double-click `bridge/Scriptorium free models.mcpb` once; Claude Desktop installs it as an extension. The page inside the Claude app may not contact outside addresses itself; the extension makes its free-model requests from your computer, so “Claude + free models” and “Free models only” work there next to Claude (`docs/FREE-MODELS.md`, `bridge/README.md`).
-- **On your computer (Windows):** double-click `Launch Scriptorium.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
-- **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening `index.html` directly:
+**Windows with OpenAI:** double-click `Launch Scriptorium with OpenAI.bat`. It asks for your OpenAI API key using a hidden prompt, keeps it in the local server's environment for that run, then opens the app. API usage is billed by OpenAI separately from a ChatGPT subscription. See [docs/OPENAI-LOCAL.md](docs/OPENAI-LOCAL.md).
 
-```bash
-./serve.sh                        # or: python3 -m http.server 8000   — then open http://localhost:8000
-```
+- **Hosted/online:** the browser app is intended for GitHub Pages; see [deployment prerequisites](docs/DEPLOYMENT.md) before treating the preview URL as live. It can use browser-reachable providers configured in AI settings, but GitHub Pages cannot read your computer's environment or run the secure localhost relay. Use the standalone launcher for OpenAI-first authoring.
+- **Fallback providers:** in the AI settings panel you can configure other OpenAI-compatible or free providers. The router tries OpenAI first, then enabled fallbacks if the local endpoint is unavailable.
+- **On your computer without OpenAI:** double-click `Launch Scriptorium.bat` to run the local server with fallback providers but no OpenAI key. For the OpenAI-first route use `Launch Scriptorium with OpenAI.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
+- **macOS/Linux with the full local relay:** run `python3 launcher/serve.py 8000` and open http://localhost:8000. This is the equivalent of the Windows launcher and enables the secure local OpenAI adapter plus the optional local provider relay.
+- **Static preview only:** `./serve.sh` or `python3 -m http.server 8000` serves the browser app without the server-side AI relay. Use it to explore the seeded library and configure direct browser-compatible providers.
 
 Notes for running locally:
 - three.js, MathJax, pdf.js and the fonts load from CDNs, so you need to be online.
 - Your library, rooms and PDFs are stored in the browser (IndexedDB) for that address. The example books' dioramas are brought up to date by themselves when a new version changes them, unless you edited them (`js/seeds-version.js`). Use the same address and port each time (http://localhost:8000) or you will see an empty library; *Import / export* moves a library between browsers.
-- The built-in Claude analysis and the research connectors only work inside claude.ai. Locally the free models can do the AI steps (the AI engine button), or every AI step shows its prompt for *Copy prompt / Paste JSON* with any AI (see `docs/PROTOCOL.md`), and `tools/verify-chain.mjs` checks the answer before you paste it.
+- OpenAI requests go through `/__openai/v1/responses` on localhost. The same-origin server reads `OPENAI_API_KEY`; it does not expose the key to JavaScript. For a different model or provider, use the AI settings panel. The offline chain verifier remains available (`tools/verify-chain.mjs`).
 
 ## Check a chain from another AI
 
@@ -43,6 +48,33 @@ node tools/verify-chain.mjs answer.json sections.json      # also check against 
 
 It runs the app's own coverage check (`verifyChain` in `js/ai/prompts.js`) and the strict schema (`schema/chain.strict.schema.json`), and prints one line per fault: a subsection without steps or coarser than the book, a PDF figure nobody cites, a break in the question thread, a 3D demo without 3–6 lessons, a lesson waiting for an event the model never logs, outside data without a source. Numbers that are not in the PDF text are printed as warnings. Exit code 0 means the chain passes; `--json` prints the full report, `--loose` checks the base schema only. `examples/chain-coverage-example.json` passes.
 
+## PowerPoint ingestion regression tests
+
+The source parser has two complementary checks:
+
+- `node tools/test-pptx-visuals.mjs` tests Open XML relationship resolution, cached chart values, SmartArt nodes/edges, and the human-readable slide/page source labels without a browser.
+- With the app served and Playwright plus Chromium installed, `node tools/test-pptx-browser.mjs http://localhost:8000/` generates a synthetic `.pptx` package in the browser and tests the actual ZIP ingestion path: presentation slide order, shape text, speaker notes, chart cache, SmartArt, embedded image decoding and media provenance.
+
+The browser fixture does not call an AI provider or incur API charges. It verifies ingestion mechanics, not the scientific accuracy of a model's later interpretation.
+
+## Source-structured visual reconstruction
+
+The PowerPoint parser retains chart series, category labels, cached raw/numeric values, chart kind, and SmartArt node IDs and directed connections as structured data rather than flattening everything into prose. Concept links are established by exact slide location and labelled as locators, not semantic proof. When a concept view selects one of these records, complete supported bar charts become native bars diagrams and complete SmartArt graphs become native flow diagrams; incomplete SmartArt is shown as a node inventory rather than a fabricated process. Unsupported or incomplete charts stay in their structured source form. The atlas builds a deterministic reconstruction brief from those records plus source tables, equations, derivations, actor IDs and step dependencies. Diorama authoring receives this brief and explicit fidelity rules: preserve exact values/IDs, do not interpolate missing chart points, do not infer units or physical scale from raster figures, and do not treat SmartArt edges as causal mechanisms by themselves.
+
+Each concept now has a stable ordered visual pathway. Every planned view has a unique `viewId`, explicit order and a teaching stage (curiosity → orientation/decomposition → inspection/mechanism → reconstruction/understanding). The atlas groups all 3D intentions for a concept into one interactive scene, while each 2D intention becomes its own inspectable stage. Existing source chart/SmartArt reconstructions are associated with the view that selected them; remaining 2D views are authored together in one bounded request per concept, validated against the native figure renderer, and retained as planned rather than fabricated when authoring fails. The learner navigates the pathway with a horizontal view selector; switching views cleans up the prior figure renderer and preserves the selected concept.
+
+Run `node tools/test-pptx-visuals.mjs` for structured Open XML chart/SmartArt tests, `node tools/test-atlas.mjs` for source-step linking, reconstruction-brief checks, ordered view validation and sequence compilation, and `node tools/test-pptx-browser.mjs http://localhost:8000/` for the production browser ZIP-ingestion path.
+
+## Evidence-linked visual compilation
+
+Concept-level diorama plans may cite only figure IDs that are present in the extracted source index and explicitly referenced by one of that concept's validated steps. The atlas records each figure's caption, page or slide, package media path and linked step IDs. The grouped authoring and model-audit calls receive only those linked image assets, subject to the configured image budget. An ordered image manifest maps each request attachment to its figure ID, caption, page/slide and source-step IDs. Unindexed references are recorded as unresolved and never attached as evidence.
+
+Run `node tools/test-atlas.mjs` for the pure provenance, attachment-selection and strict figure-reference checks. The browser atlas test also verifies that the source trail displays the linked figure and its source location. These tests validate the provenance/selection pipeline without calling a live vision model; a real uploaded deck still needs a manual end-to-end authoring check.
+
+## Simulation contract regression test
+
+Run `node tools/test-model-contract.mjs` (Node 18 or later, no installs) to exercise the source-evidence, actor identity, parameter range/unit and legacy-compatibility checks used by the scene authoring pipeline.
+
 ## Smoke test
 
 `tools/smoke.mjs` opens the whole app in headless Chromium and checks it end to end: boot, every seeded room and scroll, every built-in diorama, lessons, editing, the library arranger, import, WebGL context loss, memory leaks and console errors.
@@ -54,6 +86,12 @@ node tools/smoke.mjs                                       # or: node tools/smok
 ```
 
 A run takes about 3 minutes on a machine with a GPU and 10–15 minutes with software rendering. `SMOKE_OUT=dir` saves two canvas captures, `SMOKE_SLOW=1` also runs every built-in model through the drawing → real transition, `SMOKE_HEADED=1` shows the browser. Exit code 0 = all checks passed, 1 = a check failed, 2 = it could not start (no server or no playwright).
+
+## Learning workflow
+
+The concept atlas now supports horizontal question branches, prediction-first commitments and source-linked, one-reasoning-unit-at-a-time unfolding. An optional loci route is also available: learners can anchor a concept to a bookcase row/slot, add their own memory cue, and practise recall at that place. A compact source scan also exposes subsections and searchable, source-linked terms, equations, examples, tables, figures and code, with native autocomplete drawn from the source; adaptive scan prompts and loci routes also use the existing spaced-retrieval ledger, with learner self-ratings and expanding review intervals; arbitrary room landmarks remain future design targets.
+
+See [docs/LEARNING-WORKFLOW.md](docs/LEARNING-WORKFLOW.md) for the scan → question sweep → selective depth model, the optional spatial memory layer, its source-grounding guardrails and evaluation criteria. The [pedagogy guide](docs/PEDAGOGY.md) and [user guide](docs/USER_GUIDE.md) explain the implementation currently available.
 
 ## Three materialisation techniques
 
@@ -75,13 +113,13 @@ js/gfx/               renderer + post chain, procedural textures, materials, roo
 js/dio/               diorama: scene builder (shapes & macros), environments, built-in models, runtime (tour, lessons, edit)
 js/hub/               library room and its props
 js/room/              book room, reading scroll, 2D diagrams
-js/ai/                Claude connector, research connectors (evidence.js), prompts, PDF ingestion
+js/ai/                OpenAI-first provider router, optional fallbacks, evidence connectors, prompts, PDF/PPTX ingestion
 prompts/              the portable prompt pack (same text the app sends; regenerate with `node prompts/build.mjs`)
-schema/               JSON Schemas: chain (with coverage, question thread, figures, extra) and its strict profile, scene, room
+schema/               JSON Schemas: chain (coverage, question thread, figures, extra), strict profile, semantic atlas, scene and room
 tools/                verify-chain.mjs (offline check of a chain or room file), smoke.mjs (end-to-end browser test), polish.mjs (layout and
                       colour gate), test-math / test-prose / test-seeds (unit checks), seed-history.mjs (regenerates js/seeds-history.js)
 examples/             example scenes, a room file, and a complete chain with its coverage map
-skill/                a Claude skill that turns a PDF into a room file
+skill/                optional portable ingest skill that turns a PDF into an importable room file
 docs/                 architecture, protocol, scene spec, user guide, pedagogy & grounding, research notes
 launcher/             Windows launcher helpers (local server, shortcut maker)
 assets/               app icon (scriptorium.ico / .png)

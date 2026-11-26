@@ -1,6 +1,6 @@
 // The reading scroll: a parchment overlay showing one part's logical chain. 3D showcases appear as 2D drawings
 // (the real model seen through a long lens) with a Transition button that carries the camera into them.
-import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML, mathText } from '../util.js';
+import { el, esc, typeset, toast, uid, $, clamp, nextFrame, mathHTML, mathText, confirmBox } from '../util.js';
 import { SVGDEMO, SVG_TYPES, renderFigure } from './diagrams.js';
 import { closeLecterns } from '../dio/prims/index.js';
 import { prose } from './prose.js';
@@ -8,12 +8,12 @@ import { renderSketch } from '../dio/engine.js';
 import { DIO } from '../dio/models.js';
 import { askJSON, errCopy, imageLimit, aiAvailable } from '../ai/claude.js';
 import { chapterPrompt, detailPrompt } from '../ai/prompts.js';
-import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo, roomCtx } from '../ai/pipeline.js';
+import { analysePart, coverageFill, material as pipeMaterial, authorDemo, fallbackDemo, roomCtx, mergeAtlasResearch } from '../ai/pipeline.js';
 import { partKey, cached } from '../store.js';
 import { addReveals } from '../seeds-sources.js';
 import { renderHook, renderPayoff, normHook, fallbackHook } from './hooks.js';
 import { seedHook } from '../seeds-hooks.js';
-import { renderReveal, renderTransfer, normReveal, revealSpec, enrollCheck } from './reveal.js';
+import { renderReveal, renderTransfer, normReveal, revealSpec, enrollCheck, ensureLocusReviewCard, rateLocusRecall, removeLocusReviewCard } from './reveal.js';
 import { glyphFor, glyphSVG } from './glyphs.js';
 import { fitAll } from './textfit.js';
 import { renderMotion, hasMotion, motionIssues } from './motion.js';
@@ -21,6 +21,7 @@ import { seedMotion } from '../seeds-motion.js';
 import { redundantFigures, isFlow } from './figspec.js';
 import * as MEDIA from '../ai/media.js';
 import { evidenceTools, evidenceAvailable, evidenceServers, verifySources, collectSources, searchOpenAlex, evidenceErr, doiUrl } from '../ai/evidence.js';
+import { renderAtlasView } from './atlas-view.js';
 // Scroll drawings are rendered one per frame (each builds and renders a whole diorama), so opening a long scroll
 // never freezes the page for the sum of them; a closed scroll's pending drawings are skipped.
 let sketchQ = Promise.resolve();
@@ -124,6 +125,20 @@ export class Reader {
     R.append(el('div', { class: 'rod' }), head, body, el('div', { class: 'rod' }));
     if (!P.analysis) { this.folds = null; this.renderEmpty(); return; }
     if (!(P.analysis.chain || []).length) { this.folds = null; this.renderNoSteps(); return; }
+    if (P.analysis.atlas) {
+      this.folds = null; R.classList.add('atlas-reader');
+      body.append(...(this._improving ? [this.improvingBar()] : []), renderAtlasView({
+        atlas: P.analysis.atlas, part: P,
+        onOpenDiorama: (ref, challenge) => this.openAtlasDiorama(ref, challenge),
+        onGenerate: (request, nodeId, status) => this.generateAtlasDiorama(request, nodeId, status),
+        onAssignMemoryPlace: node => this.assignAtlasMemoryPlace(node),
+        onRemoveMemoryPlace: node => this.removeAtlasMemoryPlace(node),
+        onVisitMemoryRoute: node => this.visitAtlasMemoryRoute(node),
+        onSave: () => this.save()
+      }));
+      return;
+    }
+    R.classList.remove('atlas-reader');
     if (addReveals(P.analysis)) this.save();   /* an example scroll from before the Revelation Engine gets its loops (seeds-sources.js) */   // analysed, but the chain came back empty: nothing to unfold
     // an analysed scroll opens on its content: the authoring controls (depth, Re-analyse, Paste JSON) wait in the ⋯ menu
     // (showAuthoring); a sealed one keeps its Analyse bar in view, its main action (renderEmpty)
@@ -226,7 +241,7 @@ export class Reader {
     if (A && (A.chain || []).length) pop.append(el('div', { class: 'rm-sep', role: 'separator' }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Analyse again…', disabled: !!this._improving, onclick: () => { this.toggleMenu(false); this.showAuthoring(); } }),
       el('button', { class: 'rm-item', type: 'button', role: 'menuitem', text: 'Paste JSON from another AI', onclick: () => { this.toggleMenu(false); this.pasteJSON(); } }));
-    if (A && !evidenceAvailable()) pop.append(el('p', { class: 'rm-note', text: 'Sources are checked against OpenAlex, Consensus, PubMed, SciSpace, Hugging Face or ClinicalTrials.gov when one is connected in claude.ai.' }));
+    if (A && !evidenceAvailable()) pop.append(el('p', { class: 'rm-note', text: 'OpenAI web-search citations and chapter source indexing are shown in the concept atlas. Optional specialist research connectors depend on the host and provider configuration.' }));
   }
   // the authoring bar (depth, Re-analyse, Paste JSON) unfolded at the top of the sheet, from the ⋯ menu
   showAuthoring() {
@@ -258,6 +273,267 @@ export class Reader {
     const pasted = el('button', { class: 'btn small', text: 'Paste JSON from another AI', onclick: () => this.pasteJSON() });
     return el('div', { class: 'analyse-bar' + (compact ? ' compact' : '') }, [el('div', { class: 'row wrap' }, [depth, n, go, pasted]), st]);
   }
+  // ---------- chapter atlas actions ----------
+  async assignAtlasMemoryPlace(node) {
+    const app = this.app, book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    if (!atlas || !node || !node.id) return;
+    try {
+      await app.openHub();
+      const hub = app.mode;
+      if (!hub || typeof hub.listShelves !== 'function') throw new Error('The library hall could not be opened.');
+      const shelves = hub.listShelves();
+      if (!shelves.length) throw new Error('Add a bookcase before assigning a memory place.');
+      const previous = (atlas.memoryPlaces || []).find(p => p.nodeId === node.id);
+      const state = {
+        caseId: shelves.some(s => s.caseId === (previous && previous.caseId)) ? previous.caseId : shelves[0].caseId,
+        row: previous ? Number(previous.row) : null,
+        slot: previous ? Number(previous.slot) : null,
+        association: previous && previous.association || ''
+      };
+      const panel = el('aside', { class: 'memory-locus-assign-panel glass', role: 'dialog', 'aria-label': 'Assign a memory place' });
+      hub.ui.append(panel);
+      const resumeAtlas = () => {
+        if (hub && typeof hub.clearMemoryAnchor === 'function') hub.clearMemoryAnchor();
+        return app.openRoom(book.id, { openPart: part.id });
+      };
+      const memoryOwnerAt = (caseId, row, slot) => {
+        const place = (atlas.memoryPlaces || []).find(p =>
+          String(p.nodeId) !== String(node.id) &&
+          String(p.caseId) === String(caseId) &&
+          Number(p.row) === Number(row) &&
+          Number(p.slot) === Number(slot)
+        );
+        return place ? (atlas.nodes || []).find(n => String(n.id) === String(place.nodeId)) || { title: place.nodeId } : null;
+      };
+      const render = () => {
+        panel.innerHTML = '';
+        const shelf = shelves.find(s => s.caseId === state.caseId) || shelves[0];
+        state.caseId = shelf.caseId;
+        const rows = shelf.rows || [];
+        if (!rows.some(r => r.row === state.row)) state.row = rows[0] ? rows[0].row : null;
+        const row = rows.find(r => r.row === state.row) || rows[0];
+        if (row) {
+          const chosen = (row.slots || []).find(s => s.slot === state.slot && !memoryOwnerAt(state.caseId, state.row, s.slot));
+          const firstFree = chosen || (row.slots || []).find(s => !memoryOwnerAt(state.caseId, state.row, s.slot));
+          state.slot = firstFree ? firstFree.slot : null;
+        }
+        const current = row && (row.slots || []).find(s => s.slot === state.slot);
+        const locationOwner = current && memoryOwnerAt(state.caseId, state.row, current.slot);
+        const cue = el('textarea', { class: 'memory-locus-cue', rows: 3, maxlength: 240, placeholder: 'Choose a distinctive image, event, sound, movement or verbal cue for this concept. Keep the cue separate from the answer.', 'aria-label': 'Memory association' });
+        cue.value = state.association;
+        const shelfSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase' }, shelves.map(s => el('option', { value: s.caseId, text: s.title })));
+        shelfSelect.value = state.caseId;
+        shelfSelect.addEventListener('change', () => { state.caseId = shelfSelect.value; state.row = null; state.slot = null; render(); });
+        const rowSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase row' }, rows.map(r => el('option', { value: String(r.row), text: 'Row ' + r.label })));
+        if (row) rowSelect.value = String(row.row);
+        rowSelect.addEventListener('change', () => { state.row = Number(rowSelect.value); state.slot = null; render(); });
+        const slotOptions = (row && row.slots || []).map(slot => {
+          const occupant = slot.bookId && app.lib.books.find(b => b.id === slot.bookId);
+          const memoryOwner = memoryOwnerAt(state.caseId, row.row, slot.slot);
+          return el('option', {
+            value: String(slot.slot),
+            disabled: !!memoryOwner,
+            text: 'Place ' + (slot.slot + 1) +
+              (memoryOwner ? ' · memory place: ' + (memoryOwner.title || 'another concept') :
+                occupant ? ' · scroll: ' + occupant.title : ' · empty')
+          });
+        });
+        const slotSelect = el('select', { class: 'field memory-locus-select', 'aria-label': 'Bookcase place' }, slotOptions);
+        if (current) slotSelect.value = String(current.slot);
+        slotSelect.addEventListener('change', () => { state.slot = Number(slotSelect.value); render(); });
+        const status = el('span', { class: 'memory-locus-status', role: 'status' });
+        const preview = el('button', {
+          class: 'btn small',
+          type: 'button',
+          text: 'Preview this place',
+          disabled: !row || !current || !!locationOwner,
+          onclick: () => {
+            const conflict = current && memoryOwnerAt(state.caseId, state.row, current.slot);
+            if (conflict) { status.textContent = 'That location already anchors ' + (conflict.title || 'another concept') + '.'; return; }
+            const result = hub.showMemoryAnchor(state.caseId, state.row, state.slot, { frame: true });
+            status.textContent = result.ok ? 'The gold marker shows the selected location.' : result.reason;
+          }
+        });
+        const save = el('button', {
+          class: 'btn primary small',
+          type: 'button',
+          text: previous ? 'Update memory place' : 'Save memory place',
+          disabled: !row || !current || !!locationOwner || !cue.value.trim(),
+          onclick: async () => {
+            const conflict = current && memoryOwnerAt(state.caseId, state.row, current.slot);
+            if (conflict) { status.textContent = 'That location already anchors ' + (conflict.title || 'another concept') + '. Choose a different place.'; return; }
+            const association = state.association.trim().slice(0, 240);
+            if (!association) { status.textContent = 'Add a distinct memory cue before saving.'; cue.focus(); return; }
+            const next = {
+              nodeId: node.id,
+              caseId: state.caseId,
+              row: state.row,
+              slot: state.slot,
+              shelfName: shelf.title,
+              rowLabel: row.label,
+              association,
+              updatedAt: new Date().toISOString(),
+              review: previous && previous.review ? previous.review : undefined
+            };
+            atlas.memoryPlaces = [...(atlas.memoryPlaces || []).filter(p => p.nodeId !== node.id), next];
+            await roomCtx(app, book.id).save(part);
+            await resumeAtlas();
+            toast('Memory place saved to the library.');
+          }
+        });
+        cue.addEventListener('input', () => { state.association = cue.value.slice(0, 240); save.disabled = !state.association.trim() || !row || !current || !!locationOwner; });
+        panel.append(
+          el('div', { class: 'memory-route-overline', text: 'ANCHOR A CONCEPT IN THE LIBRARY' }),
+          el('h3', { text: node.title || 'Concept' }),
+          el('p', { class: 'memory-locus-description', text: 'Choose a stable bookcase row and place. The anchor follows the case when it is moved or rotated; it is a retrieval cue, not a source claim.' }),
+          el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Bookcase' }), shelfSelect]),
+          el('div', { class: 'row wrap memory-locus-row' }, [
+            el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Row' }), rowSelect]),
+            el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Place' }), slotSelect])
+          ]),
+          el('label', { class: 'memory-locus-field' }, [el('span', { text: 'Your association / mnemonic cue' }), cue]),
+          el('p', { class: 'memory-locus-occupant', text: locationOwner
+            ? 'This position already anchors ' + (locationOwner.title || 'another concept') + '. Each concept needs its own distinct place.'
+            : current && current.bookId ? 'This place currently contains a scroll. The locus marks the bookcase position, not the scroll identity.'
+              : current ? 'This place is currently empty.' : 'All places in this row are already assigned to other concepts.' }),
+          el('div', { class: 'row wrap' }, [preview, save, status]),
+          el('div', { class: 'row end' }, [el('button', { class: 'btn small', type: 'button', text: 'Cancel', onclick: () => resumeAtlas() })])
+        );
+      };
+      render();
+    } catch (e) {
+      toast(String(e && (e.message || e.code) || e), 5000);
+      await app.openRoom(book.id, { openPart: part.id });
+    }
+  }
+  async removeAtlasMemoryPlace(node) {
+    const book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    if (!atlas || !node || !Array.isArray(atlas.memoryPlaces)) return;
+    const place = atlas.memoryPlaces.find(p => String(p.nodeId) === String(node.id));
+    if (!place) return;
+    const ok = await confirmBox(
+      'Remove the saved library location and its recall record for “' + (node.title || node.id) + '”? The concept, source links and dioramas will remain in the atlas.',
+      'Remove memory place',
+      { title: 'Remove this memory place?' }
+    );
+    if (!ok) return;
+    atlas.memoryPlaces = atlas.memoryPlaces.filter(p => String(p.nodeId) !== String(node.id));
+    await roomCtx(this.app, book.id).save(part);
+    await removeLocusReviewCard(book.id, part.id, node.id);
+    this.render();
+    toast('Memory place removed. The concept remains in the atlas.');
+  }
+  async visitAtlasMemoryRoute(node) {
+    const app = this.app, book = this.room.book, part = this.part, atlas = part.analysis && part.analysis.atlas;
+    const places = atlas && Array.isArray(atlas.memoryPlaces) ? atlas.memoryPlaces : [];
+    if (!places.length) { toast('Assign a memory place to a concept first.'); return; }
+    try {
+      const reviewSchedules = {};
+      for (const place of places) {
+        const concept = (atlas.nodes || []).find(item => String(item.id) === String(place.nodeId));
+        if (!concept) continue;
+        reviewSchedules[concept.id] = await ensureLocusReviewCard(book.id, part.id, part.title, concept);
+      }
+      await app.openHub();
+      const hub = app.mode;
+      if (!hub || typeof hub.showMemoryRoute !== 'function') throw new Error('The library memory route could not be opened.');
+      const ctx = roomCtx(app, book.id);
+      hub.showMemoryRoute({
+        bookId: book.id,
+        partId: part.id,
+        atlas,
+        initialNodeId: node && node.id,
+        reviewSchedules,
+        onGradeRecall: (nodeId, recalled) => {
+          const schedule = reviewSchedules[String(nodeId)];
+          return schedule ? rateLocusRecall(schedule.id, recalled) : Promise.resolve(null);
+        },
+        onSave: () => ctx.save(part)
+      });
+    } catch (e) {
+      toast(String(e && (e.message || e.code) || e), 5000);
+      await app.openRoom(book.id, { openPart: part.id });
+    }
+  }
+  openAtlasDiorama(ref, challengeMode = null) {
+    const A = this.part.analysis, st = (A.chain || []).find(x => String(x.id) === String(ref.stepId));
+    const d = st && (st.demos || [])[+ref.demoIndex];
+    if (!d || !is3D(d)) { toast('This atlas node has no 3D diorama linked to that reference yet.'); return; }
+    let spec;
+    try { spec = JSON.parse(JSON.stringify(d)); } catch (e) { toast('This diorama could not be copied safely.'); return; }
+    let partial = false;
+    if (challengeMode && challengeMode.incomplete && spec.type === 'scene' && Array.isArray(spec.bodies)) {
+      const missing = new Set((challengeMode.challenge && challengeMode.challenge.missingBodyIds) || []);
+      if (missing.size) {
+        spec.bodies = spec.bodies.map(b => missing.has(String(b.id)) ? { ...b, hidden: true } : b);
+        partial = true;
+      } else if (challengeMode.challenge && challengeMode.challenge.type === 'structural') {
+        toast('The structural prompt was recorded, but no hideable actor IDs were mapped; opening the full model.');
+      }
+    }
+    this.app.openDiorama(spec, {
+      buildIn: true, autoTransition: true,
+      title: (spec.title || ref.title || this.part.title) + (partial ? ' · incomplete view' : ''),
+      subtitle: this.part.title + ' · ' + ref.stepId,
+      context: (st.title || '') + ': ' + (st.statement || ''),
+      onSave: () => this.save(),
+      returnTo: { room: this.room.book.id, part: this.part.id }
+    });
+  }
+  async generateAtlasDiorama(request, nodeId, onStatus = () => {}) {
+    const A = this.part.analysis, atlas = A && A.atlas, node = atlas && (atlas.nodes || []).find(n => n.id === nodeId);
+    if (!node) throw new Error('The selected concept node no longer exists.');
+    if (this._atlasBuildBusy) throw new Error('A diorama for this chapter is already being authored.');
+    const sourceSteps = (node.stepIds || []).map(id => (A.chain || []).find(x => String(x.id) === String(id))).filter(Boolean);
+    const st = sourceSteps[0];
+    if (!st) throw new Error('This concept has no source step to anchor the new diorama.');
+    this._atlasBuildBusy = true;
+    const d = {
+      type: 'scene', title: (node.title + ' · Additional view').slice(0, 90),
+      purpose: node.question,
+      request: 'Create an additional explanatory diorama requested by the learner for this concept.\n' +
+        'Concept: ' + node.title + '\nQuestion: ' + node.question + '\nSummary: ' + node.summary + '\n' +
+        'Planned explanatory intent: ' + node.visualIntent + '\n' +
+        'LEARNER REQUEST: ' + request + '\n' +
+        'COMPLETE SOURCE STEPS FOR THIS CONCEPT: ' + JSON.stringify(sourceSteps.map(x => ({
+          id: x.id, title: x.title, statement: String(x.statement || '').slice(0, 1200),
+          answers: x.answers || '', opens: x.opens || '', math: x.math || '',
+          terms: (x.terms || []).slice(0, 12),
+          explanation: (x.explain || []).map(e => e && e.text).filter(Boolean).join(' ').slice(0, 1200),
+          pages: x.pages || [], figures: x.figures || [], table: x.table || null
+        }))) + '\n' +
+        'Use the learner request as an additional view, not as permission to contradict the source. Ground every factual claim, number and actor in these source steps. Do not invent measurements or mechanisms absent from them. Let the visual grammar and camera technique fit the subject rather than forcing a card-style scene.'
+    };
+    const researchAudit = [];
+    const recordResearch = () => {
+      if (!researchAudit.length) return;
+      A.researchEvidenceCalls = [...(A.researchEvidenceCalls || []), ...researchAudit].slice(-120);
+      mergeAtlasResearch(atlas, researchAudit);
+    };
+    try {
+      onStatus('Planning and authoring the additional diorama…');
+      let how;
+      try { how = await authorDemo(this.ctx(), st, d, { onStatus, researchAudit }); }
+      catch (e) { recordResearch(); this.save(); throw e; }
+      st.demos = st.demos || []; st.demos.push(d);
+      const index = st.demos.length - 1;
+      if (is3D(d)) {
+        node.dioramaRefs = node.dioramaRefs || [];
+        node.dioramaRefs.push({ stepId: st.id, demoIndex: index, title: d.title || node.title, purpose: d.purpose || node.question, learnerRequested: true });
+        node.visualKind = 'diorama';
+      } else if (d.type === 'figure' && d.figure) {
+        node.generatedFigure = d.figure; node.visualKind = 'diagram';
+        node.explanatoryFigures = node.explanatoryFigures || [];
+        node.explanatoryFigures.push({ stepId: String(st.id), title: d.title || node.title, purpose: d.purpose || node.question, figure: d.figure, learnerRequested: true });
+      }
+      atlas.audit = { ...(atlas.audit || {}), linkedDioramas: (atlas.nodes || []).reduce((n, x) => n + (x.dioramaRefs || []).length, 0) };
+      recordResearch();
+      this.save(); this.room.refreshStation(this.part); this.render();
+      toast(is3D(d) ? 'Additional diorama added to the concept sequence.' : 'The request was represented as a 2D explanatory figure rather than a spatial simulation.');
+      return how;
+    } finally { this._atlasBuildBusy = false; }
+  }
+
   // ---------- the analysis pipeline (docs/PROTOCOL.md, "Recipe for any AI"; js/ai/pipeline.js) ----------
   // chain → coverage follow-ups → quality gate with targeted repairs → figures → dioramas per subsection. Nothing stored
   // is ever recomputed or re-asked; an interrupted run resumes at the stage it reached.
@@ -564,7 +840,30 @@ export class Reader {
   renderDemo(d, st, i, demos) {
     const wrapDemo = node => { if (!node || node.tagName === 'SPAN') return node; const prov = demoProvenance(d);
       // a fallback (authoring failed, or no AI here): say so, and offer to author the requested diorama again
-      const fb = d.requested ? el('div', { class: 'demo-fallback' }, [el('span', { text: (d.type === 'figure' ? 'A diagram stands in' : 'A ready-made model stands in') + ' for the requested diorama “' + (d.requested.title || '') + '”' + (d.fallback ? ' (' + d.fallback + ')' : '') + '. ' }), aiAvailable() ? el('button', { class: 'linkbtn', text: 'Try building it with AI', onclick: async ev => { ev.target.disabled = true; const keep = { ...d }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'scene', ...keep.requested }); try { await authorDemo(this.ctx(), st, d, {}); } catch (e) { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, keep); } this.save(); this.room.refreshStation(this.part); const w = ev.target.closest('.demo-wrap'); if (w) demos.replaceChild(this.renderDemo(d, st, i, demos), w); } }) : null]) : null; const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null; return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb]); };
+      const fb = d.requested ? el('div', { class: 'demo-fallback' }, [el('span', { text: (d.type === 'figure' ? 'A diagram stands in' : 'A ready-made model stands in') + ' for the requested diorama “' + (d.requested.title || '') + '”' + (d.fallback ? ' (' + d.fallback + ')' : '') + '. ' }), aiAvailable() ? el('button', { class: 'linkbtn', text: 'Try building it with AI', onclick: async ev => { ev.target.disabled = true; const keep = { ...d }; Object.keys(d).forEach(k => delete d[k]); Object.assign(d, { type: 'scene', ...keep.requested }); try { await authorDemo(this.ctx(), st, d, {}); } catch (e) { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, keep); } this.save(); this.room.refreshStation(this.part); const w = ev.target.closest('.demo-wrap'); if (w) demos.replaceChild(this.renderDemo(d, st, i, demos), w); } }) : null]) : null; const purp = d.purpose ? el('div', { class: 'demo-purpose', html: '<b>This demo answers:</b> ' + mathHTML(d.purpose) }) : null; const less = Array.isArray(d.lessons) && d.lessons.some(l => l && l.question) ? el('ol', { class: 'lesson-thread' }, d.lessons.map(l => el('li', {}, [el('span', { class: 'lq', html: mathHTML(l.question || l.title || '') }), l.opens ? el('span', { class: 'lo', html: ' → ' + mathHTML(l.opens) }) : null]))) : null;
+      const audit = d.modelAudit || d.modelValidation || (d.rejectedAttempts || []).length ? (() => {
+        const a = d.modelAudit || {}, v = d.modelValidation || {};
+        const label = a.verdict === 'pass' ? 'Model review: passed' : a.verdict === 'revise' ? 'Model review: revision suggested' : a.verdict === 'uncertain' ? 'Model review: uncertain' : v.pass ? 'Model structure checked' : 'Model authoring checks';
+        const notes = [];
+        if (a.summary) notes.push(a.summary);
+        (v.faults || []).forEach(x => notes.push('Structure: ' + x));
+        (a.issues || []).forEach(x => notes.push(String(x.severity || 'Note').toUpperCase() + ' · ' + (x.problem || '') + (x.repair ? ' Suggested repair: ' + x.repair : '')));
+        (a.unverified || []).forEach(x => notes.push('Unverified: ' + x));
+        (a.assumptionsToSurface || []).forEach(x => notes.push('Assumption to inspect: ' + x));
+        if (a.error) notes.push('The separate model review could not complete: ' + a.error);
+        (d.rejectedAttempts || []).forEach(x => {
+          notes.push('Rejected ' + (x.attempt || 'scene') + ' attempt (' + (x.stage || 'check') + ').');
+          (x.faults || []).forEach(y => notes.push('Rejected attempt: ' + y));
+          (x.issues || []).forEach(y => notes.push('Rejected attempt · ' + String(y.severity || 'issue').toUpperCase() + ': ' + (y.problem || '') + (y.repair ? ' Repair: ' + y.repair : '')));
+        });
+        if (!notes.length) notes.push('The structural contract matched. This AI review is a quality-control aid, not scientific proof or formal verification.');
+        return el('details', { class: 'model-audit' }, [
+          el('summary', { text: label }),
+          el('p', { class: 'dim small', text: 'A generated-model review is a quality-control aid, not formal verification.' }),
+          el('ul', { class: 'model-audit-list' }, notes.map(x => el('li', { text: x })))
+        ]);
+      })() : null;
+      return el('div', { class: 'demo-wrap' }, [purp, node, less, prov, fb, audit]); };
     return wrapDemo(this.renderDemoInner(d, st, i, demos));
   }
   renderDemoInner(d, st, i, demos) {

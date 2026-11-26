@@ -501,6 +501,357 @@ export class Hub {
   caseName(id) { return (this.lib.shelves.find(s => s.id === id) || {}).name || 'a bookcase'; }
   // rows are counted from the top for people (row 1 = the top row); the API uses tier indices (0 = the bottom row)
   rowLabel(id, t) { const so = this.shelfObjs.get(id); return so ? so.userData.tiers - t : t + 1; }
+  // A loci anchor is a local bookcase coordinate, not a world-space point: it follows the case if the learner
+  // moves or rotates the furniture. It is deliberately independent of scroll occupancy, so a memory cue is not lost
+  // when a book is later placed in or moved away from that slot.
+  clearMemoryAnchor() {
+    if (!this.memoryMarker) return;
+    this.memoryMarker.removeFromParent();
+    disposeTree(this.memoryMarker);
+    this.memoryMarker = null;
+  }
+  showMemoryAnchor(caseId, row, slot, { frame = true } = {}) {
+    const so = this.shelfObjs.get(caseId);
+    if (!so || !(row >= 0 && row < so.userData.tiers && slot >= 0 && slot < so.userData.slotsPerTier)) {
+      this.clearMemoryAnchor();
+      return { ok: false, reason: 'The saved bookcase or slot no longer exists.' };
+    }
+    this.clearMemoryAnchor();
+    const marker = new THREE.Group();
+    marker.name = 'memory-locus-marker';
+    const gold = new THREE.MeshBasicMaterial({ color: 0xf2c66e, transparent: true, opacity: .96, depthTest: false, depthWrite: false, toneMapped: false });
+    const pale = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: .92, depthTest: false, depthWrite: false, toneMapped: false });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.083, .0065, 8, 40), gold);
+    ring.rotation.y = Math.PI / 2;
+    ring.renderOrder = 990;
+    const centre = new THREE.Mesh(new THREE.SphereGeometry(.012, 12, 8), pale);
+    centre.renderOrder = 991;
+    marker.add(ring, centre);
+    marker.position.copy(slotPos(so, row, slot));
+    marker.position.z += .035;
+    marker.userData.memoryAnchor = { caseId, row, slot };
+    so.add(marker);
+    this.memoryMarker = marker;
+    if (frame) {
+      so.updateMatrixWorld(true);
+      const p = so.localToWorld(marker.position.clone());
+      const n = V3(0, 0, 1).transformDirection(so.matrixWorld).setY(0).normalize();
+      this.frameAt(p, n);
+    }
+    return { ok: true, caseId, row, slot };
+  }
+  closeMemoryRoute() {
+    if (this._memoryRouteFlush) {
+      const flush = this._memoryRouteFlush;
+      this._memoryRouteFlush = null;
+      void flush();
+    }
+    if (this.memoryRoutePanel) { this.memoryRoutePanel.remove(); this.memoryRoutePanel = null; }
+    this.clearMemoryAnchor();
+  }
+  // The route is a retrieval surface, not a tour score: every stop asks for an attempt before its answer appears.
+  // Review records live with the chapter atlas and remain optional; leaving or switching stops gives no points.
+  showMemoryRoute({ bookId, partId, atlas, initialNodeId, reviewSchedules = {}, onGradeRecall = async () => null, onSave = () => {} } = {}) {
+    this.closeMemoryRoute();
+    const nodes = new Map((atlas && atlas.nodes || []).map(n => [String(n.id), n]));
+    const stops = (atlas && atlas.memoryPlaces || []).filter(p => p && nodes.has(String(p.nodeId)));
+    if (!stops.length) return null;
+    let index = Math.max(0, stops.findIndex(p => String(p.nodeId) === String(initialNodeId)));
+    const preparedStops = new Set();
+    const reviewDueLabel = schedule => {
+      if (!schedule || !Number.isFinite(Number(schedule.due))) return 'Not scheduled';
+      const days = Math.ceil((Number(schedule.due) - Date.now()) / 864e5);
+      return days <= 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : 'Due in ' + days + ' days';
+    };
+    const intervalLabel = schedule => {
+      const days = Number(schedule && schedule.interval) || 1;
+      return days === 1 ? '1 day' : days + ' days';
+    };
+    const panel = el('aside', { class: 'memory-route-panel glass', role: 'region', 'aria-label': 'Loci memory route' });
+    this.memoryRoutePanel = panel;
+    this.ui.append(panel);
+
+    let saveTimer = null;
+    const flushSave = async () => {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      try { await onSave(); } catch (e) { console.warn('memory route save', e); }
+    };
+    const scheduleSave = () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { saveTimer = null; void flushSave(); }, 450);
+    };
+    this._memoryRouteFlush = flushSave;
+    const startFreshAttempt = async place => {
+      const current = place.review || {};
+      const history = [...(current.history || [])];
+      if (current.committed) history.push({
+        response: current.response || '',
+        confidence: current.confidence || '',
+        attemptedAt: current.attemptedAt || null,
+        revealedAt: current.revealedAt || null,
+        rating: current.rating || null,
+        gradedAt: current.gradedAt || null
+      });
+      place.review = {
+        history: history.slice(-12),
+        response: '',
+        confidence: '',
+        committed: false,
+        revealed: false,
+        rating: null,
+        gradedAt: null
+      };
+      await flushSave();
+    };
+    const render = () => {
+      panel.innerHTML = '';
+      const place = stops[index], node = nodes.get(String(place.nodeId));
+      const schedule = reviewSchedules[String(node.id)] || null;
+      let review = place.review || {};
+      // Prepare an overdue stop only on its first entry in this route session. Do not
+      // clear the answer on the re-render immediately after a fresh reveal, before self-rating.
+      const reviewKey = String(node.id);
+      if (!preparedStops.has(reviewKey)) {
+        preparedStops.add(reviewKey);
+        if (review.revealed && schedule && Number(schedule.due) <= Date.now()) {
+          const history = [...(review.history || [])];
+          if (review.committed) history.push({
+            response: review.response || '',
+            confidence: review.confidence || '',
+            attemptedAt: review.attemptedAt || null,
+            revealedAt: review.revealedAt || null,
+            rating: review.rating || null,
+            gradedAt: review.gradedAt || null
+          });
+          place.review = {
+            history: history.slice(-12),
+            response: '',
+            confidence: '',
+            committed: false,
+            revealed: false,
+            rating: null,
+            gradedAt: null
+          };
+          review = place.review;
+          void flushSave();
+        }
+      }
+      const shelf = this.lib.shelves.find(s => s.id === place.caseId);
+      panel.append(
+        el('div', { class: 'memory-route-overline', text: 'OPTIONAL LOCI MEMORY ROUTE' }),
+        el('div', { class: 'memory-route-heading' }, [
+          el('div', {}, [
+            el('h3', { text: node.title || 'Concept' }),
+            el('p', { text: (shelf ? shelf.name : place.shelfName || 'Missing bookcase') + ' · row ' + (place.rowLabel || Number(place.row) + 1) + ' · slot ' + (Number(place.slot) + 1) })
+          ]),
+          el('button', { class: 'ibtn dark tiny', type: 'button', text: '×', title: 'Close route panel', 'aria-label': 'Close route panel', onclick: async () => { await flushSave(); this.closeMemoryRoute(); } })
+        ])
+      );
+      const rail = el('div', { class: 'memory-route-stops', role: 'group', 'aria-label': 'Memory places in this chapter' });
+      stops.forEach((stop, i) => {
+        const item = nodes.get(String(stop.nodeId));
+        const due = reviewSchedules[String(stop.nodeId)];
+        rail.append(el('button', {
+          class: 'memory-route-stop' + (i === index ? ' active' : ''),
+          type: 'button',
+          'aria-current': i === index ? 'step' : 'false',
+          onclick: () => { index = i; render(); }
+        }, [
+          el('span', { class: 'memory-route-stop-n', text: String(i + 1).padStart(2, '0') }),
+          el('span', { class: 'memory-route-stop-main' }, [
+            el('span', { text: item ? item.title : stop.nodeId }),
+            due ? el('small', { class: 'memory-route-stop-due', text: reviewDueLabel(due) }) : null
+          ])
+        ]));
+      });
+      panel.append(rail);
+
+      const anchor = this.showMemoryAnchor(place.caseId, place.row, place.slot, { frame: true });
+      if (!anchor.ok) panel.append(el('p', { class: 'memory-route-missing', role: 'status', text: 'This saved place is no longer available. The bookcase or slot may have been removed. Reassign the locus from the concept atlas.' }));
+
+      panel.append(
+        el('div', { class: 'memory-route-association' }, [
+          el('span', { class: 'memory-route-label', text: 'YOUR MEMORY CUE' }),
+          el('p', { text: place.association || 'No association was saved for this place.' })
+        ]),
+        el('div', { class: 'memory-route-question' }, [
+          el('span', { class: 'memory-route-label', text: 'RECALL BEFORE REVEAL' }),
+          el('h4', { text: node.question || node.title || 'Reconstruct this concept.' })
+        ])
+      );
+
+      const response = el('textarea', {
+        class: 'memory-route-response',
+        rows: 3,
+        placeholder: 'Reconstruct the idea in your own words before revealing the expected explanation…',
+        'aria-label': 'Memory route recall attempt'
+      });
+      response.value = review.response || '';
+      response.disabled = !!review.revealed;
+      const confidence = el('select', { class: 'memory-route-confidence', 'aria-label': 'Confidence in recall' }, [
+        el('option', { value: '', text: 'Confidence?' }),
+        ...['Low', 'Medium', 'High'].map(v => el('option', { value: v, text: v, selected: review.confidence === v }))
+      ]);
+      confidence.disabled = !!review.revealed;
+      const status = el('span', { class: 'memory-route-status', role: 'status' });
+      response.addEventListener('input', () => {
+        place.review = { ...(place.review || {}), response: response.value.slice(0, 1200) };
+        scheduleSave();
+      });
+      confidence.addEventListener('change', () => {
+        place.review = { ...(place.review || {}), confidence: confidence.value || '' };
+        scheduleSave();
+      });
+      const commit = el('button', {
+        class: 'btn primary small',
+        type: 'button',
+        text: review.revealed ? 'Recall locked' : review.committed ? 'Update recall' : 'Commit recall',
+        disabled: !!review.revealed || !response.value.trim(),
+        onclick: async () => {
+          const current = place.review || {};
+          place.review = { ...current, response: response.value.trim(), confidence: confidence.value || '', committed: true, attemptedAt: new Date().toISOString() };
+          await flushSave();
+          render();
+        }
+      });
+      response.addEventListener('input', () => { commit.disabled = !!(place.review && place.review.revealed) || !response.value.trim(); });
+      panel.append(response, el('div', { class: 'row wrap' }, [confidence, commit, status]));
+
+      if (review.committed) {
+        panel.append(el('div', { class: 'memory-route-feedback' }, [
+          el('b', { text: 'Your committed reconstruction' }),
+          el('p', { text: review.response || '' })
+        ]));
+        if (!review.revealed) {
+          panel.append(el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Reveal expected reconstruction',
+            onclick: async () => {
+              place.review = { ...(place.review || {}), revealed: true, revealedAt: new Date().toISOString() };
+              await flushSave();
+              render();
+            }
+          }));
+        } else {
+          panel.append(el('div', { class: 'memory-route-feedback expected' }, [
+            el('b', { text: 'Expected reconstruction' }),
+            el('p', { text: node.summary || node.question || node.title || '' }),
+            el('small', { text: 'Source steps: ' + ((node.stepIds || []).join(', ') || 'not recorded') })
+          ]));
+          panel.append(el('p', { class: 'memory-route-transfer-note', text: 'Return to the concept atlas for the full source-linked reasoning path, diagrams and dioramas.' }));
+          const schedule = reviewSchedules[String(node.id)] || null;
+          const ratingText = review.rating === 'recalled' ? 'You rated this recall as accurate.' : review.rating === 'again' ? 'You marked this concept for another pass.' : '';
+          const schedulePanel = el('div', { class: 'memory-route-schedule' }, [
+            el('span', { class: 'memory-route-label', text: 'SPACED REVIEW · SELF-RATED' }),
+            el('b', { text: schedule ? reviewDueLabel(schedule) : 'Review schedule unavailable' }),
+            schedule ? el('small', { text: 'Current interval · ' + intervalLabel(schedule) + ' · ' + (schedule.attempts || 0) + ' reviewed attempts' }) : null,
+            ratingText ? el('p', { text: ratingText }) : null
+          ]);
+          if (schedule && !review.gradedAt) {
+            schedulePanel.append(el('p', { class: 'memory-route-rating-prompt', text: 'Rate your own reconstruction. This is not automatically graded.' }));
+            schedulePanel.append(el('div', { class: 'row wrap' }, [
+              el('button', {
+                class: 'btn small',
+                type: 'button',
+                text: 'Needs another pass',
+                onclick: async () => {
+                  const updated = await onGradeRecall(node.id, false);
+                  if (!updated) return;
+                  reviewSchedules[String(node.id)] = updated;
+                  place.review = { ...(place.review || {}), rating: 'again', gradedAt: new Date().toISOString() };
+                  await flushSave();
+                  render();
+                }
+              }),
+              el('button', {
+                class: 'btn primary small',
+                type: 'button',
+                text: 'Recalled accurately',
+                onclick: async () => {
+                  const updated = await onGradeRecall(node.id, true);
+                  if (!updated) return;
+                  reviewSchedules[String(node.id)] = updated;
+                  place.review = { ...(place.review || {}), rating: 'recalled', gradedAt: new Date().toISOString() };
+                  await flushSave();
+                  render();
+                }
+              })
+            ]));
+          }
+          panel.append(schedulePanel);
+          panel.append(el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Start another recall attempt',
+            onclick: async () => {
+              await startFreshAttempt(place);
+              render();
+            }
+          }));
+          if ((review.history || []).length) {
+            panel.append(el('details', { class: 'memory-route-history' }, [
+              el('summary', { text: 'Previous attempts · ' + review.history.length }),
+              ...(review.history || []).map((attempt, i) => el('div', { class: 'memory-route-history-item' }, [
+                el('b', { text: 'Attempt ' + (i + 1) + (attempt.confidence ? ' · ' + attempt.confidence + ' confidence' : '') }),
+                el('p', { text: attempt.response || '' }),
+                attempt.attemptedAt ? el('small', { text: 'Committed ' + new Date(attempt.attemptedAt).toLocaleString() }) : null
+              ]))
+            ]));
+          }
+        }
+      }
+
+      panel.append(el('div', { class: 'memory-route-order' }, [
+        el('span', { class: 'memory-route-status', text: 'YOUR ROUTE ORDER · NOT A CLAIM ABOUT CONCEPT DEPENDENCY' }),
+        el('div', { class: 'row wrap' }, [
+          el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Move this place earlier',
+            disabled: index === 0,
+            onclick: async () => {
+              const current = stops[index];
+              stops.splice(index, 1);
+              index -= 1;
+              stops.splice(index, 0, current);
+              atlas.memoryPlaces = [...stops, ...(atlas.memoryPlaces || []).filter(p => !stops.includes(p))];
+              await flushSave();
+              render();
+            }
+          }),
+          el('button', {
+            class: 'btn small',
+            type: 'button',
+            text: 'Move this place later',
+            disabled: index >= stops.length - 1,
+            onclick: async () => {
+              const current = stops[index];
+              stops.splice(index, 1);
+              index += 1;
+              stops.splice(index, 0, current);
+              atlas.memoryPlaces = [...stops, ...(atlas.memoryPlaces || []).filter(p => !stops.includes(p))];
+              await flushSave();
+              render();
+            }
+          })
+        ])
+      ]));
+      panel.append(el('div', { class: 'memory-route-footer' }, [
+        el('button', { class: 'btn small', type: 'button', text: '← Previous place', disabled: index === 0, onclick: () => { index = Math.max(0, index - 1); render(); } }),
+        el('span', { class: 'memory-route-progress', text: (index + 1) + ' / ' + stops.length }),
+        el('button', { class: 'btn small', type: 'button', text: 'Next place →', disabled: index >= stops.length - 1, onclick: () => { index = Math.min(stops.length - 1, index + 1); render(); } })
+      ]));
+      panel.append(el('button', {
+        class: 'btn primary small memory-route-return',
+        type: 'button',
+        text: 'Return to concept atlas',
+        onclick: async () => { await flushSave(); this.closeMemoryRoute(); await this.app.openRoom(bookId, { openPart: partId }); }
+      }));
+    };
+    render();
+    return panel;
+  }
   // ---------- public API (for the Add-PDF dialog and other callers) ----------
   // listShelves() → [{caseId, title, kind, rows: [{row, label, hang: {min, max}, slots: [{slot, free, bookId?}]}]}]
   //   row: tier index, 0 = the bottom row (label: 1 = the top row, as people count); free: a new cradled scroll can go

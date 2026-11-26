@@ -39,6 +39,35 @@
 - **Pedestals** carry the card model of the part's diorama. Click one: it unfolds and you enter the diorama. To choose which diorama a pedestal shows, use the *Pedestal* button on any drawing in the scroll.
 - **Room** opens the size sliders and the list of scrolls. The room also grows by itself when new scrolls need space.
 
+## A chapter concept atlas
+
+The atlas presents a chapter as an interactive concept map. Select a node to see its central question, explanatory views, linked dioramas, figures and source trail. It is intended for question-led exploration rather than reading one long chapter summary.
+
+- **Quick source scan:** expand the collapsed scan above the concept map. It lists the ingested subsections and source-step counts. Expand a subsection to filter its inventory by detected content type (definitions, equations, worked examples, tables, figures, code and terms); the counts come from the indexed source steps, and **All** restores the full subsection. Search for a concept, term, equation, worked example, table, figure or code fragment; the search field also suggests terms, equations, example titles and figure labels/captions extracted from the source. Selecting a linked result opens the owning concept and expands the matching source-trail entry. Unlinked figures remain visible as indexed evidence but are not presented as assigned concepts. When the source contains complete term/meaning pairs, problem/answer examples or statement/equation pairs, a horizontal **Source-derived quick retrieval** strip offers matching recall checks. Write and commit your reconstruction before revealing the source answer; attempts are saved per prompt and are not automatically graded. Missing or incomplete fields do not produce a prompt.
+- **Question branches:** challenges appear in a horizontal scroller. Select a branch to investigate one question at a time. Your other branches keep their own progress.
+- **Predict first:** inspect the stimulus, open a hint only when useful, write your prediction and choose a confidence level, then commit it before revealing the expected reconstruction.
+- **Unfold one move at a time:** after revealing the answer, press **UNFOLD** to expose exactly one next reasoning unit. Earlier units stay visible. **Space** unfolds one more unit; **Ctrl+Z** steps back one unit. Neither action changes the selected question.
+- **Source links:** each new reasoning unit lists the chain steps it uses. Open **Source trail and internal indexing** to inspect source steps, subsections, page/slide spans and figure IDs.
+- **Dioramas and diagrams:** open a linked diorama to inspect the concept as a manipulable model. Where 3D would mislead, the atlas can show 2D explanatory figures instead.
+- **Legacy atlases:** saved atlases created before the structured reasoning path remain readable. Their existing explanation appears as one reveal unit rather than being rewritten or divided into invented steps.
+
+See [the learning workflow](LEARNING-WORKFLOW.md) for the planned advanced autocomplete scan and spatial-memory extensions. The compact source scan and bookcase-based loci route described here are available now; due-review scheduling and non-bookcase landmarks remain future work.
+
+## Optional loci memory route
+
+A concept can have a place in the walkable library. This is an optional retrieval cue, not a replacement for the source material.
+
+- In the concept atlas, select a node and choose **Assign a memory place**.
+- Choose a bookcase, row and place. A place may already contain a scroll: the anchor marks the bookcase position, not the scroll's identity. **Preview this place** frames it and shows a gold ring.
+- Write a short, distinctive association of your own, then save. The anchor follows the bookcase if you move or rotate it. Use **Change this memory place** to revise its location or cue.
+- Choose **Visit memory route** to walk the saved places for this chapter. At each stop, use your cue to reconstruct the concept and commit your answer and confidence before revealing the expected reconstruction.
+- Use **Move this place earlier/later** to arrange the route in your own order. The app labels this as your route order; it does not imply that the concepts are causally or logically dependent in that sequence.
+- Use **Change this memory place** to revise a cue or location, or **Remove memory place** to delete the anchor and its recall record without deleting the concept.
+- After reveal, the attempt is locked and saved with the place. Choose **Needs another pass** or **Recalled accurately** to self-rate the attempt. The app schedules the next review in its shared retrieval ledger: another pass returns in one day; an accurate recall expands the interval by 2.5×, up to 120 days. The route shows each stop's due state and current interval. This is a self-rating, not automatic grading of free text.
+- Choose **Start another recall attempt** to practise again; the previous response, confidence, timestamps and self-rating are retained in the attempt history. When a revealed attempt becomes due, the next route entry archives it and starts with a blank recall prompt—the previous answer is hidden again. This also prevents an unrated revealed answer from being left visible on the next due visit. Use **Previous place** and **Next place** to move around the route, or **Return to concept atlas** for the complete source-linked reasoning, diagrams and dioramas.
+
+The route reuses Scriptorium's existing spaced-retrieval ledger. Loci self-ratings count as recall scheduling, not objective transfer accuracy. The route is optional; you can continue studying entirely from the concept atlas.
+
 ## A diorama
 
 1. **The drawing.** You see the scene as a drawing, either on the scroll or full screen. Press **Transition** (or scroll down) to materialise it while the camera dives in.

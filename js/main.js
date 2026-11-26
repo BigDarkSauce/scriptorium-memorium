@@ -762,11 +762,11 @@ class App {
     const out = (name, obj) => this.download(name, JSON.stringify(obj, null, 2));
     const box = el('div', { class: 'modal-veil' }, [el('div', { class: 'modal glass wide' }, [
       el('h3', { text: 'Import / export' }),
-      el('p', { class: 'dim', text: 'Everything is plain JSON in one documented format (docs/PROTOCOL.md). Any AI (another Claude account, ChatGPT, Gemini) can produce a room from your PDF with the prompt pack, and you import the result here.' }),
+      el('p', { class: 'dim', text: 'Everything is plain JSON in one documented format (docs/PROTOCOL.md). Any compatible AI can produce a room from your source material with the prompt pack, and you can import the result here.' }),
       el('div', { class: 'row wrap' }, [
         el('button', { class: 'btn', text: 'Copy the prompt pack', onclick: async () => { try { await navigator.clipboard.writeText(this.promptPack(book)); toast('Prompt pack copied'); } catch (e) { toast('Clipboard blocked: use Download instead'); } } }),
         el('button', { class: 'btn', text: 'Download prompt pack', onclick: () => this.download('scriptorium-prompt-pack.md', this.promptPack(book)) }),
-        book ? el('button', { class: 'btn', text: 'Export this room', onclick: async () => out(book.title.replace(/\W+/g, '-') + '.room.json', { format: 'scriptorium-room/1', book: { title: book.title, pages: book.pages || null }, room: await this.loadRoom(book.id) }) }) : null,
+        book ? el('button', { class: 'btn', text: 'Export this room', onclick: async () => out(book.title.replace(/\W+/g, '-') + '.room.json', { format: 'scriptorium-room/1', book: { title: book.title, pages: book.pages || null, sourceType: book.sourceType || 'pdf' }, room: await this.loadRoom(book.id) }) }) : null,
         el('button', { class: 'btn', text: 'Export whole library', onclick: async () => { const rooms = {}; for (const b of this.lib.books) rooms[b.id] = await this.loadRoom(b.id); out('scriptorium-library.json', { format: 'scriptorium-library/1', library: this.lib, rooms }); } }),
         el('button', { class: 'btn primary', text: 'Import JSON…', onclick: () => file.click() })]),
       el('div', { class: 'row end' }, [el('button', { class: 'btn', text: 'Close', onclick: () => box.remove() })]), file])]);
@@ -780,7 +780,8 @@ class App {
       room.parts.forEach(p => { p.id = p.id || 'p-' + uid(); if (p.analysis) normalizeChain(p.analysis); });
       if (bookId) { const cur = await this.loadRoom(bookId); room.dims = room.dims || cur.dims; await store.set('room:' + bookId, room); toast('Room imported'); return this.openRoom(bookId); }
       const shelf = this.firstShelf(); const title = String((j.book && j.book.title) || room.title || 'Imported book').slice(0, 300);
-      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: 0, slot: this.lib.books.filter(x => x.shelf === shelf.id).length, color: shelf.color, icon: 'JSON', hasPdf: false };
+      const sourceType = j.book && j.book.sourceType === 'pptx' ? 'pptx' : 'pdf';
+      const b = { id: 'bk-' + uid(), title, shelf: shelf.id, tier: 0, slot: this.lib.books.filter(x => x.shelf === shelf.id).length, color: shelf.color, icon: 'JSON', hasPdf: false, ...(sourceType === 'pptx' ? { sourceType } : {}) };
       this.lib.books.push(b); this.saveLib(); await store.set('room:' + b.id, room); toast(`"${title}" added to ${shelf.name}`); return this.openHub();
     }
     if (j.chain) { toast('That is a single chain: open a scroll and use "Paste JSON from another AI".'); return; }

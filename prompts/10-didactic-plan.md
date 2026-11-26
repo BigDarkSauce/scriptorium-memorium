@@ -1,6 +1,29 @@
 # Plan a 3D demo before building it
 
-The app sends this before it authors a scene (stage 5 of the pipeline). The plan is short (about 1.5k tokens): the demo's question, the kind of knowledge, the levels of its multiscale scene graph, Jared Owen's sequence (curiosity → orientation → decomposition → inspection → mechanism → intuition → reconstruction → understanding, recursive inside a beat) with one operation of the visual grammar and one camera mode per beat, an analogy with its limit, and the comprehension check. Operations are named, never described: the app already knows how to explode, section, compare, zoom, track and so on. `node tools/verify-chain.mjs plan.json` checks a plan; the built-in models' own plans are in `../js/dio/plans.js` (`node tools/verify-chain.mjs --builtins`).
+The app sends this before it authors a scene (stage 5 of the pipeline). The plan is short (about 1.5k tokens): the demo's question, knowledge kind, levels, explanatory sequence, analogy and comprehension check, plus a source-mapped model contract. The contract fixes the system boundary, actor identities, controllable variables and their ranges/units, directed causal mechanisms and their evidence basis, constraints, assumptions, observables and uncertainties. Operations are named, never described: the app already knows how to explode, section, compare, zoom, track and so on. `node tools/verify-chain.mjs plan.json` checks a plan; the built-in models' own plans are in `../js/dio/plans.js` (`node tools/verify-chain.mjs --builtins`).
+
+
+
+## Required model contract
+
+Every plan must additionally contain `version: "scriptorium-model-plan/1"` and:
+
+```json
+{
+  "modelContract": {
+    "systemBoundary": "what is modelled and what is outside the boundary",
+    "entities": [{"bodyId":"exact actor ID","referent":"real entity or explicit stand-in","role":"function","evidenceStepIds":["S1"]}],
+    "stateVariables": [{"key":"scene param key","name":"quantity","unit":"unit or dimensionless","initial":1,"min":0,"max":2,"controllable":true,"provenance":"source|derived|illustrative","evidenceStepIds":["S1"]}],
+    "mechanisms": [{"id":"rule-id","from":["actor ID"],"to":["actor ID"],"rule":"conditional cause → consequence","basis":"source|standard|external|hypothesis","evidenceStepIds":["S1"],"source":"required for external basis"}],
+    "constraints": [{"kind":"conservation|causal|geometric|temporal|logical|other","statement":"rule the scene must respect","evidenceStepIds":["S1"]}],
+    "assumptions": [{"statement":"simplification or condition","why":"what it enables and excludes"}],
+    "observables": [{"name":"readout","unit":"unit","relationship":"how it follows from state","evidenceStepIds":["S1"]}],
+    "uncertainties": ["what the source does not establish"]
+  }
+}
+```
+
+Only use source-step IDs supplied in the prompt. Every actor must be declared and later match a scene body ID exactly. Every controllable state variable becomes one scene parameter with the same key, min, max, initial value and unit. If a variable is illustrative, mark it `illustrative` and state why in assumptions. An external mechanism needs a real source. Label uncertain mechanisms as hypotheses. Keep constraints and unknowns explicit; do not invent precise dynamics for under-specified or stochastic systems.
 
 ```text
 Plan a 3D explanatory demo BEFORE it is built (no scene yet: only the plan).

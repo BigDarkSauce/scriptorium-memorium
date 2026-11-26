@@ -5,17 +5,17 @@
 const DB = 'scriptorium-memorium', OS = 'kv';   // (the database keeps the project's first name: renaming it would orphan every saved library)
 let dbp = null, warned = false; const mem = new Map();
 export const status = { persistent: null, error: null };
-function warn(msg) { status.error = msg; if (warned) return; warned = true; try { import('./util.js').then(u => u.toast(msg, 6000)); } catch (e) { } console.warn(msg); }
+function warn(msg) { status.error = msg; if (warned) return; warned = true; if (typeof document !== 'undefined') { try { import('./util.js').then(u => u.toast(msg, 6000)).catch(() => { }); } catch (e) { } } console.warn(msg); }
 function db() {
   if (dbp) return dbp;
   dbp = new Promise(res => {
-    let done = false;
+    let done = false, deadline = null;
     const fin = (v, why) => {
       if (done) { if (v) try { v.close(); } catch (e) { } return; }   // too late: this session already runs in memory (never overwrite stored data with it)
-      done = true; status.persistent = !!v; res(v);
+      done = true; clearTimeout(deadline); status.persistent = !!v; res(v);
       if (!v) warn(why === 'slow' ? 'The browser storage did not answer: changes made now are kept only until this page is closed.' : 'This browser is not keeping data for this page (private window or blocked storage): your library lasts until the page is closed.');
     };
-    setTimeout(() => fin(null, 'slow'), 15000);   // some private modes never answer open()
+    deadline = setTimeout(() => fin(null, 'slow'), 15000);   // some private modes never answer open()
     try {
       const rq = indexedDB.open(DB, 1);
       rq.onupgradeneeded = () => { try { rq.result.createObjectStore(OS); } catch (e) { } };
@@ -83,7 +83,7 @@ export function flushSaves() { [...pending.keys()].forEach(flushOne); }
 // autosave: whatever is still waiting is written every 2 s as well (a crash or a frozen tab loses at most that), and the
 // browser is asked to keep this site's storage rather than evict it under pressure
 if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { if (pending.size) flushSaves(); }, 2000);   // in the page only (a test importing this module must still exit)
-try { if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => { }); } catch (e) { }
+try { if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => { }); } catch (e) { }
 if (typeof addEventListener === 'function') { addEventListener('pagehide', flushSaves); addEventListener('beforeunload', flushSaves); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaves(); }); }
 export function structuredCloneSafe(v) { try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } }
 export function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
