@@ -82,7 +82,7 @@ export function openAIPanel(app) {
   const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Fallback provider connectivity' });
   const openAIStatus = el('p', { class: 'small ai-openai-status', text: 'OpenAI local relay: checking…' });
   const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), openAIStatus, reach,
-    el('p', { class: 'dim small', text: 'The OpenAI key is read from OPENAI_API_KEY by the localhost server and is never stored in browser storage. Other provider keys, including custom endpoints, are saved in this browser profile's localStorage and IndexedDB and sent to their matching endpoint. Browser storage is not encrypted by this app; avoid saving keys in shared browser profiles or on public computers. API requests may incur charges.' })]);
+    el('p', { class: 'dim small', text: "The OpenAI key is read from OPENAI_API_KEY by the localhost server and is never stored in browser storage. Other provider keys, including custom endpoints, are saved in this browser profile's localStorage and IndexedDB and sent to their matching endpoint. Browser storage is not encrypted by this app; avoid saving keys in shared browser profiles or on public computers. API requests may incur charges." })]);
   modes.after(details);
   // Optional host-networking extension. It is not required for the local OpenAI-first workflow.
   const dlBtn = label => { const b = el('button', { class: 'btn small primary', type: 'button', text: label, onclick: async () => { b.disabled = true; const was = b.textContent; b.textContent = 'Preparing…';

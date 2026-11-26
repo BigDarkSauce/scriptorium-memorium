@@ -5,7 +5,7 @@
 const DB = 'scriptorium-memorium', OS = 'kv';   // (the database keeps the project's first name: renaming it would orphan every saved library)
 let dbp = null, warned = false; const mem = new Map();
 export const status = { persistent: null, error: null };
-function warn(msg) { status.error = msg; if (warned) return; warned = true; try { import('./util.js').then(u => u.toast(msg, 6000)); } catch (e) { } console.warn(msg); }
+function warn(msg) { status.error = msg; if (warned) return; warned = true; if (typeof document !== 'undefined') { try { import('./util.js').then(u => u.toast(msg, 6000)).catch(() => { }); } catch (e) { } } console.warn(msg); }
 function db() {
   if (dbp) return dbp;
   dbp = new Promise(res => {
