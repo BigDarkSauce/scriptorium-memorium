@@ -112,6 +112,7 @@ export class TitleScreen {
       item('New scriptorium', 'A private library of your own, saved in this browser', () => this.newSlot()),
       item('Load scriptorium', `${A.slots.length} saved`, () => this.loadSlots()),
       item('Get a scroll', 'From what other readers have shared', () => this.go(async () => { await A.continueSlot(A.slotId); setTimeout(() => A.getScroll(), 1600); })),
+      item('Storyboard Studio', 'Turn a chapter or deck into a visual explainer', () => { window.location.href = 'storyboard.html'; }),
     ]);
     this.panel = el('div', { class: 'tt-panel' });
     this.ui.append(el('div', { class: 'tt-rays', 'aria-hidden': 'true' }), el('div', { class: 'tt-motes', 'aria-hidden': 'true' }, Array.from({ length: 28 }, (_, i) => el('i', { style: `--x:${(i * 37) % 100}%;--d:${8 + (i * 7) % 11}s;--o:${(i * 13) % 10 / 10}` }))),
