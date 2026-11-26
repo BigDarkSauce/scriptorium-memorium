@@ -2,7 +2,6 @@
 import assert from 'node:assert/strict';
 
 const values = new Map();
-globalThis.indexedDB = { open() { throw new Error('IndexedDB is intentionally unavailable in this Node unit test'); } };
 globalThis.localStorage = {
   getItem(key) { return values.has(key) ? values.get(key) : null; },
   setItem(key, value) { values.set(key, String(value)); },

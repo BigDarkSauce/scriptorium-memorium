@@ -149,6 +149,9 @@ export function saveSettings(patch, { quiet = false } = {}) { const s = { ...set
 // the newest of the three is used, so a change you make is never undone by an older copy; nothing else changes them.
 let vaultT = 0;
 function persist(s) {
+  // Browser storage and the optional host vault are only available in the browser app.
+  // Keeping this guard makes configuration logic safe to import in Node-based validation tools.
+  if (typeof window === 'undefined') return;
   store.setGlobal('sm-ai-settings', s).catch(() => { });
   clearTimeout(vaultT); vaultT = setTimeout(async () => { try { if (via() === 'bridge' && await bridgeReady()) { const v = await bridgeVault('get'); const same = v && JSON.stringify({ ...v, savedAt: 0 }) === JSON.stringify({ ...s, savedAt: 0 }); if (!same) await bridgeVault('set', s); } } catch (e) { console.warn('vault', e); } }, 1500);
 }
