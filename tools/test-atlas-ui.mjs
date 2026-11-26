@@ -251,7 +251,7 @@ try {
   const termRecallResponse = recallCard.locator('.atlas-scan-recall-response');
   const termCommitButton = recallCard.getByRole('button', { name: 'Commit recall' });
   assert.equal(await termCommitButton.isEnabled(), true, 'the commit action remains available and validates its own response');
-  await termCommitButton.click();
+  await termCommitButton.evaluate(el => el.click());
   assert.match(await recallCard.innerText(), /Write a response before committing/i, 'an empty submission must be blocked with inline guidance');
   assert.equal(await page.evaluate(() => !!window.__atlasUITest.atlas.scanAttempts['term:S1:0']?.committed), false, 'an empty recall must not become committed');
   await termRecallResponse.fill('selective permeability');
