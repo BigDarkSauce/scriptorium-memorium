@@ -59,7 +59,6 @@ export const PROVIDERS = [
   // your own computer: no quota at all (and the router of routers)
   { id: 'freellmapi', name: 'FreeLLMAPI (34 providers, one key)', base: 'http://127.0.0.1:31415/v1', key: 'optional', keyUrl: 'https://github.com/tashfeenahmed/freellmapi/releases/latest', rpm: 600, rpd: 1e6, discover: 'freellmapi', extra: ['auto:smart'], local: true, editableBase: true, json: true, note: 'The router of routers on your computer: 34 free providers, 635 model endpoints, ~7.4 billion tokens a month once each provider has its free key (added in its own dashboard, Keys page). Found and connected by itself when the Scriptorium extension is installed; otherwise paste its address (desktop app :31415, Docker or npm :3001) and its unified freellmapi-… key.' },
   { id: 'ollama', name: 'Ollama / LM Studio (local)', base: 'http://localhost:11434/v1', key: 'none', rpm: 600, rpd: 1e6, local: true, editableBase: true, note: 'A model on this computer: unlimited, private, slow on a laptop GPU. Ollama needs OLLAMA_ORIGINS=* to answer a web page.' },
-  { id: 'custom', name: 'Any OpenAI-compatible endpoint', base: '', key: 'optional', rpm: 60, rpd: 1e5, editableBase: true, editableModel: true, note: 'Base URL ending in /v1, its key and model.' },
 ];
 
 // How well a model family writes long, exact JSON in this app's formats (higher is better). Ordered from the live tests
@@ -84,8 +83,61 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 export const MODES = { free: 'OpenAI preferred + fallback providers' };
 export function settings() {
   const s = read(SKEY, {});
-  return { mode: 'free', chosen: true, auto: false, keys: s.keys || {}, bases: s.bases || {}, models: s.models || {}, off: s.off || {}, on: { 'openai-local': true, ...(s.on || {}) } };
+  const keys = { ...(s.keys || {}) }, bases = { ...(s.bases || {}) }, models = { ...(s.models || {}) };
+  const on = { 'openai-local': true, ...(s.on || {}) }, off = { ...(s.off || {}) };
+  const seen = new Set();
+  const customProviders = (Array.isArray(s.customProviders) ? s.customProviders : []).filter(p => {
+    if (!p || typeof p.id !== 'string' || !/^custom-[a-z0-9-]{4,80}$/i.test(p.id) || seen.has(p.id)) return false;
+    seen.add(p.id); return true;
+  }).map(p => ({ id: p.id, name: String(p.name || 'Custom API').trim().slice(0, 60) || 'Custom API' }));
+  // Migrate the former single custom endpoint without losing its URL, key, model or enabled state.
+  if ((bases.custom || models.custom || keys.custom) && !seen.has('custom-legacy')) {
+    customProviders.push({ id: 'custom-legacy', name: 'Custom API (migrated)' });
+    if (bases.custom) bases['custom-legacy'] = bases.custom;
+    if (models.custom) models['custom-legacy'] = models.custom;
+    if (keys.custom) keys['custom-legacy'] = keys.custom;
+    if (Object.prototype.hasOwnProperty.call(on, 'custom')) on['custom-legacy'] = on.custom;
+    if (Object.prototype.hasOwnProperty.call(off, 'custom')) off['custom-legacy'] = off.custom;
+    delete bases.custom; delete models.custom; delete keys.custom; delete on.custom; delete off.custom;
+  }
+  return { mode: 'free', chosen: true, auto: false, keys, bases, models, off, on, customProviders };
 }
+export function providers(S = settings()) {
+  const custom = (S.customProviders || []).map(p => ({
+    id: p.id, name: p.name, base: S.bases[p.id] || '', key: 'optional',
+    rpm: 60, rpd: 100000, editableBase: true, editableModel: true, custom: true,
+    note: 'Custom OpenAI-compatible Chat Completions endpoint. Enter its base URL (normally ending in /v1), the exact model ID and an optional API key. The app appends /chat/completions.'
+  }));
+  return [...PROVIDERS, ...custom];
+}
+
+export function addCustomProvider(name = 'Custom API') {
+  const S = settings();
+  const id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const entry = { id, name: String(name || 'Custom API').trim().slice(0, 60) || 'Custom API' };
+  return saveSettings({ customProviders: [...S.customProviders, entry], on: { ...S.on, [id]: true } });
+}
+
+export function renameCustomProvider(id, name) {
+  const S = settings();
+  if (!S.customProviders.some(p => p.id === id)) return S;
+  const label = String(name || 'Custom API').trim().slice(0, 60) || 'Custom API';
+  return saveSettings({ customProviders: S.customProviders.map(p => p.id === id ? { ...p, name: label } : p) });
+}
+
+export function removeCustomProvider(id) {
+  const S = settings();
+  if (!S.customProviders.some(p => p.id === id)) return S;
+  const without = object => { const next = { ...object }; delete next[id]; return next; };
+  const next = saveSettings({
+    customProviders: S.customProviders.filter(p => p.id !== id),
+    keys: without(S.keys), bases: without(S.bases), models: without(S.models),
+    on: without(S.on), off: without(S.off)
+  });
+  try { const cache = read(MKEY, {}); delete cache[id]; write(MKEY, cache); } catch (e) { }
+  return next;
+}
+
 export function autoMode() {
   const S = read(SKEY, {});
   if (S.mode !== 'free' || S.chosen !== true) saveSettings({ mode: 'free', chosen: true, auto: false });
@@ -144,7 +196,11 @@ const keyOf = (p, S = settings()) => (S.keys[p.id] || '').trim();
 // a provider is in play when it is switched on (a server on your own computer or a custom endpoint: once you turn it on;
 // the others: unless you turn them off), has an address, and has a key if it needs one
 export const isOn = (p, S = settings()) => p.local || p.editableModel ? !!S.on[p.id] : !S.off[p.id];
-export const active = (S = settings()) => PROVIDERS.filter(p => isOn(p, S) && baseOf(p, S) && (p.key !== 'required' || keyOf(p, S)));
+export const active = (S = settings()) => providers(S).filter(p =>
+  isOn(p, S) && baseOf(p, S) &&
+  (p.key !== 'required' || keyOf(p, S)) &&
+  (!p.custom || !!(S.models[p.id] || '').trim())
+);
 export { baseOf, keyOf };
 
 // ---------------------------------------------------------------- usage, limits and cool-downs (this browser)

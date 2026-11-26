@@ -1610,3 +1610,8 @@ body.cine .room-ui > *:not(.tooltip) { opacity: 0 !important; pointer-events: no
 .atlas-visual-path-head p { margin:0; color:#6a5037; font-size:12px; line-height:1.4; }
 .atlas-visual-path-figure { margin:0; }
 .atlas-visual-path-warning { color:var(--rubric); font:10px var(--f-mono); }
+
+/* Custom API provider labels stay compact without squeezing the key/URL fields. */
+.ai-custom-name { flex: 0 1 220px; min-width: 120px; max-width: 260px; padding: 4px 7px; font-size: 12px; }
+.ai-provider-tools { gap: 8px; padding: 2px 2px 4px; }
+.ai-provider-tools .btn { white-space: nowrap; }

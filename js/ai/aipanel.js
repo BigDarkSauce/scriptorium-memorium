@@ -1,5 +1,5 @@
-// AI settings: OpenAI is the primary model route, with the configured provider pool as automatic fallbacks. The
-// OpenAI API key remains in the local server environment; it is never stored by the browser.
+// AI settings: OpenAI is the primary model route, with the configured provider pool as automatic fallbacks.
+// The OpenAI-local key remains in the server environment; custom and other provider keys are browser-profile settings.
 import { el, toast } from '../util.js';
 import * as FREE from './free.js';
 import { claudeAvailable } from './claude.js';
@@ -26,17 +26,32 @@ export function openAIPanel(app) {
   const drawModes = () => { modes.innerHTML = ''; const [t, d] = MODE_TEXT.free; modes.append(el('div', { class: 'ai-mode on', role: 'status' }, [el('b', { text: t }), el('span', { text: d })])); };
   const plist = el('div', { class: 'ai-providers' }), out = el('div', { class: 'ai-test' });
   const use = FREE.usageToday();
+  const addCustom = el('button', { class: 'btn small', type: 'button', text: '+ Add custom API', onclick: () => {
+    S = FREE.addCustomProvider('Custom API');
+    drawProviders();
+    const names = plist.querySelectorAll('.ai-custom-name');
+    names[names.length - 1]?.focus();
+  } });
   const drawProviders = () => { plist.innerHTML = ''; plist.hidden = false;
-    FREE.PROVIDERS.forEach(p => {
-      const on = FREE.isOn(p, S), key = el('input', { class: 'field mono', type: 'password', placeholder: p.key === 'required' ? 'API key (required)' : p.key === 'optional' ? 'key (optional)' : '', value: S.keys[p.id] || '', autocomplete: 'off', spellcheck: 'false', 'aria-label': p.name + ' key', hidden: p.key === 'none' });
+    plist.append(el('div', { class: 'row between ai-provider-tools' }, [
+      el('span', { class: 'dim small', text: 'Add as many custom OpenAI-compatible API endpoints as you need.' }),
+      addCustom
+    ]));
+    FREE.providers(S).forEach(p => {
+      const on = FREE.isOn(p, S);
+      const key = el('input', { class: 'field mono', type: 'password', placeholder: p.key === 'required' ? 'API key (required)' : p.key === 'optional' ? 'API key (optional)' : '', value: S.keys[p.id] || '', autocomplete: 'off', spellcheck: 'false', 'aria-label': p.name + ' key', hidden: p.key === 'none' });
       key.onchange = () => { S = FREE.saveSettings({ keys: { ...S.keys, [p.id]: key.value.trim() } }); drawProviders(); };
-      const base = p.editableBase ? el('input', { class: 'field mono', value: S.bases[p.id] || p.base, placeholder: 'https://…/v1', 'aria-label': p.name + ' address', onchange: e => { S = FREE.saveSettings({ bases: { ...S.bases, [p.id]: e.target.value.trim() } }); } }) : null;
-      const model = p.editableModel || p.id === 'ollama' ? el('input', { class: 'field mono', value: S.models[p.id] || '', placeholder: p.id === 'ollama' ? 'model, e.g. qwen3:8b' : 'model id', 'aria-label': p.name + ' model', onchange: e => { S = FREE.saveSettings({ models: { ...S.models, [p.id]: e.target.value.trim() } }); } }) : null;
+      const base = p.editableBase ? el('input', { class: 'field mono', value: S.bases[p.id] || p.base, placeholder: p.custom ? 'https://api.example.com/v1' : 'https://…/v1', 'aria-label': p.name + ' base URL', onchange: e => { S = FREE.saveSettings({ bases: { ...S.bases, [p.id]: e.target.value.trim() } }); } }) : null;
+      const model = p.editableModel || p.id === 'ollama' ? el('input', { class: 'field mono', value: S.models[p.id] || '', placeholder: p.id === 'ollama' ? 'model, e.g. qwen3:8b' : 'model ID (exact)', 'aria-label': p.name + ' model', onchange: e => { S = FREE.saveSettings({ models: { ...S.models, [p.id]: e.target.value.trim() } }); } }) : null;
       const tog = el('input', { type: 'checkbox', checked: on, 'aria-label': 'Use ' + p.name, onchange: e => { const v = e.target.checked; S = p.local || p.editableModel ? FREE.saveSettings({ on: { ...S.on, [p.id]: v } }) : FREE.saveSettings({ off: { ...S.off, [p.id]: !v } }); drawProviders(); } });
       const n = Object.entries(use.requests).filter(([k]) => k.startsWith(p.id + '|')).reduce((a, [, v]) => a + v, 0);
-      const ready = on && (p.key !== 'required' || (S.keys[p.id] || '').trim());
+      const ready = on && !!FREE.baseOf(p, S) && (!p.editableModel || !!(S.models[p.id] || '').trim()) && (p.key !== 'required' || !!(S.keys[p.id] || '').trim());
+      const title = p.custom
+        ? el('input', { class: 'field ai-custom-name', type: 'text', value: p.name, maxlength: 60, placeholder: 'Provider name', 'aria-label': p.name + ' display name', onchange: e => { S = FREE.renameCustomProvider(p.id, e.target.value); drawProviders(); } })
+        : el('b', { text: p.name });
+      const remove = p.custom ? el('button', { class: 'btn ghost small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + p.name, onclick: () => { S = FREE.removeCustomProvider(p.id); drawProviders(); } }) : null;
       plist.append(el('div', { class: 'ai-prov' + (ready ? ' ready' : '') }, [
-        el('label', { class: 'ai-pname' }, [tog, el('b', { text: p.name }), el('span', { class: 'ai-chip', text: p.editableModel ? 'your endpoint' : p.local ? 'your computer' : p.key === 'required' ? 'free key' : 'no key needed' }), n ? el('span', { class: 'ai-used', text: n + ' today' }) : null]),
+        el('div', { class: 'ai-pname' }, [tog, title, el('span', { class: 'ai-chip', text: p.custom ? 'custom API' : p.editableModel ? 'your endpoint' : p.local ? 'your computer' : p.key === 'required' ? 'free key' : 'no key needed' }), n ? el('span', { class: 'ai-used', text: n + ' today' }) : null, remove]),
         el('div', { class: 'ai-pnote', text: p.note }),
         el('div', { class: 'ai-pkeys' }, [base, key, model, p.keyUrl ? el('a', { href: p.keyUrl, target: '_blank', rel: 'noopener', class: 'ai-get', text: p.key === 'required' ? 'Get a free key ↗' : 'Site ↗' }) : null].filter(Boolean))]));
     });
@@ -67,7 +82,7 @@ export function openAIPanel(app) {
   const reach = el('div', { class: 'ai-reach' }), sumT = el('span', { text: 'Fallback provider connectivity' });
   const openAIStatus = el('p', { class: 'small ai-openai-status', text: 'OpenAI local relay: checking…' });
   const details = el('details', { class: 'ai-details' }, [el('summary', {}, [sumT, el('span', { class: 'ai-more', text: 'Details' })]), openAIStatus, reach,
-    el('p', { class: 'dim small', text: 'The OpenAI API key is read from OPENAI_API_KEY by the local Scriptorium server; it is not stored in the browser. Other provider keys are stored in this browser and sent only to their matching provider. API requests may incur charges. If the local OpenAI model is unavailable, configured fallback providers are tried next.' })]);
+    el('p', { class: 'dim small', text: 'The OpenAI key is read from OPENAI_API_KEY by the localhost server and is never stored in browser storage. Other provider keys, including custom endpoints, are saved in this browser profile's localStorage and IndexedDB and sent to their matching endpoint. Browser storage is not encrypted by this app; avoid saving keys in shared browser profiles or on public computers. API requests may incur charges.' })]);
   modes.after(details);
   // Optional host-networking extension. It is not required for the local OpenAI-first workflow.
   const dlBtn = label => { const b = el('button', { class: 'btn small primary', type: 'button', text: label, onclick: async () => { b.disabled = true; const was = b.textContent; b.textContent = 'Preparing…';
