@@ -14,6 +14,12 @@ A walkable 3D library for studying anything. Each PDF or PowerPoint presentation
 - **Grounded in actual research.** The local OpenAI integration uses the Responses API with the live `web_search` tool when external evidence is genuinely needed. Search-call metadata and returned citations are recorded separately from the uploaded-document index. Other configured models remain automatic fallbacks; they do not inherit OpenAI's native web-search tool.
 - **OpenAI-first, locally secured.** The Windows launcher can prompt for an OpenAI API key without echoing it, keep it in the server process environment, and proxy Responses API requests through localhost. The browser never stores the OpenAI key. Other providers can be enabled as fallbacks.
 
+## AI providers and ChatGPT development
+
+The AI engine settings support built-in providers plus multiple custom OpenAI-compatible endpoints. Each custom endpoint has its own name, base URL, exact model ID and optional API key. The app calls the base URL plus /chat/completions. Non-compatible native protocols require a dedicated adapter. See [provider setup](docs/SETUP-GUIDE.md#configure-ai-providers) and [working from ChatGPT without an API key](docs/CHATGPT-GITHUB-WORKFLOW.md).
+
+ChatGPT can also work on this repository through its authorised GitHub connection. That access is separate from provider credentials used by the running Scriptorium app.
+
 ## Run it
 
 **Hosted preview target:** [Scriptorium Memorialium](https://bigdarksauce.github.io/scriptorium-memorium/) (available after the repository's Pages source is set to GitHub Actions and the deploy workflow succeeds). The hosted edition runs the complete browser experience, including the seeded library, 3D dioramas, PDF/PPTX ingestion, source atlases, learner tools, and local browser storage. It does not host an OpenAI key or the localhost relay; use the local OpenAI launcher below for the OpenAI-first authoring route. See [deployment and run modes](docs/DEPLOYMENT.md).

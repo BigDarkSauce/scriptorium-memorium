@@ -37,11 +37,25 @@ python3 launcher/serve.py 8000
 
 The OpenAI key is read by the local server process. A hosted page such as GitHub Pages cannot read that local environment variable; use the local launcher for the OpenAI-first workflow. A different local port or hostname is a different browser origin and therefore has a separate library.
 
+## Configure AI providers
+
+Open the AI sparkle button in the app and enable whichever built-in providers you want. You may also add multiple custom entries with **+ Add custom API**. Each custom entry has independent settings:
+
+1. Give it a name so you can recognise it.
+2. Enter the provider's OpenAI-compatible base URL, normally ending in /v1. Do not add /chat/completions.
+3. Enter the exact model ID shown by that provider.
+4. Paste its API key if the endpoint requires one. The field is optional for local or anonymous endpoints; clearing it removes the saved value.
+5. Leave its checkbox enabled and use **Test AI providers** to check model discovery and whether it can produce a source-chain answer.
+
+The custom adapter sends a Bearer-authenticated Chat Completions request to the base URL plus /chat/completions. Multiple model IDs may be comma-separated. This covers OpenAI-compatible gateways and services; it cannot automatically speak every proprietary vendor protocol (for example, a native Messages or Bedrock API). Such a provider needs a dedicated adapter or an OpenAI-compatible gateway.
+
+OpenAI's own primary key is different: use the hidden Windows launcher prompt or the local server environment variable so it remains server-side. Other provider keys are stored in this browser profile's localStorage and IndexedDB. This app does not encrypt browser-stored keys. Use a private browser profile on a trusted device; avoid shared or public computers for sensitive credentials.
+
 ## Your library and provider keys
 
 - PDFs, room analyses, atlases and learner progress are kept in the browser's local IndexedDB for that origin. Use **Import / export** to move a library to another browser or computer.
 - The OpenAI API key belongs in the hidden launcher prompt or the local server's `OPENAI_API_KEY` environment variable. Never paste it into the browser's provider-settings form, a URL or a source document.
-- Optional fallback-provider keys are stored in the browser's AI settings and sent only to the provider they belong to. Their retention, training and regional terms are provider-specific; review those terms before enabling a fallback for sensitive documents.
+- Built-in and custom fallback-provider keys are stored in this browser profile's AI settings (localStorage and IndexedDB) and sent only to their matching provider. Browser storage is not encrypted by this app. Their retention, training and regional terms are provider-specific; review those terms before enabling a provider for sensitive documents.
 - The optional FreeLLMAPI/local-model route can be used as a fallback. It is not required for OpenAI-first operation.
 - The old Artifact/Claude Desktop bridge remains only for compatibility with that host. It is not part of the normal local setup.
 

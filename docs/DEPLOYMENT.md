@@ -14,6 +14,10 @@ The Pages workflow builds the site from tracked repository files and checks the 
 
 If Pages has not been configured for Actions publishing in this repository yet, set **Settings → Pages → Build and deployment → Source → GitHub Actions** once. GitHub creates or uses the github-pages deployment environment for the workflow.
 
+### Configure multiple provider keys
+
+The hosted UI can store multiple custom OpenAI-compatible API endpoints, each with its own URL, model ID and optional key. The provider must allow requests from the browser origin (CORS) or be reachable through a local relay when the page is served locally. Keys entered into the browser are stored in that browser profile's localStorage and IndexedDB; this app does not encrypt them. See [provider setup](SETUP-GUIDE.md#configure-ai-providers).
+
 ### Hosted-mode limits
 
 GitHub Pages serves static files. It cannot run launcher/serve.py, the PowerShell server, the localhost relay, or access OPENAI_API_KEY on your computer. Therefore:

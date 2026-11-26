@@ -110,3 +110,9 @@ CI includes both a pure Open XML unit test and a real-browser synthetic-deck tes
 - [OpenAI web search tool](https://developers.openai.com/api/docs/guides/tools-web-search)
 - [OpenAI API key safety](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety)
 - [Three.js documentation](https://threejs.org/docs/)
+
+## Custom providers and independent keys
+
+The AI settings panel supports the built-in provider pool and multiple custom OpenAI-compatible Chat Completions endpoints. A custom entry has its own display name, base URL, model ID and optional Bearer API key. The app calls the base URL plus /chat/completions; use a base URL ending in /v1, not the full route. Use Test AI providers before analysing a document. Native vendor APIs with a different request/response protocol need a dedicated adapter or an OpenAI-compatible gateway.
+
+Custom and fallback-provider keys are stored in the current browser profile's localStorage and IndexedDB. This app does not encrypt browser-stored keys. The OpenAI-local key is treated differently: it stays in the local server environment and is not saved in browser storage. Do not commit any credential or use browser-stored keys in a shared/public browser profile.
