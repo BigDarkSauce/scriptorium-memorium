@@ -18,9 +18,17 @@ OpenAI API usage is billed separately from a ChatGPT subscription. A full chapte
 
 Double-click **Launch Scriptorium.bat**. The local app still runs and can use any optional fallback providers you configure in the AI settings panel. The quality, vision support, rate limits and data handling of those providers differ; check their current terms before sending a document to them.
 
+## Hosted edition
+
+Open the published [Scriptorium Memorialium preview](https://bigdarksauce.github.io/scriptorium-memorium/). It serves the complete browser app and its static resources. The seeded library, 3D dioramas, document import, source atlas, retrieval tools and learner data run in the browser. The browser's IndexedDB is origin-specific: the hosted site's library is separate from localhost and from other browsers. Use the app's **Import / export** action to move room and library data between them.
+
+GitHub Pages is static hosting. It does not run the localhost server and cannot read OPENAI_API_KEY from your computer. For the secure OpenAI-first authoring engine, download the repository and use the local launcher below. The hosted edition can use providers that permit browser-origin requests; provider keys entered in its settings remain in that browser profile, so do not use that route for sensitive documents unless the provider's data terms are appropriate.
+
+See [deployment and run modes](DEPLOYMENT.md) for the distinction and the automated publishing workflow.
+
 ## Other computers and hosting
 
-Serve the project over HTTP; do not open `index.html` directly as a file:
+Serve the project over HTTP; do not open index.html directly as a file:
 
 ```bash
 python3 launcher/serve.py 8000

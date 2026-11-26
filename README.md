@@ -16,16 +16,15 @@ A walkable 3D library for studying anything. Each PDF or PowerPoint presentation
 
 ## Run it
 
+**Hosted preview:** [Open Scriptorium Memorialium](https://bigdarksauce.github.io/scriptorium-memorium/). The hosted edition runs the complete browser experience, including the seeded library, 3D dioramas, PDF/PPTX ingestion, source atlases, learner tools, and local browser storage. It does not host an OpenAI key or the localhost relay; use the local OpenAI launcher below for the OpenAI-first authoring route. See [deployment and run modes](docs/DEPLOYMENT.md).
+
 **Windows with OpenAI:** double-click `Launch Scriptorium with OpenAI.bat`. It asks for your OpenAI API key using a hidden prompt, keeps it in the local server's environment for that run, then opens the app. API usage is billed by OpenAI separately from a ChatGPT subscription. See [docs/OPENAI-LOCAL.md](docs/OPENAI-LOCAL.md).
 
-- **Hosted/online:** the published artifact does not have access to your local OpenAI server or its environment key. Use the standalone localhost launcher for the OpenAI-first workflow.
+- **Hosted/online:** the browser app is published on GitHub Pages. It can use browser-reachable providers configured in AI settings, but GitHub Pages cannot read your computer's environment or run the secure localhost relay. Use the standalone launcher for OpenAI-first authoring.
 - **Fallback providers:** in the AI settings panel you can configure other OpenAI-compatible or free providers. The router tries OpenAI first, then enabled fallbacks if the local endpoint is unavailable.
 - **On your computer without OpenAI:** double-click `Launch Scriptorium.bat` to run the local server with fallback providers but no OpenAI key. For the OpenAI-first route use `Launch Scriptorium with OpenAI.bat`. The first run also creates a **Scriptorium Memorialium** shortcut with the scroll icon, both in this folder and on your Desktop. The launcher starts a small local server on port 8000 (a working Python if there is one, checked with `python -c "import http.server"` so the Microsoft Store placeholder is skipped; else the `py` launcher; else the built-in PowerShell server in `launcher/serve.ps1`), waits until it answers, and then opens http://localhost:8000 in your browser. Keep its window open while you use the app; closing it stops the server.
-- **Any system:** the page uses ES modules, so serve the folder over HTTP rather than opening `index.html` directly:
-
-```bash
-./serve.sh                        # or: python3 -m http.server 8000   — then open http://localhost:8000
-```
+- **macOS/Linux with the full local relay:** run `python3 launcher/serve.py 8000` and open http://localhost:8000. This is the equivalent of the Windows launcher and enables the secure local OpenAI adapter plus the optional local provider relay.
+- **Static preview only:** `./serve.sh` or `python3 -m http.server 8000` serves the browser app without the server-side AI relay. Use it to explore the seeded library and configure direct browser-compatible providers.
 
 Notes for running locally:
 - three.js, MathJax, pdf.js and the fonts load from CDNs, so you need to be online.
