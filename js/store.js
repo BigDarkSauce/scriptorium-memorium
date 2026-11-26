@@ -83,7 +83,7 @@ export function flushSaves() { [...pending.keys()].forEach(flushOne); }
 // autosave: whatever is still waiting is written every 2 s as well (a crash or a frozen tab loses at most that), and the
 // browser is asked to keep this site's storage rather than evict it under pressure
 if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { if (pending.size) flushSaves(); }, 2000);   // in the page only (a test importing this module must still exit)
-try { if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => { }); } catch (e) { }
+try { if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => { }); } catch (e) { }
 if (typeof addEventListener === 'function') { addEventListener('pagehide', flushSaves); addEventListener('beforeunload', flushSaves); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaves(); }); }
 export function structuredCloneSafe(v) { try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } }
 export function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
