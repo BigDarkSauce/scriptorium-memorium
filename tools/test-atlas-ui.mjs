@@ -266,7 +266,7 @@ try {
   await recallCard.locator('.atlas-scan-recall-response').fill('J = P (C1 - C2)');
   await recallCard.getByRole('button', { name: 'Commit recall' }).click();
   await recallCard.getByRole('button', { name: 'Reveal expected answer' }).click();
-  assert.match(await recallCard.innerText(), /J = P \(C1 - C2\)/);
+  assert.match(await recallCard.innerText(), /J = P \(C1\s*[-−]\s*C2\)/, 'the typeset equation may use a typographic minus');
   await recallTabs.nth(2).evaluate(el => el.click());
   assert.match(await recallCard.innerText(), /worked example/i);
   assert.match(await recallCard.innerText(), /A solute moves down its concentration gradient/i);
