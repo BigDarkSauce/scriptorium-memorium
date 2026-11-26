@@ -53,6 +53,9 @@ jobs:
       - name: Test source-mapped simulation contracts
         run: node tools/test-model-contract.mjs
 
+      - name: Test custom OpenAI-compatible provider settings
+        run: node tools/test-provider-config.mjs
+
       - name: Test semantic atlas and progressive challenge reveals
         run: node tools/test-atlas.mjs
 
