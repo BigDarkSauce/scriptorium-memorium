@@ -20,7 +20,7 @@ Double-click **Launch Scriptorium.bat**. The local app still runs and can use an
 
 ## Hosted edition
 
-Open the published [Scriptorium Memorialium preview](https://bigdarksauce.github.io/scriptorium-memorium/). It serves the complete browser app and its static resources. The seeded library, 3D dioramas, document import, source atlas, retrieval tools and learner data run in the browser. The browser's IndexedDB is origin-specific: the hosted site's library is separate from localhost and from other browsers. Use the app's **Import / export** action to move room and library data between them.
+The intended [Scriptorium Memorialium preview](https://bigdarksauce.github.io/scriptorium-memorium/) becomes available after the repository enables GitHub Actions as its Pages publishing source and the deploy workflow succeeds. It serves the complete browser app and its static resources. The seeded library, 3D dioramas, document import, source atlas, retrieval tools and learner data run in the browser. The browser's IndexedDB is origin-specific: the hosted site's library is separate from localhost and from other browsers. Use the app's **Import / export** action to move room and library data between them.
 
 GitHub Pages is static hosting. It does not run the localhost server and cannot read OPENAI_API_KEY from your computer. For the secure OpenAI-first authoring engine, download the repository and use the local launcher below. The hosted edition can use providers that permit browser-origin requests; provider keys entered in its settings remain in that browser profile, so do not use that route for sensitive documents unless the provider's data terms are appropriate.
 

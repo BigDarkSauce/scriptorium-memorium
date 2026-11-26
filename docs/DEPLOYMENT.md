@@ -2,9 +2,11 @@
 
 ## Hosted browser edition
 
-The GitHub Pages edition is published at:
+The intended GitHub Pages address, once the repository enables Actions publishing and the deploy workflow succeeds, is:
 
 **https://bigdarksauce.github.io/scriptorium-memorium/**
+
+The build-and-upload stage has been verified. GitHub's final Pages publish stage also requires the repository setting **Settings → Pages → Build and deployment → Source → GitHub Actions**. If the deployment is blocked after that change, check **Settings → Environments → github-pages** and allow the `feature/openai-diorama-atlas` branch (or remove the branch restriction) so this preview branch can deploy. These repository settings are owner-controlled; the workflow cannot safely override them.
 
 It contains the complete static browser application: WebGL library and rooms, seeded examples, PDF and PowerPoint import, semantic concept atlas, source scan, retrieval and loci tools, diagrams, diorama editing, local browser storage, and import/export. The deployment bundle also includes the user guides, prompt pack, schemas, example files and local launchers.
 
