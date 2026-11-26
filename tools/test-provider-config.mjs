@@ -9,6 +9,7 @@ globalThis.localStorage = {
 };
 
 const FREE = await import('../js/ai/free.js');
+assert.equal(FREE.via(), 'direct');
 const initial = FREE.settings();
 assert.ok(Array.isArray(initial.customProviders));
 assert.equal(initial.customProviders.length, 0);

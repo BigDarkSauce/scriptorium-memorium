@@ -54,7 +54,7 @@ export function bridgeReady({ fresh = false } = {}) {
   })());
 }
 export const bridgeInfo = () => INFO;
-export const inClaudeApp = () => !!(window.claude && claude.use);
+export const inClaudeApp = () => typeof window !== 'undefined' && !!(window.claude && window.claude.use);
 
 // fetch() through the bridge: resolves once the status is known, with a body that streams as the answer arrives
 export async function bridgeFetch(url, { method = 'GET', headers = {}, body, signal } = {}) {
